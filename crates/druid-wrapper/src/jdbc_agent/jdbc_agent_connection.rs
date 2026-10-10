@@ -81,6 +81,8 @@ pub struct JdbcAgentConnection {
     transaction_isolation: u8,
     catalog: Option<String>,
     schema: Option<String>,
+    savepoints: HashMap<u64, String>,
+    next_savepoint_id: u64,
     closed: bool,
     discarded: bool,
     metadata: JdbcAgentDatabaseMetaData,
@@ -172,6 +174,8 @@ impl JdbcAgentConnection {
                 .get("schema")
                 .and_then(JsonValue::as_str)
                 .map(ToOwned::to_owned),
+            savepoints: HashMap::new(),
+            next_savepoint_id: 1,
             closed: false,
             discarded: false,
             metadata,
@@ -206,6 +210,8 @@ impl JdbcAgentConnection {
             transaction_isolation: self.transaction_isolation,
             catalog: self.catalog.clone(),
             schema: self.schema.clone(),
+            savepoints: HashMap::new(),
+            next_savepoint_id: self.next_savepoint_id,
             closed: false,
             discarded: self.discarded,
             metadata: self.metadata.clone(),
@@ -217,6 +223,31 @@ impl JdbcAgentConnection {
         let executor = owned_executor(owned, runtime_trace);
         self.standard_executor = Some(Arc::clone(&executor));
         Ok(executor)
+    }
+
+    async fn create_savepoint(
+        &mut self,
+        name: Option<&str>,
+    ) -> Result<druid_rdbc::types::Savepoint, RdbcError> {
+        let local_id = self.next_savepoint_id;
+        let next_id = local_id.checked_add(1).ok_or_else(|| {
+            RdbcError::InvalidArgument("JDBC Agent savepoint id exhausted".to_owned())
+        })?;
+        let response = self
+            .standard_executor_core()?
+            .connection_control("set_savepoint", json!({"name": name}))
+            .await?;
+        let remote_id = response
+            .get("savepointId")
+            .and_then(JsonValue::as_str)
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| Self::protocol_error("set_savepoint returned no savepointId"))?;
+        self.savepoints.insert(local_id, remote_id.to_owned());
+        self.next_savepoint_id = next_id;
+        Ok(druid_rdbc::types::Savepoint {
+            id: local_id,
+            name: name.map(str::to_owned),
+        })
     }
 
     async fn execute_update_core(
@@ -490,6 +521,15 @@ impl std::fmt::Debug for JdbcAgentConnection {
 
 #[async_trait::async_trait]
 impl AdapterExecutionCore for JdbcAgentConnection {
+    async fn standard_connection_control_core(
+        &mut self,
+        operation: &str,
+        payload: JsonValue,
+    ) -> Result<JsonValue, RdbcError> {
+        self.ensure_open()?;
+        self.client_mut_core()?.request(operation, payload).await
+    }
+
     async fn standard_execute_update_core(
         &mut self,
         sql: &str,
@@ -529,14 +569,101 @@ druid_rdbc::impl_standard_wrapper!(JdbcAgentConnection => Connection);
 
 #[async_trait::async_trait]
 impl druid_rdbc::connection::Connection for JdbcAgentConnection {
+    fn auto_commit(&self) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        Ok(self.auto_commit)
+    }
+
+    async fn set_auto_commit(&mut self, enabled: bool) -> Result<(), RdbcError> {
+        self.standard_executor_core()?
+            .connection_control("set_auto_commit", json!({"value": enabled}))
+            .await?;
+        self.auto_commit = enabled;
+        Ok(())
+    }
+
+    async fn commit(&mut self) -> Result<(), RdbcError> {
+        self.standard_executor_core()?
+            .connection_control("commit", JsonValue::Null)
+            .await?;
+        self.savepoints.clear();
+        Ok(())
+    }
+
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
+        self.standard_executor_core()?
+            .connection_control("rollback", JsonValue::Null)
+            .await?;
+        self.savepoints.clear();
+        Ok(())
+    }
+
+    async fn set_savepoint(&mut self) -> Result<druid_rdbc::types::Savepoint, RdbcError> {
+        self.create_savepoint(None).await
+    }
+
+    async fn set_savepoint_named(
+        &mut self,
+        name: &str,
+    ) -> Result<druid_rdbc::types::Savepoint, RdbcError> {
+        self.create_savepoint(Some(name)).await
+    }
+
+    async fn rollback_to(
+        &mut self,
+        savepoint: &druid_rdbc::types::Savepoint,
+    ) -> Result<(), RdbcError> {
+        let remote_id = self
+            .savepoints
+            .get(&savepoint.id)
+            .ok_or_else(|| RdbcError::InvalidArgument("unknown JDBC Agent savepoint".to_owned()))?
+            .clone();
+        self.standard_executor_core()?
+            .connection_control("rollback_to_savepoint", json!({"savepointId": remote_id}))
+            .await?;
+        Ok(())
+    }
+
+    async fn release_savepoint(
+        &mut self,
+        savepoint: &druid_rdbc::types::Savepoint,
+    ) -> Result<(), RdbcError> {
+        let remote_id = self
+            .savepoints
+            .get(&savepoint.id)
+            .ok_or_else(|| RdbcError::InvalidArgument("unknown JDBC Agent savepoint".to_owned()))?
+            .clone();
+        self.standard_executor_core()?
+            .connection_control("release_savepoint", json!({"savepointId": remote_id}))
+            .await?;
+        self.savepoints.remove(&savepoint.id);
+        Ok(())
+    }
+
     fn catalog(&self) -> Result<Option<String>, RdbcError> {
         self.ensure_open()?;
         Ok(self.catalog.clone())
     }
 
+    async fn set_catalog(&mut self, catalog: Option<&str>) -> Result<(), RdbcError> {
+        self.standard_executor_core()?
+            .connection_control("set_catalog", json!({"value": catalog}))
+            .await?;
+        self.catalog = catalog.map(str::to_owned);
+        Ok(())
+    }
+
     fn schema(&self) -> Result<Option<String>, RdbcError> {
         self.ensure_open()?;
         Ok(self.schema.clone())
+    }
+
+    async fn set_schema(&mut self, schema: Option<&str>) -> Result<(), RdbcError> {
+        self.standard_executor_core()?
+            .connection_control("set_schema", json!({"value": schema}))
+            .await?;
+        self.schema = schema.map(str::to_owned);
+        Ok(())
     }
 
     async fn exec(
@@ -613,11 +740,14 @@ impl druid_rdbc::connection::Connection for JdbcAgentConnection {
             druid_rdbc::metadata::DatabaseMetaData::database_product_name(&mut snapshot)
                 .await
                 .ok();
-        Ok(Box::new(StandardAdapterDatabaseMetaData::new(
-            self.standard_executor_core()?,
-            product_name,
-            "jdbc_agent_database_metadata_product_name_absent",
-        )))
+        Ok(Box::new(
+            StandardAdapterDatabaseMetaData::new(
+                self.standard_executor_core()?,
+                product_name,
+                "jdbc_agent_database_metadata_product_name_absent",
+            )
+            .with_driver_name(self.driver_name.clone()),
+        ))
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {

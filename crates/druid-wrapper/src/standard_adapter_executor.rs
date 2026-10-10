@@ -4,6 +4,7 @@ use crate::standard_query_result::StandardQueryResult;
 use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::types::Value;
+use serde_json::Value as JsonValue;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -19,6 +20,16 @@ pub(crate) struct AdapterUpdateResult {
 /// Concrete adapters expose one private driver core to canonical callers.
 #[async_trait::async_trait]
 pub(crate) trait AdapterExecutionCore: Send + 'static {
+    async fn standard_connection_control_core(
+        &mut self,
+        _operation: &str,
+        _payload: JsonValue,
+    ) -> Result<JsonValue, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_control",
+        })
+    }
+
     async fn standard_execute_update_core(
         &mut self,
         sql: &str,
@@ -80,6 +91,12 @@ pub(crate) trait AdapterExecutionCore: Send + 'static {
 /// Type-erased executor owned by canonical Statement/Prepared/ResultSet handles.
 #[async_trait::async_trait]
 pub(crate) trait StandardExecutor: Send + Sync {
+    async fn connection_control(
+        &self,
+        operation: &str,
+        payload: JsonValue,
+    ) -> Result<JsonValue, RdbcError>;
+
     /// 参数为SQL及值；返回更新计数与当前执行的完整生成键，不提前发布句柄状态。
     async fn execute_update_keys(
         &self,
@@ -160,6 +177,18 @@ impl<C> StandardExecutor for OwnedAdapterExecutor<C>
 where
     C: AdapterExecutionCore,
 {
+    async fn connection_control(
+        &self,
+        operation: &str,
+        payload: JsonValue,
+    ) -> Result<JsonValue, RdbcError> {
+        let mut guard = self.connection.lock().await;
+        let connection = guard.as_mut().ok_or(RdbcError::ConnectionDiscarded)?;
+        connection
+            .standard_connection_control_core(operation, payload)
+            .await
+    }
+
     async fn execute_update_keys(
         &self,
         sql: &str,
