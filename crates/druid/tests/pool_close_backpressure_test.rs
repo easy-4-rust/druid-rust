@@ -71,6 +71,33 @@ struct SelectiveSlowCloseFactory {
     closed: Arc<AtomicUsize>,
 }
 
+/// 首次建连等待外部闸门，用于复现关闭时仍在运行的借用任务。
+struct HangingCreateFactory {
+    gate: Arc<Semaphore>,
+    entered: Arc<AtomicUsize>,
+    created: AtomicUsize,
+}
+
+#[async_trait::async_trait]
+impl ConnectionFactory for HangingCreateFactory {
+    async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
+        if self.created.fetch_add(1, Ordering::AcqRel) == 0 {
+            self.entered.fetch_add(1, Ordering::AcqRel);
+            let permit = self.gate.acquire().await.expect("create gate remains open");
+            permit.forget();
+        }
+        Ok(Box::new(SlowCloseConnection {
+            gate: Arc::new(Semaphore::new(1)),
+            entered: Arc::new(AtomicUsize::new(0)),
+            closed: Arc::new(AtomicUsize::new(0)),
+        }))
+    }
+
+    async fn validate(&self, connection: &mut Box<dyn Connection>) -> Result<(), RdbcError> {
+        connection.ping().await
+    }
+}
+
 #[async_trait::async_trait]
 impl ConnectionFactory for SelectiveSlowCloseFactory {
     async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
@@ -328,4 +355,60 @@ async fn explicit_overflow_close_reports_physical_timeout() {
     tokio::time::timeout(Duration::from_secs(2), pool.close())
         .await
         .expect("shutdown remains bounded");
+}
+
+#[tokio::test]
+async fn shutdown_deadline_defers_cleanup_until_external_creator_finishes() {
+    let gate = Arc::new(Semaphore::new(0));
+    let entered = Arc::new(AtomicUsize::new(0));
+    let factory = Arc::new(HangingCreateFactory {
+        gate: Arc::clone(&gate),
+        entered: Arc::clone(&entered),
+        created: AtomicUsize::new(0),
+    });
+    let pool = Arc::new(
+        DruidPool::builder()
+            .name("stalled-creator-shutdown")
+            .driver_name("test")
+            .factory(factory)
+            .max_open(1)
+            .shutdown_timeout(Duration::from_millis(50))
+            .build()
+            .await
+            .expect("build pool"),
+    );
+    let borrowing_pool = Arc::clone(&pool);
+    let borrow = tokio::spawn(async move { borrowing_pool.get().await });
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while entered.load(Ordering::Acquire) == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("factory begins creating");
+
+    tokio::time::timeout(Duration::from_millis(500), pool.close())
+        .await
+        .expect("shutdown has a bounded creator wait");
+    assert!(pool.is_closed());
+    assert!(
+        tokio::time::timeout(Duration::from_millis(500), pool.restart())
+            .await
+            .expect("restart fails promptly while creator remains")
+            .is_err()
+    );
+
+    gate.add_permits(1);
+    assert!(tokio::time::timeout(Duration::from_secs(2), borrow)
+        .await
+        .expect("old borrow terminates")
+        .expect("old borrow task joins")
+        .is_err());
+    tokio::time::timeout(Duration::from_secs(2), pool.restart())
+        .await
+        .expect("restart completes after creator drains")
+        .expect("restart is safe after creator drains");
+    let mut connection = pool.get().await.expect("new generation borrows");
+    connection.close().await.expect("new lease closes");
+    pool.close().await;
 }

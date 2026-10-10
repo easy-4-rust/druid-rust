@@ -1240,16 +1240,16 @@ impl DruidPool {
         self.close_resources().await;
     }
 
-    async fn close_resources(&self) {
+    /// 关闭并回收旧代次资源；返回是否已等到全部建连任务退出并完成清理。
+    async fn close_resources(&self) -> bool {
         if !self.initialized.load(Ordering::Acquire) {
             self.destroy_initialized_filters().await;
-            return;
+            return true;
         }
-        if self.is_closed() {
-            return;
+        if !self.is_closed() {
+            self.inner.set_enabled(false);
+            self.inner.advance_lifecycle_generation();
         }
-        self.inner.set_enabled(false);
-        self.inner.advance_lifecycle_generation();
         self.start_create_worker();
         self.inner.request_create_worker_shutdown();
         self.start_close_worker();
@@ -1258,11 +1258,13 @@ impl DruidPool {
         // 先把池标记为 closed 并排空 idle，再等待维护任务退出。这样 close
         // future 在等待后台任务期间被取消时，新借用也已经被拒绝，且
         // PoolInner::close 的 DetachedHolder 会完成剩余资源计数清理。
-        if tokio::time::timeout(self.inner.config.shutdown_timeout, self.inner.close())
-            .await
-            .is_err()
-        {
-            tracing::warn!("pool idle connection shutdown exceeded configured deadline");
+        if !self.is_closed() {
+            if tokio::time::timeout(self.inner.config.shutdown_timeout, self.inner.close())
+                .await
+                .is_err()
+            {
+                tracing::warn!("pool idle connection shutdown exceeded configured deadline");
+            }
         }
         let maintenance_task = self.maintenance_task.lock().take();
         if let Some(maintenance_task) = maintenance_task {
@@ -1274,7 +1276,17 @@ impl DruidPool {
         }
         // 必须先等待旧代次 factory 调用完成。否则 close worker 可能已经退出，
         // restart 又恢复 enable，旧创建任务会把连接混入新代次或绕过 async close。
-        self.inner.wait_for_creators().await;
+        if tokio::time::timeout(
+            self.inner.config.shutdown_timeout,
+            self.inner.wait_for_creators(),
+        )
+        .await
+        .is_err()
+        {
+            // 不提前关闭 worker/Filter；旧代次 factory 完成后仍需能移交并关闭结果。
+            tracing::warn!("pool creators exceeded configured shutdown deadline");
+            return false;
+        }
         let create_worker_task = self.create_worker_task.lock().take();
         if let Some(create_worker_task) = create_worker_task {
             let _ = create_worker_task.await;
@@ -1287,6 +1299,7 @@ impl DruidPool {
             }
         }
         self.destroy_initialized_filters().await;
+        true
     }
 
     async fn destroy_initialized_filters(&self) {
@@ -1323,7 +1336,11 @@ impl DruidPool {
             return Err(DruidError::ActiveConnectionsPreventRestart { active_count });
         }
 
-        self.close_resources().await;
+        if !self.close_resources().await {
+            return Err(DruidError::Other(
+                "cannot restart while prior-generation creators are still running".to_owned(),
+            ));
+        }
         self.drain_close_worker_if_idle().await;
         self.reset_stats();
         self.active_leases.clear();
