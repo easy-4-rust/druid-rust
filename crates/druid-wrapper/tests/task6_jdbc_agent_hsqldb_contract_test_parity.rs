@@ -62,11 +62,11 @@ async fn task6_jdbc_agent_hsqldb_contract_test_jdbc_agent_hsqldb_contract_when_c
         connection
             .catalog()
             .expect("catalog state must be readable"),
-        None
+        Some("PUBLIC".to_owned())
     );
     assert_eq!(
         connection.schema().expect("schema state must be readable"),
-        None
+        Some("PUBLIC".to_owned())
     );
     assert_eq!(
         druid_rdbc::statement::PreparedStatement::sql(statement.as_ref())

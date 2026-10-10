@@ -1272,13 +1272,12 @@ impl DruidPool {
         // 先把池标记为 closed 并排空 idle，再等待维护任务退出。这样 close
         // future 在等待后台任务期间被取消时，新借用也已经被拒绝，且
         // PoolInner::close 的 DetachedHolder 会完成剩余资源计数清理。
-        if !self.is_closed() {
-            if tokio::time::timeout_at(deadline, self.inner.close())
+        if !self.is_closed()
+            && tokio::time::timeout_at(deadline, self.inner.close())
                 .await
                 .is_err()
-            {
-                tracing::warn!("pool idle connection shutdown exceeded configured deadline");
-            }
+        {
+            tracing::warn!("pool idle connection shutdown exceeded configured deadline");
         }
         if !self
             .join_shutdown_task(&self.maintenance_task, "maintenance", deadline)
@@ -1309,10 +1308,8 @@ impl DruidPool {
             return false;
         }
         self.inner.request_close_worker_shutdown_if_idle();
-        if self.inner.close_worker_is_idle() {
-            if !self.join_close_worker(deadline).await {
-                return false;
-            }
+        if self.inner.close_worker_is_idle() && !self.join_close_worker(deadline).await {
+            return false;
         }
         self.destroy_initialized_filters(deadline).await
     }

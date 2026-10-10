@@ -196,6 +196,11 @@ impl Statement for StandardAdapterPreparedStatement {
 
 #[async_trait::async_trait]
 impl PreparedStatement for StandardAdapterPreparedStatement {
+    fn sql(&self) -> Result<&str, RdbcError> {
+        self.executor_core()?;
+        Ok(&self.sql)
+    }
+
     fn set_input_parameter(
         &mut self,
         index: druid_rdbc::statement::ParameterIndex,
