@@ -1378,19 +1378,19 @@ def verify_repository(root: Path) -> VerificationSummary:
 
     require_fixed_files(root)
     for relative, type_name in CONCRETE_OBJECTS.items():
-        require_concrete_object((root / relative).read_text(), type_name, relative)
+        require_concrete_object((root / relative).read_text(encoding="utf-8"), type_name, relative)
     holder_path = "crates/druid/src/core/druid_connection_holder.rs"
-    require_holder_contract((root / holder_path).read_text(), holder_path)
+    require_holder_contract((root / holder_path).read_text(encoding="utf-8"), holder_path)
     for relative, (trait_path, type_name, methods) in STANDARD_IMPLS.items():
         require_direct_standard_impl(
-            (root / relative).read_text(), trait_path, type_name, methods, relative
+            (root / relative).read_text(encoding="utf-8"), trait_path, type_name, methods, relative
         )
     for relative, trait_path, type_name, methods in STANDARD_INHERITED_IMPLS:
         require_direct_standard_impl(
-            (root / relative).read_text(), trait_path, type_name, methods, relative
+            (root / relative).read_text(encoding="utf-8"), trait_path, type_name, methods, relative
         )
     require_method_delegation(
-        (root / "crates/druid/src/core/druid_pooled_statement.rs").read_text(),
+        (root / "crates/druid/src/core/druid_pooled_statement.rs").read_text(encoding="utf-8"),
         "druid_rdbc::statement::Statement",
         "DruidPooledStatement",
         {
@@ -1410,17 +1410,17 @@ def verify_repository(root: Path) -> VerificationSummary:
         ),
     ):
         require_method_delegation(
-            (root / relative).read_text(),
+            (root / relative).read_text(encoding="utf-8"),
             "druid_rdbc::statement::PreparedStatement",
             type_name,
             {"execute_prepared": "execute_standard_prepared_results"},
             relative,
         )
     require_pending_admission_policy(
-        (root / "crates/druid/src/core/standard_resource_registry.rs").read_text(),
-        (root / "crates/druid/src/core/standard_resource_admission.rs").read_text(),
+        (root / "crates/druid/src/core/standard_resource_registry.rs").read_text(encoding="utf-8"),
+        (root / "crates/druid/src/core/standard_resource_admission.rs").read_text(encoding="utf-8"),
         {
-            path.name: path.read_text()
+            path.name: path.read_text(encoding="utf-8")
             for path in (
                 root / "crates/druid/src/core/druid_pooled_connection.rs",
                 root / "crates/druid/src/core/druid_pooled_statement.rs",
@@ -1432,11 +1432,11 @@ def verify_repository(root: Path) -> VerificationSummary:
         },
     )
     owner_path = "crates/druid/src/core/druid_pooled_connection.rs"
-    require_owner_close_contract((root / owner_path).read_text(), owner_path)
+    require_owner_close_contract((root / owner_path).read_text(encoding="utf-8"), owner_path)
     require_shared_execution_policy(
-        (root / "crates/druid/src/core/druid_execution_filter_policy.rs").read_text(),
-        (root / "crates/druid/src/core/standard_logical_policy.rs").read_text(),
-        (root / owner_path).read_text(),
+        (root / "crates/druid/src/core/druid_execution_filter_policy.rs").read_text(encoding="utf-8"),
+        (root / "crates/druid/src/core/standard_logical_policy.rs").read_text(encoding="utf-8"),
+        (root / owner_path).read_text(encoding="utf-8"),
     )
     verify_task4_evidence_handoff(root)
     verify_task5_runtime_contracts(root)
@@ -1510,17 +1510,17 @@ def verify_final_repository(
                 fail(f"retired identity remains in {path}: {match.group(0)}")
     for relative, (trait_path, type_name, methods) in STANDARD_IMPLS.items():
         require_direct_standard_impl(
-            (root / relative).read_text(), trait_path, type_name, methods, relative
+            (root / relative).read_text(encoding="utf-8"), trait_path, type_name, methods, relative
         )
     for relative, trait_path, type_name, methods in STANDARD_INHERITED_IMPLS:
         require_direct_standard_impl(
-            (root / relative).read_text(), trait_path, type_name, methods, relative
+            (root / relative).read_text(encoding="utf-8"), trait_path, type_name, methods, relative
         )
     require_pending_admission_policy(
-        (root / "crates/druid/src/core/standard_resource_registry.rs").read_text(),
-        (root / "crates/druid/src/core/standard_resource_admission.rs").read_text(),
+        (root / "crates/druid/src/core/standard_resource_registry.rs").read_text(encoding="utf-8"),
+        (root / "crates/druid/src/core/standard_resource_admission.rs").read_text(encoding="utf-8"),
         {
-            path.name: path.read_text()
+            path.name: path.read_text(encoding="utf-8")
             for path in (
                 root / "crates/druid/src/core/druid_pooled_connection.rs",
                 root / "crates/druid/src/core/druid_pooled_statement.rs",
