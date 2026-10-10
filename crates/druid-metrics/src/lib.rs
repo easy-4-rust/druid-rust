@@ -38,6 +38,7 @@ pub mod sequence_window;
 mod service_identity;
 pub(crate) mod snapshot_encoder;
 pub(crate) mod snapshot_transaction_state;
+mod supervisor;
 pub mod timeline;
 
 pub use config::{DruidMetricsConfig, DruidMetricsConfigBuilder, SqlTextPolicy};

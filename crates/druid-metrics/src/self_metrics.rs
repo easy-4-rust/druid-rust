@@ -16,6 +16,8 @@ pub struct RuntimeSelfMetrics {
     unregister_coalesced_total: AtomicU64,
     /// 当前仍 active 的 datasource registrations。
     registered_datasources: AtomicUsize,
+    /// 当前由 supervisor 持有且尚未结束的后台任务数。
+    active_tasks: AtomicUsize,
     /// aggregator/exporter/client/command 的互斥 ownership ledger。
     ownership: Arc<PipelineOwnership>,
 }
@@ -32,6 +34,7 @@ impl RuntimeSelfMetrics {
             unregister_listener_active: AtomicBool::new(false),
             unregister_coalesced_total: AtomicU64::new(0),
             registered_datasources: AtomicUsize::new(0),
+            active_tasks: AtomicUsize::new(0),
             ownership,
         }
     }
@@ -87,6 +90,21 @@ impl RuntimeSelfMetrics {
 
     pub(crate) fn set_registered_datasources(&self, count: usize) {
         self.registered_datasources.store(count, Ordering::Release);
+    }
+
+    /// 返回仍由 runtime 监督的后台任务数。
+    pub fn active_tasks(&self) -> usize {
+        self.active_tasks.load(Ordering::Acquire)
+    }
+
+    /// 登记一个新后台任务，包括尚未首次被调度的任务。
+    pub(crate) fn task_started(&self) {
+        self.active_tasks.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// 后台任务结束或被终止时撤销登记。
+    pub(crate) fn task_stopped(&self) {
+        self.active_tasks.fetch_sub(1, Ordering::AcqRel);
     }
 
     /// 返回 exporter channel/task 当前持有的批次数。

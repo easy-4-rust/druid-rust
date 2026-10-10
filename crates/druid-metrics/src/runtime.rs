@@ -4,14 +4,14 @@ use std::time::Duration;
 
 use druid::stats::DataSourceMonitorable;
 use parking_lot::RwLock;
-use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 use crate::config::DruidMetricsConfig;
 use crate::error::MetricsError;
 use crate::registry::{RegistrationGuard, RegistryEntry};
 use crate::self_metrics::RuntimeSelfMetrics;
+use crate::supervisor::MetricsSupervisor;
 #[cfg(feature = "client")]
 use crate::{grpc_client::GrpcClientConfig, grpc_client::GrpcMetricsClient};
 
@@ -24,14 +24,11 @@ pub struct DruidMetricsRuntime {
     config: DruidMetricsConfig,
     /// Shared registry: runtime writes, sampler reads/writes (cleanup).
     registry: Arc<RwLock<Vec<RegistryEntry>>>,
-    sampler_handle: Option<JoinHandle<()>>,
-    aggregator_handle: Option<JoinHandle<Result<(), MetricsError>>>,
-    exporter_handle: Option<JoinHandle<Result<(), MetricsError>>>,
-    unregister_handle: Option<JoinHandle<()>>,
+    supervisor: MetricsSupervisor,
+    sampler_done: oneshot::Receiver<()>,
+    aggregator_done: oneshot::Receiver<()>,
     unregister_tx: mpsc::Sender<u64>,
-    sampler_cancel_token: CancellationToken,
     aggregator_cancel_token: CancellationToken,
-    unregister_cancel_token: CancellationToken,
     self_metrics: Arc<RuntimeSelfMetrics>,
 }
 
@@ -56,11 +53,10 @@ impl DruidMetricsRuntime {
         config: DruidMetricsConfig,
         exporter_config: RuntimeExporterConfig,
     ) -> Result<Self, MetricsError> {
-        let sampler_cancel_token = CancellationToken::new();
         let aggregator_cancel_token = CancellationToken::new();
-        let unregister_cancel_token = CancellationToken::new();
         let ownership = Arc::new(crate::pipeline_ownership::PipelineOwnership::new());
         let self_metrics = Arc::new(RuntimeSelfMetrics::with_ownership(Arc::clone(&ownership)));
+        let mut supervisor = MetricsSupervisor::new(Arc::clone(&self_metrics));
         let (snapshot_tx, snapshot_rx) = mpsc::channel(config.queue_capacity);
         let (batch_tx, mut batch_rx) = mpsc::channel(config.queue_capacity);
         let (_aggregator_command_tx, aggregator_command_rx) = mpsc::channel(config.queue_capacity);
@@ -91,12 +87,13 @@ impl DruidMetricsRuntime {
 
         // Sampler task -- uses the shared registry directly
         let sampler_registry = Arc::clone(&registry);
-        let sampler_cancel = sampler_cancel_token.clone();
+        let sampler_cancel = supervisor.cancel_token();
         let sampler_interval = config.sample_interval;
         let sampler_snapshot_tx = snapshot_tx;
         let sampler_self_metrics = Arc::clone(&self_metrics);
 
-        let sampler_handle = tokio::spawn(async move {
+        let (sampler_done_tx, sampler_done) = oneshot::channel();
+        supervisor.spawn(async move {
             crate::sampler::run_sampler(
                 sampler_registry,
                 sampler_snapshot_tx,
@@ -105,14 +102,17 @@ impl DruidMetricsRuntime {
                 sampler_self_metrics,
             )
             .await;
+            let _ = sampler_done_tx.send(());
+            Ok(())
         });
 
         // Aggregator task
         let agg_cancel = aggregator_cancel_token.clone();
         let agg_self_metrics = Arc::clone(&self_metrics);
         let aggregator_config = config.clone();
-        let aggregator_handle = tokio::spawn(async move {
-            crate::aggregator::run_aggregator(
+        let (aggregator_done_tx, aggregator_done) = oneshot::channel();
+        supervisor.spawn(async move {
+            let result = crate::aggregator::run_aggregator(
                 snapshot_rx,
                 batch_tx,
                 aggregator_command_rx,
@@ -120,13 +120,15 @@ impl DruidMetricsRuntime {
                 aggregator_config,
                 agg_self_metrics,
             )
-            .await
+            .await;
+            let _ = aggregator_done_tx.send(());
+            result
         });
 
         #[cfg(feature = "client")]
         let exporter_shutdown_timeout = config.shutdown_timeout;
         let exporter_self_metrics = Arc::clone(&self_metrics);
-        let exporter_handle = tokio::spawn(async move {
+        supervisor.spawn(async move {
             match exporter {
                 RuntimeExporter::Drain => {
                     while batch_rx.recv().await.is_some() {
@@ -149,11 +151,11 @@ impl DruidMetricsRuntime {
         // Unregister listener task: removes entries from registry when guards are dropped
         let mut unreg_rx = unregister_rx;
         let unreg_registry = Arc::clone(&registry);
-        let unregister_cancel = unregister_cancel_token.clone();
+        let unregister_cancel = supervisor.cancel_token();
         let unregister_metrics = Arc::clone(&self_metrics);
         unregister_metrics.set_unregister_listener_active(true);
         let active_guard = UnregisterListenerActiveGuard(Arc::clone(&unregister_metrics));
-        let unregister_handle = tokio::spawn(async move {
+        supervisor.spawn(async move {
             let _active_guard = active_guard;
             loop {
                 tokio::select! {
@@ -170,19 +172,17 @@ impl DruidMetricsRuntime {
                     }
                 }
             }
+            Ok(())
         });
 
         Ok(Self {
             config,
             registry: Arc::clone(&registry),
-            sampler_handle: Some(sampler_handle),
-            aggregator_handle: Some(aggregator_handle),
-            exporter_handle: Some(exporter_handle),
-            unregister_handle: Some(unregister_handle),
+            supervisor,
+            sampler_done,
+            aggregator_done,
             unregister_tx,
-            sampler_cancel_token,
             aggregator_cancel_token,
-            unregister_cancel_token,
             self_metrics,
         })
     }
@@ -227,86 +227,32 @@ impl DruidMetricsRuntime {
     /// snapshots if the deadline is exceeded.
     pub async fn shutdown(mut self, deadline: Duration) -> Result<(), MetricsError> {
         // Stop admission first so the aggregator can drain a stable input queue.
-        self.sampler_cancel_token.cancel();
-        self.unregister_cancel_token.cancel();
-
-        let aggregator_cancel = self.aggregator_cancel_token.clone();
-        let mut sampler_handle = self.sampler_handle.take();
-        let mut aggregator_handle = self.aggregator_handle.take();
-        let mut exporter_handle = self.exporter_handle.take();
-        let mut unregister_handle = self.unregister_handle.take();
+        self.supervisor.cancel();
         let self_metrics = Arc::clone(&self.self_metrics);
 
-        // Join tasks with one shared deadline. The drain-only exporter exits after
-        // the aggregator flushes and closes the bounded batch channel.
+        // 采样器先退出并关闭 snapshot sender；聚合器随后刷新并关闭 batch sender；
+        // 导出器完成传输后，由同一个 JoinSet 收集全部任务失败。
         let join_all = async {
-            let mut first_error = None;
-            if let Some(handle) = sampler_handle.as_mut() {
-                if let Err(error) = handle.await {
-                    first_error = Some(MetricsError::Join(error));
-                }
-            }
-            aggregator_cancel.cancel();
-            if let Some(handle) = aggregator_handle.as_mut() {
-                match handle.await {
-                    Ok(Ok(())) => {}
-                    Ok(Err(error)) => {
-                        if first_error.is_none() {
-                            first_error = Some(error);
-                        }
-                    }
-                    Err(error) => {
-                        if first_error.is_none() {
-                            first_error = Some(MetricsError::Join(error));
-                        }
-                    }
-                }
-            }
-            if let Some(handle) = exporter_handle.as_mut() {
-                match handle.await {
-                    Ok(Ok(())) => {}
-                    Ok(Err(error)) => {
-                        if first_error.is_none() {
-                            first_error = Some(error);
-                        }
-                    }
-                    Err(error) => {
-                        if first_error.is_none() {
-                            first_error = Some(MetricsError::Join(error));
-                        }
-                    }
-                }
-            }
-            if let Some(handle) = unregister_handle.as_mut() {
-                if let Err(error) = handle.await {
-                    if first_error.is_none() {
-                        first_error = Some(MetricsError::Join(error));
-                    }
-                }
-            }
-
+            let _ = (&mut self.sampler_done).await;
+            self.aggregator_cancel_token.cancel();
+            let _ = (&mut self.aggregator_done).await;
+            let task_result = self.supervisor.join_all().await;
             let unflushed = pipeline_unflushed(&self_metrics);
-            if unflushed != 0 && first_error.is_none() {
-                first_error = Some(MetricsError::UnflushedSnapshots { unflushed });
+            if unflushed != 0 && task_result.is_ok() {
+                return Err(MetricsError::UnflushedSnapshots { unflushed });
             }
-
-            first_error.map_or(Ok(()), Err)
+            task_result
         };
 
         let result = if let Ok(result) = tokio::time::timeout(deadline, join_all).await {
             result
         } else {
             self.aggregator_cancel_token.cancel();
-            self.unregister_cancel_token.cancel();
-            abort_if_running(sampler_handle.as_mut()).await;
-            abort_if_running(aggregator_handle.as_mut()).await;
-            abort_if_running(exporter_handle.as_mut()).await;
-            abort_if_running(unregister_handle.as_mut()).await;
+            self.supervisor.abort_all();
             let unflushed = pipeline_unflushed(&self.self_metrics);
             Err(MetricsError::ShutdownTimeout { unflushed })
         };
-        // 所有持有 registry 的任务均已 join 或 abort；guard 可以比 runtime 活得更久，
-        // 因此必须在消费 self 前撤销剩余注册并同步对外计数。
+        // guard 可以比 runtime 活得更久；撤销剩余注册并同步对外计数。
         self.registry.write().clear();
         self_metrics.set_registered_datasources(0);
         result
@@ -325,24 +271,10 @@ impl DruidMetricsRuntime {
 
 impl Drop for DruidMetricsRuntime {
     fn drop(&mut self) {
-        // 未显式调用 shutdown 时，JoinHandle 的普通 Drop 只会分离任务。
-        // 这里取消所有阶段并终止仍由 runtime 拥有的任务，避免存活的 guard
-        // 让注销监听器与 registry 在后台无限期存活。
-        self.sampler_cancel_token.cancel();
+        // 即使调用方取消 shutdown future，监督器仍持有并终止全部后台任务。
         self.aggregator_cancel_token.cancel();
-        self.unregister_cancel_token.cancel();
-        if let Some(handle) = self.sampler_handle.as_ref() {
-            handle.abort();
-        }
-        if let Some(handle) = self.aggregator_handle.as_ref() {
-            handle.abort();
-        }
-        if let Some(handle) = self.exporter_handle.as_ref() {
-            handle.abort();
-        }
-        if let Some(handle) = self.unregister_handle.as_ref() {
-            handle.abort();
-        }
+        self.supervisor.cancel();
+        self.supervisor.abort_all();
         self.registry.write().clear();
         self.self_metrics.set_registered_datasources(0);
     }
@@ -365,15 +297,6 @@ struct UnregisterListenerActiveGuard(Arc<RuntimeSelfMetrics>);
 impl Drop for UnregisterListenerActiveGuard {
     fn drop(&mut self) {
         self.0.set_unregister_listener_active(false);
-    }
-}
-
-async fn abort_if_running<T>(handle: Option<&mut JoinHandle<T>>) {
-    if let Some(handle) = handle {
-        if !handle.is_finished() {
-            handle.abort();
-            let _ = handle.await;
-        }
     }
 }
 
