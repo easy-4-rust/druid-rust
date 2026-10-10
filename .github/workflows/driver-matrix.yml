@@ -71,6 +71,12 @@ jobs:
 
   rust-contracts:
     runs-on: ubuntu-latest
+    env:
+      # The two workspace test passes share a runner. Avoid exhausting its
+      # filesystem while linking the all-feature integration binaries.
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -335,14 +341,18 @@ jobs:
       - name: Capture SemVer reports against the decision baseline
         run: |
           mkdir -p api/observed
+          # cargo-semver-checks builds isolated temporary workspaces, so the root
+          # manifest's SQLite compatibility patch must also be visible globally.
+          mkdir -p "$HOME/.cargo"
+          printf '\n[patch.crates-io]\ntoasty-driver-sqlite = { path = "%s/vendor/toasty-driver-sqlite" }\n' "$GITHUB_WORKSPACE" >> "$HOME/.cargo/config.toml"
           cargo semver-checks --version > api/observed/semver-tool-version.txt
           printf 'baseline=%s\n' "$SEMVER_BASELINE_REV" > api/observed/semver-baseline.txt
           set +e
-          cargo semver-checks --package druid-rdbc --baseline-rev "$SEMVER_BASELINE_REV" --all-features --verbose > api/observed/druid-rdbc.semver-checks.txt 2>&1
+          cargo semver-checks --package druid-rdbc --baseline-rev "$SEMVER_BASELINE_REV" --release-type patch --all-features --verbose > api/observed/druid-rdbc.semver-checks.txt 2>&1
           rdbc_status=$?
-          cargo semver-checks --package druid --baseline-rev "$SEMVER_BASELINE_REV" --all-features --verbose > api/observed/druid.semver-checks.txt 2>&1
+          cargo semver-checks --package druid --baseline-rev "$SEMVER_BASELINE_REV" --release-type patch --all-features --verbose > api/observed/druid.semver-checks.txt 2>&1
           druid_status=$?
-          cargo semver-checks --package druid-wrapper --baseline-rev "$SEMVER_BASELINE_REV" --all-features --verbose > api/observed/druid-wrapper.semver-checks.txt 2>&1
+          cargo semver-checks --package druid-wrapper --baseline-rev "$SEMVER_BASELINE_REV" --release-type patch --all-features --verbose > api/observed/druid-wrapper.semver-checks.txt 2>&1
           wrapper_status=$?
           printf 'druid-rdbc=%s\ndruid=%s\ndruid-wrapper=%s\n' "$rdbc_status" "$druid_status" "$wrapper_status" | tee api/observed/semver-exit-codes.txt
           test "$rdbc_status" -eq 0 && test "$druid_status" -eq 0 && test "$wrapper_status" -eq 0
