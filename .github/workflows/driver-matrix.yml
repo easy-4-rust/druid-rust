@@ -318,5 +318,6 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-semver-checks
+      - run: cargo semver-checks check-release -p druid-rdbc --baseline-rev origin/${{ github.base_ref }}
       - run: cargo semver-checks check-release -p druid --baseline-rev origin/${{ github.base_ref }}
       - run: cargo semver-checks check-release -p druid-wrapper --baseline-rev origin/${{ github.base_ref }}
