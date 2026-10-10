@@ -43,9 +43,9 @@ pub struct DruidPool {
     active_leases: Arc<DashMap<u64, ActiveConnectionLease>>,
     remove_abandoned_count: Arc<AtomicU64>,
     maintenance_shutdown: Arc<Notify>,
-    maintenance_task: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    maintenance_task: AsyncMutex<Option<tokio::task::JoinHandle<()>>>,
     stat_publish_shutdown: Arc<Notify>,
-    stat_publish_task: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    stat_publish_task: AsyncMutex<Option<tokio::task::JoinHandle<()>>>,
     create_worker: parking_lot::Mutex<Option<ConnectionCreateWorker>>,
     create_worker_task: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
     close_worker: parking_lot::Mutex<Option<ConnectionCloseWorker>>,
@@ -266,9 +266,9 @@ impl DruidPool {
             active_leases: Arc::new(DashMap::new()),
             remove_abandoned_count: Arc::new(AtomicU64::new(0)),
             maintenance_shutdown: Arc::new(Notify::new()),
-            maintenance_task: parking_lot::Mutex::new(None),
+            maintenance_task: AsyncMutex::new(None),
             stat_publish_shutdown: Arc::new(Notify::new()),
-            stat_publish_task: parking_lot::Mutex::new(None),
+            stat_publish_task: AsyncMutex::new(None),
             create_worker: parking_lot::Mutex::new(Some(ConnectionCreateWorker::new(
                 Arc::clone(&inner),
                 create_receiver,
@@ -425,17 +425,17 @@ impl DruidPool {
         // Java 在同步初始建连失败且 initExceptionThrow=true 时，仍先启动
         // creator/destroy 线程并在 finally 中设置 inited=true，再把错误返回。
         self.initialized.store(true, Ordering::Release);
-        self.start_maintenance();
-        self.start_stat_publisher();
+        self.start_maintenance().await;
+        self.start_stat_publisher().await;
         initial_result
     }
 
-    fn start_maintenance(&self) {
+    async fn start_maintenance(&self) {
         let period = self.inner.config.time_between_eviction_runs;
         if period.is_zero() {
             return;
         }
-        let mut task = self.maintenance_task.lock();
+        let mut task = self.maintenance_task.lock().await;
         if task.is_some() {
             return;
         }
@@ -462,12 +462,12 @@ impl DruidPool {
     }
 
     /// 启动每池唯一的周期统计发布任务。
-    fn start_stat_publisher(&self) {
+    async fn start_stat_publisher(&self) {
         let interval = self.inner.config.stat_publish_interval;
         if interval.is_zero() {
             return;
         }
-        let mut task = self.stat_publish_task.lock();
+        let mut task = self.stat_publish_task.lock().await;
         if task.is_some() {
             return;
         }
@@ -478,8 +478,18 @@ impl DruidPool {
             loop {
                 // Java LogStatsThread 每轮先发布，再 sleep；单轮 sink 错误不能终止任务。
                 let stat_value = context.snapshot_and_reset();
-                if let Err(error) = sink.publish(&stat_value) {
-                    tracing::warn!(%error, "publish datasource statistics failed");
+                // 发布协议是同步接口；隔离阻塞 sink，避免占住异步运行时 worker。
+                let sink_for_publish = Arc::clone(&sink);
+                match tokio::task::spawn_blocking(move || sink_for_publish.publish(&stat_value))
+                    .await
+                {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        tracing::warn!(%error, "publish datasource statistics failed");
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "datasource statistics publisher task failed");
+                    }
                 }
                 tokio::select! {
                     () = shutdown.notified() => break,
@@ -1267,13 +1277,17 @@ impl DruidPool {
                 tracing::warn!("pool idle connection shutdown exceeded configured deadline");
             }
         }
-        let maintenance_task = self.maintenance_task.lock().take();
-        if let Some(maintenance_task) = maintenance_task {
-            let _ = maintenance_task.await;
+        if !self
+            .join_shutdown_task(&self.maintenance_task, "maintenance")
+            .await
+        {
+            return false;
         }
-        let stat_publish_task = self.stat_publish_task.lock().take();
-        if let Some(stat_publish_task) = stat_publish_task {
-            let _ = stat_publish_task.await;
+        if !self
+            .join_shutdown_task(&self.stat_publish_task, "stat publisher")
+            .await
+        {
+            return false;
         }
         // 必须先等待旧代次 factory 调用完成。否则 close worker 可能已经退出，
         // restart 又恢复 enable，旧创建任务会把连接混入新代次或绕过 async close。
@@ -1300,6 +1314,29 @@ impl DruidPool {
             }
         }
         self.destroy_initialized_filters().await
+    }
+
+    async fn join_shutdown_task(
+        &self,
+        task: &AsyncMutex<Option<tokio::task::JoinHandle<()>>>,
+        task_name: &str,
+    ) -> bool {
+        let mut task = task.lock().await;
+        let Some(handle) = task.as_mut() else {
+            return true;
+        };
+        match tokio::time::timeout(self.inner.config.shutdown_timeout, handle).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                tracing::warn!(%error, task_name, "pool shutdown task failed");
+            }
+            Err(_) => {
+                tracing::warn!(task_name, "pool shutdown task exceeded configured deadline");
+                return false;
+            }
+        }
+        task.take();
+        true
     }
 
     async fn destroy_initialized_filters(&self) -> bool {

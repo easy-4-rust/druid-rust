@@ -2,12 +2,12 @@
 
 use druid::core::{
     BeforeFilter, Connection, ConnectionFactory, DruidError, ExecContext, ExecResult, FilterChain,
-    RdbcError, Row, Value,
+    RdbcError, Row, ValidConnectionChecker, Value,
 };
-use druid::pool::DruidPool;
+use druid::pool::{DataSourceStatSink, DruidPool};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{mpsc as std_mpsc, Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 
 /// 可阻塞物理关闭的测试连接。对应 Java: DruidDataSource 的物理 Connection。
@@ -86,6 +86,54 @@ struct HangingDestroyFilter {
     gate: Arc<Semaphore>,
     entered: Arc<AtomicUsize>,
     completed: Arc<AtomicUsize>,
+}
+
+/// 首轮同步发布受控阻塞，模拟统计 sink 卡住 Tokio worker 的场景。
+struct BlockingStatSink {
+    entered: Arc<AtomicUsize>,
+    release: Mutex<std_mpsc::Receiver<()>>,
+}
+
+/// 第二次校验阻塞，首次校验用于初始建连，第二次由维护任务保活触发。
+struct BlockingValidationChecker {
+    gate: Arc<Semaphore>,
+    entered: Arc<AtomicUsize>,
+}
+
+#[async_trait::async_trait]
+impl ValidConnectionChecker for BlockingValidationChecker {
+    async fn is_valid_connection(
+        &self,
+        _connection: &mut Box<dyn Connection>,
+        _query: Option<&str>,
+        _validation_query_timeout: Duration,
+    ) -> Result<bool, DruidError> {
+        if self.entered.fetch_add(1, Ordering::AcqRel) == 1 {
+            let permit = self
+                .gate
+                .acquire()
+                .await
+                .expect("validation gate remains open");
+            permit.forget();
+        }
+        Ok(true)
+    }
+}
+
+impl DataSourceStatSink for BlockingStatSink {
+    fn publish(
+        &self,
+        _stat_value: &druid::stats::DruidDataSourceStatValue,
+    ) -> Result<(), DruidError> {
+        if self.entered.fetch_add(1, Ordering::AcqRel) == 0 {
+            self.release
+                .lock()
+                .expect("sink lock")
+                .recv()
+                .expect("release sink");
+        }
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -494,5 +542,152 @@ async fn shutdown_deadline_retains_filter_destroy_until_completion() {
         .expect("restart finishes after filter destroy")
         .expect("restart succeeds after filter destroy");
     assert_eq!(entered.load(Ordering::Acquire), 1);
+    pool.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn shutdown_deadline_retains_blocked_stat_publisher_until_completion() {
+    let (release, receiver) = std_mpsc::channel();
+    let entered = Arc::new(AtomicUsize::new(0));
+    let pool = DruidPool::builder()
+        .name("stalled-stat-publisher")
+        .driver_name("test")
+        .factory(Arc::new(SelectiveSlowCloseFactory {
+            first_gate: Arc::new(Semaphore::new(1)),
+            block_overflow: false,
+            created: AtomicUsize::new(0),
+            entered: Arc::new(AtomicUsize::new(0)),
+            closed: Arc::new(AtomicUsize::new(0)),
+        }))
+        .stat_publish_interval(Duration::from_secs(3600))
+        .stat_sink(Arc::new(BlockingStatSink {
+            entered: Arc::clone(&entered),
+            release: Mutex::new(receiver),
+        }))
+        .shutdown_timeout(Duration::from_millis(50))
+        .build()
+        .await
+        .expect("build pool");
+    pool.init().await.expect("start statistic publisher");
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while entered.load(Ordering::Acquire) == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("publisher enters sink");
+
+    let close_result = tokio::time::timeout(Duration::from_millis(500), pool.close()).await;
+    if close_result.is_err() {
+        release
+            .send(())
+            .expect("release blocked sink after RED failure");
+    }
+    close_result.expect("blocked sink cannot hold shutdown forever");
+    assert!(
+        tokio::time::timeout(Duration::from_millis(500), pool.restart())
+            .await
+            .expect("restart fails promptly while prior sink runs")
+            .is_err()
+    );
+    release.send(()).expect("release blocked sink");
+    tokio::time::timeout(Duration::from_secs(1), pool.restart())
+        .await
+        .expect("restart completes after sink release")
+        .expect("restart succeeds after sink release");
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn shutdown_deadline_retains_blocked_maintenance_until_completion() {
+    let gate = Arc::new(Semaphore::new(0));
+    let entered = Arc::new(AtomicUsize::new(0));
+    let pool = DruidPool::builder()
+        .name("stalled-maintenance")
+        .driver_name("test")
+        .factory(Arc::new(SelectiveSlowCloseFactory {
+            first_gate: Arc::new(Semaphore::new(1)),
+            block_overflow: false,
+            created: AtomicUsize::new(0),
+            entered: Arc::new(AtomicUsize::new(0)),
+            closed: Arc::new(AtomicUsize::new(0)),
+        }))
+        .valid_connection_checker(Arc::new(BlockingValidationChecker {
+            gate: Arc::clone(&gate),
+            entered: Arc::clone(&entered),
+        }))
+        .initial_size(1)
+        .min_idle(1)
+        .keep_alive(true)
+        .keep_alive_between_time(Duration::from_millis(10))
+        .time_between_eviction_runs(Duration::from_millis(5))
+        .shutdown_timeout(Duration::from_millis(50))
+        .build()
+        .await
+        .expect("build pool");
+    pool.init().await.expect("start maintenance");
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while entered.load(Ordering::Acquire) < 2 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("maintenance enters keep-alive validation");
+
+    let close_result = tokio::time::timeout(Duration::from_millis(500), pool.close()).await;
+    if close_result.is_err() {
+        gate.add_permits(1);
+    }
+    close_result.expect("blocked maintenance cannot hold shutdown forever");
+    assert!(
+        tokio::time::timeout(Duration::from_millis(500), pool.restart())
+            .await
+            .expect("restart fails promptly while maintenance runs")
+            .is_err()
+    );
+    gate.add_permits(1);
+    tokio::time::timeout(Duration::from_secs(1), pool.restart())
+        .await
+        .expect("restart completes after maintenance release")
+        .expect("restart succeeds after maintenance release");
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn synchronous_stat_sink_does_not_block_the_async_runtime() {
+    let (release, receiver) = std_mpsc::channel();
+    let entered = Arc::new(AtomicUsize::new(0));
+    let pool = DruidPool::builder()
+        .name("stat-sink-runtime-isolation")
+        .driver_name("test")
+        .factory(Arc::new(SelectiveSlowCloseFactory {
+            first_gate: Arc::new(Semaphore::new(1)),
+            block_overflow: false,
+            created: AtomicUsize::new(0),
+            entered: Arc::new(AtomicUsize::new(0)),
+            closed: Arc::new(AtomicUsize::new(0)),
+        }))
+        .stat_publish_interval(Duration::from_secs(3600))
+        .stat_sink(Arc::new(BlockingStatSink {
+            entered: Arc::clone(&entered),
+            release: Mutex::new(receiver),
+        }))
+        .build()
+        .await
+        .expect("build pool");
+    let release_after = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(400));
+        release.send(()).expect("release sink");
+    });
+    let started = Instant::now();
+    pool.init().await.expect("start publisher");
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    let elapsed = started.elapsed();
+    release_after.join().expect("release thread joins");
+    assert!(entered.load(Ordering::Acquire) > 0);
+    assert!(
+        elapsed < Duration::from_millis(200),
+        "blocked sink stalled the async runtime for {elapsed:?}"
+    );
     pool.close().await;
 }
