@@ -844,3 +844,11 @@ Cell Sync及旧两Access导入负向编译实际E0277/E0432。三个完整单源
 
 
 2026-10-09 修改后403完整Workspace终态405：原workspace/all-features/locked/offline/-j1/no-fail-fast实际exit0，4198PASS/0FAIL/0ignored，日志SHA 7805a88c67bbadba895f9d8622a492149e64a3ddc123df7763094a7bf8e1e233；日志重新统计与原结果一致，1278冻结输入逐项不变。本轮来源包含402候选修复，不能与旧319混用。证据及执行源码以普通文件保存在docs/verification/rdbc-first/workspace405/，不新增ZIP/PDB/编译产物。同一session56719继续严格Clippy及doc/fmt/完整C1-C2；这些后续门禁尚未取得整轮终态。正式E业务候选未集成，LLVM/API/SemVer/MSRV/feature/实库全矩阵及18顶层任务仍OPEN。
+
+
+2026-10-09 当前403严格/doc/fmt阶段及修复草稿407：strict全workspace/allfeatures/alltargets/-D warnings实际exit0，日志SHA d540c44fe749ec63c79f57e08f2788dfb0ad957d8aa4d5c48920511778dba4ae；doc/no-deps exit0，日志SHA f0ed830f5eed9f5cf99b082ffaf4a3805e291a44a3f0e4be360dbff34e79706e。完整fmt实际exit1，仅sqlx_connection_actor.rs两use顺序，原日志保留。冻结外同一文件原rustfmt RED exit1->格式化->GREEN exit0；仅调换两个导入顺序，逆变换逐字节相等，1278冻结输入不变。草稿desired SHA a583de52d8479794da2882446a38ea1c882081e2e86a1e3399e63ea5d915a703，普通源码/日志在docs/verification/rdbc-first/format407/；未apply，不宣称完整fmt或C1/C2通过。原session56719完整C1/C2继续，正式候选未集成，18顶层OPEN。
+
+
+2026-10-09 格式草稿407补证：默认newline设置单文件rustfmt --check同样exit0，原CRLF字节保留。初次406默认格式化转换LF后原字节证明失败，原脚本和三命令日志保存在format407/initial406/，该设置失败不计产品RED或完整fmt PASS。候选冻结未修改，407仍待403完整C1/C2终态后应用及全fmt复验。
+
+2026-10-10 403最终结果与407格式修复：原完整验收C1/C2 exit0，479行/442唯一方法，executed=yes；workspace4198/0、strict0、doc0。原403仅fmt exit1，因此总exit1。只交换F候选actor两条use顺序，字节逆变换一致，1278冻结输入仅此一项变更；之后cargo fmt --all -- --check exit0。详见 docs/verification/rdbc-first/format407/RESULT.md。候选仍未合入E；18顶层OPEN。

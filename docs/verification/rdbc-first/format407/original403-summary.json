@@ -1,0 +1,138 @@
+{
+  "terminal": true,
+  "pid": 67796,
+  "production_applied": false,
+  "frozen_input_count": 1278,
+  "commands": [
+    {
+      "name": "wrapper-original-prebuild",
+      "command": [
+        "C:\\Users\\hnxyh\\.rustup\\toolchains\\1.97.1-x86_64-pc-windows-msvc\\bin\\cargo.exe",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "druid-wrapper",
+        "--all-features",
+        "--lib",
+        "--",
+        "--show-output"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1563.0,
+      "log": "F:\\codex_build_cache\\druid_rust\\task6_e_disk_full_evidence_20261008\\task7-candidate-verification403\\wrapper-original-prebuild.log",
+      "sha256": "8126a1766e7f00d5a9d309b8724c220318fcc30da1545518603d354bd97b0943",
+      "passed": 18,
+      "failed": 0,
+      "ignored": 0,
+      "changed_inputs": []
+    },
+    {
+      "name": "workspace-complete",
+      "command": [
+        "C:\\Users\\hnxyh\\.rustup\\toolchains\\1.97.1-x86_64-pc-windows-msvc\\bin\\cargo.exe",
+        "test",
+        "--workspace",
+        "--all-features",
+        "--locked",
+        "--offline",
+        "-j1",
+        "--no-fail-fast"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 15263.234000000026,
+      "log": "F:\\codex_build_cache\\druid_rust\\task6_e_disk_full_evidence_20261008\\task7-candidate-verification403\\workspace-complete.log",
+      "sha256": "7805a88c67bbadba895f9d8622a492149e64a3ddc123df7763094a7bf8e1e233",
+      "passed": 4198,
+      "failed": 0,
+      "ignored": 0,
+      "changed_inputs": []
+    },
+    {
+      "name": "workspace-strict",
+      "command": [
+        "C:\\Users\\hnxyh\\.rustup\\toolchains\\1.97.1-x86_64-pc-windows-msvc\\bin\\cargo.exe",
+        "clippy",
+        "--workspace",
+        "--all-features",
+        "--locked",
+        "--offline",
+        "-j1",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 598.5149999999849,
+      "log": "F:\\codex_build_cache\\druid_rust\\task6_e_disk_full_evidence_20261008\\task7-candidate-verification403\\workspace-strict.log",
+      "sha256": "d540c44fe749ec63c79f57e08f2788dfb0ad957d8aa4d5c48920511778dba4ae",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0,
+      "changed_inputs": []
+    },
+    {
+      "name": "workspace-doc",
+      "command": [
+        "C:\\Users\\hnxyh\\.rustup\\toolchains\\1.97.1-x86_64-pc-windows-msvc\\bin\\cargo.exe",
+        "doc",
+        "--workspace",
+        "--all-features",
+        "--locked",
+        "--offline",
+        "-j1",
+        "--no-deps"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 78.07800000000861,
+      "log": "F:\\codex_build_cache\\druid_rust\\task6_e_disk_full_evidence_20261008\\task7-candidate-verification403\\workspace-doc.log",
+      "sha256": "f0ed830f5eed9f5cf99b082ffaf4a3805e291a44a3f0e4be360dbff34e79706e",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0,
+      "changed_inputs": []
+    },
+    {
+      "name": "format-check",
+      "command": [
+        "C:\\Users\\hnxyh\\.rustup\\toolchains\\1.97.1-x86_64-pc-windows-msvc\\bin\\cargo.exe",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 3.562999999994645,
+      "log": "F:\\codex_build_cache\\druid_rust\\task6_e_disk_full_evidence_20261008\\task7-candidate-verification403\\format-check.log",
+      "sha256": "7a44fbebf7fbedf57e13177aa7d8e4b4315d6a62dd1dbc14c0b23e932a5cebfe",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0,
+      "changed_inputs": []
+    },
+    {
+      "name": "c1-complete-runtime",
+      "command": [
+        "C:/Espressif/tools/python/python.exe",
+        "-X",
+        "utf8",
+        "scripts/verify_task6_method_parity.py",
+        "--repository-root",
+        "F:\\codex_build_cache\\d177"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 4146.937000000005,
+      "log": "F:\\codex_build_cache\\druid_rust\\task6_e_disk_full_evidence_20261008\\task7-candidate-verification403\\c1-complete-runtime.log",
+      "sha256": "f21b946f415a2838363c100cc271f0a108dd692d8a7eb787378a7549c8c797e6",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0,
+      "changed_inputs": []
+    }
+  ],
+  "original_c1_c2_timeouts_preserved": true,
+  "child_priority": "normal inherited",
+  "parent319_terminal_sha256": "36a165c61a9c7f53f0d30fb8323c30539819237fce5a4ab61fcca02adb615469",
+  "exit_code": 1
+}

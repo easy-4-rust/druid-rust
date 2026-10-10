@@ -7,3 +7,6 @@
 /docs/verification/rdbc-first/preflight404/** -text whitespace=cr-at-eol
 /docs/verification/rdbc-first/workspace405/** -text whitespace=cr-at-eol
 /docs/verification/rdbc-first/workspace405/*.log -text whitespace=cr-at-eol,-blank-at-eof
+/docs/verification/rdbc-first/format407/** -text whitespace=cr-at-eol,-blank-at-eof
+/docs/verification/rdbc-first/format407/*.log -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+/docs/verification/rdbc-first/format407/initial406/*.log -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof

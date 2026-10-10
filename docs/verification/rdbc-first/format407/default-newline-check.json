@@ -1,0 +1,13 @@
+{
+  "command": [
+    "C:/Users/hnxyh/.rustup/toolchains/1.97.1-x86_64-pc-windows-msvc/bin/rustfmt.exe",
+    "--edition",
+    "2021",
+    "--config",
+    "skip_children=true",
+    "--check",
+    "F:\\codex_build_cache\\druid_rust\\task6_e_disk_full_evidence_20261008\\task7-format-draft407\\sqlx_connection_actor.rs"
+  ],
+  "exit_code": 0,
+  "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

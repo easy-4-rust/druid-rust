@@ -1,0 +1,1 @@
+Initial 406 collection failed at original.count(before)==1: original used CRLF while the default rustfmt draft used LF. This was a draft byte-proof setup failure, not a product test failure or a passing complete workspace format gate. The original 403 frozen input was not changed. Corrected 407 retains CRLF and proves exact inverse bytes; default rustfmt check also passes.

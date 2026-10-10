@@ -1,0 +1,10 @@
+Diff in \\?\F:\codex_build_cache\druid_rust\task6_e_disk_full_evidence_20261008\task7-format-draft406\sqlx_connection_actor.rs:14:
+ use std::sync::atomic::AtomicU64;
+ use std::sync::atomic::{AtomicBool, Ordering};
+ use std::sync::Arc;
+-use tokio::sync::{mpsc, oneshot, watch};
+ use tokio::sync::Mutex;
++use tokio::sync::{mpsc, oneshot, watch};
+ 
+ /// 串行拥有一个 SQLx raw connection 的 canonical executor/lease。
+ ///

@@ -1,0 +1,53 @@
+{
+  "scope": "SINGLE_IMPORT_ORDER_DRAFT_NOT_APPLIED_TO_FROZEN_CANDIDATE",
+  "path": "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
+  "candidate_preimage_sha256": "c3ba4da266bb0cc11e39515b3ff349e1f263280d5c310a75aa06cf210309b4cf",
+  "desired_sha256": "a583de52d8479794da2882446a38ea1c882081e2e86a1e3399e63ea5d915a703",
+  "commands": [
+    {
+      "name": "red-check",
+      "command": [
+        "C:/Users/hnxyh/.rustup/toolchains/1.97.1-x86_64-pc-windows-msvc/bin/rustfmt.exe",
+        "--edition",
+        "2021",
+        "--config",
+        "skip_children=true,newline_style=Windows",
+        "--check",
+        "F:\\codex_build_cache\\druid_rust\\task6_e_disk_full_evidence_20261008\\task7-format-draft407\\sqlx_connection_actor.rs"
+      ],
+      "exit_code": 1,
+      "log_sha256": "f297afeeadc0d54642bf1f9571302aa59bc1810182f7b431827157f226792b1a"
+    },
+    {
+      "name": "format",
+      "command": [
+        "C:/Users/hnxyh/.rustup/toolchains/1.97.1-x86_64-pc-windows-msvc/bin/rustfmt.exe",
+        "--edition",
+        "2021",
+        "--config",
+        "skip_children=true,newline_style=Windows",
+        "F:\\codex_build_cache\\druid_rust\\task6_e_disk_full_evidence_20261008\\task7-format-draft407\\sqlx_connection_actor.rs"
+      ],
+      "exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "green-check",
+      "command": [
+        "C:/Users/hnxyh/.rustup/toolchains/1.97.1-x86_64-pc-windows-msvc/bin/rustfmt.exe",
+        "--edition",
+        "2021",
+        "--config",
+        "skip_children=true,newline_style=Windows",
+        "--check",
+        "F:\\codex_build_cache\\druid_rust\\task6_e_disk_full_evidence_20261008\\task7-format-draft407\\sqlx_connection_actor.rs"
+      ],
+      "exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "reverse_transform_byte_identical": true,
+  "frozen_inputs_unchanged": 1278,
+  "production_applied": false,
+  "full_workspace_format_after_apply_not_verified": true
+}
