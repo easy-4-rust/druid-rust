@@ -262,6 +262,29 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
 
         verify_tree(self.root, phase="transitional")
 
+    def test_final_phase_includes_canonical_resource_contracts(self) -> None:
+        """Final purity counts JDBC resource contracts and permits their canonical paths."""
+
+        (self.root / "resource/mod.rs").write_text(
+            "mod blob;\npub use blob::Blob;\n", encoding="utf-8"
+        )
+        (self.root / "resource/blob.rs").write_text(
+            "pub trait Blob: Send {}\n", encoding="utf-8"
+        )
+        (self.root / "connection/contract.rs").write_text(
+            "use crate::resource::Blob;\npub trait Contract: Blob {}\n",
+            encoding="utf-8",
+        )
+
+        verified = verify_tree(self.root, phase="final")
+        self.assertIn(Path("resource/blob.rs"), verified)
+
+        (self.root / "resource/blob.rs").write_text(
+            "pub trait Blob: Send {}\npub struct ConnectionHolder;\n", encoding="utf-8"
+        )
+        with self.assertRaisesRegex(VerificationError, r"resource[/\\]blob.rs"):
+            verify_tree(self.root, phase="final")
+
     def test_rejects_physical_and_product_runtime_identities(self) -> None:
         """Canonical files cannot name Physical, Druid, holder, lease, cache, or filter types."""
 

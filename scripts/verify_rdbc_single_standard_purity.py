@@ -781,8 +781,9 @@ def generic_parameter_bindings(unit: SourceUnit, opening: int, closing: int) -> 
 class ModuleScopeIndex:
     """Two-pass reachable Rust module/binding index rooted at src/lib.rs."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, phase: str) -> None:
         self.root = root
+        self.phase = phase
         self.sources: dict[Path, SourceUnit] = {}
         self.scopes: dict[tuple[str, ...], ModuleScope] = {}
         self.binding_cache: dict[tuple[tuple[str, ...], str, bool], ResolvedTarget] = {}
@@ -796,14 +797,20 @@ class ModuleScopeIndex:
             (), crate_root, 0, len(unit.tokens), None, True
         )
         self.scan_scope(root_scope)
+        transitional_roots = TRANSITIONAL_ROOT_MODULES - (
+            {"resource"} if phase == "final" else set()
+        )
         root_names = {
             name
             for name, identity in root_scope.children.items()
             if root_scope.child_visibility[name]
             and identity
-            and name not in TRANSITIONAL_ROOT_MODULES
+            and name not in transitional_roots
         }
-        missing = sorted(set(REQUIRED_CANONICAL_MODULES).difference(root_names))
+        required = set(REQUIRED_CANONICAL_MODULES)
+        if phase == "final":
+            required.add("resource")
+        missing = sorted(required.difference(root_names))
         if missing:
             fail(
                 f"standard scaffold is incomplete or unreachable from lib.rs: {missing}"
@@ -2039,9 +2046,8 @@ class ModuleScopeIndex:
         self.validate_target(target, path, canonical=canonical)
         return target
 
-    @staticmethod
     def validate_target(
-        target: ResolvedTarget, path: tuple[str, ...], *, canonical: bool
+        self, target: ResolvedTarget, path: tuple[str, ...], *, canonical: bool
     ) -> None:
         """Enforce canonical external and transitional-root allowlists after resolution."""
 
@@ -2054,7 +2060,10 @@ class ModuleScopeIndex:
                 and root not in RUST_PRELUDE_ROOTS
             ):
                 fail(f"backend/external root is forbidden: {root}")
-        if target.module and target.module[0] in FORBIDDEN_TRANSITIONAL_PATH_ROOTS:
+        forbidden_roots = FORBIDDEN_TRANSITIONAL_PATH_ROOTS - (
+            {"resource"} if self.phase == "final" else set()
+        )
+        if target.module and target.module[0] in forbidden_roots:
             fail(
                 "canonical path resolves into transitional module: "
                 f"{'::'.join(target.module)} via {'::'.join(path)}"
@@ -2239,7 +2248,7 @@ def verify_tree(root: Path, *, phase: str) -> tuple[Path, ...]:
 
     if phase not in {"scaffold", "transitional", "final"}:
         fail(f"unknown purity phase: {phase}")
-    module_index = ModuleScopeIndex(root)
+    module_index = ModuleScopeIndex(root, phase=phase)
     standard_files = discover_standard_files(module_index)
     for relative in standard_files:
         path = root / relative

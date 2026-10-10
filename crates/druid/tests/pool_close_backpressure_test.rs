@@ -424,7 +424,9 @@ async fn explicit_overflow_close_reports_physical_timeout() {
     assert!(error
         .to_string()
         .contains("physical connection close timed out"));
-    assert_eq!(entered.load(Ordering::Acquire), 2);
+    // 后台 worker 可能已完成首个超时并开始关闭第二个连接；显式溢出关闭也必须已进入。
+    let close_attempts = entered.load(Ordering::Acquire);
+    assert!((2..=3).contains(&close_attempts), "close attempts: {close_attempts}");
     assert!(pool.state().close_queue_rejected_total > 0);
     assert!(pool.state().close_timeout_total > 0);
 
