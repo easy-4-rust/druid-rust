@@ -319,8 +319,9 @@ jobs:
           retention-days: 90
 
   semver:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    env:
+      SEMVER_BASELINE_REV: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '2c421efa6caf8bfc983633529fc3775c251f9492' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -331,6 +332,25 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-semver-checks
-      - run: cargo semver-checks check-release -p druid-rdbc --baseline-rev origin/${{ github.base_ref }}
-      - run: cargo semver-checks check-release -p druid --baseline-rev origin/${{ github.base_ref }}
-      - run: cargo semver-checks check-release -p druid-wrapper --baseline-rev origin/${{ github.base_ref }}
+      - name: Capture SemVer reports against the decision baseline
+        run: |
+          mkdir -p api/observed
+          cargo semver-checks --version > api/observed/semver-tool-version.txt
+          printf 'baseline=%s\n' "$SEMVER_BASELINE_REV" > api/observed/semver-baseline.txt
+          set +e
+          cargo semver-checks --package druid-rdbc --baseline-rev "$SEMVER_BASELINE_REV" --all-features --verbose > api/observed/druid-rdbc.semver-checks.txt 2>&1
+          rdbc_status=$?
+          cargo semver-checks --package druid --baseline-rev "$SEMVER_BASELINE_REV" --all-features --verbose > api/observed/druid.semver-checks.txt 2>&1
+          druid_status=$?
+          cargo semver-checks --package druid-wrapper --baseline-rev "$SEMVER_BASELINE_REV" --all-features --verbose > api/observed/druid-wrapper.semver-checks.txt 2>&1
+          wrapper_status=$?
+          printf 'druid-rdbc=%s\ndruid=%s\ndruid-wrapper=%s\n' "$rdbc_status" "$druid_status" "$wrapper_status" | tee api/observed/semver-exit-codes.txt
+          test "$rdbc_status" -eq 0 && test "$druid_status" -eq 0 && test "$wrapper_status" -eq 0
+      - name: Upload SemVer reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semver-reports-${{ github.sha }}
+          path: api/observed/*.txt
+          if-no-files-found: warn
+          retention-days: 90
