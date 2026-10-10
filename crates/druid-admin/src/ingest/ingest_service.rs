@@ -348,14 +348,21 @@ impl MetricsIngest for IngestService {
                                 else {
                                     return false;
                                 };
-                                if replace {
-                                    repository.replace_stream(
-                                        &service_identity.service_identity,
-                                        prepared,
-                                    )
-                                } else {
-                                    repository.apply_batch(prepared)
-                                }
+                                command_broker.commit_if_current(
+                                    &service_identity.service_identity,
+                                    &header,
+                                    &command_tx,
+                                    || {
+                                        if replace {
+                                            repository.replace_stream(
+                                                &service_identity.service_identity,
+                                                prepared,
+                                            )
+                                        } else {
+                                            repository.apply_batch(prepared)
+                                        }
+                                    },
+                                )
                             },
                         )
                         .await

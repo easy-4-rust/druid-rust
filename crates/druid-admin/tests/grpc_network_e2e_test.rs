@@ -658,6 +658,71 @@ async fn grpc_newer_sequence_updates_rest_state() {
 }
 
 #[tokio::test]
+async fn successor_stream_fences_old_epoch_before_it_can_overwrite_repository() {
+    let repository = MetricsRepository::new();
+    let service = IngestService::new(repository.clone());
+    let reservation = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve fenced ingest address");
+    let address = reservation.local_addr().expect("fenced ingest address");
+    drop(reservation);
+    let (shutdown, server_handle) = start_production_server_at(address, service).await;
+    let endpoint = format!("http://{address}");
+    let first_identity = StreamIdentity::new("epoch-fence", 51_001);
+    let mut first = open_generated_stream(&endpoint, &first_identity).await;
+    assert_eq!(
+        send_batch_and_expect_ack(&mut first, &first_identity, 1, orders_entry(1, 1), true).await,
+        1
+    );
+
+    let mut successor_identity = first_identity.clone();
+    successor_identity.stream_epoch += 1;
+    let mut successor = open_generated_stream(&endpoint, &successor_identity).await;
+    assert_eq!(
+        send_batch_and_expect_ack(
+            &mut successor,
+            &successor_identity,
+            1,
+            orders_entry(7, 7),
+            true,
+        )
+        .await,
+        1
+    );
+
+    let _ = first
+        .tx
+        .send(ClientFrame {
+            payload: Some(client_frame::Payload::SnapshotBatch(SnapshotBatch {
+                header: Some(first_identity.header(2)),
+                entries: vec![orders_entry(99, 99)],
+                is_full_snapshot: false,
+                snapshot_transaction: None,
+            })),
+        })
+        .await;
+    let old_end = tokio::time::timeout(TEST_TIMEOUT, first.inbound.message())
+        .await
+        .expect("old stream ends after successor attaches")
+        .expect("old stream closes without transport error");
+    assert!(
+        old_end.is_none(),
+        "old epoch must no longer receive snapshot ACKs"
+    );
+    let visible = repository.all_datasources();
+    assert_eq!(visible.len(), 1);
+    assert_eq!(visible[0].datasource.active_count, 7);
+
+    drop(first.tx);
+    drop(successor.tx);
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("fenced ingest server joins")
+        .expect("fenced ingest server stops");
+}
+
+#[tokio::test]
 async fn grpc_duplicate_and_increasing_sequences_are_handled_over_network() {
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("duplicate", 10);

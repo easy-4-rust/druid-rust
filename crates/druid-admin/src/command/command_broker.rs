@@ -134,10 +134,42 @@ impl CommandBroker {
         for (permit, frame) in permits.zip(pending) {
             permit.send(frame);
         }
-        inner
+        if let Some((_, _, previous_cancel)) = inner
             .streams
-            .insert(selector, (header.clone(), sender.clone(), cancellation));
+            .insert(selector, (header.clone(), sender.clone(), cancellation))
+        {
+            // 新 epoch 接管后立即停止旧连接；旧连接若已进入提交路径，
+            // 下方的提交门禁会与 attach 使用同一把锁串行化。
+            previous_cancel.cancel();
+        }
         Ok(())
+    }
+
+    /// 仅允许当前附着的精确 stream epoch/sender 执行 repository 提交。
+    pub(crate) fn commit_if_current(
+        &self,
+        selector: &ServiceIdentity,
+        header: &FrameHeader,
+        sender: &mpsc::Sender<ServerFrame>,
+        commit: impl FnOnce() -> bool,
+    ) -> bool {
+        let inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !inner
+            .streams
+            .get(selector)
+            .is_some_and(|(current, current_sender, _)| {
+                current.stream_epoch == header.stream_epoch
+                    && current.protocol_version == header.protocol_version
+                    && current_sender.same_channel(sender)
+            })
+        {
+            return false;
+        }
+        // 持锁跨越同步 repository 写入，阻止新 epoch 在校验与提交间接管。
+        commit()
     }
 
     /// 只在 sender 仍是当前连接时注销 live stream。
