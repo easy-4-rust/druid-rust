@@ -163,6 +163,35 @@ async fn multiple_registrations_and_selective_drop() {
 }
 
 #[tokio::test]
+async fn dropping_one_registration_preserves_another_with_the_same_datasource_id() {
+    let runtime = DruidMetricsRuntime::start(
+        DruidMetricsConfig::builder()
+            .sample_interval(Duration::from_secs(60))
+            .build()
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    let metrics = runtime.self_metrics().clone();
+    let first = Arc::new(MockDataSource::new(12, "first"));
+    let second = Arc::new(MockDataSource::new(12, "second"));
+    let first_guard = runtime.register(first.clone());
+    let _second_guard = runtime.register(second.clone());
+    assert_eq!(metrics.registered_datasources(), 2);
+
+    drop(first_guard);
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while metrics.registered_datasources() == 2 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("unregister listener processes the dropped guard");
+    assert_eq!(metrics.registered_datasources(), 1);
+    runtime.shutdown(Duration::from_secs(1)).await.unwrap();
+}
+
+#[tokio::test]
 async fn shutdown_within_deadline_succeeds() {
     let config = DruidMetricsConfig::builder()
         .sample_interval(Duration::from_millis(50))

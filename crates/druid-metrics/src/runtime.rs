@@ -159,11 +159,12 @@ impl DruidMetricsRuntime {
                     biased;
                     () = unregister_cancel.cancelled() => break,
                     id = unreg_rx.recv() => {
-                        let Some(id) = id else {
+                        let Some(_id) = id else {
                             break;
                         };
                         let mut guard = unreg_registry.write();
-                        guard.retain(|entry| entry.datasource_id != id && entry.is_active());
+                        // ID 可以被多个注册共享；通知只是唤醒，失效令牌才决定删除。
+                        guard.retain(RegistryEntry::is_active);
                         unregister_metrics.set_registered_datasources(guard.len());
                     }
                 }
