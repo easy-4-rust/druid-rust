@@ -107,6 +107,21 @@ async fn init_stream(handler: &IngestHandler, svc: &str, inst: &str, boot: &str,
 // ─── tests ──────────────────────────────────────────────────────────────────
 
 #[tokio::test]
+async fn goodbye_releases_stream_capacity_for_next_session() {
+    let handler = IngestHandler::new().with_limits(1, 1);
+    init_stream(&handler, "svc", "instance-a", "boot-a", 1).await;
+    let goodbye = ClientFrame {
+        payload: Some(client_frame::Payload::Goodbye(ClientGoodbye {
+            header: Some(make_header(0, "svc", "instance-a", "boot-a", 1)),
+            reason: "client_shutdown".to_owned(),
+        })),
+    };
+    assert!(handler.handle_frame(&goodbye).await.is_none());
+
+    init_stream(&handler, "svc", "instance-b", "boot-b", 1).await;
+}
+
+#[tokio::test]
 async fn duplicate_batch_only_ingested_once() {
     let handler = IngestHandler::new();
 

@@ -181,7 +181,23 @@ impl IngestHandler {
                 self.handle_command_ack(ack);
                 None
             }
-            Some(client_frame::Payload::Goodbye(_)) => None,
+            Some(client_frame::Payload::Goodbye(goodbye)) => {
+                let hdr = goodbye.header.as_ref()?;
+                let key = match self.stream_key(hdr, service_identity) {
+                    Ok(key) => key,
+                    Err(message) => {
+                        return Some(self.make_snapshot_transaction_error(hdr, message))
+                    }
+                };
+                // Goodbye 结束该协议流的 sequence/transaction 所有权，释放容量；
+                // 已提交的 Admin 最新值仍由 repository TTL 独立治理。
+                self.state
+                    .lock()
+                    .expect("ingest lock poisoned")
+                    .streams
+                    .remove(&key);
+                None
+            }
             None => None,
         }
     }
