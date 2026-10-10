@@ -98,6 +98,7 @@ loopback 明文兼容模式省略 `Secure` 以免浏览器永远不发送；两�
 加入使用 cookie 的状态修改 POST/PUT/DELETE，必须在该变更中加入同步 CSRF token 或等价
 防护，不能只依赖 SameSite。当前 command POST 明确要求 Basic Authorization header，不接受
 session-only 请求，因此不把 session cookie 当作 CSRF 授权。GET/HEAD 不得执行状态修改。
+server-side session 保留两小时，成功登录时先清理过期项；最多保留 1024 个，满额时淘汰最早创建的 session，避免登录速率导致内存无限增长。
 
 ## 7. 剩余风险与运维门禁
 

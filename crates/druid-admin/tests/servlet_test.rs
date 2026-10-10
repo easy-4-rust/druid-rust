@@ -443,6 +443,54 @@ async fn auth_session_cookie_grants_access() {
     handle.abort();
 }
 
+#[tokio::test]
+async fn login_session_capacity_evicts_oldest_cookie_without_rejecting_new_login() {
+    let (addr, handle) = start_servlet_server_with_auth("admin", "secret").await;
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let mut first_cookie = None;
+    let mut newest_cookie = None;
+    for index in 0..=1_024 {
+        let response = client
+            .post(format!("http://{addr}/druid/submitLogin"))
+            .form(&[("loginUsername", "admin"), ("loginPassword", "secret")])
+            .send()
+            .await
+            .expect("login request completes");
+        assert_eq!(response.status(), 200, "login {index} succeeds");
+        let cookie = response
+            .headers()
+            .get("set-cookie")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(';').next())
+            .expect("successful login issues a session cookie")
+            .to_owned();
+        if first_cookie.is_none() {
+            first_cookie = Some(cookie.clone());
+        }
+        newest_cookie = Some(cookie);
+    }
+
+    let resource = format!("http://{addr}/druid/datasource.json");
+    let old_response = client
+        .get(&resource)
+        .header("cookie", first_cookie.expect("first cookie"))
+        .send()
+        .await
+        .expect("old session lookup completes");
+    assert_eq!(old_response.status(), 302, "oldest session is evicted");
+    let new_response = client
+        .get(&resource)
+        .header("cookie", newest_cookie.expect("newest cookie"))
+        .send()
+        .await
+        .expect("new session lookup completes");
+    assert_eq!(new_response.status(), 200, "newest session remains valid");
+    handle.abort();
+}
+
 // ---- Static resource tests ----
 
 /// Requesting a non-existent HTML page must return 404.

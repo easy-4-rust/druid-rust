@@ -28,13 +28,14 @@ use super::LoginRequest;
 
 /// Session expiry duration (2 hours, matching typical Java Servlet session).
 const SESSION_TTL: Duration = Duration::from_secs(7200);
+const MAX_SESSIONS: usize = 1_024;
 
 /// Druid 管理协议的 Axum 路由。
 ///
 /// 对应 Java: `com.alibaba.druid.admin.servlet.MonitorViewServlet`。
 ///
-/// Sessions are stored with creation timestamps and expired after
-/// the two-hour session expiry interval to prevent unbounded memory growth.
+/// Sessions are stored with creation timestamps, a two-hour TTL, and a hard
+/// capacity so repeated successful logins cannot grow memory without bound.
 #[derive(Clone)]
 pub struct MonitorViewServlet {
     backend: MonitorBackend,
@@ -416,7 +417,20 @@ impl MonitorViewServlet {
             return (StatusCode::OK, "error").into_response();
         }
         let token = uuid::Uuid::new_v4().simple().to_string();
-        state.sessions.write().insert(token.clone(), Instant::now());
+        let now = Instant::now();
+        let mut sessions = state.sessions.write();
+        sessions.retain(|_, created| now.duration_since(*created) < SESSION_TTL);
+        if sessions.len() >= MAX_SESSIONS {
+            if let Some(oldest) = sessions
+                .iter()
+                .min_by_key(|(_, created)| **created)
+                .map(|(token, _)| token.clone())
+            {
+                sessions.remove(&oldest);
+            }
+        }
+        sessions.insert(token.clone(), now);
+        drop(sessions);
         let secure = if state.secure_cookies { "; Secure" } else { "" };
         (
             StatusCode::OK,
@@ -1111,8 +1125,8 @@ fn is_command_path(path: &str, context_path: &str) -> bool {
 
 /// Check whether the request carries a valid (non-expired) session token.
 ///
-/// While holding the write lock, expired sessions are pruned to prevent
-/// unbounded memory growth.
+/// While holding the write lock, expired sessions are pruned; admission also
+/// enforces a hard cap independent of login rate.
 fn request_has_session(request: &Request, sessions: &RwLock<HashMap<String, Instant>>) -> bool {
     let token = request
         .headers()
