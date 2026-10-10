@@ -50,6 +50,7 @@ pub struct DruidPool {
     create_worker_task: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
     close_worker: parking_lot::Mutex<Option<ConnectionCloseWorker>>,
     close_worker_task: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    filter_destroy_task: AsyncMutex<Option<tokio::task::JoinHandle<()>>>,
     stats_collector: Arc<StatsCollector>,
     wall_provider: Arc<WallProvider>,
     statement_id_seed: Arc<AtomicU64>,
@@ -282,6 +283,7 @@ impl DruidPool {
                 Arc::clone(&inner.close_worker_terminated),
             ))),
             close_worker_task: parking_lot::Mutex::new(None),
+            filter_destroy_task: AsyncMutex::new(None),
             stats_collector,
             wall_provider,
             statement_id_seed: Arc::new(AtomicU64::new(20_000)),
@@ -1243,8 +1245,7 @@ impl DruidPool {
     /// 关闭并回收旧代次资源；返回是否已等到全部建连任务退出并完成清理。
     async fn close_resources(&self) -> bool {
         if !self.initialized.load(Ordering::Acquire) {
-            self.destroy_initialized_filters().await;
-            return true;
+            return self.destroy_initialized_filters().await;
         }
         if !self.is_closed() {
             self.inner.set_enabled(false);
@@ -1298,20 +1299,35 @@ impl DruidPool {
                 self.join_close_worker(close_worker_task).await;
             }
         }
-        self.destroy_initialized_filters().await;
-        true
+        self.destroy_initialized_filters().await
     }
 
-    async fn destroy_initialized_filters(&self) {
+    async fn destroy_initialized_filters(&self) -> bool {
+        let mut task = self.filter_destroy_task.lock().await;
         if self
             .filters_initialized
             .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
         {
             if let Some(filter_chain) = &self.filter_chain {
-                filter_chain.destroy_filters().await;
+                let filter_chain = Arc::clone(filter_chain);
+                *task = Some(tokio::spawn(async move {
+                    filter_chain.destroy_filters().await;
+                }));
             }
         }
+        let Some(handle) = task.as_mut() else {
+            return true;
+        };
+        if tokio::time::timeout(self.inner.config.shutdown_timeout, handle)
+            .await
+            .is_err()
+        {
+            tracing::warn!("pool filter destroy exceeded configured shutdown deadline");
+            return false;
+        }
+        task.take();
+        true
     }
 
     /// 将关闭后的池恢复到“尚未初始化”状态。
@@ -1338,7 +1354,7 @@ impl DruidPool {
 
         if !self.close_resources().await {
             return Err(DruidError::Other(
-                "cannot restart while prior-generation creators are still running".to_owned(),
+                "cannot restart while prior-generation shutdown work is still running".to_owned(),
             ));
         }
         self.drain_close_worker_if_idle().await;

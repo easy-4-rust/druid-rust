@@ -1,6 +1,9 @@
 //! 物理关闭变慢时，池的关闭命令必须有硬容量上限。
 
-use druid::core::{Connection, ConnectionFactory, ExecResult, RdbcError, Row, Value};
+use druid::core::{
+    BeforeFilter, Connection, ConnectionFactory, DruidError, ExecContext, ExecResult, FilterChain,
+    RdbcError, Row, Value,
+};
 use druid::pool::DruidPool;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -76,6 +79,32 @@ struct HangingCreateFactory {
     gate: Arc<Semaphore>,
     entered: Arc<AtomicUsize>,
     created: AtomicUsize,
+}
+
+/// 销毁等待闸门的过滤器，验证关闭超时后可从同一生命周期继续等待。
+struct HangingDestroyFilter {
+    gate: Arc<Semaphore>,
+    entered: Arc<AtomicUsize>,
+    completed: Arc<AtomicUsize>,
+}
+
+#[async_trait::async_trait]
+impl BeforeFilter for HangingDestroyFilter {
+    fn name(&self) -> &str {
+        "hanging-destroy"
+    }
+
+    async fn before(&self, _context: &mut ExecContext<'_>) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    async fn destroy(&self) -> Result<(), DruidError> {
+        self.entered.fetch_add(1, Ordering::AcqRel);
+        let permit = self.gate.acquire().await.expect("filter gate remains open");
+        permit.forget();
+        self.completed.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -410,5 +439,60 @@ async fn shutdown_deadline_defers_cleanup_until_external_creator_finishes() {
         .expect("restart is safe after creator drains");
     let mut connection = pool.get().await.expect("new generation borrows");
     connection.close().await.expect("new lease closes");
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn shutdown_deadline_retains_filter_destroy_until_completion() {
+    let gate = Arc::new(Semaphore::new(0));
+    let entered = Arc::new(AtomicUsize::new(0));
+    let completed = Arc::new(AtomicUsize::new(0));
+    let mut chain = FilterChain::new();
+    chain.add_before(Arc::new(HangingDestroyFilter {
+        gate: Arc::clone(&gate),
+        entered: Arc::clone(&entered),
+        completed: Arc::clone(&completed),
+    }));
+    let pool = DruidPool::builder()
+        .name("stalled-filter-destroy")
+        .driver_name("test")
+        .factory(Arc::new(SelectiveSlowCloseFactory {
+            first_gate: Arc::new(Semaphore::new(1)),
+            block_overflow: false,
+            created: AtomicUsize::new(0),
+            entered: Arc::new(AtomicUsize::new(0)),
+            closed: Arc::new(AtomicUsize::new(0)),
+        }))
+        .filter_chain(Arc::new(chain))
+        .shutdown_timeout(Duration::from_millis(50))
+        .build()
+        .await
+        .expect("build pool");
+
+    tokio::time::timeout(Duration::from_millis(500), pool.close())
+        .await
+        .expect("filter destroy cannot hold shutdown forever");
+    assert_eq!(entered.load(Ordering::Acquire), 1);
+    assert_eq!(completed.load(Ordering::Acquire), 0);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(500), pool.restart())
+            .await
+            .expect("restart fails promptly while filter destroy runs")
+            .is_err()
+    );
+
+    gate.add_permits(1);
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while completed.load(Ordering::Acquire) == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("filter destroy completes");
+    tokio::time::timeout(Duration::from_secs(1), pool.restart())
+        .await
+        .expect("restart finishes after filter destroy")
+        .expect("restart succeeds after filter destroy");
+    assert_eq!(entered.load(Ordering::Acquire), 1);
     pool.close().await;
 }
