@@ -47,10 +47,25 @@ impl AdminServerConfig {
         };
         let auth = match optional_env("DRUID_ADMIN_AUTH_MODE")?.as_deref() {
             None | Some("disabled") => AdminAuthMode::Disabled,
-            Some("basic") => AdminAuthMode::basic(
-                required_env("DRUID_ADMIN_LOGIN_USERNAME")?,
-                required_env("DRUID_ADMIN_LOGIN_PASSWORD")?,
-            ),
+            Some("basic") => {
+                let operator_username = required_env("DRUID_ADMIN_LOGIN_USERNAME")?;
+                let operator_password = required_env("DRUID_ADMIN_LOGIN_PASSWORD")?;
+                match (
+                    optional_env("DRUID_ADMIN_INGEST_USERNAME")?,
+                    optional_env("DRUID_ADMIN_INGEST_PASSWORD")?,
+                ) {
+                    (Some(ingest_username), Some(ingest_password)) => {
+                        AdminAuthMode::basic_with_ingest(
+                            operator_username,
+                            operator_password,
+                            ingest_username,
+                            ingest_password,
+                        )
+                    }
+                    (None, None) => AdminAuthMode::basic(operator_username, operator_password),
+                    _ => return Err(AdminConfigError::IncompleteIngestCredentials),
+                }
+            }
             Some(_) => return Err(AdminConfigError::UnsupportedAuthMode),
         };
         let shutdown_timeout = parse_shutdown_timeout()?;
@@ -67,6 +82,9 @@ impl AdminServerConfig {
         }
         if self.requires_remote_security() && (self.tls.is_none() || !self.auth.is_enabled()) {
             return Err(AdminConfigError::InsecureRemoteBind);
+        }
+        if self.requires_remote_security() && !self.auth.has_separate_roles() {
+            return Err(AdminConfigError::RemoteRoleSeparationRequired);
         }
         Ok(())
     }

@@ -210,7 +210,7 @@ impl MonitorViewServlet {
         r#"["/druid/api/datasources","/druid/api/sql/top","/druid/api/sql/slow","/druid/api/wall","/druid/api/active","/metrics"]"#
     }
 
-    async fn authorize(State(state): State<Self>, request: Request, next: Next) -> Response {
+    async fn authorize(State(state): State<Self>, mut request: Request, next: Next) -> Response {
         if is_command_path(request.uri().path(), state.context_path.as_str()) {
             // 命令端点必须由 handler 校验显式 Basic，不能被 Disabled 或 session 放行。
             return next.run(request).await;
@@ -222,10 +222,15 @@ impl MonitorViewServlet {
             .headers()
             .get(header::AUTHORIZATION)
             .and_then(|value| value.to_str().ok());
-        if is_public_path(request.uri().path(), state.context_path.as_str())
-            || request_has_session(&request, &state.sessions)
+        if is_public_path(request.uri().path(), state.context_path.as_str()) {
+            return next.run(request).await;
+        }
+        if request_has_session(&request, &state.sessions)
             || state.auth.authorizes_header(authorization)
         {
+            request
+                .extensions_mut()
+                .insert(crate::config::AdminRole::Operator);
             return next.run(request).await;
         }
         redirect_found(format!("{}/login.html", state.context_path))

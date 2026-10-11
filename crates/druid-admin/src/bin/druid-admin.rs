@@ -12,7 +12,8 @@
 //! - `DRUID_ADMIN_GRPC_ADDR` - gRPC bind address (default: `127.0.0.1:9090`)
 //! - `DRUID_ADMIN_TLS_CERT_PATH` / `DRUID_ADMIN_TLS_KEY_PATH` - shared PEM material
 //! - `DRUID_ADMIN_AUTH_MODE` - `disabled` (loopback only) or `basic`
-//! - `DRUID_ADMIN_LOGIN_USERNAME` / `DRUID_ADMIN_LOGIN_PASSWORD` - Basic credentials
+//! - `DRUID_ADMIN_LOGIN_USERNAME` / `DRUID_ADMIN_LOGIN_PASSWORD` - HTTP operator credentials
+//! - `DRUID_ADMIN_INGEST_USERNAME` / `DRUID_ADMIN_INGEST_PASSWORD` - gRPC ingest credentials (required for remote bind)
 //! - `DRUID_ADMIN_SHUTDOWN_TIMEOUT_MS` - bounded server join deadline (default: `10000`)
 
 use std::sync::Arc;

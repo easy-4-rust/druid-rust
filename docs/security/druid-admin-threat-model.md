@@ -19,7 +19,7 @@ TLS 就把本进程的明文 remote listener 当成安全 listener。当前实�
 flowchart LR
     OP["浏览器 / 运维客户端"] -->|"HTTPS + Basic 或 session"| HTTP["druid-admin rustls HTTP listener"]
     AGENT["druid-metrics client"] -->|"gRPC over TLS + authorization metadata"| GRPC["druid-admin Tonic TLS listener"]
-    HTTP --> AUTH["共享 AdminAuthMode"]
+    HTTP --> AUTH["AdminAuthMode：Operator / Ingest 分离"]
     GRPC --> AUTH
     AUTH --> SERVLET["MonitorViewServlet 单一管理路由"]
     AUTH --> INGEST["MetricsIngest Connect interceptor"]
@@ -35,6 +35,7 @@ flowchart LR
 - HTTP TLS 在 `druid-admin` 的 rustls listener 终止。
 - gRPC TLS 在同一进程的 Tonic server 终止。
 - 两端读取同一份 PEM 证书链和私钥材料；不会自动生成证书或 secret。
+- 远程绑定要求独立的 HTTP Operator 和 gRPC Ingest 凭据；两个入口的凭据不能互换。
 - gRPC interceptor 在调用 `MetricsIngest::connect` 前验证标准
   `authorization` metadata。`ClientHello` 的 service/instance/boot/epoch 只用于协议
   身份与序列校验，绝不是认证凭据。
@@ -70,7 +71,9 @@ flowchart LR
 | gRPC `Connect` | 否（remote） | gRPC `UNAUTHENTICATED` | loopback 且 auth disabled 时允许；remote 配置不允许 disabled |
 
 URL query 中的 `loginUsername/loginPassword` 不再构成认证旁路，因为 URL 常被 access
-log、浏览器历史和 proxy 记录。HTTP Basic header 与现有 login/session 共享同一组凭据。
+log、浏览器历史和 proxy 记录。HTTP Basic header 与现有 login/session 共享操作员凭据；
+gRPC ingest 使用单独凭据。已有仅一组 Basic 凭据的 loopback 部署仍可使用；远程部署
+必须补齐 ingest 用户名和密码，且不能与操作员凭据相同。
 
 ## 5. 配置与 secret 假设
 
@@ -83,6 +86,8 @@ log、浏览器历史和 proxy 记录。HTTP Basic header 与现有 login/sessio
 | `DRUID_ADMIN_AUTH_MODE` | `disabled` / `basic` | 未设置为 disabled；remote 禁止 disabled |
 | `DRUID_ADMIN_LOGIN_USERNAME` | Basic/login 用户名 | basic 必填且非空 |
 | `DRUID_ADMIN_LOGIN_PASSWORD` | Basic/login 密码 | basic 必填且非空；不得打印或写入 metrics |
+| `DRUID_ADMIN_INGEST_USERNAME` | gRPC ingest 用户名 | remote 必填；与 ingest 密码成对 |
+| `DRUID_ADMIN_INGEST_PASSWORD` | gRPC ingest 密码 | remote 必填；与操作员凭据不同 |
 | `DRUID_ADMIN_SHUTDOWN_TIMEOUT_MS` | SIGTERM 后 owned handle join deadline | 默认 `10000`；必须为非零毫秒 |
 
 生产环境应由 secret manager 或只读 volume provision PEM 与凭据。私钥文件应由运行用户

@@ -19,6 +19,9 @@ pub enum AdminConfigError {
     /// basic 模式缺少用户名或密码。
     #[error("basic admin authentication requires non-empty username and password")]
     MissingBasicCredentials,
+    /// gRPC 采集用户名与密码必须同时配置。
+    #[error("admin ingest username and password must be configured together")]
+    IncompleteIngestCredentials,
     /// Basic credentials 不能形成严格 canonical 值。
     #[error("basic admin authentication credentials are invalid")]
     InvalidBasicCredentials,
@@ -28,6 +31,9 @@ pub enum AdminConfigError {
     /// 非 loopback 暴露缺少 TLS 或应用层认证。
     #[error("non-loopback admin listeners require both TLS and authentication")]
     InsecureRemoteBind,
+    /// 远程监听必须把管理操作员与指标采集端的凭据分开。
+    #[error("non-loopback admin listeners require separate operator and ingest credentials")]
+    RemoteRoleSeparationRequired,
     /// 无法读取 TLS 文件。
     #[error("failed to read admin TLS material")]
     TlsMaterialRead(#[source] std::io::Error),

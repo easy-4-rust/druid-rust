@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::Request;
+use druid_admin::config::{AdminAuthMode, AdminServerConfig, AdminTlsFiles};
 use druid_metrics::aggregator::AggregatedBatch;
 use druid_metrics::grpc_client::{GrpcAuthorization, GrpcClientConfig, GrpcMetricsClient};
 use druid_metrics::protocol::{PoolSnapshotMsg, SnapshotEntry};
@@ -25,6 +26,8 @@ const SECURITY_ENV_VARS: &[&str] = &[
     "DRUID_ADMIN_AUTH_MODE",
     "DRUID_ADMIN_LOGIN_USERNAME",
     "DRUID_ADMIN_LOGIN_PASSWORD",
+    "DRUID_ADMIN_INGEST_USERNAME",
+    "DRUID_ADMIN_INGEST_PASSWORD",
     "DRUID_ADMIN_SHUTDOWN_TIMEOUT_MS",
 ];
 
@@ -243,7 +246,7 @@ fn every_non_loopback_bind_requires_tls_and_auth() {
             remote,
             loopback_grpc,
             Some(AdminTlsFiles::new("certificate.pem", "private-key.pem")),
-            AdminAuthMode::basic("admin", "secret"),
+            AdminAuthMode::basic_with_ingest("admin", "secret", "metrics", "metrics-secret"),
         );
         assert!(secured.is_ok(), "remote address {remote}");
     }
@@ -262,6 +265,33 @@ fn every_non_loopback_bind_requires_tls_and_auth() {
         AdminAuthMode::Disabled,
     )
     .is_err());
+}
+
+#[test]
+fn remote_bind_rejects_one_credential_for_both_operator_and_ingest() {
+    let remote_http = "0.0.0.0:8080".parse().expect("remote HTTP address");
+    let remote_grpc = "0.0.0.0:9090".parse().expect("remote gRPC address");
+    let tls = Some(AdminTlsFiles::new("certificate.pem", "private-key.pem"));
+    assert!(
+        AdminServerConfig::try_new(
+            remote_http,
+            remote_grpc,
+            tls,
+            AdminAuthMode::basic("operator", "operator-secret"),
+        )
+        .is_err(),
+        "remote ingest must not accept the operator credential"
+    );
+    assert!(
+        AdminServerConfig::try_new(
+            remote_http,
+            remote_grpc,
+            Some(AdminTlsFiles::new("certificate.pem", "private-key.pem")),
+            AdminAuthMode::basic_with_ingest("operator", "same", "operator", "same"),
+        )
+        .is_err(),
+        "remote role credentials must be distinct"
+    );
 }
 
 #[tokio::test]
@@ -286,6 +316,8 @@ async fn invalid_tls_material_fails_before_listening() {
         .env("DRUID_ADMIN_AUTH_MODE", "basic")
         .env("DRUID_ADMIN_LOGIN_USERNAME", "admin")
         .env("DRUID_ADMIN_LOGIN_PASSWORD", "secret")
+        .env("DRUID_ADMIN_INGEST_USERNAME", "metrics")
+        .env("DRUID_ADMIN_INGEST_PASSWORD", "metrics-secret")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true)
@@ -352,6 +384,8 @@ async fn remote_http_and_grpc_use_tls_and_require_authentication() {
         .env("DRUID_ADMIN_AUTH_MODE", "basic")
         .env("DRUID_ADMIN_LOGIN_USERNAME", "admin")
         .env("DRUID_ADMIN_LOGIN_PASSWORD", "secret")
+        .env("DRUID_ADMIN_INGEST_USERNAME", "metrics")
+        .env("DRUID_ADMIN_INGEST_PASSWORD", "metrics-secret")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true)
@@ -447,6 +481,17 @@ async fn remote_http_and_grpc_use_tls_and_require_authentication() {
             .status(),
         reqwest::StatusCode::OK
     );
+    assert_eq!(
+        client
+            .get(format!("{base_url}/druid/datasource.json"))
+            .basic_auth("metrics", Some("metrics-secret"))
+            .send()
+            .await
+            .expect("ingest credential on HTTP")
+            .status(),
+        reqwest::StatusCode::FOUND,
+        "ingest credential cannot access operator HTTP routes"
+    );
 
     let missing = GrpcMetricsClient::connect(secure_grpc_config(grpc_port, None)).await;
     assert!(
@@ -462,12 +507,23 @@ async fn remote_http_and_grpc_use_tls_and_require_authentication() {
         invalid.is_err(),
         "invalid production credential is rejected"
     );
+    let operator_on_ingest = GrpcMetricsClient::connect(secure_grpc_config(
+        grpc_port,
+        Some(GrpcAuthorization::basic("admin", "secret")),
+    ))
+    .await;
+    assert!(
+        operator_on_ingest.is_err(),
+        "operator credential cannot send metrics"
+    );
 
-    let authenticated_config =
-        secure_grpc_config(grpc_port, Some(GrpcAuthorization::basic("admin", "secret")));
+    let authenticated_config = secure_grpc_config(
+        grpc_port,
+        Some(GrpcAuthorization::basic("metrics", "metrics-secret")),
+    );
     let config_debug = format!("{authenticated_config:?}");
     assert!(!config_debug.contains("secret"));
-    assert!(!config_debug.contains("YWRtaW46c2VjcmV0"));
+    assert!(!config_debug.contains("bWV0cmljczptZXRyaWNzLXNlY3JldA=="));
     assert!(config_debug.contains("[REDACTED]"));
     let metrics_client = GrpcMetricsClient::connect(authenticated_config)
         .await
