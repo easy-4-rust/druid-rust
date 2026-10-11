@@ -36,6 +36,11 @@ ISOLATED_FEATURES = {
     "http-sql": {"reqwest"},
     "libsql-native": {"libsql"},
     "managed-driver-install": {"fs2", "reqwest"},
+    "jdbc-agent": set(),
+    "sqlite": {"toasty", "toasty-core", "toasty-driver-sqlite"},
+    "postgresql": {"toasty", "toasty-core"},
+    "mysql": {"toasty", "toasty-core"},
+    "turso": {"toasty", "toasty-core"},
 }
 # Toasty 0.9.0 internally depends on deadpool 0.13; this does not enable the
 # wrapper's optional deadpool 0.12 adapter. Cargo's feature tree is checked
@@ -43,6 +48,10 @@ ISOLATED_FEATURES = {
 ALLOWED_TRANSITIVE = {
     "toasty": {"deadpool"},
     "toasty-sqlite": {"deadpool"},
+    "sqlite": {"deadpool"},
+    "postgresql": {"deadpool"},
+    "mysql": {"deadpool"},
+    "turso": {"deadpool"},
 }
 
 
