@@ -6,6 +6,8 @@
 
 `PoolInner` 使用有界 `mpsc` 和关闭队列 permit；溢出时显式异步关闭受 `close_timeout` 约束，补池目标通过 `watch` 合并。`PoolState` 暴露队列深度、拒绝数、超时数、补池目标和 worker 终止状态。本机以 `--locked` 重跑 `pool_close_backpressure_test`（11/11）、`task6_pool_maintenance_semantics_test_parity`（14/14）和 `task6_recycle_complete_contract_test`（16/16），均退出 0。这证明已测的慢关闭、维护和回收路径；全仓回归及 P06 其他任务仍未关闭。
 
+Metrics 的 `task_supervision_test`（2/2）、`shutdown_test`（8/8）、`queue_semantics_test`（4/4）、`config_test`（7/7）及 `aggregator_output_test`（17/17）同样以 `--locked` 退出 0，覆盖任务回收、panic 传播、关闭顺序、队列饱和和配置行为。仍需把这些局部证据与网络故障注入、全仓回归及运行预算合并验收。
+
 ## 2026-10-11 本机基线
 
 - 源码：`6bee28d` 加上 `runtime.rs` 等待队列采样；Rust `1.97.1`；Windows 11 `10.0.26200`；i7-13700K（24 逻辑处理器）。
