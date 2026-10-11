@@ -345,7 +345,8 @@ impl MonitorViewServlet {
                 Json(json!({
                     "commandId": acknowledgement.command_id,
                     "success": false,
-                    "error": acknowledgement.error_message
+                    // CommandAck 来自远端客户端；错误文本可能携带 URL、用户名或密码。
+                    "error": "command failed"
                 })),
             )
                 .into_response(),

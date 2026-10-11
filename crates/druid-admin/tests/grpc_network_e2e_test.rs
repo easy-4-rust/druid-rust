@@ -5010,6 +5010,105 @@ async fn authenticated_broker_executes_reset_and_full_snapshot_through_real_inge
         .expect("command gRPC stops");
 }
 
+#[tokio::test]
+async fn command_ack_error_does_not_expose_client_supplied_credentials_over_http() {
+    let repository = MetricsRepository::new();
+    let broker = CommandBroker::new(16, TEST_TIMEOUT);
+    let http_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind command HTTP");
+    let grpc_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind command gRPC");
+    let http_addr = http_listener.local_addr().expect("command HTTP address");
+    let grpc_addr = grpc_listener.local_addr().expect("command gRPC address");
+    let config = AdminServerConfig::try_new(
+        http_addr,
+        grpc_addr,
+        None,
+        AdminAuthMode::basic("admin", "secret"),
+    )
+    .expect("valid command server config");
+    let app = production_router_with_command_broker(repository.clone(), &config, broker.clone());
+    let shutdown = CancellationToken::new();
+    let http_shutdown = shutdown.clone();
+    let grpc_shutdown = shutdown.clone();
+    let http_handle = tokio::spawn(async move {
+        axum::serve(http_listener, app)
+            .with_graceful_shutdown(http_shutdown.cancelled_owned())
+            .await
+    });
+    let ingest = IngestService::new(repository)
+        .with_command_broker(broker)
+        .with_shutdown_token(grpc_shutdown.clone());
+    let grpc_handle = tokio::spawn(async move {
+        Server::builder()
+            .add_service(ingest.into_server())
+            .serve_with_incoming_shutdown(
+                TcpListenerStream::new(grpc_listener),
+                grpc_shutdown.cancelled_owned(),
+            )
+            .await
+    });
+
+    let identity = StreamIdentity::new("command-error-redaction", 93_001);
+    let mut stream = open_generated_stream(&format!("http://{grpc_addr}"), &identity).await;
+    let request = tokio::spawn(async move {
+        reqwest::Client::new()
+            .post(format!("http://{http_addr}/druid/api/commands"))
+            .basic_auth("admin", Some("secret"))
+            .json(&json!({
+                "serviceName": identity.service_name,
+                "instanceId": identity.instance_id,
+                "bootId": identity.boot_id,
+                "commandId": "redacted-failure",
+                "type": "requestFullSnapshot"
+            }))
+            .send()
+            .await
+            .expect("authenticated command request")
+    });
+    let delivered = next_server_frame(&mut stream.inbound).await;
+    let Some(server_frame::Payload::Command(command)) = delivered.payload else {
+        panic!("expected broker command, got {delivered:?}");
+    };
+    assert_eq!(command.command_id, "redacted-failure");
+    stream
+        .tx
+        .send(ClientFrame {
+            payload: Some(client_frame::Payload::CommandAck(
+                druid_metrics::protocol::CommandAck {
+                    header: Some(StreamIdentity::new("command-error-redaction", 93_001).header(0)),
+                    command_id: "redacted-failure".to_owned(),
+                    success: false,
+                    error_message: "postgres://alice:top-secret@database/orders?token=private"
+                        .to_owned(),
+                },
+            )),
+        })
+        .await
+        .expect("send failed command acknowledgement");
+    let response = request.await.expect("command request joins");
+    assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+    let body = response.text().await.expect("read command response");
+    assert!(body.contains("redacted-failure"));
+    assert!(body.contains("command failed"));
+    assert!(!body.contains("top-secret"));
+    assert!(!body.contains("private"));
+    assert!(!body.contains("alice"));
+
+    drop(stream.tx);
+    shutdown.cancel();
+    http_handle
+        .await
+        .expect("command HTTP joins")
+        .expect("command HTTP stops");
+    grpc_handle
+        .await
+        .expect("command gRPC joins")
+        .expect("command gRPC stops");
+}
+
 async fn post_authenticated_command_until_live(
     client: &reqwest::Client,
     http_addr: SocketAddr,
