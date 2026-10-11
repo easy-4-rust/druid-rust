@@ -3,11 +3,50 @@ use druid_rdbc::connection::Connection;
 use druid_rdbc::driver::{ConnectionProperties, Driver, DriverAction};
 use druid_rdbc::error::RdbcError;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::Duration;
 
 struct RefusingDriver;
 
 struct AcceptingButRefusingDriver;
+
+struct ReentrantDriver {
+    registered: Arc<dyn Driver>,
+    callback_completed: Arc<AtomicUsize>,
+    registration: Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+
+#[async_trait::async_trait]
+impl Driver for ReentrantDriver {
+    fn name(&self) -> &str {
+        "reentrant_driver"
+    }
+
+    fn accepts_url(&self, url: &str) -> bool {
+        if !url.starts_with("rdbc:reentrant-driver-test://") {
+            return false;
+        }
+        let (sender, receiver) = mpsc::channel();
+        let registered = Arc::clone(&self.registered);
+        let handle = std::thread::spawn(move || {
+            DriverManager::register_driver(registered);
+            let _ = sender.send(());
+        });
+        let completed = receiver.recv_timeout(Duration::from_secs(2)).is_ok();
+        self.callback_completed
+            .store(usize::from(completed), Ordering::SeqCst);
+        *self.registration.lock().unwrap() = Some(handle);
+        false
+    }
+
+    async fn connect(
+        &self,
+        _url: &str,
+        _properties: &ConnectionProperties,
+    ) -> Result<Option<Box<dyn Connection>>, RdbcError> {
+        Ok(None)
+    }
+}
 
 #[async_trait::async_trait]
 impl Driver for AcceptingButRefusingDriver {
@@ -94,4 +133,30 @@ async fn missing_driver_diagnostics_do_not_disclose_connection_url_secrets() {
         .expect("refusing driver must return no connection");
     assert!(DriverManager::deregister_driver(&driver));
     assert!(!connect_error.to_string().contains("canary-secret"));
+}
+
+#[test]
+fn driver_callback_can_register_without_registry_lock_reentrancy() {
+    let registered: Arc<dyn Driver> = Arc::new(RefusingDriver);
+    let completed = Arc::new(AtomicUsize::new(0));
+    let probe = Arc::new(ReentrantDriver {
+        registered: Arc::clone(&registered),
+        callback_completed: Arc::clone(&completed),
+        registration: Mutex::new(None),
+    });
+    let driver: Arc<dyn Driver> = probe.clone();
+    DriverManager::register_driver(Arc::clone(&driver));
+    let result = DriverManager::get_driver("rdbc:reentrant-driver-test://localhost/db");
+    probe
+        .registration
+        .lock()
+        .unwrap()
+        .take()
+        .unwrap()
+        .join()
+        .unwrap();
+    assert!(DriverManager::deregister_driver(&driver));
+    assert!(DriverManager::deregister_driver(&registered));
+    assert!(result.is_err());
+    assert_eq!(completed.load(Ordering::SeqCst), 1);
 }

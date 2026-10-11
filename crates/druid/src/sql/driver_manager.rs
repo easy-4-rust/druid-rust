@@ -209,11 +209,10 @@ impl DriverManager {
     }
 
     fn driver_for(url: &str) -> Result<Arc<dyn Driver>, RdbcError> {
-        Self::registry()
-            .read()
-            .iter()
-            .find(|entry| entry.driver.accepts_url(url))
-            .map(|entry| Arc::clone(&entry.driver))
+        // 先复制注册顺序，再在锁外调用第三方 Driver 回调，允许回调重入注册表。
+        Self::drivers()
+            .into_iter()
+            .find(|driver| driver.accepts_url(url))
             .ok_or_else(|| RdbcError::DriverError("No suitable driver found".to_owned()))
     }
 
