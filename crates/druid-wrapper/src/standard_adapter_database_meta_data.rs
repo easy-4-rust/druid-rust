@@ -27,6 +27,7 @@ impl StandardAdapterDatabaseMetaData {
         }
     }
 
+    #[cfg(feature = "jdbc-agent")]
     pub(crate) fn with_driver_name(mut self, driver_name: String) -> Self {
         self.driver_name = Some(driver_name);
         self

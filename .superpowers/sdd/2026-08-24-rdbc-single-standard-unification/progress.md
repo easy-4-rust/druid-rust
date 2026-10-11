@@ -1410,3 +1410,4 @@ Task6 Ruling: 固定BASE完整连接状态原值0/1/0及2/8/2/8必须恢复，�
 2026-10-09 格式草稿407补证：默认newline设置单文件rustfmt --check同样exit0，原CRLF字节保留。初次406默认格式化转换LF后原字节证明失败，原脚本和三命令日志保存在format407/initial406/，该设置失败不计产品RED或完整fmt PASS。候选冻结未修改，407仍待403完整C1/C2终态后应用及全fmt复验。
 
 2026-10-10 403最终结果与407格式修复：原完整验收C1/C2 exit0，479行/442唯一方法，executed=yes；workspace4198/0、strict0、doc0。原403仅fmt exit1，因此总exit1。只交换F候选actor两条use顺序，字节逆变换一致，1278冻结输入仅此一项变更；之后cargo fmt --all -- --check exit0。详见 docs/verification/rdbc-first/format407/RESULT.md。候选仍未合入E；18顶层OPEN。
+2026-10-11 HEAD 8b7c803: druid-rdbc default and --all-features test suites both exit0 locally, including 435 generated method behavior tests. Live error waiver exit: gates1-4 PASS, gate5 FAIL (30 removed baseline paths, 3 surviving paths without direct RdbcError), gate6 FAIL prerequisite; historical PASS report corrected in docs/verification/rdbc-first/rdbc-error-waiver-exit.md. No waiver-exit claim; P04/P07 remain OPEN.

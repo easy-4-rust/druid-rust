@@ -4,6 +4,7 @@ use crate::standard_query_result::StandardQueryResult;
 use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::types::Value;
+#[cfg(feature = "jdbc-agent")]
 use serde_json::Value as JsonValue;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -20,6 +21,7 @@ pub(crate) struct AdapterUpdateResult {
 /// Concrete adapters expose one private driver core to canonical callers.
 #[async_trait::async_trait]
 pub(crate) trait AdapterExecutionCore: Send + 'static {
+    #[cfg(feature = "jdbc-agent")]
     async fn standard_connection_control_core(
         &mut self,
         _operation: &str,
@@ -91,6 +93,7 @@ pub(crate) trait AdapterExecutionCore: Send + 'static {
 /// Type-erased executor owned by canonical Statement/Prepared/ResultSet handles.
 #[async_trait::async_trait]
 pub(crate) trait StandardExecutor: Send + Sync {
+    #[cfg(feature = "jdbc-agent")]
     async fn connection_control(
         &self,
         operation: &str,
@@ -177,6 +180,7 @@ impl<C> StandardExecutor for OwnedAdapterExecutor<C>
 where
     C: AdapterExecutionCore,
 {
+    #[cfg(feature = "jdbc-agent")]
     async fn connection_control(
         &self,
         operation: &str,
