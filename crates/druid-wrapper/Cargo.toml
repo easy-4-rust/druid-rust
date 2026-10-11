@@ -33,6 +33,167 @@ name = "druid-driver"
 path = "src/bin/druid_driver.rs"
 required-features = ["managed-driver-install"]
 
+# 集成测试只在其真实驱动依赖可用时编译；保留原测试源码与断言。
+[[test]]
+name = "async_result_set_test"
+required-features = ["sqlx"]
+
+[[test]]
+name = "buffered_column_label_contract_test"
+required-features = ["toasty-sqlite"]
+
+[[test]]
+name = "buffered_fetch_size_contract_test"
+required-features = ["toasty-sqlite"]
+
+[[test]]
+name = "current_result_set_contract_test"
+required-features = ["sqlx"]
+
+[[test]]
+name = "driver_resolution_path_test"
+required-features = ["driver-catalog", "sqlx", "toasty-sqlite"]
+
+[[test]]
+name = "driver_extension_registry_test"
+required-features = ["driver-catalog"]
+
+[[test]]
+name = "druid_standard_pool_admission_test"
+required-features = ["sqlx", "toasty-sqlite", "rbdc"]
+
+[[test]]
+name = "generated_keys_prepare_test"
+required-features = ["sqlx", "toasty-sqlite"]
+
+[[test]]
+name = "generic_execute_row_count_test"
+required-features = ["sqlx", "toasty-sqlite"]
+
+[[test]]
+name = "metadata_actor_ownership_test"
+required-features = ["sqlx"]
+
+[[test]]
+name = "prepared_resource_execution_test"
+required-features = ["sqlx", "toasty-sqlite"]
+
+[[test]]
+name = "rbdc_connection_adapter_test"
+required-features = ["rbdc"]
+
+[[test]]
+name = "sqlx_bb8_pool_test"
+required-features = ["sqlx-bb8"]
+
+[[test]]
+name = "sqlx_deadpool_pool_test"
+required-features = ["sqlx-deadpool"]
+
+[[test]]
+name = "sqlx_mysql_timestamp_session_contract_test"
+required-features = ["sqlx"]
+
+[[test]]
+name = "sqlx_statement_cancel_contract_test"
+required-features = ["sqlx"]
+
+[[test]]
+name = "standard_adapter_conformance_test"
+required-features = ["driver-catalog", "sqlx", "toasty", "rbdc"]
+
+[[test]]
+name = "standard_buffered_stream_contract_test"
+required-features = ["toasty-sqlite"]
+
+[[test]]
+name = "statement_executor_ownership_test"
+required-features = ["sqlx"]
+
+[[test]]
+name = "task6_adapter_boundary_test_parity"
+required-features = ["sqlx-bb8", "sqlx-deadpool", "toasty", "rbdc"]
+
+[[test]]
+name = "task6_database_profile_live_contract_test_parity"
+required-features = ["driver-catalog", "sqlx"]
+
+[[test]]
+name = "task6_driver_registry_test_parity"
+required-features = ["driver-catalog", "sqlx"]
+
+[[test]]
+name = "task6_internalized_method_behavior_test"
+required-features = ["sqlx-bb8"]
+
+[[test]]
+name = "task6_pool_deep_branch_coverage_test_parity_part_01"
+required-features = ["toasty-sqlite"]
+
+[[test]]
+name = "task6_pool_deep_branch_coverage_test_parity_part_02"
+required-features = ["toasty-sqlite"]
+
+[[test]]
+name = "task6_pool_deep_branch_coverage_test_parity_part_03"
+required-features = ["toasty-sqlite"]
+
+[[test]]
+name = "task6_pool_deep_branch_coverage_test_parity_part_04"
+required-features = ["toasty-sqlite"]
+
+[[test]]
+name = "task6_pool_deep_branch_coverage_test_parity_part_05"
+required-features = ["toasty-sqlite"]
+
+[[test]]
+name = "task6_pool_deep_branch_coverage_test_parity_part_06"
+required-features = ["toasty-sqlite"]
+
+[[test]]
+name = "task6_pool_deep_branch_coverage_test_parity_part_07"
+required-features = ["toasty-sqlite"]
+
+[[test]]
+name = "task6_prepared_statement_canonical_matrix_test"
+required-features = ["sqlx", "toasty-sqlite"]
+
+[[test]]
+name = "task6_rdbc_data_source_test_parity"
+required-features = ["driver-catalog"]
+
+[[test]]
+name = "task6_sqlite_wrapper_semantics_test_parity"
+required-features = ["sqlx-bb8", "sqlx-deadpool"]
+
+[[test]]
+name = "task6_sqlx_canonical_matrix_test"
+required-features = ["sqlx"]
+
+[[test]]
+name = "task6_sqlx_method_parity_test"
+required-features = ["sqlx"]
+
+[[test]]
+name = "task6_toasty_canonical_matrix_test"
+required-features = ["toasty-sqlite"]
+
+[[test]]
+name = "task6_toasty_connection_method_parity_test"
+required-features = ["toasty-sqlite"]
+
+[[test]]
+name = "task7_sqlx_forward_direction_contract_test"
+required-features = ["sqlx"]
+
+[[test]]
+name = "toasty_boundary_test"
+required-features = ["toasty"]
+
+[[test]]
+name = "toasty_connection_adapter_test"
+required-features = ["toasty"]
+
 [dependencies]
 async-trait.workspace = true
 base64.workspace = true
