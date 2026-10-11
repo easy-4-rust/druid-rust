@@ -2,6 +2,8 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
+2026-10-12 `394f116` 复测：Admin `servlet_test` 28/28、`admin_binary_test` 16/16、命令 broker 错误脱敏单测 1/1 通过。`grpc_network_e2e_test` 在原路径首次初连即超时；同字节二进制复制到新路径后整套 48 项运行至 37/48，后 11 项出现 TCP `10060`/5 秒初连超时。将这 11 项分别复制为新文件名并独立运行后全部通过。该证据支持本机按可执行文件路径/运行时长触发的回环异常，但**不构成整套网络测试通过**；仍以 CI 与稳定环境的完整运行作关闭依据。
+
 2026-10-12 当前 `d528486` Windows 复测：Pool 关闭/维护/回收分别 11/11、14/14、16/16；Metrics Supervisor/shutdown 分别 2/2、8/8；Admin binary（含真实 TLS/认证）16/16。`grpc_network_e2e_test` 常规路径 45/48，三项失败；单独重跑时普通生成的 Tonic 客户端也在初连收到 TCP `10060`。临时加入同一测试二进制的纯 `std::net`/Tokio 回环探针均超时，而独立 Rust/Python 探针成功；复制该测试二进制到另一位置后纯 TCP 探针曾通过，完整顺序运行又在后段出现回环超时（39/50，包含两项临时探针）。临时探针已从源码移除且未提交。此现象定位到本机测试进程的回环边界，尚不能据此判断协议缺陷或宣称跨平台网络门禁通过；Linux/Windows CI 结果与该本地异常需分别核对。
 
 2026-10-12 本机复测：Pool `pool_close_backpressure_test` 11/11；Metrics `task_supervision_test`、`shutdown_test`、`queue_semantics_test` 合计 14/14；Admin `grpc_network_e2e_test` 与 `repository_capacity_test` 合计 52/52，`admin_binary_test` 16/16，均使用 `--locked` 并退出 0。网络用例覆盖 Admin 重启、重复/跳号批次、服务不可用、命令认证及关闭；仍缺这些故障场景各自的数值运行预算与跨平台验收，不据此关闭 Task5。
