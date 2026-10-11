@@ -1,5 +1,5 @@
 // 固定 OpenJDK Java 8 Types 源码的全部 39 个常量合同。
-use druid_rdbc::error::SqlExceptionKind::InvalidAuthorizationSpec;
+use druid_rdbc::error::SqlExceptionKind;
 use druid_rdbc::types::{types, JdbcType, SqlType, Types};
 
 #[test]
@@ -265,11 +265,11 @@ fn canonical_types_module_preserves_all_java8_constants_and_existing_facades() {
 #[test]
 fn canonical_authorization_kind_retains_legacy_identity_and_trace() {
     assert_eq!(
-        InvalidAuthorizationSpec,
+        SqlExceptionKind::InvalidAuthorizationSpec,
         druid_rdbc::error::SqlExceptionKind::InvalidAuthorization
     );
     assert_eq!(
-        format!("{InvalidAuthorizationSpec:?}"),
+        format!("{:?}", SqlExceptionKind::InvalidAuthorizationSpec),
         "InvalidAuthorization"
     );
 }
