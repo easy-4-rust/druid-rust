@@ -96,17 +96,7 @@ impl AgentRuntime {
             .ok_or_else(|| RdbcError::DriverError("JDBC Agent stdout was not piped".to_owned()))?;
         let mut stdout = BufReader::new(stdout);
         let ready = Self::read_json_line(&mut stdout, options.frame_limit()).await?;
-        if ready.get("jsonrpc").and_then(JsonValue::as_str) != Some("2.0")
-            || ready.get("method").and_then(JsonValue::as_str) != Some("ready")
-            || ready
-                .pointer("/params/protocolVersion")
-                .and_then(JsonValue::as_u64)
-                != Some(1)
-        {
-            return Err(RdbcError::DriverError(format!(
-                "JDBC Agent sent an invalid ready notification: {ready}"
-            )));
-        }
+        Self::validate_ready(&ready)?;
 
         let pending = Arc::new(Mutex::new(HashMap::new()));
         let expected_shutdown = Arc::new(AtomicBool::new(false));
@@ -169,6 +159,21 @@ impl AgentRuntime {
         Ok(runtime)
     }
 
+    fn validate_ready(ready: &JsonValue) -> Result<(), RdbcError> {
+        if ready.get("jsonrpc").and_then(JsonValue::as_str) != Some("2.0")
+            || ready.get("method").and_then(JsonValue::as_str) != Some("ready")
+            || ready
+                .pointer("/params/protocolVersion")
+                .and_then(JsonValue::as_u64)
+                != Some(1)
+        {
+            return Err(RdbcError::DriverError(
+                "JDBC Agent sent an invalid ready notification".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
     fn validate_handshake(
         handshake: &JsonValue,
         artifact_version: &str,
@@ -188,9 +193,7 @@ impl AgentRuntime {
             || negotiated_artifact != Some(artifact_version)
             || capabilities.is_none()
         {
-            return Err(Self::protocol_message(format!(
-                "invalid handshake response: {handshake}"
-            )));
+            return Err(Self::protocol_message("invalid handshake response"));
         }
         let capabilities = capabilities.expect("capabilities were checked above");
         for required in required_capabilities {
@@ -502,5 +505,23 @@ mod tests {
             AgentRuntime::read_line(&mut reader, 3).await.unwrap(),
             b"abc"
         );
+    }
+
+    #[test]
+    fn invalid_handshake_does_not_echo_agent_payload() {
+        let secret = "agent-secret-marker";
+        let handshake = json!({"protocolVersion": 2, "password": secret});
+        let error = AgentRuntime::validate_handshake(&handshake, "unmanaged", &[])
+            .expect_err("invalid handshake must be rejected");
+        assert!(!error.to_string().contains(secret));
+    }
+
+    #[test]
+    fn invalid_ready_does_not_echo_agent_payload() {
+        let secret = "agent-ready-secret-marker";
+        let ready = json!({"jsonrpc": "2.0", "method": "wrong", "params": {"protocolVersion": 1, "password": secret}});
+        let error =
+            AgentRuntime::validate_ready(&ready).expect_err("invalid ready must be rejected");
+        assert!(!error.to_string().contains(secret));
     }
 }
