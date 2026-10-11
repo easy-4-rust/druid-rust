@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import tempfile
 from pathlib import Path
@@ -62,6 +63,10 @@ def main() -> int:
     )
     arguments = parser.parse_args()
     root = arguments.root.resolve()
+    druid_path = json.dumps(str(root / "crates/druid"))
+    rdbc_path = json.dumps(str(root / "crates/druid-rdbc"))
+    wrapper_path = json.dumps(str(root / "crates/druid-wrapper"))
+    toasty_patch_path = json.dumps(str(root / "vendor/toasty-driver-sqlite"))
     with tempfile.TemporaryDirectory(
         prefix="druid-task6-external-public-"
     ) as temporary:
@@ -75,13 +80,13 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1"
-druid = {{ path = "{root / 'crates/druid'}" }}
-druid-rdbc = {{ path = "{root / 'crates/druid-rdbc'}" }}
-druid-wrapper = {{ path = "{root / 'crates/druid-wrapper'}", default-features = false, features = ["driver-catalog"] }}
+druid = {{ path = {druid_path} }}
+druid-rdbc = {{ path = {rdbc_path} }}
+druid-wrapper = {{ path = {wrapper_path}, default-features = false, features = ["driver-catalog"] }}
 sqlx = {{ version = "=0.8.6", default-features = false }}
 
 [patch.crates-io]
-toasty-driver-sqlite = {{ path = "{root / 'vendor/toasty-driver-sqlite'}" }}
+toasty-driver-sqlite = {{ path = {toasty_patch_path} }}
 """
         (consumer / "src").mkdir()
         (consumer / "Cargo.toml").write_text(manifest, encoding="utf-8", newline="\n")
@@ -98,6 +103,8 @@ toasty-driver-sqlite = {{ path = "{root / 'vendor/toasty-driver-sqlite'}" }}
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=600,
         )
         if result.returncode != 0:
