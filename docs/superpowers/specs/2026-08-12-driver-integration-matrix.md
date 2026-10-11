@@ -178,6 +178,9 @@ SHA-256，并按 `profile/objects/<sha256>/...` 内容寻址保存。activation 
 - SQLite D3 不能外推 PostgreSQL/MySQL；
 - ORM CRUD 测试不能替代 raw `PhysicalConnection` 合同；
 - protocol/types crate 的编译不能替代 driver 连接测试。
+- `libsql-native` 的远程 HTTPS 模式必须启用 TLS；连接初始化不得因缺少 TLS
+  功能而 panic。初始化测试只证明配置可用，D3 仍须真实远程库验收。
+- D5 还须通过供应链漏洞门禁；不能以禁用审计或宽泛忽略未修复漏洞代替修复。
 
 ## 6. 下一轮真实集成矩阵
 
