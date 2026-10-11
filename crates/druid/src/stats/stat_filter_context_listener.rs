@@ -42,11 +42,15 @@ pub trait StatFilterContextListener: Send + Sync {
     /// 池化连接关闭事件。
     fn pool_close(&self, nanos: i64) -> Result<(), DruidError>;
 
-    /// 物理连接创建事件。
-    fn connection_open(&self) -> Result<(), DruidError>;
+    /// 物理连接创建事件。旧版监听器未实现时默认忽略该新增事件。
+    fn connection_open(&self) -> Result<(), DruidError> {
+        Ok(())
+    }
 
-    /// 物理连接关闭事件。
-    fn connection_close(&self, nanos: i64) -> Result<(), DruidError>;
+    /// 物理连接关闭事件。旧版监听器未实现时默认忽略该新增事件。
+    fn connection_close(&self, _nanos: i64) -> Result<(), DruidError> {
+        Ok(())
+    }
 
     /// `ResultSet` 打开事件。
     fn result_set_open(&self) -> Result<(), DruidError>;
