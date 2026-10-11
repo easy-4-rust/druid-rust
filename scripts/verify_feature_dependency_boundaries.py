@@ -8,26 +8,42 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FORBIDDEN = {"sqlx", "toasty", "toasty-core", "rbdc", "rbs", "bb8", "deadpool"}
+FORBIDDEN = {
+    "sqlx", "toasty", "toasty-core", "toasty-driver-sqlite", "rbdc", "rbs",
+    "bb8", "deadpool", "duckdb", "libsql", "reqwest", "fs2",
+}
 FEATURE_DEPS = {
     "sqlx": {"sqlx"},
     "sqlx-bb8": {"bb8"},
     "sqlx-deadpool": {"deadpool"},
     "toasty": {"toasty", "toasty-core"},
+    "toasty-sqlite": {"toasty-driver-sqlite"},
     "rbdc": {"rbdc", "rbs"},
+    "duckdb-native": {"duckdb"},
+    "http-sql": {"reqwest"},
+    "libsql-native": {"libsql"},
+    "managed-driver-install": {"fs2", "reqwest", "uuid"},
 }
 ISOLATED_FEATURES = {
     "driver-catalog": set(),
     "sqlx": {"sqlx"},
     "toasty": {"toasty", "toasty-core"},
+    "toasty-sqlite": {"toasty", "toasty-core", "toasty-driver-sqlite"},
     "rbdc": {"rbdc", "rbs"},
     "sqlx-bb8": {"sqlx", "bb8"},
     "sqlx-deadpool": {"sqlx", "deadpool"},
+    "duckdb-native": {"duckdb"},
+    "http-sql": {"reqwest"},
+    "libsql-native": {"libsql"},
+    "managed-driver-install": {"fs2", "reqwest"},
 }
 # Toasty 0.9.0 internally depends on deadpool 0.13; this does not enable the
 # wrapper's optional deadpool 0.12 adapter. Cargo's feature tree is checked
 # alongside the direct optional-dependency ownership below.
-ALLOWED_TRANSITIVE = {"toasty": {"deadpool"}}
+ALLOWED_TRANSITIVE = {
+    "toasty": {"deadpool"},
+    "toasty-sqlite": {"deadpool"},
+}
 
 
 def normal_dependencies(*features: str) -> tuple[set[str], str | None]:
