@@ -77,16 +77,16 @@ TASK7_EARLY_COMPONENTS = {
         "crates/druid-rdbc/src/types/resource_handle.rs",
     ),
 }
-TASK7_PENDING_COMPONENTS = (
-    "RESOURCE_OPERATIONS_AND_FACTORY",
-    "RESOURCE_TRAIT_LIFECYCLE",
-    "RDBC_RESULT_SET_FORWARDING",
-    "CAPABILITY_TRUTHFULNESS",
-    "DRUID_OWNER_RELEASE_EXACTLY_ONCE",
-    "DRUID_CANCELLATION_HARDENING",
-    "SQLX_BUFFERED_RENAME",
-    "ASYNC_RESULT_SET_STREAMING",
-)
+TASK7_COMPONENT_STATES = {
+    "RESOURCE_OPERATIONS_AND_FACTORY": "IMPLEMENTED_TESTED",
+    "RESOURCE_TRAIT_LIFECYCLE": "IMPLEMENTED_TESTED",
+    "RDBC_RESULT_SET_FORWARDING": "IMPLEMENTED_TESTED",
+    "CAPABILITY_TRUTHFULNESS": "TASK7_PENDING",
+    "DRUID_OWNER_RELEASE_EXACTLY_ONCE": "IMPLEMENTED_TESTED",
+    "DRUID_CANCELLATION_HARDENING": "IMPLEMENTED_TESTED",
+    "SQLX_BUFFERED_RENAME": "IMPLEMENTED_TESTED",
+    "ASYNC_RESULT_SET_STREAMING": "IMPLEMENTED_TESTED",
+}
 TASK7_PENDING_AUTHORITY_PATHS = {
     "druid_rdbc::resource::RdbcResourceCapabilities",
     "druid_rdbc::resource::RdbcResourceFactory",
@@ -186,11 +186,11 @@ def verify_task7_scope_boundary(root: Path) -> None:
             fail(f"Task 7 early component is missing or duplicated: {component}")
         if not (root / source_path).is_file():
             fail(f"Task 7 early component source is missing: {source_path}")
-    for component in TASK7_PENDING_COMPONENTS:
-        expected = f"| `{component}` | `TASK7_PENDING` |"
+    for component, state in TASK7_COMPONENT_STATES.items():
+        expected = f"| `{component}` | `{state}` |"
         if section.count(expected) != 1:
-            fail(f"Task 7 pending component is missing or duplicated: {component}")
-    if "Task 7 remaining denominator: **8**" not in section:
+            fail(f"Task 7 component state is missing or duplicated: {component}")
+    if "Task 7 remaining implementation denominator: **1**" not in section:
         fail("Task 7 remaining denominator is not exact")
     if "sequencing change; it does not reduce Task 7 requirements" not in section:
         fail("Task 7 pull-forward is not recorded as sequencing-only")

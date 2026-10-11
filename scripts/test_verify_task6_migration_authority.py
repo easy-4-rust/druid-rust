@@ -11,7 +11,7 @@ from verify_task6_migration_authority import (
     STANDARDIZATION_ONLY_TASK7,
     TASK7_EARLY_COMPONENTS,
     TASK7_PENDING_AUTHORITY_PATHS,
-    TASK7_PENDING_COMPONENTS,
+    TASK7_COMPONENT_STATES,
     VerificationError,
     module_declares_exact_target,
     verify_authority_schema,
@@ -21,6 +21,9 @@ from verify_task6_migration_authority import (
 
 
 class Task6MigrationAuthorityTest(unittest.TestCase):
+    def test_live_task7_scope_accepts_verified_implementations_and_one_pending_item(self) -> None:
+        verify_task7_scope_boundary(Path(__file__).resolve().parent.parent)
+
     def test_bounded_task7_rows_cannot_be_falsely_closed(self) -> None:
         rows = []
         pending = sorted(TASK7_PENDING_AUTHORITY_PATHS)
@@ -48,7 +51,7 @@ class Task6MigrationAuthorityTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "not pending"):
             verify_authority_schema(tuple(rows))
 
-    def test_task7_scope_requires_exact_early_and_pending_denominators(self) -> None:
+    def test_task7_scope_requires_exact_states_and_remaining_denominator(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             plan = root / "docs/superpowers/plans/2026-08-24-rdbc-single-standard-unification.md"
@@ -61,21 +64,32 @@ class Task6MigrationAuthorityTest(unittest.TestCase):
                 f"| `{component}` | `COMPLETED_EARLY_TASK6` | `{identity}` | `{source}` |"
                 for component, (identity, source) in TASK7_EARLY_COMPONENTS.items()
             )
-            pending_rows = "\n".join(
-                f"| `{component}` | `TASK7_PENDING` | retained | retained |"
-                for component in TASK7_PENDING_COMPONENTS
+            task7_rows = "\n".join(
+                f"| `{component}` | `{state}` | retained | retained |"
+                for component, state in TASK7_COMPONENT_STATES.items()
             )
             plan.write_text(
                 "### Task 7 bounded pull-forward denominator\n"
                 + early_rows
                 + "\n"
-                + pending_rows
-                + "\nTask 7 remaining denominator: **7**\n"
+                + task7_rows
+                + "\nTask 7 remaining implementation denominator: **2**\n"
                 + "This is a sequencing change; it does not reduce Task 7 requirements.\n"
                 + "### Task 8:\n",
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(VerificationError, "denominator is not exact"):
+                verify_task7_scope_boundary(root)
+            plan.write_text(
+                plan.read_text(encoding="utf-8")
+                .replace("remaining implementation denominator: **2**", "remaining implementation denominator: **1**")
+                .replace(
+                    "| `CAPABILITY_TRUTHFULNESS` | `TASK7_PENDING` |",
+                    "| `CAPABILITY_TRUTHFULNESS` | `IMPLEMENTED_TESTED` |",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(VerificationError, "component state"):
                 verify_task7_scope_boundary(root)
 
     def test_exact_module_target_does_not_accept_same_leaf_elsewhere(self) -> None:
