@@ -51,3 +51,17 @@ fn unknown_extension_returns_no_driver_extension() {
         other => panic!("expected NoDriverExtension, got {other:?}"),
     }
 }
+
+#[tokio::test]
+async fn factory_is_async_runtime_safe() {
+    ensure_extensions();
+    let descriptor = druid::core::lookup_driver_extension("sqlite").unwrap();
+    let factory = (descriptor.factory)("sqlite::memory:")
+        .await
+        .expect("registered factory must initialize within the caller runtime");
+    let mut connection = factory.create().await.expect("SQLite connection must open");
+    connection
+        .close()
+        .await
+        .expect("SQLite connection must close");
+}

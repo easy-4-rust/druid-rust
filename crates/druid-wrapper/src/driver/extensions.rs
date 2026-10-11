@@ -3,14 +3,13 @@
 //! Each `inventory::submit!` registers a `DriverExtensionDescriptor` that
 //! Core's `lookup_driver_extension` can resolve by database type.
 
-use druid::core::DriverExtensionDescriptor;
 use druid::core::{
     Db2ExceptionSorter, MySqlExceptionSorter, MySqlValidConnectionChecker,
     OceanBaseOracleExceptionSorter, OceanBaseValidConnectionChecker, OracleExceptionSorter,
     OracleValidConnectionChecker, PgExceptionSorter, PgValidConnectionChecker,
 };
+use druid::core::{DriverExtensionDescriptor, DriverExtensionFactoryFuture};
 use druid_rdbc::driver::ConnectionFactory;
-use druid_rdbc::error::RdbcError;
 use std::sync::Arc;
 
 use crate::toasty::ToastyConnectionFactory;
@@ -30,12 +29,11 @@ pub fn init() {
 // Factory helpers
 // ---------------------------------------------------------------------------
 
-fn toasty_factory(url: &str) -> Result<Arc<dyn ConnectionFactory>, RdbcError> {
-    // Block on the async ToastyConnectionFactory::new.
-    // This is acceptable because inventory items are resolved lazily and
-    // the factory is typically called once at pool initialization.
-    let factory = tokio::runtime::Handle::current().block_on(ToastyConnectionFactory::new(url))?;
-    Ok(Arc::new(factory))
+fn toasty_factory(url: &str) -> DriverExtensionFactoryFuture<'_> {
+    Box::pin(async move {
+        let factory = ToastyConnectionFactory::new(url).await?;
+        Ok(Arc::new(factory) as Arc<dyn ConnectionFactory>)
+    })
 }
 
 // ---------------------------------------------------------------------------

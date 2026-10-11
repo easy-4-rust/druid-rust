@@ -28,6 +28,7 @@ pub mod database_meta_data_row_id_lifetime;
 pub mod db2_exception_sorter;
 pub mod driver;
 pub mod driver_extension_descriptor;
+pub mod driver_extension_factory;
 pub mod driver_extension_registry;
 mod druid_array;
 mod druid_array_state;
@@ -170,6 +171,7 @@ pub use database_meta_data_proxy_impl::DatabaseMetaDataProxyImpl;
 pub use db2_exception_sorter::Db2ExceptionSorter;
 pub use driver::{Driver, DriverProperty};
 pub use driver_extension_descriptor::DriverExtensionDescriptor;
+pub use driver_extension_factory::{DriverExtensionFactory, DriverExtensionFactoryFuture};
 pub use driver_extension_registry::lookup_driver_extension;
 pub use druid_connection_holder::{
     ConnectionState, DruidConnectionHolder, DruidConnectionHolder as ConnectionHolder,
