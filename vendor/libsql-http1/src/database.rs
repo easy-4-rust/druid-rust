@@ -761,17 +761,18 @@ impl Database {
     all(feature = "tls", feature = "remote"),
     all(feature = "tls", feature = "sync")
 ))]
-fn connector() -> Result<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>> {
+fn connector() -> Result<hyper_tls::HttpsConnector<hyper::client::HttpConnector>> {
     let mut http = hyper::client::HttpConnector::new();
     http.enforce_http(false);
     http.set_nodelay(true);
 
-    Ok(hyper_rustls::HttpsConnectorBuilder::new()
-        .with_native_roots()
-        .map_err(crate::Error::InvalidTlsConfiguration)?
-        .https_or_http()
-        .enable_http1()
-        .wrap_connector(http))
+    let tls = native_tls::TlsConnector::new().map_err(|error| {
+        crate::Error::InvalidTlsConfiguration(std::io::Error::new(std::io::ErrorKind::Other, error))
+    })?;
+    Ok(hyper_tls::HttpsConnector::from((
+        http,
+        tokio_native_tls::TlsConnector::from(tls),
+    )))
 }
 
 #[cfg(any(
