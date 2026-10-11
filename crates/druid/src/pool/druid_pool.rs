@@ -1597,7 +1597,7 @@ impl WaitTaskRegistration {
                 inner
                     .wait_count
                     .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
-                        (current <= max).then_some(current.saturating_add(1))
+                        (current < max).then_some(current + 1)
                     });
             if let Err(current) = result {
                 return Err(DruidError::MaxWaitThreadCountExceeded { max, current });
