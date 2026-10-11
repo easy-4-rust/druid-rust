@@ -56,10 +56,12 @@ ALLOWED_TRANSITIVE = {
 
 
 def normal_dependencies(*features: str) -> tuple[set[str], str | None]:
+    # CI starts with a cold Cargo cache. Optional feature trees may need crates
+    # absent from the preceding no-default-features build; --locked still pins them.
     command = [
         "cargo", "tree", "-p", "druid-wrapper", "--no-default-features",
         "-e", "normal", "--prefix", "none", "--format", "{p}",
-        "--offline", "--locked",
+        "--locked",
     ]
     if features:
         command.extend(["--features", ",".join(features)])
