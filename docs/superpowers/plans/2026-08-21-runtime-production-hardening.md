@@ -125,6 +125,8 @@ Expected: FAIL because unregister listener is detached and task failures are dis
 Supervisor owns sampler, aggregator, exporter/client and unregister listener. Registration admission
 closes first; producers are dropped; aggregator flushes; exporter sends pending/goodbye; cancellation
 then stops idle tasks; JoinSet is drained within configured deadline.
+Client flush must register its progress notification before checking outstanding work, so an ACK
+between the check and the first await cannot consume the entire timeout after all work is flushed.
 
 - [ ] **Step 4: Consume every public config field**
 

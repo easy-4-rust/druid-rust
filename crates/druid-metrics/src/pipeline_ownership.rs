@@ -492,6 +492,13 @@ impl PipelineOwnership {
     pub(crate) async fn changed(&self) {
         self.changed.notified().await;
     }
+
+    pub(crate) fn registered_change(&self) -> impl std::future::Future<Output = ()> + '_ {
+        // `notify_waiters` 不保存许可；先 enable 再检查计数，避免 ACK 抢在首次 poll 前丢失。
+        let mut changed = Box::pin(self.changed.notified());
+        changed.as_mut().enable();
+        changed
+    }
 }
 
 impl Default for PipelineOwnership {
@@ -503,6 +510,19 @@ impl Default for PipelineOwnership {
 #[cfg(test)]
 mod tests {
     use super::{CommandTransition, CommandWorkKey, PipelineOwnership};
+
+    #[tokio::test]
+    async fn registered_change_observes_completion_before_first_poll() {
+        let ownership = PipelineOwnership::new();
+        let batch = ownership.queue_client_batch().unwrap();
+        let changed = ownership.registered_change();
+        ownership.drop_client_batch(batch).unwrap();
+
+        tokio::time::timeout(std::time::Duration::from_millis(100), changed)
+            .await
+            .expect("registered waiter must observe the completed batch");
+        assert_eq!(ownership.client_unflushed(), 0);
+    }
 
     #[test]
     fn batch_work_ids_reject_double_finish_and_cross_stage_or_cross_id_transitions() {

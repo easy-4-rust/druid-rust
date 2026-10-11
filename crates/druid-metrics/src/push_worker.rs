@@ -244,6 +244,10 @@ impl PushProgress {
         self.ownership.changed().await;
     }
 
+    pub(crate) fn registered_change(&self) -> impl std::future::Future<Output = ()> + '_ {
+        self.ownership.registered_change()
+    }
+
     /// 在批次进入有界客户端队列前记账。
     #[cfg(feature = "client")]
     pub(crate) fn queue_batch(&self) -> Result<BatchWorkId, PipelineOwnershipError> {

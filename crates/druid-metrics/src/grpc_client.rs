@@ -218,7 +218,7 @@ impl GrpcMetricsClient {
             if unflushed == 0 {
                 return Ok(());
             }
-            let changed = self.progress.changed();
+            let changed = self.progress.registered_change();
             if self.progress.unflushed() == 0 {
                 return Ok(());
             }
