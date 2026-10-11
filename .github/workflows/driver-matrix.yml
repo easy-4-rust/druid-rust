@@ -177,6 +177,8 @@ jobs:
           tool: cargo-audit,cargo-deny
       # RUSTSEC-2023-0071 currently has no fixed rsa release and is also pulled
       # by SQLx MySQL. Keep the exception narrow and visible in both audit tools.
+      - run: python3 -m unittest discover -s scripts -p test_verify_rsa_waiver_scope.py
+      - run: python3 scripts/verify_rsa_waiver_scope.py
       - run: cargo audit --ignore RUSTSEC-2023-0071
       - run: cargo deny check
 

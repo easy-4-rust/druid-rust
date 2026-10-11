@@ -254,6 +254,10 @@ cargo deny check
 ```
 
 Expected: exit 0 with only the documented narrow advisory exception.
+Before the ignored audit, verify from locked Cargo dependency metadata that
+`rsa@0.9.10` is still the sole waived RSA package and its only direct consumers
+are `druid` and `sqlx-mysql`. Fail the gate if the waiver becomes stale or its
+dependency scope expands.
 
 - [ ] **Step 2: Run real database certification**
 
