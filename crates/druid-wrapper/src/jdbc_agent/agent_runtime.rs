@@ -13,6 +13,8 @@ use tokio::sync::{mpsc, oneshot};
 type PendingRequests = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<JsonValue, RdbcError>>>>>;
 // 默认单帧上限 16 MiB；限制排队帧数，防止停滞的 Agent 使客户端无限缓存请求。
 const OUTBOUND_QUEUE_CAPACITY: usize = 8;
+// 多 session 共享同一进程；Agent 长时间不响应时仍需限制关联状态规模。
+const MAX_PENDING_REQUESTS: usize = 64;
 
 struct OutboundFrame {
     request_id: u64,
@@ -228,10 +230,7 @@ impl AgentRuntime {
         bytes.push(b'\n');
 
         let (sender, receiver) = oneshot::channel();
-        self.pending
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(request_id, sender);
+        Self::register_pending(&self.pending, request_id, sender)?;
         if let Err(error) = Self::queue_frame(
             &self.outbound,
             &self.pending,
@@ -251,6 +250,28 @@ impl AgentRuntime {
             receiver,
             pending: Arc::clone(&self.pending),
         })
+    }
+
+    fn register_pending(
+        pending: &PendingRequests,
+        request_id: u64,
+        sender: oneshot::Sender<Result<JsonValue, RdbcError>>,
+    ) -> Result<(), RdbcError> {
+        let mut requests = pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if requests.len() >= MAX_PENDING_REQUESTS {
+            return Err(RdbcError::DriverError(
+                "JDBC Agent pending request limit reached".to_owned(),
+            ));
+        }
+        if requests.contains_key(&request_id) {
+            return Err(RdbcError::DriverError(
+                "JDBC Agent request ID collision".to_owned(),
+            ));
+        }
+        requests.insert(request_id, sender);
+        Ok(())
     }
 
     fn queue_frame(
@@ -492,6 +513,26 @@ impl Drop for AgentRuntime {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn pending_requests_have_a_hard_capacity() {
+        let pending: PendingRequests = Arc::new(Mutex::new(HashMap::new()));
+        for request_id in 1..=MAX_PENDING_REQUESTS as u64 {
+            let (sender, _receiver) = oneshot::channel();
+            AgentRuntime::register_pending(&pending, request_id, sender)
+                .expect("request within capacity");
+        }
+        let (sender, _receiver) = oneshot::channel();
+        let result =
+            AgentRuntime::register_pending(&pending, MAX_PENDING_REQUESTS as u64 + 1, sender);
+        assert!(
+            matches!(result, Err(RdbcError::DriverError(message)) if message.contains("pending request limit"))
+        );
+        assert_eq!(
+            pending.lock().expect("pending map").len(),
+            MAX_PENDING_REQUESTS
+        );
+    }
 
     #[test]
     fn saturated_outbound_queue_rejects_and_cleans_pending_request() {
