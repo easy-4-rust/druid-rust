@@ -206,10 +206,14 @@ impl DriverManager {
     }
 
     fn driver_for(url: &str) -> Result<Arc<dyn Driver>, RdbcError> {
-        // 先复制注册顺序，再在锁外调用第三方 Driver 回调，允许回调重入注册表。
-        Self::drivers()
-            .into_iter()
-            .find(|driver| driver.accepts_url(url))
+        // 先复制注册顺序，再交给标准 registry 在锁外执行第三方回调。
+        // 查询路径不调用 driver.name()，保留原有 get_driver 副作用边界。
+        let mut registry = DriverRegistry::new();
+        for driver in Self::drivers() {
+            registry.register(DriverExtensionDescriptor::new("", driver, None));
+        }
+        registry
+            .first_accepted_driver(url)
             .ok_or_else(|| RdbcError::DriverError("No suitable driver found".to_owned()))
     }
 

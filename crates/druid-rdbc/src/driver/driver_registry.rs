@@ -1,6 +1,9 @@
 use crate::connection::Connection;
 use crate::driver::{ConnectionProperties, DriverExtensionDescriptor};
 use crate::error::RdbcError;
+use std::sync::Arc;
+
+use crate::driver::Driver;
 
 /// 纯 standard provider registry。
 ///
@@ -26,6 +29,15 @@ impl DriverRegistry {
     /// 返回当前 provider descriptors。
     pub fn descriptors(&self) -> &[DriverExtensionDescriptor] {
         &self.descriptors
+    }
+
+    /// 按注册顺序返回首个接受 URL 的标准驱动；参数为连接 URL，未匹配时返回 `None`。
+    #[must_use]
+    pub fn first_accepted_driver(&self, url: &str) -> Option<Arc<dyn Driver>> {
+        self.descriptors
+            .iter()
+            .find(|descriptor| descriptor.driver().accepts_url(url))
+            .map(|descriptor| Arc::clone(descriptor.driver()))
     }
 
     /// 按注册顺序寻找第一个接受 URL 的 driver。

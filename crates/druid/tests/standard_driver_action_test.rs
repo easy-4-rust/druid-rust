@@ -201,6 +201,29 @@ async fn connection_lookup_continues_after_first_driver_returns_none() {
 }
 
 #[test]
+fn standard_registry_selects_first_accepted_driver_without_connecting() {
+    let first: Arc<dyn Driver> = Arc::new(RefusingDriver);
+    let second: Arc<dyn Driver> = Arc::new(AcceptingButRefusingDriver);
+    let third: Arc<dyn Driver> = Arc::new(SecondCandidateDriver);
+    let mut registry = DriverRegistry::new();
+    for driver in [&first, &second, &third] {
+        registry.register(DriverExtensionDescriptor::new(
+            driver.name(),
+            Arc::clone(driver),
+            None,
+        ));
+    }
+
+    let selected = registry
+        .first_accepted_driver("rdbc:next-candidate-test://localhost/db")
+        .expect("second descriptor accepts the URL");
+    assert!(Arc::ptr_eq(&selected, &second));
+    assert!(registry
+        .first_accepted_driver("rdbc:missing-driver-test://localhost/db")
+        .is_none());
+}
+
+#[test]
 fn driver_callback_can_register_without_registry_lock_reentrancy() {
     let registered: Arc<dyn Driver> = Arc::new(RefusingDriver);
     let completed = Arc::new(AtomicUsize::new(0));
