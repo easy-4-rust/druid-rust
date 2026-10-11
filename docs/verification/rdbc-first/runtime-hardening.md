@@ -2,6 +2,8 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
+2026-10-12 本机复测：Pool `pool_close_backpressure_test` 11/11；Metrics `task_supervision_test`、`shutdown_test`、`queue_semantics_test` 合计 14/14；Admin `grpc_network_e2e_test` 与 `repository_capacity_test` 合计 52/52，`admin_binary_test` 16/16，均使用 `--locked` 并退出 0。网络用例覆盖 Admin 重启、重复/跳号批次、服务不可用、命令认证及关闭；仍缺这些故障场景各自的数值运行预算与跨平台验收，不据此关闭 Task5。
+
 JDBC Agent 故障注入：`cargo test -p druid-wrapper --features jdbc-agent --lib --quiet` 本机 21/21 通过。沉默子进程启动按调用者配置的 75 ms 期限失败；不同身份的启动互不阻塞，同一身份的等待也遵守各自期限。超过 1 KiB 且无换行的帧在 EOF 前被拒绝，非法 ready/handshake 不回显注入的凭据标记。此项只覆盖 Agent 协议边界，不代替下表的跨平台运行预算或真实数据库验收。
 
 ## 2026-10-11 Pool 慢关闭组件核验
