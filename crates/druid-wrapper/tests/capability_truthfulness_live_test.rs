@@ -1,27 +1,52 @@
-//! 在 CI 的 PostgreSQL/MySQL 服务上验证 SQLx 宣称的事务与保存点能力。
+//! 在 CI 的 PostgreSQL/MySQL 服务上验证 SQLx/Toasty 宣称的事务与保存点能力。
 #![cfg(feature = "sqlx")]
 
+use druid_rdbc::connection::Connection;
 use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::types::{Row, Value};
 use druid_wrapper::sqlx::SqlxConnectionFactory;
+#[cfg(any(feature = "postgresql", feature = "mysql"))]
+use druid_wrapper::toasty::ToastyConnectionFactory;
 
 #[tokio::test]
 #[ignore = "requires DRUID_DATABASE_URL and a live PostgreSQL or MySQL service"]
-async fn sqlx_live_backend_capability_claims_match_committed_rows() {
+async fn live_backend_capability_claims_match_committed_rows() {
     let url = std::env::var("DRUID_DATABASE_URL")
         .expect("CI must provide DRUID_DATABASE_URL for the ignored live capability test");
     let backend = std::env::var("DRUID_DATABASE_PROFILE")
         .expect("CI must provide DRUID_DATABASE_PROFILE for the live capability test");
     assert!(matches!(backend.as_str(), "postgresql" | "mysql"));
 
-    let factory = SqlxConnectionFactory::new(url);
-    let mut connection = factory.create().await.expect("connect to live database");
+    let mut factories: Vec<Box<dyn ConnectionFactory>> =
+        vec![Box::new(SqlxConnectionFactory::new(url.clone()))];
+    #[cfg(any(feature = "postgresql", feature = "mysql"))]
+    factories.push(Box::new(
+        ToastyConnectionFactory::new(url)
+            .await
+            .expect("create live Toasty factory"),
+    ));
+    assert_eq!(
+        factories.len(),
+        2,
+        "live capability gate must execute SQLx and Toasty"
+    );
+    for factory in factories {
+        let driver = factory.name().to_owned();
+        let connection = factory.create().await.expect("connect to live database");
+        verify_capabilities(connection, &backend, &driver).await;
+    }
+}
+
+async fn verify_capabilities(mut connection: Box<dyn Connection>, backend: &str, driver: &str) {
     let capabilities = connection.capabilities();
     assert!(
         capabilities.transactions,
-        "{backend} must support transactions"
+        "{backend}/{driver} must support transactions"
     );
-    assert!(capabilities.savepoints, "{backend} must support savepoints");
+    assert!(
+        capabilities.savepoints,
+        "{backend}/{driver} must support savepoints"
+    );
     assert!(!capabilities.catalogs);
     assert!(!capabilities.schemas);
     assert!(!capabilities.callable_statements);
@@ -68,7 +93,7 @@ async fn sqlx_live_backend_capability_claims_match_committed_rows() {
             .await
             .expect("read committed rows"),
         vec![Row::new(vec![Value::Int(1)])],
-        "{backend} must preserve only the row before the savepoint"
+        "{backend}/{driver} must preserve only the row before the savepoint"
     );
 
     connection
@@ -90,7 +115,7 @@ async fn sqlx_live_backend_capability_claims_match_committed_rows() {
             .await
             .expect("read rows after rollback"),
         vec![Row::new(vec![Value::Int(1)])],
-        "{backend} must roll back the whole second transaction"
+        "{backend}/{driver} must roll back the whole second transaction"
     );
     connection.close().await.expect("close live connection");
 }

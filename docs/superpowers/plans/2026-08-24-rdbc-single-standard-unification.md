@@ -638,7 +638,7 @@ lifecycle semantics or owner cleanup.
 | `RESOURCE_OPERATIONS_AND_FACTORY` | `IMPLEMENTED_TESTED` | `ResourceOperations` + `ResourceHandleFactory` | `resource_standard_contract_test` 31/31；标准 operations/factory 源码已核对 |
 | `RESOURCE_TRAIT_LIFECYCLE` | `IMPLEMENTED_TESTED` | standard resource traits | 同一 31/31 契约覆盖 1-based、free-after-use、SQLXML 消耗/释放状态 |
 | `RDBC_RESULT_SET_FORWARDING` | `IMPLEMENTED_TESTED` | `SharedResultSet` | `task7_shared_result_set_contract_test` 6/6；共享转发身份独立于 `BufferedRowSet` |
-| `CAPABILITY_TRUTHFULNESS` | `TASK7_PENDING` | `ConnectionCapabilities` | JDBC Agent callable 误报已修复；H2/HSQLDB 已验证 catalog/schema/savepoint；SQLx 与 Toasty SQLite、SQLx PostgreSQL/MySQL 已通过本地事务和保存点实库合同，后两者已接入 CI 但尚待运行；仍需其余启用后端及发布门禁证据 |
+| `CAPABILITY_TRUTHFULNESS` | `TASK7_PENDING` | `ConnectionCapabilities` | JDBC Agent callable 误报已修复；H2/HSQLDB 已验证 catalog/schema/savepoint；SQLx/Toasty 的 SQLite、PostgreSQL、MySQL 已通过本地事务和保存点实库合同，后两者已接入 CI 但尚待运行；仍需其余启用后端及发布门禁证据 |
 | `DRUID_OWNER_RELEASE_EXACTLY_ONCE` | `IMPLEMENTED_TESTED` | Druid resource owner/release | `resource_owner_cancellation_test` 112/112；driver release、重复通知与父租约处置合同 |
 | `DRUID_CANCELLATION_HARDENING` | `IMPLEMENTED_TESTED` | Druid supervised release | 同一 112/112 合同覆盖取消、重试与父连接清理 |
 | `SQLX_BUFFERED_RENAME` | `IMPLEMENTED_TESTED` | `SqlxBufferedResultSet` | 编译模块与 Task 4 live 清单均指向真实缓冲实现；旧 Streaming 文件已退休 |

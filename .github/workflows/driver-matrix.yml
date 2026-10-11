@@ -329,7 +329,7 @@ jobs:
         run: |
           mkdir -p target/contract-evidence
           cargo test -p druid-wrapper --no-default-features --features driver-catalog,sqlx --test task6_database_profile_live_contract_test_parity -- --nocapture
-          cargo test -p druid-wrapper --no-default-features --features driver-catalog,sqlx --test capability_truthfulness_live_test -- --ignored --exact sqlx_live_backend_capability_claims_match_committed_rows
+          cargo test -p druid-wrapper --no-default-features --features driver-catalog,sqlx,postgresql --test capability_truthfulness_live_test -- --ignored --exact live_backend_capability_claims_match_committed_rows
       - name: Upload auditable PostgreSQL contract record
         if: always()
         uses: actions/upload-artifact@v4
@@ -382,7 +382,7 @@ jobs:
         run: |
           mkdir -p target/contract-evidence
           cargo test -p druid-wrapper --no-default-features --features driver-catalog,sqlx --test task6_database_profile_live_contract_test_parity -- --nocapture
-          cargo test -p druid-wrapper --no-default-features --features driver-catalog,sqlx --test capability_truthfulness_live_test -- --ignored --exact sqlx_live_backend_capability_claims_match_committed_rows
+          cargo test -p druid-wrapper --no-default-features --features driver-catalog,sqlx,mysql --test capability_truthfulness_live_test -- --ignored --exact live_backend_capability_claims_match_committed_rows
       - name: Upload auditable MySQL contract record
         if: always()
         uses: actions/upload-artifact@v4
