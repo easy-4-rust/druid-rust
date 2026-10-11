@@ -12,6 +12,7 @@ pub mod druid_admin_application;
 pub mod ingest;
 pub mod model;
 pub mod repository;
+pub mod security;
 pub mod service;
 pub mod servlet;
 pub mod util;

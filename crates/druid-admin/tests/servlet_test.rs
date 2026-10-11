@@ -16,9 +16,12 @@ use serde_json::Value;
 
 use druid_admin::config::AdminAuthMode;
 use druid_admin::config::MonitorProperties;
+use druid_admin::model::dto::{DataSourceContent, SqlListContent, WallResult};
 use druid_admin::repository::MetricsRepository;
+use druid_admin::repository::{DataSourceEntry, DataSourceId};
 use druid_admin::service::{EmptyAdminStatProvider, MonitorStatService, StaticDiscoveryClient};
 use druid_admin::util::ReqwestHttpClient;
+use druid_metrics::ServiceIdentity;
 
 /// Helper: build a `MonitorViewServlet`-backed router with no auth configured.
 async fn start_servlet_server() -> (SocketAddr, tokio::task::JoinHandle<()>) {
@@ -168,6 +171,72 @@ async fn sql_json_returns_java_format() {
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
     assert!(body.get("ResultCode").is_some());
+    handle.abort();
+}
+
+#[tokio::test]
+async fn authenticated_management_json_redacts_sensitive_repository_fields() {
+    let repository = MetricsRepository::new();
+    let identity = ServiceIdentity::try_new("orders", "pod-1", "boot-1").unwrap();
+    let mut sql_stats = HashMap::new();
+    sql_stats.insert(
+        9,
+        SqlListContent {
+            id: 9,
+            sql: Some("select 'sql-secret' as token".to_owned()),
+            last_slow_parameters: serde_json::json!(["parameter-secret"]),
+            last_error_message: serde_json::json!("driver-error-secret"),
+            url: serde_json::json!("jdbc:postgresql://db.example/app?password=url-secret"),
+            ..Default::default()
+        },
+    );
+    assert!(repository.upsert_datasource(
+        DataSourceId {
+            service_identity: identity.clone(),
+            identity: 7,
+        },
+        DataSourceEntry {
+            datasource: DataSourceContent {
+                identity: 7,
+                url: Some("jdbc:postgresql://db.example/app?password=url-secret".to_owned()),
+                user_name: Some("operator-secret".to_owned()),
+                active_count: 3,
+                ..Default::default()
+            },
+            sql_stats,
+            wall: WallResult::default(),
+            last_updated_ms: 1,
+            sequence: 1,
+        }
+    ));
+    let app = druid_admin::MonitorViewServlet::from_repository(repository)
+        .with_auth_mode(AdminAuthMode::basic("admin", "password"))
+        .router();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let client = reqwest::Client::new();
+
+    for path in ["/druid/datasource.json", "/druid/sql.json"] {
+        let response = client
+            .get(format!("http://{addr}{path}"))
+            .basic_auth("admin", Some("password"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        let body = response.text().await.unwrap();
+        assert!(body.contains("\"ActiveCount\":3") || body.contains("\"ID\":9"));
+        for secret in [
+            "url-secret",
+            "operator-secret",
+            "sql-secret",
+            "parameter-secret",
+            "driver-error-secret",
+        ] {
+            assert!(!body.contains(secret), "{path} reflected {secret}");
+        }
+    }
     handle.abort();
 }
 

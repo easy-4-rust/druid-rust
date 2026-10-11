@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use axum::body::{to_bytes, Body};
 use axum::extract::{Form, OriginalUri, Path, Query, Request, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
@@ -22,6 +23,7 @@ use tokio_metrics::TaskMonitor;
 use crate::config::AdminAuthMode;
 use crate::model::dto::DataSourceResult;
 use crate::repository::{DataSourceId, MetricsRepository, MetricsRepositoryConfig};
+use crate::security::AdminRedactionPolicy;
 use crate::service::{MonitorStatService, MonitorStatServiceError, StatQuery};
 use crate::CommandBroker;
 
@@ -30,6 +32,7 @@ use super::LoginRequest;
 /// Session expiry duration (2 hours, matching typical Java Servlet session).
 const SESSION_TTL: Duration = Duration::from_secs(7200);
 const MAX_SESSIONS: usize = 1_024;
+const MAX_MANAGEMENT_JSON_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 
 /// Druid 管理协议的 Axum 路由。
 ///
@@ -42,6 +45,7 @@ pub struct MonitorViewServlet {
     backend: MonitorBackend,
     task_monitor: TaskMonitor,
     auth: AdminAuthMode,
+    redaction_policy: AdminRedactionPolicy,
     /// Session token -> creation instant. Expired entries are pruned on access.
     sessions: Arc<RwLock<HashMap<String, Instant>>>,
     context_path: Arc<String>,
@@ -71,6 +75,7 @@ impl MonitorViewServlet {
             backend: MonitorBackend::Remote(monitor_stat_service),
             task_monitor: TaskMonitor::new(),
             auth: AdminAuthMode::Disabled,
+            redaction_policy: AdminRedactionPolicy::compatibility(),
             sessions: Arc::new(RwLock::new(HashMap::new())),
             context_path: Arc::new("/druid".to_owned()),
             secure_cookies: false,
@@ -87,6 +92,7 @@ impl MonitorViewServlet {
             backend: MonitorBackend::Repository(repository),
             task_monitor: TaskMonitor::new(),
             auth: AdminAuthMode::Disabled,
+            redaction_policy: AdminRedactionPolicy::compatibility(),
             sessions: Arc::new(RwLock::new(HashMap::new())),
             context_path: Arc::new("/druid".to_owned()),
             secure_cookies: false,
@@ -117,6 +123,11 @@ impl MonitorViewServlet {
             self.sessions = Arc::new(RwLock::new(HashMap::new()));
         }
         self.auth = auth;
+        self.redaction_policy = if self.auth.is_enabled() {
+            AdminRedactionPolicy::secure()
+        } else {
+            AdminRedactionPolicy::compatibility()
+        };
         self
     }
 
@@ -159,6 +170,7 @@ impl MonitorViewServlet {
     /// 构建 Java 兼容端点和 Rust REST 别名。
     pub fn router(self) -> Router {
         let auth_state = self.clone();
+        let redaction_policy = self.redaction_policy;
         let context_path = self.context_path.to_string();
         let admin_routes = Router::new()
             .route("/index.html", get(Self::legacy_page))
@@ -220,6 +232,63 @@ impl MonitorViewServlet {
             )
             .with_state(self)
             .layer(middleware::from_fn_with_state(auth_state, Self::authorize))
+            .layer(middleware::from_fn_with_state(
+                redaction_policy,
+                Self::redact_management_response,
+            ))
+    }
+
+    async fn redact_management_response(
+        State(policy): State<AdminRedactionPolicy>,
+        request: Request,
+        next: Next,
+    ) -> Response {
+        let response = next.run(request).await;
+        if !policy.is_enabled()
+            || !response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .is_some_and(|value| value.starts_with("application/json"))
+        {
+            return response;
+        }
+        let (mut parts, body) = response.into_parts();
+        let bytes = match to_bytes(body, MAX_MANAGEMENT_JSON_RESPONSE_BYTES).await {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(
+                        json!({"ResultCode": -1, "Content": "admin JSON response exceeds budget"}),
+                    ),
+                )
+                    .into_response();
+            }
+        };
+        let mut json = match serde_json::from_slice::<Value>(&bytes) {
+            Ok(json) => json,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(json!({"ResultCode": -1, "Content": "invalid upstream admin JSON"})),
+                )
+                    .into_response();
+            }
+        };
+        policy.redact_json(&mut json);
+        let bytes = match serde_json::to_vec(&json) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"ResultCode": -1, "Content": "admin JSON serialization failed"})),
+                )
+                    .into_response();
+            }
+        };
+        parts.headers.remove(header::CONTENT_LENGTH);
+        Response::from_parts(parts, Body::from(bytes))
     }
 
     /// 返回稳定端点清单。
