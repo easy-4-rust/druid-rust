@@ -1,8 +1,11 @@
 """Regression tests for the single RSA advisory exception."""
 
 import unittest
+from unittest.mock import patch
+import json
+import subprocess
 
-from verify_rsa_waiver_scope import waiver_scope_errors
+from verify_rsa_waiver_scope import main, waiver_scope_errors
 
 
 RSA = "registry+https://github.com/rust-lang/crates.io-index#rsa@0.9.10"
@@ -39,6 +42,14 @@ class RsaWaiverScopeTests(unittest.TestCase):
 
     def test_missing_rsa_fails_as_stale_waiver(self):
         self.assertTrue(waiver_scope_errors({"packages": [], "resolve": {"nodes": []}}))
+
+    @patch("verify_rsa_waiver_scope.subprocess.run")
+    def test_ci_fetches_missing_registry_metadata_without_offline_mode(self, run):
+        run.return_value = subprocess.CompletedProcess([], 0, json.dumps(metadata()), "")
+        self.assertEqual(0, main())
+        command = run.call_args.args[0]
+        self.assertIn("--locked", command)
+        self.assertNotIn("--offline", command)
 
 
 if __name__ == "__main__":

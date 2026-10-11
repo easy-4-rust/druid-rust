@@ -45,7 +45,7 @@ def waiver_scope_errors(metadata):
 
 def main():
     result = subprocess.run(
-        ["cargo", "metadata", "--format-version", "1", "--locked", "--offline"],
+        ["cargo", "metadata", "--format-version", "1", "--locked"],
         cwd=ROOT,
         text=True,
         encoding="utf-8",
