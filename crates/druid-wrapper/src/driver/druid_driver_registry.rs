@@ -120,6 +120,16 @@ impl DruidDriverRegistry {
                 config.properties().clone(),
             )
         };
+        #[cfg(any(
+            feature = "jdbc-agent",
+            feature = "duckdb-native",
+            feature = "libsql-native",
+            feature = "http-sql"
+        ))]
+        let diagnostic_url = RdbcUrl::parse(config.url()).map_or_else(
+            |_| "<redacted connection URL>".to_owned(),
+            |url| url.redacted(),
+        );
         // Properties are consumed only by feature-gated native/JDBC factories.
         let _ = &properties;
         match profile.runtime_mode() {
@@ -146,7 +156,7 @@ impl DruidDriverRegistry {
                     if !driver_url.starts_with("jdbc:") {
                         return Err(DriverRegistryError::InvalidUrl {
                             profile: profile.id().to_string(),
-                            url: display_url.clone(),
+                            url: diagnostic_url.clone(),
                         });
                     }
                     let options = self.jdbc_agent_options.clone().ok_or_else(|| {
@@ -178,7 +188,7 @@ impl DruidDriverRegistry {
                         if !driver_url.starts_with("duckdb:") {
                             return Err(DriverRegistryError::InvalidUrl {
                                 profile: profile.id().to_string(),
-                                url: display_url.clone(),
+                                url: diagnostic_url.clone(),
                             });
                         }
                         let factory: Arc<dyn ConnectionFactory> =
@@ -203,7 +213,7 @@ impl DruidDriverRegistry {
                         {
                             return Err(DriverRegistryError::InvalidUrl {
                                 profile: profile.id().to_string(),
-                                url: display_url.clone(),
+                                url: diagnostic_url.clone(),
                             });
                         }
                         let mut factory = LibSqlConnectionFactory::new(&driver_url);
@@ -241,7 +251,7 @@ impl DruidDriverRegistry {
                     if !driver_url.starts_with("http://") && !driver_url.starts_with("https://") {
                         return Err(DriverRegistryError::InvalidUrl {
                             profile: profile.id().to_string(),
-                            url: display_url.clone(),
+                            url: diagnostic_url.clone(),
                         });
                     }
                     let provider = HttpSqlProvider::from_provider_id(profile.provider_id())
@@ -487,7 +497,7 @@ impl DruidDriverRegistry {
         };
         normalized.ok_or_else(|| DriverRegistryError::InvalidUrl {
             profile: profile.id().to_string(),
-            url: url.to_owned(),
+            url: "<redacted connection URL>".to_owned(),
         })
     }
 }

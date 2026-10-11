@@ -303,25 +303,24 @@ impl PreparedStatement for StandardAdapterPreparedStatement {
         let values = self.values_core().await?;
         let execution = executor.execute_query(&self.sql, values);
         let result = if self.state.query_timeout > 0 {
-            match tokio::time::timeout(
+            if let Ok(result) = tokio::time::timeout(
                 std::time::Duration::from_secs(self.state.query_timeout as u64),
                 execution,
             )
             .await
             {
-                Ok(result) => result?,
-                Err(_) => {
-                    executor.cancel_running()?;
-                    return Err(RdbcError::SqlException(Box::new(
-                        SqlException::new(
-                            0,
-                            Some("HYT00".to_owned()),
-                            Some("statement query timed out".to_owned()),
-                        )
-                        .with_class_name("java.sql.SQLTimeoutException")
-                        .with_assignable_type("java.sql.SQLTransientException"),
-                    )));
-                }
+                result?
+            } else {
+                executor.cancel_running()?;
+                return Err(RdbcError::SqlException(Box::new(
+                    SqlException::new(
+                        0,
+                        Some("HYT00".to_owned()),
+                        Some("statement query timed out".to_owned()),
+                    )
+                    .with_class_name("java.sql.SQLTimeoutException")
+                    .with_assignable_type("java.sql.SQLTransientException"),
+                )));
             }
         } else {
             execution.await?

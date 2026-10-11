@@ -488,6 +488,20 @@ fn connection_config_diagnostics_redact_native_urls_and_invalid_input() {
         .err()
         .expect("non-RDBC URL must fail");
     assert!(!error.to_string().contains("canary-secret"));
+
+    let registry = DruidDriverRegistry::builtin().unwrap();
+    let incompatible = DatabaseConnectionConfig::new("mysql", secret_url).unwrap();
+    let error = registry.resolve(&incompatible).err().unwrap();
+    assert!(!format!("{error:?}").contains("canary-secret"));
+    assert!(!error.to_string().contains("canary-secret"));
+
+    let valid = DatabaseConnectionConfig::new(
+        "mysql",
+        "mysql://user:canary-secret@localhost/db?password=canary-secret",
+    )
+    .unwrap();
+    let resolved = registry.resolve(&valid).unwrap();
+    assert!(!format!("{resolved:?}").contains("canary-secret"));
 }
 
 #[tokio::test]

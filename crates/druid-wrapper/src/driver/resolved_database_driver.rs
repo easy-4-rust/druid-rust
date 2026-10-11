@@ -40,10 +40,14 @@ impl ResolvedDatabaseDriver {
 
 impl fmt::Debug for ResolvedDatabaseDriver {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let diagnostic_url = druid::sql::RdbcUrl::parse(&self.url).map_or_else(
+            |_| "<redacted connection URL>".to_owned(),
+            |url| url.redacted(),
+        );
         formatter
             .debug_struct("ResolvedDatabaseDriver")
             .field("profile", &self.profile)
-            .field("url", &self.url)
+            .field("url", &diagnostic_url)
             .finish_non_exhaustive()
     }
 }
