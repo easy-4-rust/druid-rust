@@ -63,6 +63,8 @@ Use bounded mpsc for physical close commands. QueueFull policy is: attempt a dea
 in the caller's explicit async close path; Drop path marks overflow and relies on owned connection
 drop without spawning. Replace repeated refill commands with `watch::Sender<usize>` or atomic max
 target plus Notify.
+The managed wrapper close facade must allow a later caller to finish shutdown if an earlier close
+future is cancelled after admission is disabled; repeated close remains safe for native and external pools.
 
 - [ ] **Step 4: Add self metrics**
 

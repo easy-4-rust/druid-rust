@@ -18,6 +18,8 @@ pub struct ManagedWrapperPool {
     inner: Arc<dyn Pool>,
     enabled: AtomicBool,
     closed: AtomicBool,
+    shutdown_complete: AtomicBool,
+    shutdown_lock: tokio::sync::Mutex<()>,
     object_name: RwLock<Option<String>>,
     shutdown: Option<Arc<dyn WrapperPoolShutdown>>,
 }
@@ -51,6 +53,8 @@ impl ManagedWrapperPool {
             inner,
             enabled: AtomicBool::new(true),
             closed: AtomicBool::new(false),
+            shutdown_complete: AtomicBool::new(false),
+            shutdown_lock: tokio::sync::Mutex::new(()),
             object_name: RwLock::new(None),
             shutdown: None,
         }
@@ -67,6 +71,8 @@ impl ManagedWrapperPool {
             inner: pool,
             enabled: AtomicBool::new(true),
             closed: AtomicBool::new(false),
+            shutdown_complete: AtomicBool::new(false),
+            shutdown_lock: tokio::sync::Mutex::new(()),
             object_name: RwLock::new(None),
             shutdown: Some(shutdown),
         }
@@ -108,13 +114,17 @@ impl ManagedWrapperPool {
 
     /// 关闭 facade 及支持显式 shutdown 的底层 pool。
     pub async fn close(&self) {
-        if self.closed.swap(true, Ordering::AcqRel) {
+        // 门禁先关闭；若上一次 close future 被取消，后续调用仍须继续底层清理。
+        self.closed.store(true, Ordering::Release);
+        self.enabled.store(false, Ordering::Release);
+        let _shutdown_guard = self.shutdown_lock.lock().await;
+        if self.shutdown_complete.load(Ordering::Acquire) {
             return;
         }
-        self.enabled.store(false, Ordering::Release);
         if let Some(shutdown) = &self.shutdown {
             shutdown.shutdown().await;
         }
+        self.shutdown_complete.store(true, Ordering::Release);
     }
 
     fn ensure_enabled(&self) -> Result<(), RdbcError> {
@@ -153,5 +163,87 @@ impl Pool for ManagedWrapperPool {
 
     fn name(&self) -> &str {
         self.inner.name()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ManagedWrapperPool, WrapperPoolShutdown};
+    use druid::core::{DruidPooledConnection, Pool, PoolState};
+    use druid_rdbc::error::RdbcError;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tokio::sync::{Notify, Semaphore};
+
+    struct SlowShutdownPool {
+        calls: AtomicUsize,
+        entered: Notify,
+        release: Semaphore,
+    }
+
+    #[async_trait::async_trait]
+    impl WrapperPoolShutdown for SlowShutdownPool {
+        async fn shutdown(&self) {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.entered.notify_one();
+            let permit = self.release.acquire().await.expect("semaphore stays open");
+            permit.forget();
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl Pool for SlowShutdownPool {
+        async fn get(&self) -> Result<DruidPooledConnection, RdbcError> {
+            Err(RdbcError::PoolClosed)
+        }
+
+        async fn get_timeout(
+            &self,
+            _timeout: Duration,
+        ) -> Result<DruidPooledConnection, RdbcError> {
+            Err(RdbcError::PoolClosed)
+        }
+
+        fn state(&self) -> PoolState {
+            PoolState::default()
+        }
+
+        fn driver_name(&self) -> &str {
+            "slow-shutdown"
+        }
+
+        fn name(&self) -> &str {
+            "slow-shutdown"
+        }
+    }
+
+    #[tokio::test]
+    async fn cancelled_close_can_be_retried_until_underlying_shutdown_finishes() {
+        let inner = Arc::new(SlowShutdownPool {
+            calls: AtomicUsize::new(0),
+            entered: Notify::new(),
+            release: Semaphore::new(0),
+        });
+        let wrapper = Arc::new(ManagedWrapperPool::with_shutdown(
+            "native",
+            Arc::clone(&inner),
+        ));
+        let first_wrapper = Arc::clone(&wrapper);
+        let first = tokio::spawn(async move { first_wrapper.close().await });
+        tokio::time::timeout(Duration::from_secs(1), inner.entered.notified())
+            .await
+            .expect("first close must reach the physical pool");
+        first.abort();
+        first.await.expect_err("first close was cancelled");
+
+        inner.release.add_permits(1);
+        tokio::time::timeout(Duration::from_secs(1), wrapper.close())
+            .await
+            .expect("retry must complete physical shutdown");
+        assert_eq!(inner.calls.load(Ordering::SeqCst), 2);
+        assert!(wrapper.state().closed);
+        wrapper.close().await;
+        assert_eq!(inner.calls.load(Ordering::SeqCst), 2);
     }
 }

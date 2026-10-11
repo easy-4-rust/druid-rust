@@ -43,3 +43,5 @@ Admin 的 `repository_capacity_test`（2/2）与 `ingest_test`（11/11）以 `--
 门禁脚本会先保存测量 JSON，再对超预算指标逐项报错。[预算门禁首次运行](https://github.com/easy-4-rust/druid-rust/actions/runs/38129014068)在提交 `ab18389` 上成功；上传的 JSON 记录 p99 25.486 ms、峰值 RSS 18,848 KiB、关闭 1 ms、全部五项上限及零超限项。边界等于阈值与五项同时超限的单元测试均已通过。慢物理关闭的队列/超时、Metrics 饱和时的 dropped/coalesced、Admin 不可用与重启、重复 batch/序列缺口、过期条目、无效认证和待 ACK 时 SIGTERM 仍缺运行预算。P06 Task5 保持开放。
 
 当前提交 `bb1bea1` 的[手动 CI 复测](https://github.com/easy-4-rust/druid-rust/actions/runs/38134374659)通过：进程级故障注入验证超预算返回非零并保留 JSON；真实基准 100 样本测得 p50/p95/p99 为 24.758/25.112/25.163 ms，峰值 RSS 18,764 KiB，等待队列峰值 56，关闭 1 ms，五项预算零超限。该故障注入证明检查进程的失败传播；尚未通过故意让整个 GitHub 作业失败来验证工作流终态。
+
+提交 `9f5692a` 的[当前主线实测](https://github.com/easy-4-rust/druid-rust/actions/runs/38162299686)通过：100 样本 p50/p95/p99 为 25.152/25.233/25.513 ms，峰值 RSS 18,484 KiB，等待队列峰值 56、活动连接峰值 8、关闭 1 ms；上传 JSON 的五项预算均无超限。此证据只覆盖 Pool burst 场景，不能替代 Metrics/Admin 故障预算，也不包含其后的 Wrapper 取消关闭修复。
