@@ -282,6 +282,101 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  postgresql-product-contract:
+    name: PostgreSQL real product contract
+    runs-on: ubuntu-24.04
+    services:
+      database:
+        image: postgres:16.15-trixie
+        env:
+          POSTGRES_USER: druid
+          POSTGRES_PASSWORD: druid_contract
+          POSTGRES_DB: druid
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U druid -d druid"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - name: Run real PostgreSQL product contract and restart fault injection
+        env:
+          DRUID_REQUIRE_DATABASE_PROFILE_CONTRACT: "1"
+          DRUID_DATABASE_PROFILE: postgresql
+          DRUID_DATABASE_URL: postgres://druid:druid_contract@127.0.0.1:${{ job.services.database.ports['5432'] }}/druid
+          DRUID_DATABASE_BAD_URL: postgres://druid:wrong_password@127.0.0.1:${{ job.services.database.ports['5432'] }}/druid
+          DRUID_CONTRACT_LONG_QUERY: SELECT pg_sleep(30)
+          DRUID_CONTRACT_RESTART_PROGRAM: bash
+          DRUID_CONTRACT_RESTART_ARGS_JSON: '["${{ github.workspace }}/scripts/restart_contract_service.sh","${{ job.services.database.id }}"]'
+          DRUID_CONTRACT_TARGET: x86_64-unknown-linux-gnu
+          DRUID_CONTRACT_RUST_VERSION: "1.97.1"
+          DRUID_CONTRACT_EVIDENCE_PATH: ${{ github.workspace }}/target/contract-evidence/postgresql.json
+          DRUID_CONTRACT_EVIDENCE_REF: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p target/contract-evidence
+          cargo test -p druid-wrapper --no-default-features --features driver-catalog,sqlx --test task6_database_profile_live_contract_test_parity -- --nocapture
+      - name: Upload auditable PostgreSQL contract record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgresql-product-contract-${{ github.sha }}
+          path: target/contract-evidence/postgresql.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  mysql-product-contract:
+    name: MySQL real product contract
+    runs-on: ubuntu-24.04
+    services:
+      database:
+        image: mysql:8.4.11
+        env:
+          MYSQL_ROOT_PASSWORD: druid_root_contract
+          MYSQL_DATABASE: druid
+          MYSQL_USER: druid
+          MYSQL_PASSWORD: druid_contract
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - name: Run real MySQL product contract and restart fault injection
+        env:
+          DRUID_REQUIRE_DATABASE_PROFILE_CONTRACT: "1"
+          DRUID_DATABASE_PROFILE: mysql
+          DRUID_DATABASE_URL: mysql://druid:druid_contract@127.0.0.1:${{ job.services.database.ports['3306'] }}/druid
+          DRUID_DATABASE_BAD_URL: mysql://druid:wrong_password@127.0.0.1:${{ job.services.database.ports['3306'] }}/druid
+          DRUID_CONTRACT_LONG_QUERY: SELECT SLEEP(30)
+          DRUID_CONTRACT_RESTART_PROGRAM: bash
+          DRUID_CONTRACT_RESTART_ARGS_JSON: '["${{ github.workspace }}/scripts/restart_contract_service.sh","${{ job.services.database.id }}"]'
+          DRUID_CONTRACT_TARGET: x86_64-unknown-linux-gnu
+          DRUID_CONTRACT_RUST_VERSION: "1.97.1"
+          DRUID_CONTRACT_EVIDENCE_PATH: ${{ github.workspace }}/target/contract-evidence/mysql.json
+          DRUID_CONTRACT_EVIDENCE_REF: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p target/contract-evidence
+          cargo test -p druid-wrapper --no-default-features --features driver-catalog,sqlx --test task6_database_profile_live_contract_test_parity -- --nocapture
+      - name: Upload auditable MySQL contract record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-product-contract-${{ github.sha }}
+          path: target/contract-evidence/mysql.json
+          if-no-files-found: warn
+          retention-days: 90
+
   aggregate-sqlite-evidence:
     needs: sqlite-product-contract
     runs-on: ubuntu-latest
