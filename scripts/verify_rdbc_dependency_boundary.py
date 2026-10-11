@@ -45,6 +45,7 @@ def cargo_metadata(root: Path) -> dict[str, object]:
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if completed.returncode != 0:
         print(completed.stderr, file=sys.stderr, end="")
