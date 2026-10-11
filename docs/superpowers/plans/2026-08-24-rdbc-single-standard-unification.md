@@ -640,10 +640,10 @@ lifecycle semantics or owner cleanup.
 | `DRUID_OWNER_RELEASE_EXACTLY_ONCE` | `IMPLEMENTED_TESTED` | Druid resource owner/release | `resource_owner_cancellation_test` 112/112；driver release、重复通知与父租约处置合同 |
 | `DRUID_CANCELLATION_HARDENING` | `IMPLEMENTED_TESTED` | Druid supervised release | 同一 112/112 合同覆盖取消、重试与父连接清理 |
 | `SQLX_BUFFERED_RENAME` | `TASK7_PENDING` | `SqlxStreamingResultSet` rename | truthful eager/buffered naming |
-| `ASYNC_RESULT_SET_STREAMING` | `TASK7_PENDING` | `SqlxAsyncResultSet` | bounded first-row consumption and Stream adapter |
+| `ASYNC_RESULT_SET_STREAMING` | `IMPLEMENTED_TESTED` | `SqlxAsyncResultSet` | `async_result_set_test` 15/15；容量 1 请求队列、按 next 拉取与提前释放同一 actor |
 
-Task 7 remaining implementation denominator: **3**. The three completed-early Task 6 rows and
-the five `IMPLEMENTED_TESTED` Task 7 rows do not count as remaining implementation work; Task 7
+Task 7 remaining implementation denominator: **2**. The three completed-early Task 6 rows and
+the six `IMPLEMENTED_TESTED` Task 7 rows do not count as remaining implementation work; Task 7
 itself stays open until all eight obligations and the full GREEN matrix are verified. The
 completed-early rows remain part of Task 6 behavior-preservation evidence.
 
