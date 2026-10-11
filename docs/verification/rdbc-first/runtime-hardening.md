@@ -2,6 +2,8 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
+2026-10-12 当前 `d528486` Windows 复测：Pool 关闭/维护/回收分别 11/11、14/14、16/16；Metrics Supervisor/shutdown 分别 2/2、8/8；Admin binary（含真实 TLS/认证）16/16。`grpc_network_e2e_test` 常规路径 45/48，三项失败；单独重跑时普通生成的 Tonic 客户端也在初连收到 TCP `10060`。临时加入同一测试二进制的纯 `std::net`/Tokio 回环探针均超时，而独立 Rust/Python 探针成功；复制该测试二进制到另一位置后纯 TCP 探针曾通过，完整顺序运行又在后段出现回环超时（39/50，包含两项临时探针）。临时探针已从源码移除且未提交。此现象定位到本机测试进程的回环边界，尚不能据此判断协议缺陷或宣称跨平台网络门禁通过；Linux/Windows CI 结果与该本地异常需分别核对。
+
 2026-10-12 本机复测：Pool `pool_close_backpressure_test` 11/11；Metrics `task_supervision_test`、`shutdown_test`、`queue_semantics_test` 合计 14/14；Admin `grpc_network_e2e_test` 与 `repository_capacity_test` 合计 52/52，`admin_binary_test` 16/16，均使用 `--locked` 并退出 0。网络用例覆盖 Admin 重启、重复/跳号批次、服务不可用、命令认证及关闭；仍缺这些故障场景各自的数值运行预算与跨平台验收，不据此关闭 Task5。
 
 JDBC Agent 故障注入：`cargo test -p druid-wrapper --features jdbc-agent --lib --quiet` 本机 21/21 通过。沉默子进程启动按调用者配置的 75 ms 期限失败；不同身份的启动互不阻塞，同一身份的等待也遵守各自期限。超过 1 KiB 且无换行的帧在 EOF 前被拒绝，非法 ready/handshake 不回显注入的凭据标记。此项只覆盖 Agent 协议边界，不代替下表的跨平台运行预算或真实数据库验收。
