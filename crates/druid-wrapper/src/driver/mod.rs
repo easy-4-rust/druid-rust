@@ -13,6 +13,7 @@ mod driver_verification_evidence;
 mod driver_verification_run;
 mod druid_database_pool_builder;
 mod druid_driver_registry;
+#[cfg(feature = "toasty")]
 pub(crate) mod extensions;
 mod protocol_family;
 mod resolved_database_driver;

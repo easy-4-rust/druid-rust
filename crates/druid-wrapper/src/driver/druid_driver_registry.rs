@@ -10,10 +10,25 @@ use crate::http_sql::{HttpSqlConnectionFactory, HttpSqlProvider};
 use crate::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
 #[cfg(feature = "libsql-native")]
 use crate::libsql::LibSqlConnectionFactory;
+#[cfg(feature = "sqlx")]
 use crate::sqlx::SqlxConnectionFactory;
 use druid::sql::RdbcUrl;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "jdbc-agent",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql"
+))]
 use druid_rdbc::driver::ConnectionFactory;
 use std::collections::HashMap;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "jdbc-agent",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql"
+))]
 use std::sync::Arc;
 
 /// 将产品档案解析为 Druid canonical 连接工厂的只读注册中心。
@@ -131,17 +146,23 @@ impl DruidDriverRegistry {
             |url| url.redacted(),
         );
         // Properties are consumed only by feature-gated native/JDBC factories.
-        let _ = &properties;
+        let _ = (&driver_url, &display_url, &properties);
         match profile.runtime_mode() {
             DriverRuntimeMode::Sqlx => {
-                let driver_url = Self::normalize_sqlx_url(&profile, &driver_url)?;
-                let factory: Arc<dyn ConnectionFactory> =
-                    Arc::new(SqlxConnectionFactory::new(driver_url));
-                Ok(ResolvedDatabaseDriver::new(
-                    profile,
-                    display_url.clone(),
-                    factory,
-                ))
+                #[cfg(feature = "sqlx")]
+                {
+                    let driver_url = Self::normalize_sqlx_url(&profile, &driver_url)?;
+                    let factory: Arc<dyn ConnectionFactory> =
+                        Arc::new(SqlxConnectionFactory::new(driver_url));
+                    Ok(ResolvedDatabaseDriver::new(profile, display_url, factory))
+                }
+                #[cfg(not(feature = "sqlx"))]
+                {
+                    Err(DriverRegistryError::UnsupportedRuntime {
+                        profile: profile.id().to_string(),
+                        runtime: "SQLx feature disabled".to_owned(),
+                    })
+                }
             }
             DriverRuntimeMode::JdbcAgent => {
                 #[cfg(not(feature = "jdbc-agent"))]
@@ -462,6 +483,7 @@ impl DruidDriverRegistry {
         format!("{sign}{hours:02}:{minutes:02}")
     }
 
+    #[cfg(feature = "sqlx")]
     fn normalize_sqlx_url(
         profile: &DatabaseProfile,
         url: &str,

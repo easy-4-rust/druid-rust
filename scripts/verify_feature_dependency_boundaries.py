@@ -17,6 +17,7 @@ FEATURE_DEPS = {
     "rbdc": {"rbdc", "rbs"},
 }
 ISOLATED_FEATURES = {
+    "driver-catalog": set(),
     "sqlx": {"sqlx"},
     "toasty": {"toasty", "toasty-core"},
     "rbdc": {"rbdc", "rbs"},

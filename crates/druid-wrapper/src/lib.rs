@@ -69,6 +69,7 @@ pub mod toasty;
 #[cfg(feature = "driver-catalog")]
 pub fn init_driver_extensions() {
     // Touch the module so the linker retains its statics.
+    #[cfg(feature = "toasty")]
     driver::extensions::init();
 }
 

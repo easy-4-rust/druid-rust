@@ -10,7 +10,7 @@ publish      = false
 
 [features]
 default = ["driver-catalog", "sqlite", "sqlx-bb8", "sqlx-deadpool", "rbdc"]
-driver-catalog = ["sqlx", "toasty"]
+driver-catalog = []
 sqlx = ["dep:sqlx"]
 sqlx-bb8 = ["sqlx", "dep:bb8"]
 sqlx-deadpool = ["sqlx", "dep:deadpool"]
