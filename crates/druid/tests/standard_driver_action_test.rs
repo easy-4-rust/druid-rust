@@ -1,6 +1,8 @@
 use druid::sql::DriverManager;
 use druid_rdbc::connection::Connection;
-use druid_rdbc::driver::{ConnectionProperties, Driver, DriverAction};
+use druid_rdbc::driver::{
+    ConnectionProperties, Driver, DriverAction, DriverExtensionDescriptor, DriverRegistry,
+};
 use druid_rdbc::error::RdbcError;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -9,6 +11,8 @@ use std::time::Duration;
 struct RefusingDriver;
 
 struct AcceptingButRefusingDriver;
+
+struct SecondCandidateDriver;
 
 struct ReentrantDriver {
     registered: Arc<dyn Driver>,
@@ -56,6 +60,7 @@ impl Driver for AcceptingButRefusingDriver {
 
     fn accepts_url(&self, url: &str) -> bool {
         url.starts_with("rdbc:refusing-redaction-test://")
+            || url.starts_with("rdbc:next-candidate-test://")
     }
 
     async fn connect(
@@ -64,6 +69,27 @@ impl Driver for AcceptingButRefusingDriver {
         _properties: &ConnectionProperties,
     ) -> Result<Option<Box<dyn Connection>>, RdbcError> {
         Ok(None)
+    }
+}
+
+#[async_trait::async_trait]
+impl Driver for SecondCandidateDriver {
+    fn name(&self) -> &str {
+        "second_candidate_driver"
+    }
+
+    fn accepts_url(&self, url: &str) -> bool {
+        url.starts_with("rdbc:next-candidate-test://")
+    }
+
+    async fn connect(
+        &self,
+        _url: &str,
+        _properties: &ConnectionProperties,
+    ) -> Result<Option<Box<dyn Connection>>, RdbcError> {
+        Err(RdbcError::DriverError(
+            "second candidate reached".to_owned(),
+        ))
     }
 }
 
@@ -133,6 +159,45 @@ async fn missing_driver_diagnostics_do_not_disclose_connection_url_secrets() {
         .expect("refusing driver must return no connection");
     assert!(DriverManager::deregister_driver(&driver));
     assert!(!connect_error.to_string().contains("canary-secret"));
+}
+
+#[tokio::test]
+async fn connection_lookup_continues_after_first_driver_returns_none() {
+    let first: Arc<dyn Driver> = Arc::new(AcceptingButRefusingDriver);
+    let second: Arc<dyn Driver> = Arc::new(SecondCandidateDriver);
+    let url = "rdbc:next-candidate-test://localhost/db";
+    DriverManager::register_driver(Arc::clone(&first));
+    DriverManager::register_driver(Arc::clone(&second));
+
+    let result = DriverManager::get_connection(url).await;
+    let properties_result =
+        DriverManager::get_connection_with_properties(url, &Default::default()).await;
+    let credentials_result =
+        DriverManager::get_connection_with_credentials(url, "user", "password").await;
+    let mut standard = DriverRegistry::new();
+    standard.register(DriverExtensionDescriptor::new(
+        "first",
+        Arc::clone(&first),
+        None,
+    ));
+    standard.register(DriverExtensionDescriptor::new(
+        "second",
+        Arc::clone(&second),
+        None,
+    ));
+    let standard_result = standard.connect(url, &ConnectionProperties::new()).await;
+    assert!(DriverManager::deregister_driver(&first));
+    assert!(DriverManager::deregister_driver(&second));
+    for result in [result, properties_result, credentials_result] {
+        assert!(matches!(
+            result,
+            Err(RdbcError::DriverError(ref message)) if message == "second candidate reached"
+        ));
+    }
+    assert!(matches!(
+        standard_result,
+        Err(RdbcError::DriverError(ref message)) if message == "second candidate reached"
+    ));
 }
 
 #[test]

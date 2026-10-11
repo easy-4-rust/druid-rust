@@ -28,6 +28,12 @@ flowchart LR
 
 DriverManager 与多条 registry 路径的最终统一属于 P05。上述责任划分不能作为当前路径已全部收敛的证明。
 
+DriverManager 的显式注册顺序是 Java 兼容层行为。获取连接时，候选协商委托
+`druid-rdbc::driver::DriverRegistry::connect`：不接受 URL 的驱动跳过；接受 URL
+但返回 `Ok(None)` 时继续尝试后续驱动；首个 `Some(connection)` 返回；驱动错误保留原错。
+登录超时包围整个候选尝试过程。`get_driver` 仅查找首个声明接受 URL 的驱动，不建连。
+这条协商语义已统一，但产品 profile、inventory 与显式注册的完整路径收敛仍需 P05 验证。
+
 ## 2. 对象所有权与异步执行
 
 | 对象 | 合同 |

@@ -8,7 +8,7 @@ use parking_lot::RwLock;
 use super::{Driver, DriverAction, RdbcLogWriter};
 use crate::core::RdbcError;
 use druid_rdbc::connection::Connection;
-use druid_rdbc::driver::ConnectionProperties;
+use druid_rdbc::driver::{ConnectionProperties, DriverExtensionDescriptor, DriverRegistry};
 
 #[derive(Clone)]
 struct RegisteredDriver {
@@ -171,8 +171,7 @@ impl DriverManager {
     /// Returns an unpooled connection. Missing drivers, driver failures, and login timeouts retain
     /// their error semantics. Corresponds to Java: `getConnection(String)`.
     pub async fn get_connection(url: &str) -> Result<Box<dyn Connection>, RdbcError> {
-        let driver = Self::driver_for(url)?;
-        Self::with_login_timeout(driver.connect(url, &ConnectionProperties::new())).await
+        Self::connect_registered(url, &ConnectionProperties::new()).await
     }
 
     /// Opens a physical connection using RDBC property semantics.
@@ -183,12 +182,11 @@ impl DriverManager {
         url: &str,
         info: &HashMap<String, String>,
     ) -> Result<Box<dyn Connection>, RdbcError> {
-        let driver = Self::driver_for(url)?;
         let properties = info
             .iter()
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect();
-        Self::with_login_timeout(driver.connect(url, &properties)).await
+        Self::connect_registered(url, &properties).await
     }
 
     /// Opens a physical connection with a URL, user name, and password.
@@ -200,12 +198,11 @@ impl DriverManager {
         username: &str,
         password: &str,
     ) -> Result<Box<dyn Connection>, RdbcError> {
-        let driver = Self::driver_for(url)?;
         let properties = ConnectionProperties::from([
             ("user".to_owned(), username.to_owned()),
             ("password".to_owned(), password.to_owned()),
         ]);
-        Self::with_login_timeout(driver.connect(url, &properties)).await
+        Self::connect_registered(url, &properties).await
     }
 
     fn driver_for(url: &str) -> Result<Arc<dyn Driver>, RdbcError> {
@@ -214,6 +211,19 @@ impl DriverManager {
             .into_iter()
             .find(|driver| driver.accepts_url(url))
             .ok_or_else(|| RdbcError::DriverError("No suitable driver found".to_owned()))
+    }
+
+    async fn connect_registered(
+        url: &str,
+        properties: &ConnectionProperties,
+    ) -> Result<Box<dyn Connection>, RdbcError> {
+        // 兼容层只保存 Java 注册顺序；连接协商委托唯一标准 registry 算法。
+        let mut registry = DriverRegistry::new();
+        for driver in Self::drivers() {
+            let name = driver.name().to_owned();
+            registry.register(DriverExtensionDescriptor::new(name, driver, None));
+        }
+        Self::with_login_timeout(registry.connect(url, properties)).await
     }
 
     async fn with_login_timeout<F>(future: F) -> Result<Box<dyn Connection>, RdbcError>
