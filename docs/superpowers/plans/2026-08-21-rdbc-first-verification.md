@@ -154,9 +154,10 @@ git commit -m "test(quality): verify rdbc-first api and toolchains"
 
 ```bash
 cargo test -p druid-rdbc --tests
-cargo test -p druid --test physical_connection_contract
+cargo test -p druid --test task6_standard_connection_contract_parity
 cargo test -p druid --test rdbc_resource_context_test
-cargo test -p druid --test druid_pooled_result_set_semantics_test
+cargo test -p druid --test task6_buffered_result_set_canonical_matrix_test
+cargo test -p druid --test task7_pooled_async_result_set_test
 ```
 
 Expected: all PASS.
@@ -164,7 +165,8 @@ Expected: all PASS.
 - [ ] **Step 2: Run adapter parity**
 
 ```bash
-cargo test -p druid-wrapper --test sqlx_connection_adapter_test
+cargo test -p druid-wrapper --test task6_sqlx_canonical_matrix_test
+cargo test -p druid-wrapper --test task6_sqlx_method_parity_test
 cargo test -p druid-wrapper --test sqlx_bb8_pool_test
 cargo test -p druid-wrapper --test sqlx_deadpool_pool_test
 cargo test -p druid-wrapper --test rbdc_connection_adapter_test
