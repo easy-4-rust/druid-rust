@@ -91,6 +91,18 @@ class Task6MigrationAuthorityTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(VerificationError, "component state"):
                 verify_task7_scope_boundary(root)
+            plan.write_text(
+                plan.read_text(encoding="utf-8").replace(
+                    "| `CAPABILITY_TRUTHFULNESS` | `IMPLEMENTED_TESTED` |",
+                    "| `CAPABILITY_TRUTHFULNESS` | `TASK7_PENDING` |",
+                ).replace(
+                    "### Task 8:",
+                    "| `CAPABILITY_TRUTHFULNESS` | `IMPLEMENTED_TESTED` | forged | forged |\n### Task 8:",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(VerificationError, "component state"):
+                verify_task7_scope_boundary(root)
 
     def test_exact_module_target_does_not_accept_same_leaf_elsewhere(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

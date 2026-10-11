@@ -182,13 +182,13 @@ def verify_task7_scope_boundary(root: Path) -> None:
     section = plan.split(TASK7_SCOPE_HEADING, 1)[1].split("### Task 8:", 1)[0]
     for component, (public_identity, source_path) in TASK7_EARLY_COMPONENTS.items():
         expected = f"| `{component}` | `COMPLETED_EARLY_TASK6` | `{public_identity}` | `{source_path}` |"
-        if section.count(expected) != 1:
+        if section.count(f"| `{component}` |") != 1 or section.count(expected) != 1:
             fail(f"Task 7 early component is missing or duplicated: {component}")
         if not (root / source_path).is_file():
             fail(f"Task 7 early component source is missing: {source_path}")
     for component, state in TASK7_COMPONENT_STATES.items():
         expected = f"| `{component}` | `{state}` |"
-        if section.count(expected) != 1:
+        if section.count(f"| `{component}` |") != 1 or section.count(expected) != 1:
             fail(f"Task 7 component state is missing or duplicated: {component}")
     if "Task 7 remaining implementation denominator: **1**" not in section:
         fail("Task 7 remaining denominator is not exact")
