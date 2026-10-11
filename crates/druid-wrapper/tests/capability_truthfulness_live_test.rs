@@ -1,11 +1,33 @@
-//! 在 CI 的 PostgreSQL/MySQL 服务上验证 SQLx/Toasty 宣称的事务与保存点能力。
-#![cfg(all(feature = "sqlx", any(feature = "postgresql", feature = "mysql")))]
+//! 验证 SQLx/Toasty 宣称的事务与保存点能力；远程产品由 CI 实库执行。
+#![cfg(all(
+    feature = "sqlx",
+    any(feature = "sqlite", feature = "postgresql", feature = "mysql")
+))]
 
 use druid_rdbc::connection::Connection;
 use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::types::{Row, Value};
 use druid_wrapper::sqlx::SqlxConnectionFactory;
 use druid_wrapper::toasty::ToastyConnectionFactory;
+
+#[cfg(feature = "sqlite")]
+#[tokio::test]
+async fn sqlite_capability_claims_match_committed_rows() {
+    const URL: &str = "sqlite::memory:";
+    let factories: Vec<Box<dyn ConnectionFactory>> = vec![
+        Box::new(SqlxConnectionFactory::new(URL)),
+        Box::new(
+            ToastyConnectionFactory::new(URL)
+                .await
+                .expect("create SQLite Toasty factory"),
+        ),
+    ];
+    for factory in factories {
+        let driver = factory.name().to_owned();
+        let connection = factory.create().await.expect("connect to SQLite");
+        verify_capabilities(connection, "sqlite", &driver).await;
+    }
+}
 
 #[tokio::test]
 #[ignore = "requires DRUID_DATABASE_URL and a live PostgreSQL or MySQL service"]
