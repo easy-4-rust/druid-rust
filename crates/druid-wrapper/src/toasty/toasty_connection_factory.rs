@@ -20,7 +20,7 @@ use toasty_core::{
 #[derive(Clone)]
 pub struct ToastyConnectionFactory {
     driver: Arc<dyn Driver>,
-    #[cfg(feature = "sqlite")]
+    #[cfg(feature = "toasty-sqlite")]
     sqlite_driver: Option<Arc<toasty_driver_sqlite::Sqlite>>,
     schema: Arc<Schema>,
     connect_context: ConnectContext,
@@ -58,7 +58,7 @@ impl ToastyConnectionFactory {
                 operation: "toasty_non_sql_connection",
             });
         }
-        #[cfg(feature = "sqlite")]
+        #[cfg(feature = "toasty-sqlite")]
         if url
             .split_once(':')
             .is_some_and(|(scheme, _)| scheme.eq_ignore_ascii_case("sqlite"))
@@ -105,14 +105,14 @@ impl ToastyConnectionFactory {
 
         // 仅识别真实 SQLite 类型，保留配置好的原实例；自定义驱动仍走官方路径。
         let driver = Arc::new(driver);
-        #[cfg(feature = "sqlite")]
+        #[cfg(feature = "toasty-sqlite")]
         let sqlite_driver = {
             let erased: Arc<dyn std::any::Any + Send + Sync> = driver.clone();
             erased.downcast::<toasty_driver_sqlite::Sqlite>().ok()
         };
         Ok(Self {
             driver,
-            #[cfg(feature = "sqlite")]
+            #[cfg(feature = "toasty-sqlite")]
             sqlite_driver,
             schema: Arc::new(schema),
             connect_context: ConnectContext::default(),
@@ -168,7 +168,7 @@ impl ToastyConnectionFactory {
         if let Some(trace) = &self.runtime_trace {
             trace.task4_trace_factory_create();
         }
-        #[cfg(feature = "sqlite")]
+        #[cfg(feature = "toasty-sqlite")]
         let (connection, query_metadata): (Box<dyn toasty_core::Connection>, _) =
             if let Some(driver) = &self.sqlite_driver {
                 let (connection, metadata) = driver
@@ -184,7 +184,7 @@ impl ToastyConnectionFactory {
                     None,
                 )
             };
-        #[cfg(not(feature = "sqlite"))]
+        #[cfg(not(feature = "toasty-sqlite"))]
         let connection = self
             .driver
             .connect(&self.connect_context)
@@ -199,7 +199,7 @@ impl ToastyConnectionFactory {
             self.driver.capability(),
             self.url.clone(),
         );
-        #[cfg(feature = "sqlite")]
+        #[cfg(feature = "toasty-sqlite")]
         connection.install_query_metadata(query_metadata);
         if let Some(trace) = &self.runtime_trace {
             connection.install_runtime_trace(trace.clone());

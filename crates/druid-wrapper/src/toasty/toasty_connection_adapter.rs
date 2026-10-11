@@ -58,7 +58,7 @@ fn read_only_session_sql(driver_name: &str, read_only: bool) -> Option<&'static 
 /// `toasty::Db` 或 Toasty Pool；DruidPool 独占池化、回收和统计职责。
 pub struct ToastyConnectionAdapter {
     connection: Option<Box<dyn ToastyConnection>>,
-    #[cfg(feature = "sqlite")]
+    #[cfg(feature = "toasty-sqlite")]
     query_metadata: Option<toasty_driver_sqlite::SqliteQueryMetadata>,
     schema: Arc<Schema>,
     url: String,
@@ -95,7 +95,7 @@ impl ToastyConnectionAdapter {
     ) -> Self {
         Self {
             connection: Some(connection),
-            #[cfg(feature = "sqlite")]
+            #[cfg(feature = "toasty-sqlite")]
             query_metadata: None,
             schema,
             url,
@@ -110,7 +110,7 @@ impl ToastyConnectionAdapter {
         }
     }
 
-    #[cfg(feature = "sqlite")]
+    #[cfg(feature = "toasty-sqlite")]
     pub(crate) fn install_query_metadata(
         &mut self,
         metadata: Option<toasty_driver_sqlite::SqliteQueryMetadata>,
@@ -120,7 +120,7 @@ impl ToastyConnectionAdapter {
 
     // 在同一 executor 锁内消费刚执行的列快照，不执行额外 SQL。
     fn query_result(&self, rows: Vec<Row>, hidden_key: bool) -> StandardQueryResult {
-        #[cfg(feature = "sqlite")]
+        #[cfg(feature = "toasty-sqlite")]
         if let Some(mut columns) = self
             .query_metadata
             .as_ref()
@@ -158,7 +158,7 @@ impl ToastyConnectionAdapter {
                 .collect();
             return result;
         }
-        #[cfg(not(feature = "sqlite"))]
+        #[cfg(not(feature = "toasty-sqlite"))]
         let _ = hidden_key;
         StandardQueryResult::rows_only(rows)
     }
@@ -175,7 +175,7 @@ impl ToastyConnectionAdapter {
         let runtime_trace = self.runtime_trace.take();
         let shell = Self {
             connection: None,
-            #[cfg(feature = "sqlite")]
+            #[cfg(feature = "toasty-sqlite")]
             query_metadata: None,
             schema: Arc::clone(&self.schema),
             url: self.url.clone(),

@@ -192,7 +192,7 @@ required-features = ["toasty"]
 
 [[test]]
 name = "toasty_connection_adapter_test"
-required-features = ["toasty"]
+required-features = ["toasty-sqlite"]
 
 [dependencies]
 async-trait.workspace = true
