@@ -1201,11 +1201,13 @@ def execute_targets(
                 check=False,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=1_800,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             fail(f"replacement tests NOT_RUN/ERROR for {package}: {error}")
-        output = result.stdout + "\n" + result.stderr
+        output = (result.stdout or "") + "\n" + (result.stderr or "")
         if result.returncode != 0:
             fail(
                 f"replacement tests failed for {package}/{target}: "

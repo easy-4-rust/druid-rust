@@ -1279,13 +1279,15 @@ def execute_behavior_evidence(
                 check=False,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=1_800,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             raise VerificationError(
                 f"method evidence target NOT_RUN/ERROR for {package}/{target}: {error}"
             ) from error
-        output = result.stdout + "\n" + result.stderr
+        output = (result.stdout or "") + "\n" + (result.stderr or "")
         if result.returncode != 0:
             raise VerificationError(
                 f"method evidence target failed for {package}/{target}: {output[-20_000:]}"
@@ -1349,6 +1351,7 @@ def verify_c2_runtime_evidence(
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors="replace",
             timeout=7_200,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
@@ -1387,6 +1390,7 @@ def verify_c2_source_evidence(
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors="replace",
             timeout=1_800,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
@@ -1422,13 +1426,15 @@ def verify_generated_behavior_matrix(
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=1_800,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise VerificationError(
             f"generated method behavior matrix NOT_RUN/ERROR: {error}"
         ) from error
-    output = result.stdout + "\n" + result.stderr
+    output = (result.stdout or "") + "\n" + (result.stderr or "")
     if result.returncode != 0:
         raise VerificationError(
             f"generated method behavior matrix check failed: {output[-20_000:]}"

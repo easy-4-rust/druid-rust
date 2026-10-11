@@ -596,6 +596,8 @@ fn typed_trace_behavior() {
             self.assertIn("--all-features", command)
             self.assertIn("--locked", command)
             self.assertIn("--offline", command)
+            self.assertEqual(kwargs.get("encoding"), "utf-8")
+            self.assertEqual(kwargs.get("errors"), "replace")
             if "--show-output" in command:
                 output = (
                     "test required_behavior ... ok\n\nsuccesses:\n"

@@ -200,6 +200,8 @@ class DeletedTestParityVerifierTest(unittest.TestCase):
 
         def actual_harness_shape(command, **kwargs):
             # 对应真实单线程 --nocapture 输出：digest 插入测试名和 ok 之间。
+            self.assertEqual(kwargs.get("encoding"), "utf-8")
+            self.assertEqual(kwargs.get("errors"), "replace")
             output = "test matrix ... TASK6_CASE_DIGEST=matrix:onlycase\nok\n"
             if "--show-output" in command:
                 output = ("test matrix ... ok\n\nsuccesses:\n\n---- matrix stdout ----\n"
