@@ -2,20 +2,20 @@
 #[derive(Debug, thiserror::Error)]
 pub enum HttpError {
     /// 网络或 TLS 失败。
-    #[error("request {url} failed: {source}")]
+    #[error("downstream request failed")]
     Request {
         url: String,
         #[source]
         source: reqwest::Error,
     },
     /// 下游返回非 200 状态。
-    #[error("request {url} returned HTTP {status}")]
+    #[error("downstream returned HTTP {status}")]
     Status {
         url: String,
         status: reqwest::StatusCode,
     },
     /// JSON 结构不符合目标 DTO。
-    #[error("response from {url} is invalid JSON: {source}")]
+    #[error("downstream response is invalid JSON")]
     Json {
         url: String,
         #[source]

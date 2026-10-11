@@ -21,7 +21,7 @@ use tokio_metrics::TaskMonitor;
 use crate::config::AdminAuthMode;
 use crate::model::dto::DataSourceResult;
 use crate::repository::{DataSourceId, MetricsRepository};
-use crate::service::{MonitorStatService, StatQuery};
+use crate::service::{MonitorStatService, MonitorStatServiceError, StatQuery};
 use crate::CommandBroker;
 
 use super::LoginRequest;
@@ -1058,15 +1058,21 @@ fn invalid_service_id() -> Response {
         .into_response()
 }
 
-fn error_response(error: impl std::fmt::Display) -> Response {
-    let error_msg = error.to_string();
-    // Map well-known error patterns to appropriate HTTP status codes.
-    let status = if error_msg.contains("unknown serviceId") {
-        StatusCode::NOT_FOUND
-    } else if error_msg.contains("invalid parameter") {
-        StatusCode::UNPROCESSABLE_ENTITY
-    } else {
-        StatusCode::BAD_GATEWAY
+fn error_response(error: MonitorStatServiceError) -> Response {
+    // 只向客户端返回错误类别和静态参数名。上游 URL、参数值与发现信息
+    // 可能含凭据，不得通过 JSON Content 或错误字符串回显。
+    let (status, error_msg) = match error {
+        MonitorStatServiceError::UnknownServiceId(_) => {
+            (StatusCode::NOT_FOUND, "unknown serviceId".to_owned())
+        }
+        MonitorStatServiceError::InvalidParameter { name, .. } => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            format!("invalid parameter {name}"),
+        ),
+        _ => (
+            StatusCode::BAD_GATEWAY,
+            "upstream admin service failed".to_owned(),
+        ),
     };
     (
         status,

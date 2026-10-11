@@ -81,6 +81,45 @@ async fn start_servlet_server_with_auth(
     (addr, handle)
 }
 
+#[tokio::test]
+async fn malformed_legacy_query_does_not_echo_sensitive_input() {
+    let (addr, handle) = start_servlet_server().await;
+    let response = reqwest::get(format!(
+        "http://{addr}/druid/unused.json?page=credential_marker_9381"
+    ))
+    .await
+    .expect("malformed legacy request");
+    assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+    let body = response.text().await.expect("error response");
+    assert!(body.contains("invalid parameter page"));
+    assert!(!body.contains("credential_marker_9381"));
+    handle.abort();
+}
+
+#[test]
+fn admin_error_display_omits_untrusted_urls_and_parameter_values() {
+    use druid_admin::service::MonitorStatServiceError;
+    use druid_admin::util::HttpError;
+
+    let url = "https://user:credential_marker_9381@backend.example/druid";
+    let downstream = HttpError::Status {
+        url: url.to_owned(),
+        status: reqwest::StatusCode::BAD_GATEWAY,
+    };
+    let invalid = MonitorStatServiceError::InvalidParameter {
+        name: "page",
+        value: "credential_marker_9381".to_owned(),
+    };
+    let unknown = MonitorStatServiceError::UnknownServiceId("credential_marker_9381".into());
+    for rendered in [
+        downstream.to_string(),
+        invalid.to_string(),
+        unknown.to_string(),
+    ] {
+        assert!(!rendered.contains("credential_marker_9381"), "{rendered}");
+    }
+}
+
 // ---- Route tests (no auth) ----
 
 /// /druid/ root must redirect to /druid/index.html.

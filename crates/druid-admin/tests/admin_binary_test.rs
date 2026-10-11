@@ -119,9 +119,11 @@ async fn production_trace_logs_path_without_query_credentials() {
         .without_time()
         .with_writer(logs.clone())
         .finish();
-    let app = druid_admin::standalone_router(druid_admin::MetricsRepository::new());
-    let response = app
-        .oneshot(
+    // 将路由构造和 future 创建都放在 subscriber 内，避免测试线程并行时
+    // 在订阅生效前初始化并缓存 tracing callsite。
+    let response = async move {
+        let app = druid_admin::standalone_router(druid_admin::MetricsRepository::new());
+        app.oneshot(
             Request::builder()
                 .uri(
                     "/druid/datasource.json?loginPassword=trace-password-secret&token=trace-token-secret",
@@ -129,9 +131,11 @@ async fn production_trace_logs_path_without_query_credentials() {
                 .body(Body::empty())
                 .expect("valid request"),
         )
-        .with_subscriber(subscriber)
         .await
-        .expect("router response");
+    }
+    .with_subscriber(subscriber)
+    .await
+    .expect("router response");
     assert_eq!(response.status(), axum::http::StatusCode::OK);
     let output = logs.text();
     assert!(output.contains("/druid/datasource.json"), "{output}");

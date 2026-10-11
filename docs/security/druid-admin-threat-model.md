@@ -41,6 +41,8 @@ flowchart LR
   身份与序列校验，绝不是认证凭据。
 - 生产 `GrpcMetricsClient` 由 redacted `GrpcAuthorization` provider 在初连和每次重连
   的 generated Tonic Request boundary 注入同一 metadata；凭据不进入 protobuf frame。
+- 远程聚合失败只向 HTTP 客户端返回错误类别和静态参数名；下游 URL、参数值及发现
+  信息不进入错误 `Display` 或 JSON `Content`。
 
 ## 3. 资产、威胁者、入口与控制
 

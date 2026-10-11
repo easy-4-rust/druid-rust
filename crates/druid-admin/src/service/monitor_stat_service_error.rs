@@ -4,10 +4,10 @@ use crate::util::HttpError;
 #[derive(Debug, thiserror::Error)]
 pub enum MonitorStatServiceError {
     /// 注册中心返回缺少实例标识。
-    #[error("service {service} instance has neither instanceId nor nacos.instanceId")]
+    #[error("service instance has neither instanceId nor nacos.instanceId")]
     MissingInstanceId { service: String },
     /// 请求引用了未知节点。
-    #[error("unknown serviceId: {0}")]
+    #[error("unknown serviceId")]
     UnknownServiceId(String),
     /// 下游 HTTP 或 JSON 错误。
     #[error(transparent)]
@@ -16,9 +16,9 @@ pub enum MonitorStatServiceError {
     #[error(transparent)]
     Json(#[from] serde_json::Error),
     /// Kubernetes 发现失败。
-    #[error("kubernetes discovery failed: {0}")]
+    #[error("kubernetes discovery failed")]
     Kubernetes(String),
     /// Java URL 协议参数无效。
-    #[error("invalid parameter {name}: {value}")]
+    #[error("invalid parameter {name}")]
     InvalidParameter { name: &'static str, value: String },
 }
