@@ -474,6 +474,50 @@ crates/druid/src/core/a.rs\tTYPE\tA@token=1\tdruid_rdbc::spi::A\tdruid::core::a\
                         registry, admission, {**producers, "druid_pooled_connection.rs": candidate}
                     )
 
+    def test_live_resource_factories_keep_pre_raw_admission(self) -> None:
+        """每个新增 Blob/Clob/NClob/SQLXML/Array 创建入口都必须先取得许可。"""
+
+        core = repository_root() / "crates/druid/src/core"
+        registry = (core / "standard_resource_registry.rs").read_text(encoding="utf-8")
+        admission = (core / "standard_resource_admission.rs").read_text(encoding="utf-8")
+        producers = {
+            name: (core / name).read_text(encoding="utf-8")
+            for name in (
+                "druid_pooled_connection.rs", "druid_pooled_statement.rs",
+                "druid_pooled_prepared_statement.rs", "druid_pooled_callable_statement.rs",
+                "database_meta_data_proxy_impl.rs", "druid_pooled_result_set.rs",
+            )
+        }
+        verifier.require_pending_admission_policy(registry, admission, producers)
+        source = producers["druid_pooled_connection.rs"]
+        for method in ("create_blob", "create_clob", "create_n_clob", "create_sql_xml", "create_array_of"):
+            with self.subTest(method=method):
+                prefix = f"async fn {method}("
+                self.assertEqual(source.count(prefix), 1)
+                before, tail = source.split(prefix, 1)
+                self.assertIn("begin_admission", tail)
+                mutated = before + prefix + tail.replace("begin_admission", "retired_admission", 1)
+                with self.assertRaisesRegex(VerificationError, "producer drift|pre-raw admission"):
+                    verifier.require_pending_admission_policy(
+                        registry, admission,
+                        {**producers, "druid_pooled_connection.rs": mutated},
+                    )
+                permit_start = tail.index("let admission = ")
+                permit_end = tail.index(";", permit_start) + 1
+                raw_start = tail.index("let raw_result = ", permit_end)
+                raw_end = tail.index(";", raw_start) + 1
+                misordered = (
+                    before + prefix + tail[:permit_start]
+                    + tail[permit_end:raw_end]
+                    + tail[permit_start:permit_end]
+                    + tail[raw_end:]
+                )
+                with self.assertRaisesRegex(VerificationError, "pre-raw admission"):
+                    verifier.require_pending_admission_policy(
+                        registry, admission,
+                        {**producers, "druid_pooled_connection.rs": misordered},
+                    )
+
     def test_residual_method_delegation_rejects_direct_raw_fallback(self) -> None:
         source = """
             impl druid_rdbc::statement::PreparedStatement for DruidPooledPreparedStatement {

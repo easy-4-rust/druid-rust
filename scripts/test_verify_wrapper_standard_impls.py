@@ -718,7 +718,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 destination = fixture_root / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 destination.write_bytes((repository / relative).read_bytes())
-                requirement["source_sha256"] = hashlib.sha256(destination.read_bytes()).hexdigest()
+                requirement["source_sha256"] = verifier.canonical_source_sha256(destination.read_bytes())
                 requirement["compiler_function_name"] = (
                     "UNIT_TEST_ONLY_NO_LLVM_" + family["family"] + "_" + requirement["requirement_id"]
                 )
@@ -726,6 +726,17 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         manifest.parent.mkdir(parents=True, exist_ok=True)
         manifest.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
         return fixture_root
+
+    def test_coverage_source_hash_accepts_checkout_line_endings_only(self) -> None:
+        """Windows CRLF checkout must retain the same reviewed LF source identity."""
+
+        source = b"fn reviewed() {}\n"
+        expected = verifier.canonical_source_sha256(source)
+        self.assertEqual(
+            verifier.canonical_source_sha256(source.replace(b"\n", b"\r\n")),
+            expected,
+        )
+        self.assertNotEqual(verifier.canonical_source_sha256(source + b" "), expected)
 
     def test_wrong_source_hash_or_compiler_function_identity_is_rejected(self) -> None:
         """Neither stale source bytes nor a different exact function can be credited."""
@@ -1336,13 +1347,12 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         if os.name == "nt":
             self.assertIsNone(timeout.exception.ownership_capture_error)
             descendants = timeout.exception.owned_descendants
-            self.assertEqual(len(descendants), 1, "timeout did not observe the required owned child")
-            descendant = descendants[0]
-            self.assertTrue(descendant["private_job_membership_verified"])
-            self.assertTrue(descendant["terminated"], "owned child survived Job cleanup")
-            child_pid = int(descendant["process_id"])
-            if child_pid_file.is_file():
-                self.assertEqual(child_pid, int(child_pid_file.read_text(encoding="utf-8")))
+            self.assertTrue(child_pid_file.is_file(), "test child did not publish its PID")
+            child_pid = int(child_pid_file.read_text(encoding="utf-8"))
+            self.assertIn(child_pid, {int(child["process_id"]) for child in descendants})
+            for descendant in descendants:
+                self.assertTrue(descendant["private_job_membership_verified"])
+                self.assertTrue(descendant["terminated"], "owned child survived Job cleanup")
         else:
             child_pid = int(child_pid_file.read_text(encoding="utf-8"))
         child_alive = True

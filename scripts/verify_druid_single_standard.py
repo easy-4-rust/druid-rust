@@ -633,7 +633,7 @@ def require_pending_admission_policy(
         fail("Task 5 pending admission registry/RAII policy is incomplete")
 
     expected = {
-        "druid_pooled_connection.rs": ("begin_admission", 3),
+        "druid_pooled_connection.rs": ("begin_admission", 8),
         "druid_pooled_statement.rs": ("begin_standard_admission", 5),
         "druid_pooled_prepared_statement.rs": ("begin_standard_admission", 3),
         "druid_pooled_callable_statement.rs": ("begin_standard_admission", 3),
@@ -694,6 +694,41 @@ def require_pending_admission_policy(
                 "prepare_call(&effective_sql,options).await",
                 "DruidPooledCallableStatement::new_standard",
             ),
+        ),
+        (
+            "druid_pooled_connection.rs",
+            "Connection",
+            "DruidPooledConnection",
+            "create_blob",
+            ("begin_admission", "create_blob().await", "DruidBlob::register"),
+        ),
+        (
+            "druid_pooled_connection.rs",
+            "Connection",
+            "DruidPooledConnection",
+            "create_clob",
+            ("begin_admission", "create_clob().await", "DruidClob::register"),
+        ),
+        (
+            "druid_pooled_connection.rs",
+            "Connection",
+            "DruidPooledConnection",
+            "create_n_clob",
+            ("begin_admission", "create_n_clob().await", "DruidNClob::register"),
+        ),
+        (
+            "druid_pooled_connection.rs",
+            "Connection",
+            "DruidPooledConnection",
+            "create_sql_xml",
+            ("begin_admission", "create_sql_xml().await", "DruidSqlXml::register"),
+        ),
+        (
+            "druid_pooled_connection.rs",
+            "Connection",
+            "DruidPooledConnection",
+            "create_array_of",
+            ("begin_admission", "create_array_of(type_name,elements).await", "DruidArray::register"),
         ),
         (
             "druid_pooled_statement.rs",

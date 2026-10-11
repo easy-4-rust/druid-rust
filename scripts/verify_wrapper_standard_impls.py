@@ -254,6 +254,8 @@ TRACE_RECORD_CALLSITE_COUNTS = {
 TRACE_RECORD_CALLSITE_COUNTS.update({
     ("crates/druid-wrapper/src/sqlx/sqlx_async_result_set.rs", "task4_trace_result_next"): 1,
     ("crates/druid-wrapper/src/sqlx/sqlx_async_result_set.rs", "task4_trace_result_set_metadata"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs", "task4_trace_result_next"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs", "task4_trace_result_set_metadata"): 1,
 })
 TRACE_BRANCH_CALLSITE_COUNTS = {
     **{
@@ -915,6 +917,12 @@ def validate_coverage_requirement_binding(
         )
 
 
+def canonical_source_sha256(raw: bytes) -> str:
+    """Hash source identity independent of Git's LF/CRLF checkout conversion."""
+
+    return hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
+
+
 def validate_coverage_manifest(
     root: Path, family_specs: tuple[CoverageFamilySpec, ...]
 ) -> None:
@@ -993,7 +1001,7 @@ def validate_coverage_manifest(
                     f"coverage requirement source is missing: {requirement.source_path}"
                 )
             raw = path.read_bytes()
-            observed_sha = hashlib.sha256(raw).hexdigest()
+            observed_sha = canonical_source_sha256(raw)
             if observed_sha != requirement.source_sha256:
                 fail(
                     "coverage requirement source hash is stale: "
