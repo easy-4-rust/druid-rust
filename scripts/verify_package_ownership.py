@@ -20,7 +20,7 @@ WORKFLOWS = {
 DRIVER_PREFIX = "cargo run -p druid-wrapper --features managed-driver-install --bin druid-driver -- "
 LIVE_TEST_TARGET = "task6_database_profile_live_contract_test_parity"
 LIVE_TEST_WORKFLOWS = {
-    ".github/workflows/driver-matrix.yml": 2,
+    ".github/workflows/driver-matrix.yml": 4,
     ".github/workflows/database-profile-certification.yml": 1,
 }
 
@@ -95,7 +95,11 @@ def main() -> int:
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print(f"package ownership verified: {len(packages)} workspace packages, 2 binaries, 3 driver and 3 live contract CI invocations")
+    print(
+        f"package ownership verified: {len(packages)} workspace packages, "
+        f"2 binaries, 3 driver and {sum(LIVE_TEST_WORKFLOWS.values())} "
+        "live contract CI invocations"
+    )
     return 0
 
 
