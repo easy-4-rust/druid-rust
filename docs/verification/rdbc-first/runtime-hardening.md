@@ -36,4 +36,4 @@ Admin 的 `repository_capacity_test`（2/2）与 `ingest_test`（11/11）以 `--
 | 等待队列峰值 / 活动连接峰值 | 56 / 8（每次） | 56 / 8 |
 | 池关闭耗时 | 2 / 1 / 2 ms | 250 ms |
 
-门禁脚本会先保存测量 JSON，再对超预算指标逐项报错；需要在新提交的 Linux CI 上执行并确认失败传播。慢物理关闭的队列/超时、Metrics 饱和时的 dropped/coalesced、Admin 不可用与重启、重复 batch/序列缺口、过期条目、无效认证和待 ACK 时 SIGTERM 仍缺运行预算。P06 Task5 保持开放。
+门禁脚本会先保存测量 JSON，再对超预算指标逐项报错。[预算门禁首次运行](https://github.com/easy-4-rust/druid-rust/actions/runs/38129014068)在提交 `ab18389` 上成功；上传的 JSON 记录 p99 25.486 ms、峰值 RSS 18,848 KiB、关闭 1 ms、全部五项上限及零超限项。边界等于阈值与五项同时超限的单元测试均已通过；实际 CI 超限失败传播尚未做故障注入验证。慢物理关闭的队列/超时、Metrics 饱和时的 dropped/coalesced、Admin 不可用与重启、重复 batch/序列缺口、过期条目、无效认证和待 ACK 时 SIGTERM 仍缺运行预算。P06 Task5 保持开放。
