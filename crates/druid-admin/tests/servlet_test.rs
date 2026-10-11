@@ -14,7 +14,9 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+use druid_admin::config::AdminAuthMode;
 use druid_admin::config::MonitorProperties;
+use druid_admin::repository::MetricsRepository;
 use druid_admin::service::{EmptyAdminStatProvider, MonitorStatService, StaticDiscoveryClient};
 use druid_admin::util::ReqwestHttpClient;
 
@@ -489,6 +491,87 @@ async fn login_session_capacity_evicts_oldest_cookie_without_rejecting_new_login
         .expect("new session lookup completes");
     assert_eq!(new_response.status(), 200, "newest session remains valid");
     handle.abort();
+}
+
+#[tokio::test]
+async fn changing_admin_credentials_invalidates_existing_session_cookie() {
+    let servlet = druid_admin::MonitorViewServlet::from_repository(MetricsRepository::new())
+        .with_auth_mode(AdminAuthMode::basic("admin", "old-secret"));
+    let first_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let first_addr = first_listener.local_addr().unwrap();
+    let first_router = servlet.clone().router();
+    let first_server = tokio::spawn(async move {
+        axum::serve(first_listener, first_router).await.unwrap();
+    });
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let login = client
+        .post(format!("http://{first_addr}/druid/submitLogin"))
+        .form(&[("loginUsername", "admin"), ("loginPassword", "old-secret")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(login.status(), 200);
+    let cookie = login
+        .headers()
+        .get("set-cookie")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned();
+
+    let second_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let second_addr = second_listener.local_addr().unwrap();
+    let second_router = servlet
+        .with_auth_mode(AdminAuthMode::basic("admin", "new-secret"))
+        .router();
+    let second_server = tokio::spawn(async move {
+        axum::serve(second_listener, second_router).await.unwrap();
+    });
+    let protected = format!("http://{second_addr}/druid/datasource.json");
+    let old_session = client
+        .get(&protected)
+        .header("cookie", cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        old_session.status(),
+        302,
+        "old auth session must be rejected"
+    );
+    let new_login = client
+        .post(format!("http://{second_addr}/druid/submitLogin"))
+        .form(&[("loginUsername", "admin"), ("loginPassword", "new-secret")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(new_login.status(), 200);
+    let new_cookie = new_login
+        .headers()
+        .get("set-cookie")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned();
+    assert_eq!(new_login.text().await.unwrap(), "success");
+    let current_session = client
+        .get(&protected)
+        .header("cookie", new_cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(current_session.status(), 200);
+    first_server.abort();
+    second_server.abort();
 }
 
 // ---- Static resource tests ----

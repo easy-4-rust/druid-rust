@@ -92,19 +92,23 @@ impl MonitorViewServlet {
     /// 配置 Java `loginUsername`/`loginPassword` 登录语义。
     #[must_use]
     pub fn with_credentials(
-        mut self,
+        self,
         login_username: Option<String>,
         login_password: Option<String>,
     ) -> Self {
-        self.auth = login_username.map_or(AdminAuthMode::Disabled, |username| {
+        let auth = login_username.map_or(AdminAuthMode::Disabled, |username| {
             AdminAuthMode::basic(username, login_password.unwrap_or_default())
         });
-        self
+        self.with_auth_mode(auth)
     }
 
     /// 配置 HTTP 与 gRPC 共用的应用层认证模式。
     #[must_use]
     pub fn with_auth_mode(mut self, auth: AdminAuthMode) -> Self {
+        if self.auth != auth {
+            // 认证身份改变后不能让 clone 共享的旧会话在新路由继续生效。
+            self.sessions = Arc::new(RwLock::new(HashMap::new()));
+        }
         self.auth = auth;
         self
     }
