@@ -34,6 +34,7 @@ from verify_wrapper_standard_impls import (
     verify_adapter_source,
     verify_runtime_trace_source_hygiene,
     verify_sqlx_ownership,
+    verify_live_sqlx_result_set_inventory,
     verify_trace_record_callsites,
 )
 
@@ -140,6 +141,14 @@ class WrapperStandardVerifierTest(unittest.TestCase):
     def test_rejects_missing_sqlx_actor(self) -> None:
         with self.assertRaisesRegex(VerificationError, "statement-owned executor"):
             verify_sqlx_ownership(self.root)
+
+    def test_sqlx_result_set_inventory_only_names_compiled_implementations(self) -> None:
+        repository = Path(__file__).resolve().parents[1]
+        rows = task_adapter_rows(
+            repository / verifier.DEFAULT_ADAPTERS,
+            repository / verifier.DEFAULT_RUNTIME_EVIDENCE,
+        )
+        verify_live_sqlx_result_set_inventory(repository, rows)
 
     def test_sqlx_coverage_binding_and_call_chain_reject_retired_update_aliases(self) -> None:
         """Task 6 coverage binds the live update-result actor, never the retired alias。"""

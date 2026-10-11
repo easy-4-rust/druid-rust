@@ -60,7 +60,7 @@ driver release 与 owner notification 各自恰好一次；简单把状态回退
 
 Stream 是唯一 ResultSet 的适配，不创建第二个标准 cursor。known_row_count 不得通过 drain 整个流计算；metadata snapshot 不得伪装成 live metadata。
 
-当前 [SQLx 结果集](../../crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs) 保存 Vec，准确命名及真实流式实现尚待 Task7，不能以类名推断能力。
+SQLx 的 [缓冲结果集](../../crates/druid-wrapper/src/sqlx/sqlx_buffered_result_set.rs) 完整保存查询行；[异步前向结果集](../../crates/druid-wrapper/src/sqlx/sqlx_async_result_set.rs) 通过容量为 1 的请求队列按 `next()` 拉取。调用方应按实际查询路径判断消费和内存语义。
 
 ## 6. feature 与注册
 

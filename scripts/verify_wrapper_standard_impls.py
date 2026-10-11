@@ -254,8 +254,8 @@ TRACE_RECORD_CALLSITE_COUNTS = {
 TRACE_RECORD_CALLSITE_COUNTS.update({
     ("crates/druid-wrapper/src/sqlx/sqlx_async_result_set.rs", "task4_trace_result_next"): 1,
     ("crates/druid-wrapper/src/sqlx/sqlx_async_result_set.rs", "task4_trace_result_set_metadata"): 1,
-    ("crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs", "task4_trace_result_next"): 1,
-    ("crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs", "task4_trace_result_set_metadata"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_buffered_result_set.rs", "task4_trace_result_next"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_buffered_result_set.rs", "task4_trace_result_set_metadata"): 1,
 })
 TRACE_BRANCH_CALLSITE_COUNTS = {
     **{
@@ -665,6 +665,30 @@ def task_adapter_rows(path: Path, evidence_path: Path) -> list[AdapterRow]:
         ):
             fail(f"integration evidence cargo id is not exact: {row.behavior_evidence}")
     return rows
+
+
+def verify_live_sqlx_result_set_inventory(root: Path, rows: list[AdapterRow]) -> None:
+    """Reject a source-only SQLx cursor advertised as a live standard adapter."""
+    buffered = Path("crates/druid-wrapper/src/sqlx/sqlx_buffered_result_set.rs")
+    legacy = root / "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs"
+    matches = [
+        row for row in rows
+        if row.trace_family == "SQLX"
+        and row.target_trait == "druid_rdbc::result_set::ResultSet"
+    ]
+    if len(matches) != 1 or matches[0].source_path != buffered or (
+        matches[0].implementation_type != "SqlxBufferedResultSet"
+        or matches[0].standard_implementation_type != "SqlxBufferedResultSet"
+        or matches[0].standard_source_path != buffered
+    ):
+        fail("SQLx live ResultSet inventory must identify the compiled buffered cursor")
+    module = (root / "crates/druid-wrapper/src/sqlx/mod.rs").read_text(encoding="utf-8")
+    if "pub(crate) mod sqlx_buffered_result_set;" not in module or (
+        "mod sqlx_async_result_set;" not in module
+    ):
+        fail("SQLx buffered and async ResultSet modules must both be compiled")
+    if legacy.exists():
+        fail("retired SqlxStreamingResultSet source must not remain in production tree")
 
 
 def concrete_type(type_name: str) -> str:
@@ -2628,6 +2652,7 @@ def verify_repository(
     """Verify source identity, anti-forgery, and exact runtime evidence for Task 4."""
 
     adapters = task_adapter_rows(root / adapters_path, root / runtime_evidence_path)
+    verify_live_sqlx_result_set_inventory(root, adapters)
     for row in adapters:
         verify_adapter_source(root, row)
     consumers = verify_consumer_rows(root, root / consumers_path)
