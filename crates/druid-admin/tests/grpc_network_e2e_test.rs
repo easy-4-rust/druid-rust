@@ -4625,8 +4625,15 @@ async fn reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries() {
         .expect("queue one replayable batch");
 
     let retried_after_stall = tokio::time::timeout(Duration::from_secs(2), async {
-        while connections.load(Ordering::Acquire) < 3 {
-            changed.notified().await;
+        loop {
+            // 先注册通知再检查计数，避免重连恰好发生在检查与等待之间时丢失唤醒。
+            let notified = changed.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if connections.load(Ordering::Acquire) >= 3 {
+                break;
+            }
+            notified.await;
         }
     })
     .await
