@@ -345,23 +345,20 @@ impl MetricsRepository {
             .entries
             .keys()
             .filter(|id| replaced_service != Some(&id.service_identity))
-            .cloned()
             .collect::<HashSet<_>>();
-        identities.extend(incoming.iter().map(|(id, _)| id.clone()));
-        let services = identities
-            .iter()
-            .map(|id| &id.service_identity)
-            .collect::<HashSet<_>>();
-        if services.len() > self.config.max_services() {
-            return true;
+        identities.extend(incoming.iter().map(|(id, _)| id));
+        // 每个身份只计数一次，避免在最大容量下按 service 反复扫描整个集合。
+        let mut service_counts = HashMap::<&ServiceIdentity, usize>::new();
+        for id in identities {
+            let count = service_counts.entry(&id.service_identity).or_default();
+            *count = count.saturating_add(1);
+            if *count > self.config.max_datasources_per_service()
+                || service_counts.len() > self.config.max_services()
+            {
+                return true;
+            }
         }
-        services.into_iter().any(|service_identity| {
-            identities
-                .iter()
-                .filter(|id| &id.service_identity == service_identity)
-                .count()
-                > self.config.max_datasources_per_service()
-        })
+        false
     }
 }
 

@@ -49,6 +49,8 @@ impl DruidMetricsRuntime {
         Self::start_inner(config, RuntimeExporterConfig::Grpc(Box::new(grpc_config))).await
     }
 
+    // 无 client feature 时只保留 Drain 分支；启用 client 后此函数会等待 gRPC 握手。
+    #[cfg_attr(not(feature = "client"), allow(clippy::unused_async))]
     async fn start_inner(
         config: DruidMetricsConfig,
         exporter_config: RuntimeExporterConfig,
