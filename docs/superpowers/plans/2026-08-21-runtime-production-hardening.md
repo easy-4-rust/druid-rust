@@ -75,8 +75,8 @@ Expose `close_queue_depth`, `close_queue_rejected_total`, `close_timeout_total`,
 
 ```bash
 cargo test -p druid --test pool_close_backpressure_test
-cargo test -p druid --test pool_maintenance_semantics_test
-cargo test -p druid --test recycle_semantics_test
+cargo test -p druid --test task6_pool_maintenance_semantics_test_parity
+cargo test -p druid --test task6_recycle_complete_contract_test
 ```
 
 Expected: all PASS.
