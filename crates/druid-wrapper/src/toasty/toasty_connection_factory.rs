@@ -34,7 +34,7 @@ impl std::fmt::Debug for ToastyConnectionFactory {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("ToastyConnectionFactory")
-            .field("url", &self.url)
+            .field("url", &"<redacted connection URL>")
             .field("driver_name", &self.driver_name)
             .field("max_connections", &self.max_connections)
             .finish_non_exhaustive()

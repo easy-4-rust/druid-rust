@@ -86,7 +86,7 @@ impl std::fmt::Debug for HttpSqlConnectionFactory {
         formatter
             .debug_struct("HttpSqlConnectionFactory")
             .field("provider", &self.provider)
-            .field("endpoint", &self.endpoint)
+            .field("endpoint", &"<redacted connection URL>")
             .field("property_names", &self.properties.keys())
             .finish_non_exhaustive()
     }

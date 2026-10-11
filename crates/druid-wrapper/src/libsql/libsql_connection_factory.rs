@@ -23,7 +23,7 @@ impl std::fmt::Debug for LibSqlConnectionFactory {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("LibSqlConnectionFactory")
-            .field("url", &self.url)
+            .field("url", &"<redacted connection URL>")
             .field(
                 "property_names",
                 &self.properties.keys().collect::<Vec<_>>(),

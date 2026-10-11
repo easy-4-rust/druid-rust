@@ -11,11 +11,20 @@ use std::sync::{Arc, Weak};
 /// `DuckDB` 原生未池化连接工厂。
 ///
 /// 同一工厂通过 duckdb-rs 共享数据库句柄并创建独立连接，DruidPool 是唯一池化边界。
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DuckDbConnectionFactory {
     url: String,
     runtime_trace: Option<RuntimeTraceEmitter>,
     shared_connection: Arc<tokio::sync::Mutex<Weak<Mutex<duckdb::Connection>>>>,
+}
+
+impl std::fmt::Debug for DuckDbConnectionFactory {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("DuckDbConnectionFactory")
+            .field("url", &"<redacted connection URL>")
+            .finish_non_exhaustive()
+    }
 }
 
 impl DuckDbConnectionFactory {
