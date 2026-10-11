@@ -3,13 +3,19 @@ use druid_rdbc::error::RdbcError;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
 /// 按 Agent 命令身份共享子进程并管理空闲 TTL 的运行时管理器。
 pub(crate) struct AgentRuntimeManager {
     runtimes: Mutex<HashMap<String, Arc<ManagedAgentRuntime>>>,
+    startup_locks: StdMutex<HashMap<String, Arc<Mutex<()>>>>,
+}
+
+struct StartupLockLease {
+    key: String,
+    lock: Arc<Mutex<()>>,
 }
 
 struct ManagedAgentRuntime {
@@ -33,7 +39,24 @@ impl AgentRuntimeManager {
         static MANAGER: OnceLock<AgentRuntimeManager> = OnceLock::new();
         MANAGER.get_or_init(|| Self {
             runtimes: Mutex::new(HashMap::new()),
+            startup_locks: StdMutex::new(HashMap::new()),
         })
+    }
+
+    fn startup_lock(&self, key: &str) -> StartupLockLease {
+        let mut locks = self
+            .startup_locks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let lock = Arc::clone(
+            locks
+                .entry(key.to_owned())
+                .or_insert_with(|| Arc::new(Mutex::new(()))),
+        );
+        StartupLockLease {
+            key: key.to_owned(),
+            lock,
+        }
     }
 
     /// 取得或创建同一命令身份的共享 Agent 运行时。
@@ -42,29 +65,54 @@ impl AgentRuntimeManager {
     ) -> Result<AgentRuntimeLease, RdbcError> {
         let manager = Self::global();
         let key = options.runtime_key();
+        let startup_deadline = tokio::time::Instant::now() + options.timeout();
+        // 同一身份只启动一次；启动等待不能占用其他身份共用的映射锁。
+        let startup_lock = manager.startup_lock(&key);
+        let _startup_guard = tokio::time::timeout_at(startup_deadline, startup_lock.lock.lock())
+            .await
+            .map_err(|_| {
+                RdbcError::DriverError(format!(
+                    "JDBC Agent startup timed out after {:?}",
+                    options.timeout()
+                ))
+            })?;
         let mut runtimes = manager.runtimes.lock().await;
         let managed = if let Some(existing) = runtimes
             .get(&key)
             .filter(|runtime| runtime.healthy.load(Ordering::Acquire))
         {
-            Arc::clone(existing)
+            let managed = Arc::clone(existing);
+            managed.active_sessions.fetch_add(1, Ordering::AcqRel);
+            managed.generation.fetch_add(1, Ordering::AcqRel);
+            managed
         } else {
+            drop(runtimes);
             let healthy = Arc::new(AtomicBool::new(true));
-            let runtime = AgentRuntime::start(options, Arc::clone(&healthy)).await?;
+            // ready 与握手都属于启动；不可信子进程不能无限占用本身份的启动锁。
+            let runtime = tokio::time::timeout_at(
+                startup_deadline,
+                AgentRuntime::start(options, Arc::clone(&healthy)),
+            )
+            .await
+            .map_err(|_| {
+                RdbcError::DriverError(format!(
+                    "JDBC Agent startup timed out after {:?}",
+                    options.timeout()
+                ))
+            })??;
             let managed = Arc::new(ManagedAgentRuntime {
                 key: key.clone(),
                 runtime: Arc::new(runtime),
-                active_sessions: AtomicUsize::new(0),
-                generation: AtomicU64::new(0),
+                active_sessions: AtomicUsize::new(1),
+                generation: AtomicU64::new(1),
                 healthy,
                 idle_timeout: options.runtime_idle_timeout(),
             });
+            runtimes = manager.runtimes.lock().await;
             runtimes.insert(key, Arc::clone(&managed));
             managed
         };
-        managed.active_sessions.fetch_add(1, Ordering::AcqRel);
         JdbcAgentRuntimeMetrics::session_opened();
-        managed.generation.fetch_add(1, Ordering::AcqRel);
         Ok(AgentRuntimeLease {
             managed,
             request_timeout: options.timeout(),
@@ -98,6 +146,22 @@ impl AgentRuntimeManager {
             runtime.request("shutdown", serde_json::json!({})),
         )
         .await;
+    }
+}
+
+impl Drop for StartupLockLease {
+    fn drop(&mut self) {
+        let mut locks = AgentRuntimeManager::global()
+            .startup_locks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if Arc::strong_count(&self.lock) == 2
+            && locks
+                .get(&self.key)
+                .is_some_and(|current| Arc::ptr_eq(current, &self.lock))
+        {
+            locks.remove(&self.key);
+        }
     }
 }
 
@@ -179,5 +243,130 @@ impl AgentRuntimeLease {
 impl Drop for AgentRuntimeLease {
     fn drop(&mut self) {
         self.release();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn silent_agent_startup_obeys_request_timeout() {
+        #[cfg(windows)]
+        let options = JdbcAgentOptions::new("powershell.exe")
+            .argument("-NoProfile")
+            .argument("-Command")
+            .argument("Start-Sleep -Seconds 10")
+            .runtime_identity("silent-ready", "unmanaged", "ready-test")
+            .request_timeout(Duration::from_millis(75));
+        #[cfg(not(windows))]
+        let options = JdbcAgentOptions::new("sh")
+            .argument("-c")
+            .argument("sleep 10")
+            .runtime_identity("silent-ready", "unmanaged", "ready-test")
+            .request_timeout(Duration::from_millis(75));
+        let key = options.runtime_key();
+
+        let result = tokio::time::timeout(
+            Duration::from_secs(2),
+            AgentRuntimeManager::acquire(&options),
+        )
+        .await
+        .expect("a silent Agent must not hold the runtime manager indefinitely");
+        assert!(
+            matches!(result, Err(RdbcError::DriverError(message)) if message.contains("startup timed out")),
+            "startup must report its configured timeout"
+        );
+        assert!(
+            !AgentRuntimeManager::global()
+                .startup_locks
+                .lock()
+                .expect("startup lock map")
+                .contains_key(&key),
+            "failed startup must not retain its lock entry"
+        );
+    }
+
+    #[tokio::test]
+    async fn silent_agent_does_not_block_unrelated_runtime_identity() {
+        #[cfg(windows)]
+        let stalled = JdbcAgentOptions::new("powershell.exe")
+            .argument("-NoProfile")
+            .argument("-Command")
+            .argument("Start-Sleep -Seconds 10")
+            .runtime_identity("silent-independent", "unmanaged", "independent-test")
+            .request_timeout(Duration::from_secs(2));
+        #[cfg(not(windows))]
+        let stalled = JdbcAgentOptions::new("sh")
+            .argument("-c")
+            .argument("sleep 10")
+            .runtime_identity("silent-independent", "unmanaged", "independent-test")
+            .request_timeout(Duration::from_secs(2));
+        let stalled_key = stalled.runtime_key();
+
+        let stalled_task =
+            tokio::spawn(async move { AgentRuntimeManager::acquire(&stalled).await });
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(
+            !stalled_task.is_finished(),
+            "fixture must still be starting"
+        );
+
+        let unrelated = JdbcAgentOptions::new("nonexistent-druid-agent-executable")
+            .request_timeout(Duration::from_millis(200));
+        let result = tokio::time::timeout(
+            Duration::from_millis(700),
+            AgentRuntimeManager::acquire(&unrelated),
+        )
+        .await
+        .expect("a different Agent identity must not wait for stalled startup");
+        assert!(matches!(result, Err(RdbcError::DriverError(_))));
+        stalled_task.abort();
+        let _ = stalled_task.await;
+        assert!(
+            !AgentRuntimeManager::global()
+                .startup_locks
+                .lock()
+                .expect("startup lock map")
+                .contains_key(&stalled_key),
+            "cancelled startup must not retain its lock entry"
+        );
+    }
+
+    #[tokio::test]
+    async fn waiting_for_same_agent_startup_obeys_own_timeout() {
+        #[cfg(windows)]
+        let stalled = JdbcAgentOptions::new("powershell.exe")
+            .argument("-NoProfile")
+            .argument("-Command")
+            .argument("Start-Sleep -Seconds 10")
+            .runtime_identity("silent-same", "unmanaged", "same-test")
+            .request_timeout(Duration::from_secs(2));
+        #[cfg(not(windows))]
+        let stalled = JdbcAgentOptions::new("sh")
+            .argument("-c")
+            .argument("sleep 10")
+            .runtime_identity("silent-same", "unmanaged", "same-test")
+            .request_timeout(Duration::from_secs(2));
+        let impatient = stalled.clone().request_timeout(Duration::from_millis(75));
+        let stalled_task =
+            tokio::spawn(async move { AgentRuntimeManager::acquire(&stalled).await });
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(
+            !stalled_task.is_finished(),
+            "fixture must still be starting"
+        );
+
+        let result = tokio::time::timeout(
+            Duration::from_millis(700),
+            AgentRuntimeManager::acquire(&impatient),
+        )
+        .await
+        .expect("same-identity startup wait must be bounded by this caller's timeout");
+        assert!(
+            matches!(result, Err(RdbcError::DriverError(message)) if message.contains("startup timed out"))
+        );
+        stalled_task.abort();
+        let _ = stalled_task.await;
     }
 }

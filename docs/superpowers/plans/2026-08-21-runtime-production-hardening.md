@@ -273,7 +273,8 @@ git commit -m "feat(admin): unify management plane security"
 - [ ] **Step 1: 运行故障矩阵**
 
 Scenarios: slow driver close, saturated metrics queue, Admin unavailable/restart, duplicate batch,
-sequence gap, expired repository entries, invalid auth, SIGTERM during pending ACK.
+sequence gap, expired repository entries, invalid auth, SIGTERM during pending ACK, and a JDBC
+Agent that never sends ready/handshake (startup must fail within the configured request timeout).
 
 - [ ] **Step 2: 运行性能和 shutdown 测量**
 
