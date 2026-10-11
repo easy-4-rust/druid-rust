@@ -23,4 +23,17 @@ Admin 的 `repository_capacity_test`（2/2）与 `ingest_test`（11/11）以 `--
 | benchmark 进程峰值工作集 | 16.68 MiB | ≤ 32 MiB |
 | 池关闭耗时 | 3 ms | ≤ 250 ms |
 
-上述预算只针对这台机器和这一负载。仍须在 Linux CI 上独立测量并确定稳定阈值；还须测量慢物理关闭的队列/超时、Metrics 饱和时的 dropped/coalesced、Admin 不可用与重启、重复 batch/序列缺口、过期条目、无效认证和待 ACK 时 SIGTERM。未取得这些数据前，P06 Task5 保持开放。
+上述 Windows 参考预算只针对这台机器和这一负载。
+
+## 2026-10-11 Linux CI 基线与门禁
+
+相同提交 `dcf1841` 在 Ubuntu 24.04 runner 的三次独立运行均成功：[第 1 次](https://github.com/easy-4-rust/druid-rust/actions/runs/38128370325)、[第 2 次](https://github.com/easy-4-rust/druid-rust/actions/runs/38128589274)、[第 3 次](https://github.com/easy-4-rust/druid-rust/actions/runs/38128589449)。每次均有 100 个 Criterion 样本和可下载的 JSON、原始日志及样本；等待次数为 18,638–24,338，确认负载确实发生争用。
+
+| 指标 | 三次实测 | 后续 CI 上限 |
+| --- | ---: | ---: |
+| 每轮完成时间 p99 | 25.293 / 25.447 / 25.495 ms | 100 ms |
+| 峰值 RSS | 18,464 / 18,840 / 18,620 KiB | 65,536 KiB |
+| 等待队列峰值 / 活动连接峰值 | 56 / 8（每次） | 56 / 8 |
+| 池关闭耗时 | 2 / 1 / 2 ms | 250 ms |
+
+门禁脚本会先保存测量 JSON，再对超预算指标逐项报错；需要在新提交的 Linux CI 上执行并确认失败传播。慢物理关闭的队列/超时、Metrics 饱和时的 dropped/coalesced、Admin 不可用与重启、重复 batch/序列缺口、过期条目、无效认证和待 ACK 时 SIGTERM 仍缺运行预算。P06 Task5 保持开放。

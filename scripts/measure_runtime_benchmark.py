@@ -75,12 +75,28 @@ def benchmark_summary(output: str) -> dict[str, int]:
     }
 
 
+def runtime_budget_violations(
+    measurement: dict[str, int | float], limits: dict[str, int | float]
+) -> list[str]:
+    """Return each measured runtime metric that exceeds its release budget."""
+    return [
+        f"{metric}={measurement[metric]} exceeds {limit}"
+        for metric, limit in limits.items()
+        if measurement[metric] > limit
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-log", type=Path, required=True)
     parser.add_argument("--sample", type=Path, required=True)
     parser.add_argument("--run-log", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--max-p99-ms", type=float)
+    parser.add_argument("--max-peak-rss-kib", type=int)
+    parser.add_argument("--max-shutdown-ms", type=int)
+    parser.add_argument("--max-wait-queue-depth", type=int)
+    parser.add_argument("--max-active-peak", type=int)
     args = parser.parse_args()
     if not sys.platform.startswith("linux"):
         parser.error("peak RSS measurement currently requires a Linux runner")
@@ -117,9 +133,26 @@ def main() -> int:
         **sample_percentiles_ms(args.sample),
         **benchmark_summary(output),
     }
+    limits = {
+        metric: value
+        for metric, value in {
+            "p99_ms": args.max_p99_ms,
+            "peak_rss_kib": args.max_peak_rss_kib,
+            "shutdown_ms": args.max_shutdown_ms,
+            "max_wait_queue_depth": args.max_wait_queue_depth,
+            "active_peak": args.max_active_peak,
+        }.items()
+        if value is not None
+    }
+    if any(not math.isfinite(value) or value <= 0 for value in limits.values()):
+        parser.error("runtime budgets must be finite positive values")
+    violations = runtime_budget_violations(payload, limits)
+    payload["budget"] = {"limits": limits, "violations": violations}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(payload, sort_keys=True))
+    if violations:
+        raise RuntimeError("runtime benchmark budget exceeded: " + "; ".join(violations))
     return 0
 
 

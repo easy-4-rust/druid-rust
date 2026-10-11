@@ -8,6 +8,7 @@ import unittest
 from measure_runtime_benchmark import (
     benchmark_executable,
     benchmark_summary,
+    runtime_budget_violations,
     sample_percentiles_ms,
 )
 
@@ -40,6 +41,22 @@ class RuntimeBenchmarkEvidenceTest(unittest.TestCase):
     def test_missing_runtime_summary_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "runtime_benchmark summary"):
             benchmark_summary("Benchmarking runtime/pool_burst_64")
+
+    def test_runtime_budget_accepts_exact_limits(self):
+        measurement = {"p99_ms": 100.0, "peak_rss_kib": 65536, "shutdown_ms": 250,
+                       "max_wait_queue_depth": 56, "active_peak": 8}
+        limits = dict(measurement)
+        self.assertEqual(runtime_budget_violations(measurement, limits), [])
+
+    def test_runtime_budget_reports_every_exceeded_limit(self):
+        measurement = {"p99_ms": 101.0, "peak_rss_kib": 65537, "shutdown_ms": 251,
+                       "max_wait_queue_depth": 57, "active_peak": 9}
+        limits = {"p99_ms": 100.0, "peak_rss_kib": 65536, "shutdown_ms": 250,
+                  "max_wait_queue_depth": 56, "active_peak": 8}
+        violations = runtime_budget_violations(measurement, limits)
+        self.assertEqual(len(violations), 5)
+        for metric in limits:
+            self.assertTrue(any(metric in violation for violation in violations))
 
 
 if __name__ == "__main__":

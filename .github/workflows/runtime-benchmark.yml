@@ -33,7 +33,12 @@ jobs:
             --build-log target/benchmark-evidence/runtime-build.jsonl \
             --sample target/criterion/runtime_pool_burst_64/new/sample.json \
             --run-log target/benchmark-evidence/runtime-run.log \
-            --output target/benchmark-evidence/runtime-measurement.json
+            --output target/benchmark-evidence/runtime-measurement.json \
+            --max-p99-ms 100 \
+            --max-peak-rss-kib 65536 \
+            --max-shutdown-ms 250 \
+            --max-wait-queue-depth 56 \
+            --max-active-peak 8
       - name: Upload runtime measurement
         if: always()
         uses: actions/upload-artifact@v4
