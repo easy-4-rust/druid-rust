@@ -1,0 +1,47 @@
+name: runtime-benchmark
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * 0"
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - name: Verify benchmark evidence parser
+        run: python3 scripts/test_measure_runtime_benchmark.py
+      - name: Build runtime benchmark
+        run: |
+          mkdir -p target/benchmark-evidence
+          cargo bench -p druid-bench --locked --bench runtime --no-run --message-format=json > target/benchmark-evidence/runtime-build.jsonl
+      - name: Measure runtime pool burst and shutdown
+        run: |
+          python3 scripts/measure_runtime_benchmark.py \
+            --build-log target/benchmark-evidence/runtime-build.jsonl \
+            --sample target/criterion/runtime_pool_burst_64/new/sample.json \
+            --run-log target/benchmark-evidence/runtime-run.log \
+            --output target/benchmark-evidence/runtime-measurement.json
+      - name: Upload runtime measurement
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-measurement-${{ github.sha }}
+          path: |
+            target/benchmark-evidence/runtime-measurement.json
+            target/benchmark-evidence/runtime-run.log
+            target/criterion/runtime_pool_burst_64/new/sample.json
+          if-no-files-found: error
+          retention-days: 90
