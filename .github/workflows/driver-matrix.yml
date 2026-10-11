@@ -136,6 +136,10 @@ jobs:
               echo "::error::Public API snapshot mismatch for $crate: expected=${expected:-missing} actual=$actual"
               status=1
             fi
+            if ! cmp -s "api/$crate.single-standard.after.txt" "api/observed/$crate.txt"; then
+              echo "::error::Public API snapshot body differs for $crate"
+              status=1
+            fi
           done
           exit "$status"
       - name: Upload observed public APIs
