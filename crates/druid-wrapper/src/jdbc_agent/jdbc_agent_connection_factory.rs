@@ -268,6 +268,13 @@ mod tests {
         let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
             .await
             .unwrap();
+        assert!(!connection.capabilities().callable_statements);
+        assert!(matches!(
+            connection
+                .prepare_call("{call unsupported()}", StatementOptions::default())
+                .await,
+            Err(RdbcError::UnsupportedOperation { .. })
+        ));
         let mut statement = connection
             .create_statement(StatementOptions::default())
             .await

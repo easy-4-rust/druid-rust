@@ -31,6 +31,15 @@ async fn task6_jdbc_agent_h2_contract_test_jdbc_agent_h2_contract_when_configure
         options.clone(),
     );
     let mut connection = factory.create().await.expect("必须建立 H2 JDBC 连接");
+    let capabilities = connection.capabilities();
+    assert!(capabilities.transactions);
+    assert!(capabilities.savepoints);
+    assert!(capabilities.catalogs);
+    assert!(capabilities.schemas);
+    assert!(
+        !capabilities.callable_statements,
+        "JDBC Agent 协议未实现 prepare_call，不能把 H2 驱动能力暴露为适配器能力"
+    );
     let mut shared_runtime_connection = factory
         .create()
         .await
@@ -116,6 +125,16 @@ async fn task6_jdbc_agent_h2_contract_test_jdbc_agent_h2_contract_when_configure
         .set_auto_commit(true)
         .await
         .expect("必须恢复 autoCommit");
+    if connection.capabilities().catalogs {
+        let catalog = connection
+            .catalog()
+            .expect("已声明 catalog 能力时必须可读取当前 catalog");
+        connection
+            .set_catalog(catalog.as_deref())
+            .await
+            .expect("已声明 catalog 能力时必须可设置当前 catalog");
+        assert_eq!(connection.catalog().unwrap(), catalog);
+    }
     if connection.capabilities().schemas {
         connection
             .set_schema(Some("PUBLIC"))

@@ -151,7 +151,9 @@ impl JdbcAgentConnection {
                 savepoints: capability("savepoints"),
                 catalogs: capability("catalog"),
                 schemas: capability("schema"),
-                callable_statements: true,
+                // Agent 协议尚未提供 prepare_call；不能把 JDBC 驱动本身的能力
+                // 误报为当前 Rust 适配器可调用的能力。
+                callable_statements: false,
             },
             auto_commit: session
                 .get("autoCommit")
