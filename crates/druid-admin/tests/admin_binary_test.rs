@@ -15,6 +15,7 @@ use druid_metrics::protocol::{PoolSnapshotMsg, SnapshotEntry};
 use tokio::io::AsyncWriteExt as _;
 use tonic::transport::{Certificate, ClientTlsConfig, Endpoint};
 use tower::ServiceExt as _;
+use tracing::instrument::WithSubscriber as _;
 
 const SECURITY_ENV_VARS: &[&str] = &[
     "DRUID_ADMIN_HTTP_ADDR",
@@ -115,7 +116,6 @@ async fn production_trace_logs_path_without_query_credentials() {
         .without_time()
         .with_writer(logs.clone())
         .finish();
-    let _subscriber_guard = tracing::subscriber::set_default(subscriber);
     let app = druid_admin::standalone_router(druid_admin::MetricsRepository::new());
     let response = app
         .oneshot(
@@ -126,6 +126,7 @@ async fn production_trace_logs_path_without_query_credentials() {
                 .body(Body::empty())
                 .expect("valid request"),
         )
+        .with_subscriber(subscriber)
         .await
         .expect("router response");
     assert_eq!(response.status(), axum::http::StatusCode::OK);
