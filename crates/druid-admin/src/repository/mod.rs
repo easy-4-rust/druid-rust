@@ -5,6 +5,8 @@
 
 mod metrics_repository;
 mod metrics_repository_config;
+#[cfg(test)]
+mod metrics_repository_test;
 mod stored_data_source_entry;
 
 pub use metrics_repository::{DataSourceEntry, DataSourceId, MetricsRepository};

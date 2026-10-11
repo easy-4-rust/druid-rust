@@ -81,6 +81,23 @@ impl MetricsRepository {
 
     /// 在一个写锁事务中校验并应用完整 incremental batch。
     pub fn apply_batch(&self, entries: Vec<(DataSourceId, DataSourceEntry)>) -> bool {
+        self.apply_batch_scoped(None, entries)
+    }
+
+    /// 提交已经由协议 stream 所有权门禁校验的 incremental batch。
+    pub(crate) fn apply_batch_for_epoch(
+        &self,
+        stream_epoch: u64,
+        entries: Vec<(DataSourceId, DataSourceEntry)>,
+    ) -> bool {
+        self.apply_batch_scoped(Some(stream_epoch), entries)
+    }
+
+    fn apply_batch_scoped(
+        &self,
+        stream_epoch: Option<u64>,
+        entries: Vec<(DataSourceId, DataSourceEntry)>,
+    ) -> bool {
         let mut inner = self.inner.write();
         self.prune_expired(&mut inner);
         inner.ingest_count = inner.ingest_count.saturating_add(1);
@@ -90,7 +107,7 @@ impl MetricsRepository {
                 || inner
                     .entries
                     .get(id)
-                    .is_some_and(|existing| entry.sequence <= existing.entry.sequence)
+                    .is_some_and(|existing| Self::is_stale(existing, entry, stream_epoch))
         });
         if invalid {
             inner.rejected_count = inner.rejected_count.saturating_add(1);
@@ -102,7 +119,9 @@ impl MetricsRepository {
             return false;
         }
         for (id, entry) in entries {
-            inner.entries.insert(id, StoredDataSourceEntry::new(entry));
+            inner
+                .entries
+                .insert(id, StoredDataSourceEntry::new(entry, stream_epoch));
         }
         true
     }
@@ -111,6 +130,25 @@ impl MetricsRepository {
     pub fn replace_stream(
         &self,
         service_identity: &ServiceIdentity,
+        entries: Vec<(DataSourceId, DataSourceEntry)>,
+    ) -> bool {
+        self.replace_stream_scoped(service_identity, None, entries)
+    }
+
+    /// 提交已经由协议 stream 所有权门禁校验的权威快照。
+    pub(crate) fn replace_stream_for_epoch(
+        &self,
+        service_identity: &ServiceIdentity,
+        stream_epoch: u64,
+        entries: Vec<(DataSourceId, DataSourceEntry)>,
+    ) -> bool {
+        self.replace_stream_scoped(service_identity, Some(stream_epoch), entries)
+    }
+
+    fn replace_stream_scoped(
+        &self,
+        service_identity: &ServiceIdentity,
+        stream_epoch: Option<u64>,
         entries: Vec<(DataSourceId, DataSourceEntry)>,
     ) -> bool {
         let mut inner = self.inner.write();
@@ -123,7 +161,7 @@ impl MetricsRepository {
                 || inner
                     .entries
                     .get(id)
-                    .is_some_and(|existing| entry.sequence <= existing.entry.sequence)
+                    .is_some_and(|existing| Self::is_stale(existing, entry, stream_epoch))
         });
         if invalid {
             inner.rejected_count = inner.rejected_count.saturating_add(1);
@@ -138,9 +176,20 @@ impl MetricsRepository {
             .entries
             .retain(|id, _| &id.service_identity != service_identity);
         for (id, entry) in entries {
-            inner.entries.insert(id, StoredDataSourceEntry::new(entry));
+            inner
+                .entries
+                .insert(id, StoredDataSourceEntry::new(entry, stream_epoch));
         }
         true
+    }
+
+    fn is_stale(
+        existing: &StoredDataSourceEntry,
+        incoming: &DataSourceEntry,
+        stream_epoch: Option<u64>,
+    ) -> bool {
+        (stream_epoch.is_none() || existing.stream_epoch == stream_epoch)
+            && incoming.sequence <= existing.entry.sequence
     }
 
     /// 返回所有未过期 datasource 最新值。

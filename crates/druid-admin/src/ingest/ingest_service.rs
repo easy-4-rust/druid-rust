@@ -354,12 +354,16 @@ impl MetricsIngest for IngestService {
                                     &command_tx,
                                     || {
                                         if replace {
-                                            repository.replace_stream(
+                                            repository.replace_stream_for_epoch(
                                                 &service_identity.service_identity,
+                                                service_identity.stream_epoch,
                                                 prepared,
                                             )
                                         } else {
-                                            repository.apply_batch(prepared)
+                                            repository.apply_batch_for_epoch(
+                                                service_identity.stream_epoch,
+                                                prepared,
+                                            )
                                         }
                                     },
                                 )
