@@ -7,18 +7,10 @@ rust-version.workspace = true
 description  = "druid-rust admin: axum-based HTTP endpoints that expose datasource, SQL, wall and /metrics"
 publish      = false
 
-[features]
-default = []
-driver-catalog = ["dep:druid-wrapper", "druid-wrapper/driver-catalog"]
-jdbc-agent = ["driver-catalog", "druid-wrapper/jdbc-agent"]
-all-databases = ["jdbc-agent", "druid-wrapper/all-databases"]
-
 [lints]
 workspace = true
 
 [dependencies]
-druid         = { version = "0.0.0-design", path = "../druid" }
-druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false, optional = true }
 druid-metrics = { version = "0.0.0-design", path = "../druid-metrics", features = ["server"] }
 tokio         = { workspace = true }
 tokio-util    = { workspace = true }
@@ -55,6 +47,7 @@ base64        = { workspace = true }
 subtle        = { workspace = true }
 
 [dev-dependencies]
+druid         = { version = "0.0.0-design", path = "../druid" }
 tokio         = { workspace = true, features = ["full", "test-util", "macros"] }
 reqwest       = { workspace = true, features = ["json"] }
 tonic         = { workspace = true, features = ["transport"] }

@@ -150,14 +150,14 @@ The five product crates already exist; their presence does not establish release
 | `druid` | Pool, holder, logical proxies, Filter, SQL, Wall, Stat and Dynamic | druid-rdbc |
 | `druid-wrapper` | Toasty/SQLx/RBDC/DuckDB/libSQL/HTTP SQL/JDBC Agent and external-pool integration | druid, druid-rdbc |
 | `druid-metrics` | Local observation, sampling, push and shared gRPC protocol | druid |
-| `druid-admin` | HTTP/gRPC management, repository, authentication, static UI and standalone binary | druid, druid-metrics; optional druid-wrapper |
+| `druid-admin` | HTTP/gRPC management, repository, authentication, static UI and standalone binary | druid-metrics |
 
 `druid-bench` is the sixth workspace member and a verification helper, not a sixth product crate.
 Toasty integration belongs to `druid-wrapper`; its default features are `driver-catalog` and `sqlite`.
 
 ### 4.2 Dependency direction
 
-Arrows point from a dependent crate to its dependency; optional edges are dashed.
+Arrows point from a dependent crate to its production dependency.
 
 ```mermaid
 flowchart TD
@@ -166,9 +166,13 @@ flowchart TD
     DRUID --> RDBC
     METRICS["druid-metrics<br/>sampling / push / gRPC protocol"] --> DRUID
     ADMIN["druid-admin<br/>HTTP / gRPC / repository / authentication"] --> METRICS
-    ADMIN --> DRUID
-    ADMIN -. "optional driver bootstrap" .-> WRAPPER
 ```
+
+An embedding application supplies `StatViewServlet::new(context_path, service)` with its
+own statistics callback. It can add wrapper metrics through
+`MonitorViewServlet::with_metrics_appendix(provider)`. The former one-argument
+`StatViewServlet::new` and `druid-admin` driver feature forwarding are removed;
+enable driver features on `druid-wrapper` in the embedding application instead.
 
 ### 4.3 Connection ownership and dispatch
 

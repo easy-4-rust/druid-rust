@@ -46,6 +46,7 @@ pub struct MonitorViewServlet {
     context_path: Arc<String>,
     secure_cookies: bool,
     command_broker: Option<CommandBroker>,
+    metrics_appendix: Option<Arc<dyn Fn() -> String + Send + Sync>>,
 }
 
 #[derive(Clone)]
@@ -72,6 +73,7 @@ impl MonitorViewServlet {
             context_path: Arc::new("/druid".to_owned()),
             secure_cookies: false,
             command_broker: None,
+            metrics_appendix: None,
         }
     }
 
@@ -86,6 +88,7 @@ impl MonitorViewServlet {
             context_path: Arc::new("/druid".to_owned()),
             secure_cookies: false,
             command_broker: None,
+            metrics_appendix: None,
         }
     }
 
@@ -110,6 +113,17 @@ impl MonitorViewServlet {
             self.sessions = Arc::new(RwLock::new(HashMap::new()));
         }
         self.auth = auth;
+        self
+    }
+
+    /// 注入宿主进程的可选 Prometheus 指标文本；返回值须已脱敏并使用合法 exposition 格式。
+    /// 指标会计入现有输出容量预算，不引入对驱动实现 crate 的依赖。
+    #[must_use]
+    pub fn with_metrics_appendix(
+        mut self,
+        provider: impl Fn() -> String + Send + Sync + 'static,
+    ) -> Self {
+        self.metrics_appendix = Some(Arc::new(provider));
         self
     }
 
@@ -791,7 +805,6 @@ impl MonitorViewServlet {
 
     async fn metrics(State(state): State<Self>) -> Response {
         let metrics = state.task_monitor.cumulative();
-        #[allow(unused_mut)]
         let mut body = format!(
             concat!(
                 "# HELP druid_admin_tasks_instrumented_total Total instrumented admin tasks.\n",
@@ -815,59 +828,8 @@ impl MonitorViewServlet {
         if let MonitorBackend::Repository(repository) = &state.backend {
             write_repository_metrics(&mut body, repository);
         }
-        #[cfg(feature = "jdbc-agent")]
-        {
-            let agent = druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetrics::snapshot();
-            write!(
-                &mut body,
-                concat!(
-                    "# HELP druid_jdbc_agent_processes Current JDBC agent process count.\n",
-                    "# TYPE druid_jdbc_agent_processes gauge\n",
-                    "druid_jdbc_agent_processes {}\n",
-                    "# HELP druid_jdbc_agent_active_sessions Current JDBC agent active sessions.\n",
-                    "# TYPE druid_jdbc_agent_active_sessions gauge\n",
-                    "druid_jdbc_agent_active_sessions {}\n",
-                    "# HELP druid_jdbc_agent_starts_total Total JDBC agent starts.\n",
-                    "# TYPE druid_jdbc_agent_starts_total counter\n",
-                    "druid_jdbc_agent_starts_total {}\n",
-                    "# HELP druid_jdbc_agent_crashes_total Total JDBC agent crashes.\n",
-                    "# TYPE druid_jdbc_agent_crashes_total counter\n",
-                    "druid_jdbc_agent_crashes_total {}\n",
-                    "# HELP druid_jdbc_agent_rpc_total Total JDBC agent RPC calls.\n",
-                    "# TYPE druid_jdbc_agent_rpc_total counter\n",
-                    "druid_jdbc_agent_rpc_total {}\n",
-                    "# HELP druid_jdbc_agent_rpc_errors_total Total JDBC agent RPC errors.\n",
-                    "# TYPE druid_jdbc_agent_rpc_errors_total counter\n",
-                    "druid_jdbc_agent_rpc_errors_total {}\n",
-                    "# HELP druid_jdbc_agent_rpc_latency_microseconds_total Total JDBC agent RPC latency in microseconds.\n",
-                    "# TYPE druid_jdbc_agent_rpc_latency_microseconds_total counter\n",
-                    "druid_jdbc_agent_rpc_latency_microseconds_total {}\n",
-                    "# HELP druid_jdbc_agent_rpc_latency_microseconds_max Maximum JDBC agent RPC latency in microseconds.\n",
-                    "# TYPE druid_jdbc_agent_rpc_latency_microseconds_max gauge\n",
-                    "druid_jdbc_agent_rpc_latency_microseconds_max {}\n",
-                    "# HELP druid_jdbc_agent_timeouts_total Total JDBC agent RPC timeouts.\n",
-                    "# TYPE druid_jdbc_agent_timeouts_total counter\n",
-                    "druid_jdbc_agent_timeouts_total {}\n",
-                    "# HELP druid_jdbc_agent_cancellations_total Total JDBC agent RPC cancellations.\n",
-                    "# TYPE druid_jdbc_agent_cancellations_total counter\n",
-                    "druid_jdbc_agent_cancellations_total {}\n",
-                    "# HELP druid_jdbc_agent_protocol_errors_total Total JDBC agent protocol errors.\n",
-                    "# TYPE druid_jdbc_agent_protocol_errors_total counter\n",
-                    "druid_jdbc_agent_protocol_errors_total {}\n"
-                ),
-                agent.process_count(),
-                agent.active_sessions(),
-                agent.start_count(),
-                agent.crash_count(),
-                agent.rpc_count(),
-                agent.rpc_error_count(),
-                agent.rpc_latency_micros_total(),
-                agent.rpc_latency_micros_max(),
-                agent.timeout_count(),
-                agent.cancellation_count(),
-                agent.protocol_error_count(),
-            )
-            .expect("writing metrics into String cannot fail");
+        if let Some(provider) = &state.metrics_appendix {
+            body.push_str(&provider());
         }
         if let MonitorBackend::Repository(repository) = &state.backend {
             if !repository.accept_metrics_output_size(body.len()) {

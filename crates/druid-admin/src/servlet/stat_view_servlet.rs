@@ -4,27 +4,31 @@ use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::routing::any;
 use axum::Router;
-use druid::stats::DruidStatService;
+use std::sync::Arc;
 
-/// 将 core `DruidStatService` 暴露为 Axum 管理端点。
+/// 将宿主提供的统计服务暴露为 Axum 管理端点。
 ///
 /// 对应 Java：`com.alibaba.druid.support.http.StatViewServlet` 的 JSON 服务部分。
 /// UI 静态资源与登录由 `MonitorViewServlet` 承担；本对象用于被监控应用挂载
 /// `/druid/*.json`，供独立 `druid-admin` 聚合。
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StatViewServlet {
     context_path: String,
-    service: DruidStatService,
+    service: Arc<dyn Fn(&str) -> String + Send + Sync>,
 }
 
 impl StatViewServlet {
-    /// 创建管理 servlet；空路径会规范为 `/druid`。
+    /// 创建管理 servlet；参数 `service` 接收原 Java servlet 风格 URL 并返回 JSON。
+    /// 空 `context_path` 会规范为 `/druid`；返回可挂载的路由对象。
     #[must_use]
-    pub fn new(context_path: impl Into<String>) -> Self {
+    pub fn new(
+        context_path: impl Into<String>,
+        service: impl Fn(&str) -> String + Send + Sync + 'static,
+    ) -> Self {
         let context_path = normalize_context_path(context_path.into());
         Self {
             context_path,
-            service: DruidStatService,
+            service: Arc::new(service),
         }
     }
 
@@ -46,7 +50,7 @@ impl StatViewServlet {
             .strip_prefix(&state.context_path)
             .filter(|value| !value.is_empty())
             .unwrap_or("/");
-        let body = state.service.service(service_url);
+        let body = (state.service)(service_url);
         let mut response = Response::new(body.into());
         *response.status_mut() = StatusCode::OK;
         response.headers_mut().insert(
@@ -57,9 +61,13 @@ impl StatViewServlet {
     }
 }
 
-impl Default for StatViewServlet {
-    fn default() -> Self {
-        Self::new("/druid")
+impl std::fmt::Debug for StatViewServlet {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("StatViewServlet")
+            .field("context_path", &self.context_path)
+            .field("service", &"[INJECTED]")
+            .finish()
     }
 }
 

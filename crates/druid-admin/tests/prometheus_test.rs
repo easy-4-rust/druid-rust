@@ -199,24 +199,6 @@ async fn two_datasources_emit_one_help_and_type_per_metric_family() {
         ("druid_admin_datasource_commit_count", true),
         ("druid_admin_datasource_rollback_count", true),
     ];
-    #[cfg(feature = "jdbc-agent")]
-    let families = {
-        let mut families = families;
-        families.extend([
-            ("druid_jdbc_agent_processes", false),
-            ("druid_jdbc_agent_active_sessions", false),
-            ("druid_jdbc_agent_starts_total", false),
-            ("druid_jdbc_agent_crashes_total", false),
-            ("druid_jdbc_agent_rpc_total", false),
-            ("druid_jdbc_agent_rpc_errors_total", false),
-            ("druid_jdbc_agent_rpc_latency_microseconds_total", false),
-            ("druid_jdbc_agent_rpc_latency_microseconds_max", false),
-            ("druid_jdbc_agent_timeouts_total", false),
-            ("druid_jdbc_agent_cancellations_total", false),
-            ("druid_jdbc_agent_protocol_errors_total", false),
-        ]);
-        families
-    };
     for (family, per_datasource) in families {
         assert_eq!(
             body.lines()

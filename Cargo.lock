@@ -1746,7 +1746,6 @@ dependencies = [
  "chrono",
  "druid",
  "druid-metrics",
- "druid-wrapper",
  "hyper 1.11.0",
  "k8s-openapi",
  "kube",
