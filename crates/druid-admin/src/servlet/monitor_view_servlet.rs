@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -20,7 +21,7 @@ use tokio_metrics::TaskMonitor;
 
 use crate::config::AdminAuthMode;
 use crate::model::dto::DataSourceResult;
-use crate::repository::{DataSourceId, MetricsRepository};
+use crate::repository::{DataSourceId, MetricsRepository, MetricsRepositoryConfig};
 use crate::service::{MonitorStatService, MonitorStatServiceError, StatQuery};
 use crate::CommandBroker;
 
@@ -47,6 +48,7 @@ pub struct MonitorViewServlet {
     secure_cookies: bool,
     command_broker: Option<CommandBroker>,
     metrics_appendix: Option<Arc<dyn Fn() -> String + Send + Sync>>,
+    remote_metrics_output_rejected_total: Arc<AtomicU64>,
 }
 
 #[derive(Clone)]
@@ -74,6 +76,7 @@ impl MonitorViewServlet {
             secure_cookies: false,
             command_broker: None,
             metrics_appendix: None,
+            remote_metrics_output_rejected_total: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -89,6 +92,7 @@ impl MonitorViewServlet {
             secure_cookies: false,
             command_broker: None,
             metrics_appendix: None,
+            remote_metrics_output_rejected_total: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -831,28 +835,47 @@ impl MonitorViewServlet {
         if let Some(provider) = &state.metrics_appendix {
             body.push_str(&provider());
         }
-        if let MonitorBackend::Repository(repository) = &state.backend {
-            if !repository.accept_metrics_output_size(body.len()) {
-                let (_, _, output_rejected_total) = repository.limit_counters();
-                let rejected = format!(
-                    concat!(
-                        "# HELP druid_admin_metrics_output_rejected_total Total metrics expositions rejected for exceeding the byte budget.\n",
-                        "# TYPE druid_admin_metrics_output_rejected_total counter\n",
-                        "druid_admin_metrics_output_rejected_total {}\n",
-                        "# HELP druid_admin_metrics_output_limit_bytes Configured maximum metrics exposition bytes.\n",
-                        "# TYPE druid_admin_metrics_output_limit_bytes gauge\n",
-                        "druid_admin_metrics_output_limit_bytes {}\n"
-                    ),
-                    output_rejected_total,
-                    repository.max_metrics_output_bytes()
-                );
-                return (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
-                    rejected,
-                )
-                    .into_response();
+        let (accepted, output_rejected_total, output_limit) = match &state.backend {
+            MonitorBackend::Repository(repository) => {
+                let accepted = repository.accept_metrics_output_size(body.len());
+                let (_, _, rejected) = repository.limit_counters();
+                (accepted, rejected, repository.max_metrics_output_bytes())
             }
+            MonitorBackend::Remote(_) => {
+                let limit = MetricsRepositoryConfig::default().max_metrics_output_bytes();
+                let accepted = body.len() <= limit;
+                let rejected = if accepted {
+                    state
+                        .remote_metrics_output_rejected_total
+                        .load(Ordering::Relaxed)
+                } else {
+                    state
+                        .remote_metrics_output_rejected_total
+                        .fetch_add(1, Ordering::Relaxed)
+                        + 1
+                };
+                (accepted, rejected, limit)
+            }
+        };
+        if !accepted {
+            let rejected = format!(
+                concat!(
+                    "# HELP druid_admin_metrics_output_rejected_total Total metrics expositions rejected for exceeding the byte budget.\n",
+                    "# TYPE druid_admin_metrics_output_rejected_total counter\n",
+                    "druid_admin_metrics_output_rejected_total {}\n",
+                    "# HELP druid_admin_metrics_output_limit_bytes Configured maximum metrics exposition bytes.\n",
+                    "# TYPE druid_admin_metrics_output_limit_bytes gauge\n",
+                    "druid_admin_metrics_output_limit_bytes {}\n"
+                ),
+                output_rejected_total,
+                output_limit
+            );
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+                rejected,
+            )
+                .into_response();
         }
         (
             StatusCode::OK,
