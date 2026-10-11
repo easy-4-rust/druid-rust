@@ -326,7 +326,7 @@ jobs:
         with:
           name: postgresql-product-contract-${{ github.sha }}
           path: target/contract-evidence/postgresql.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 90
 
   mysql-product-contract:
@@ -374,7 +374,7 @@ jobs:
         with:
           name: mysql-product-contract-${{ github.sha }}
           path: target/contract-evidence/mysql.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 90
 
   aggregate-sqlite-evidence:
