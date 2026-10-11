@@ -285,6 +285,10 @@ jobs:
   postgresql-product-contract:
     name: PostgreSQL real product contract
     runs-on: ubuntu-24.04
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     services:
       database:
         image: postgres:16.15-trixie
@@ -332,6 +336,10 @@ jobs:
   mysql-product-contract:
     name: MySQL real product contract
     runs-on: ubuntu-24.04
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     services:
       database:
         image: mysql:8.4.11
