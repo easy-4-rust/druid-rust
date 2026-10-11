@@ -11,10 +11,13 @@ use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::{mpsc, oneshot};
 
 type PendingRequests = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<JsonValue, RdbcError>>>>>;
+// 默认单帧上限 16 MiB；限制排队帧数，防止停滞的 Agent 使客户端无限缓存请求。
+const OUTBOUND_QUEUE_CAPACITY: usize = 8;
 
 struct OutboundFrame {
     request_id: u64,
     bytes: Vec<u8>,
+    shutdown: bool,
 }
 
 /// 已发送、等待按 JSON-RPC ID 关联响应的 Agent 请求。
@@ -60,7 +63,7 @@ impl Drop for AgentPendingRequest {
 /// `AgentServer` JSON-RPC 循环。
 pub(crate) struct AgentRuntime {
     child: Mutex<Child>,
-    outbound: mpsc::UnboundedSender<OutboundFrame>,
+    outbound: mpsc::Sender<OutboundFrame>,
     pending: PendingRequests,
     next_request_id: AtomicU64,
     frame_limit: usize,
@@ -100,7 +103,7 @@ impl AgentRuntime {
 
         let pending = Arc::new(Mutex::new(HashMap::new()));
         let expected_shutdown = Arc::new(AtomicBool::new(false));
-        let (outbound, outbound_receiver) = mpsc::unbounded_channel();
+        let (outbound, outbound_receiver) = mpsc::channel(OUTBOUND_QUEUE_CAPACITY);
         tokio::spawn(Self::write_loop(
             stdin,
             outbound_receiver,
@@ -218,9 +221,6 @@ impl AgentRuntime {
         if !self.healthy.load(Ordering::Acquire) {
             return Err(RdbcError::ConnectionDiscarded);
         }
-        if method == "shutdown" {
-            self.expected_shutdown.store(true, Ordering::Release);
-        }
         let request_id = self.next_request_id.fetch_add(1, Ordering::AcqRel).max(1);
         let request = AgentRequest::new(request_id, method, params);
         let mut bytes = serde_json::to_vec(&request).map_err(Self::protocol_error)?;
@@ -232,20 +232,45 @@ impl AgentRuntime {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(request_id, sender);
-        if self
-            .outbound
-            .send(OutboundFrame { request_id, bytes })
-            .is_err()
-        {
-            AgentPendingRequest::remove_pending(&self.pending, request_id);
-            self.healthy.store(false, Ordering::Release);
-            return Err(RdbcError::ConnectionDiscarded);
+        if let Err(error) = Self::queue_frame(
+            &self.outbound,
+            &self.pending,
+            OutboundFrame {
+                request_id,
+                bytes,
+                shutdown: method == "shutdown",
+            },
+        ) {
+            if matches!(error, RdbcError::ConnectionDiscarded) {
+                self.healthy.store(false, Ordering::Release);
+            }
+            return Err(error);
         }
         Ok(AgentPendingRequest {
             request_id,
             receiver,
             pending: Arc::clone(&self.pending),
         })
+    }
+
+    fn queue_frame(
+        outbound: &mpsc::Sender<OutboundFrame>,
+        pending: &PendingRequests,
+        frame: OutboundFrame,
+    ) -> Result<(), RdbcError> {
+        let request_id = frame.request_id;
+        match outbound.try_send(frame) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                AgentPendingRequest::remove_pending(pending, request_id);
+                match error {
+                    mpsc::error::TrySendError::Full(_) => Err(RdbcError::DriverError(
+                        "JDBC Agent outbound request queue is full".to_owned(),
+                    )),
+                    mpsc::error::TrySendError::Closed(_) => Err(RdbcError::ConnectionDiscarded),
+                }
+            }
+        }
     }
 
     /// 发送一个 JSON-RPC 请求并按 ID 关联响应。
@@ -259,12 +284,15 @@ impl AgentRuntime {
 
     async fn write_loop(
         mut stdin: ChildStdin,
-        mut outbound: mpsc::UnboundedReceiver<OutboundFrame>,
+        mut outbound: mpsc::Receiver<OutboundFrame>,
         pending: PendingRequests,
         healthy: Arc<AtomicBool>,
         expected_shutdown: Arc<AtomicBool>,
     ) {
         while let Some(frame) = outbound.recv().await {
+            if frame.shutdown {
+                expected_shutdown.store(true, Ordering::Release);
+            }
             if let Err(error) = stdin.write_all(&frame.bytes).await {
                 Self::fail_transport(
                     &pending,
@@ -464,6 +492,56 @@ impl Drop for AgentRuntime {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn saturated_outbound_queue_rejects_and_cleans_pending_request() {
+        let (outbound, _receiver) = mpsc::channel(1);
+        let pending: PendingRequests = Arc::new(Mutex::new(HashMap::new()));
+        outbound
+            .try_send(OutboundFrame {
+                request_id: 1,
+                bytes: b"first\n".to_vec(),
+                shutdown: false,
+            })
+            .expect("fill bounded outbound queue");
+        let (sender, _response) = oneshot::channel();
+        pending.lock().expect("pending map").insert(2, sender);
+
+        let result = AgentRuntime::queue_frame(
+            &outbound,
+            &pending,
+            OutboundFrame {
+                request_id: 2,
+                bytes: b"second\n".to_vec(),
+                shutdown: false,
+            },
+        );
+        assert!(
+            matches!(result, Err(RdbcError::DriverError(message)) if message.contains("queue is full"))
+        );
+        assert!(!pending.lock().expect("pending map").contains_key(&2));
+    }
+
+    #[test]
+    fn closed_outbound_queue_discards_and_cleans_pending_request() {
+        let (outbound, receiver) = mpsc::channel(1);
+        drop(receiver);
+        let pending: PendingRequests = Arc::new(Mutex::new(HashMap::new()));
+        let (sender, _response) = oneshot::channel();
+        pending.lock().expect("pending map").insert(3, sender);
+
+        let result = AgentRuntime::queue_frame(
+            &outbound,
+            &pending,
+            OutboundFrame {
+                request_id: 3,
+                bytes: b"third\n".to_vec(),
+                shutdown: false,
+            },
+        );
+        assert!(matches!(result, Err(RdbcError::ConnectionDiscarded)));
+        assert!(!pending.lock().expect("pending map").contains_key(&3));
+    }
 
     #[tokio::test]
     async fn oversized_unterminated_frame_fails_before_eof() {
