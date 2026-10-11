@@ -4,6 +4,8 @@ from contextlib import redirect_stdout
 from io import StringIO
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -70,6 +72,27 @@ class RuntimeBenchmarkEvidenceTest(unittest.TestCase):
                     write_budgeted_evidence(measurement, {"p99_ms": 100.0}, output)
             saved = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(saved["budget"]["limits"], {"p99_ms": 100.0})
+            self.assertEqual(saved["budget"]["violations"], ["p99_ms=101.0 exceeds 100.0"])
+
+    def test_exceeded_budget_exits_nonzero_and_keeps_json(self):
+        """Exercise the same process exit boundary that fails the CI step."""
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "runtime-measurement.json"
+            script = (
+                "import sys; from pathlib import Path; "
+                "from measure_runtime_benchmark import write_budgeted_evidence; "
+                "write_budgeted_evidence({'p99_ms': 101.0}, {'p99_ms': 100.0}, Path(sys.argv[1]))"
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", script, str(output)],
+                cwd=Path(__file__).resolve().parent,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("runtime benchmark budget exceeded", result.stderr)
+            saved = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(saved["budget"]["violations"], ["p99_ms=101.0 exceeds 100.0"])
 
 
