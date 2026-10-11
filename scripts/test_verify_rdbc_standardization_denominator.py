@@ -123,7 +123,7 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         """Apply one controlled line-level mutation."""
 
         lines = path.read_text(encoding="utf-8").splitlines()
-        path.write_text("\n".join(mutation(lines)) + "\n", encoding="utf-8")
+        path.write_bytes(("\n".join(mutation(lines)) + "\n").encode("utf-8"))
 
     def test_accepts_exact_dynamic_manifests(self) -> None:
         """The positive control is the scanner's exact current production denominator."""
@@ -163,13 +163,12 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
             payload = (manifest_root / "rdbc-production-consumers.tsv").read_text(
                 encoding="utf-8"
             )
-            consumers.write_text(
+            consumers.write_bytes(
                 payload.replace(
                     "TASK6_COMPATIBILITY_CLOSED",
                     "TASK6_COMPATIBILITY_PENDING",
                     1,
-                ),
-                encoding="utf-8",
+                ).encode("utf-8")
             )
             with self.assertRaises(VerificationError):
                 verify_final_denominator(REPOSITORY_ROOT, physical, adapters, consumers)
@@ -212,7 +211,7 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         fields = adapter_lines[wrong_adapter].split("\t")
         fields[-1] = "STANDARD_IMPL_LIVE"
         adapter_lines[wrong_adapter] = "\t".join(fields)
-        self.adapters.write_text("\n".join(adapter_lines) + "\n", encoding="utf-8")
+        self.adapters.write_bytes(("\n".join(adapter_lines) + "\n").encode("utf-8"))
         with self.assertRaisesRegex(VerificationError, "only valid for Task 4"):
             self.verify()
 
@@ -221,7 +220,7 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         fields = consumer_lines[1].split("\t")
         fields[-1] = "UNKNOWN_LIVE"
         consumer_lines[1] = "\t".join(fields)
-        self.consumers.write_text("\n".join(consumer_lines) + "\n", encoding="utf-8")
+        self.consumers.write_bytes(("\n".join(consumer_lines) + "\n").encode("utf-8"))
         with self.assertRaisesRegex(VerificationError, "unknown state"):
             self.verify()
 
@@ -252,7 +251,7 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         fields[0] = "druid_rdbc::spi::DoesNotExist"
         fields[4] = "crates/fake/src/does_not_exist.rs"
         lines[1] = "\t".join(fields)
-        self.physical.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self.physical.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
         with self.assertRaises(VerificationError):
             self.verify()
 

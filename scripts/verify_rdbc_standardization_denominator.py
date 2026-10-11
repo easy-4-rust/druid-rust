@@ -3060,11 +3060,13 @@ def verify_final_denominator(
         fail("final adapter manifest is not canonical")
     if consumer_payload != render_consumer_rows(consumers):
         fail("final consumer manifest is not canonical")
+    # ResourceOperations and ResourceHandleFactory were reopened for Task 7 in
+    # the reviewed physical disposition; preserve those pending rows exactly.
     if len(physical) != 73 or Counter(row.compatibility for row in physical) != Counter(
         {
-            "TASK6_CLOSED": 36,
+            "TASK6_CLOSED": 34,
             "MOVE_TO_DRUID_P04_TASK5": 8,
-            "TASK7_PENDING": 29,
+            "TASK7_PENDING": 31,
         }
     ):
         fail(
