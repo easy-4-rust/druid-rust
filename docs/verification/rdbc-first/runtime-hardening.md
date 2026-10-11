@@ -44,4 +44,4 @@ Admin 的 `repository_capacity_test`（2/2）与 `ingest_test`（11/11）以 `--
 
 当前提交 `bb1bea1` 的[手动 CI 复测](https://github.com/easy-4-rust/druid-rust/actions/runs/38134374659)通过：进程级故障注入验证超预算返回非零并保留 JSON；真实基准 100 样本测得 p50/p95/p99 为 24.758/25.112/25.163 ms，峰值 RSS 18,764 KiB，等待队列峰值 56，关闭 1 ms，五项预算零超限。该故障注入证明检查进程的失败传播；尚未通过故意让整个 GitHub 作业失败来验证工作流终态。
 
-提交 `9f5692a` 的[当前主线实测](https://github.com/easy-4-rust/druid-rust/actions/runs/38162299686)通过：100 样本 p50/p95/p99 为 25.152/25.233/25.513 ms，峰值 RSS 18,484 KiB，等待队列峰值 56、活动连接峰值 8、关闭 1 ms；上传 JSON 的五项预算均无超限。此证据只覆盖 Pool burst 场景，不能替代 Metrics/Admin 故障预算，也不包含其后的 Wrapper 取消关闭修复。
+提交 `e1e6d22` 的[主线复测](https://github.com/easy-4-rust/druid-rust/actions/runs/38165824500)通过：100 样本 p50/p95/p99 为 24.758/25.089/25.122 ms，峰值 RSS 19,120 KiB，等待队列峰值 56、活动连接峰值 8、关闭 2 ms；上传 JSON 的五项预算均无超限。此提交包含 Wrapper 取消关闭修复；测量仍只覆盖 Pool burst，不能替代 Metrics/Admin 故障预算。
