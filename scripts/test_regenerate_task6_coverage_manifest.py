@@ -35,8 +35,12 @@ class CoverageRegenerationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "src").mkdir()
-            (root / "src/family.rs").write_text("fn anchor() {}\n", encoding="utf-8")
+            (root / "src/family.rs").write_bytes(b"fn anchor() {}\r\n")
             frozen = regeneration.snapshot_build_inputs(root)
+            canonical_hash = verifier.canonical_source_sha256(
+                (root / "src/family.rs").read_bytes()
+            )
+            self.assertNotEqual(frozen["src/family.rs"], canonical_hash)
             specs = tuple(SimpleNamespace(
                 family=family, category=verifier.RUNTIME_TRACE_CATEGORY,
                 test_target="lib", test_id="anchor", profile="all-features",
@@ -64,7 +68,7 @@ class CoverageRegenerationTest(unittest.TestCase):
             self.assertEqual(tuple(hashes), verifier.COVERAGE_FAMILY_ORDER)
             rows = [row for family in document["families"] for row in family["requirements"]]
             self.assertEqual(len(rows), 105)
-            self.assertTrue(all(row["source_sha256"] == frozen["src/family.rs"] for row in rows))
+            self.assertTrue(all(row["source_sha256"] == canonical_hash for row in rows))
 
     def test_fresh_report_passes_explicit_bounded_timeout_to_runner(self) -> None:
         spec = verifier.EvidenceSpec(

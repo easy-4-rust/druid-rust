@@ -249,6 +249,11 @@ def build_manifest(
             for _, path, _, _ in obligations[family]
         )
     )
+    # 漂移检测使用原始字节；清单身份使用验证器约定的 LF 规范化哈希。
+    canonical_hashes = {
+        path: verifier.canonical_source_sha256((root / path).read_bytes())
+        for path in known_paths
+    }
     reports: dict[str, dict[str, object]] = {}
     report_hashes: dict[str, str] = {}
     for spec in specs:
@@ -274,7 +279,7 @@ def build_manifest(
                     "requirement_id": requirement_id,
                     "requirement_kind": kind,
                     "source_path": source_path.as_posix(),
-                    "source_sha256": input_snapshot[source_path.as_posix()],
+                    "source_sha256": canonical_hashes[source_path],
                     "source_function": source_function,
                     "compiler_function_name": exact_compiler_name(
                         root,
