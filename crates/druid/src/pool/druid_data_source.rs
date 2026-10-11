@@ -363,7 +363,8 @@ impl DataSourceMonitorable for DruidDataSource {
         let state = self.state();
         json!({
             "Name": state.name,
-            "URL": state.url,
+            // Admin JSON 是诊断出口，不能回传配置中可能存在的用户名或令牌。
+            "URL": super::druid_pool::redacted_diagnostic_url(&state.url),
             "DriverClassName": state.driver_name,
             "MaxActive": state.max_open,
             "ActiveCount": state.active_count,

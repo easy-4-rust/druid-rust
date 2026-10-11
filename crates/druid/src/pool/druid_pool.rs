@@ -17,6 +17,7 @@ use crate::core::{
     PgValidConnectionChecker, PhoenixExceptionSorter, PoolState, RdbcError, SybaseExceptionSorter,
     ValidConnectionChecker,
 };
+use crate::sql::RdbcUrl;
 use crate::sql::WallProvider;
 use crate::stats::{DruidDataSourceStatValue, StatsCollector};
 use dashmap::DashMap;
@@ -90,7 +91,12 @@ impl DataSourceStatSnapshotContext {
             name: self.name.clone(),
             db_type: self.inner.config.db_type_name.clone(),
             driver_class_name: self.driver_name.clone(),
-            url: self.inner.factory.connection_url().map(str::to_owned),
+            // 统计 sink 可写入日志或远端系统，不能发布带凭据的原始 URL。
+            url: self
+                .inner
+                .factory
+                .connection_url()
+                .map(redacted_diagnostic_url),
             user_name: self.inner.factory.user_name().map(str::to_owned),
             filter_class_names: self
                 .filter_chain
@@ -158,6 +164,14 @@ impl DataSourceStatSnapshotContext {
             sql_list,
         }
     }
+}
+
+/// 仅为诊断输出保留无查询参数的规范 RDBC 地址；其他驱动地址整体遮蔽。
+pub(super) fn redacted_diagnostic_url(url: &str) -> String {
+    RdbcUrl::parse(url).map_or_else(
+        |_| "<redacted connection URL>".to_owned(),
+        |parsed| parsed.redacted(),
+    )
 }
 
 impl DruidPool {
