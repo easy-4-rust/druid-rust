@@ -19,7 +19,7 @@ pub enum SqlExceptionKind {
     /// 完整性约束异常。对应 Java: `java.sql.SQLIntegrityConstraintViolationException`。
     IntegrityConstraintViolation,
     /// 授权规范异常。对应 Java: `java.sql.SQLInvalidAuthorizationSpecException`。
-    InvalidAuthorizationSpec,
+    InvalidAuthorization,
     /// SQL 语法异常。对应 Java: `java.sql.SQLSyntaxErrorException`。
     Syntax,
     /// 事务回滚异常。对应 Java: `java.sql.SQLTransactionRollbackException`。
@@ -33,13 +33,13 @@ pub enum SqlExceptionKind {
 }
 
 impl SqlExceptionKind {
-    /// 授权异常分类的历史名称，与标准 InvalidAuthorizationSpec 是同一个值。
+    /// 授权异常分类的标准名称，与历史枚举成员 InvalidAuthorization 是同一个值。
     /// 对应 Java: `java.sql.SQLInvalidAuthorizationSpecException`。
     #[allow(
         non_upper_case_globals,
-        reason = "保留已有公开枚举名称的调用与匹配兼容性"
+        reason = "为 Java 类名提供标准命名，同时保留历史枚举成员的穷尽匹配兼容性"
     )]
-    pub const InvalidAuthorization: Self = Self::InvalidAuthorizationSpec;
+    pub const InvalidAuthorizationSpec: Self = Self::InvalidAuthorization;
 }
 
 impl std::fmt::Debug for SqlExceptionKind {
@@ -53,7 +53,7 @@ impl std::fmt::Debug for SqlExceptionKind {
             Self::Recoverable => "Recoverable",
             Self::Data => "Data",
             Self::IntegrityConstraintViolation => "IntegrityConstraintViolation",
-            Self::InvalidAuthorizationSpec => "InvalidAuthorization",
+            Self::InvalidAuthorization => "InvalidAuthorization",
             Self::Syntax => "Syntax",
             Self::TransactionRollback => "TransactionRollback",
             Self::FeatureNotSupported => "FeatureNotSupported",
