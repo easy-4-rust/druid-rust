@@ -8,6 +8,8 @@
 
 Metrics 的 `task_supervision_test`（2/2）、`shutdown_test`（8/8）、`queue_semantics_test`（4/4）、`config_test`（7/7）及 `aggregator_output_test`（17/17）同样以 `--locked` 退出 0，覆盖任务回收、panic 传播、关闭顺序、队列饱和和配置行为。仍需把这些局部证据与网络故障注入、全仓回归及运行预算合并验收。
 
+Admin 的 `repository_capacity_test`（2/2）与 `ingest_test`（11/11）以 `--locked` 退出 0，覆盖复合会话标识、容量拒绝、TTL 和批次原子性；同一源码的 GitHub Windows `Rust contracts` 作业还运行了 Prometheus 与 gRPC 网络测试并成功。此处只确认对应组件，不把这些局部结果扩展为 P06 全部故障和安全验收。
+
 ## 2026-10-11 本机基线
 
 - 源码：`6bee28d` 加上 `runtime.rs` 等待队列采样；Rust `1.97.1`；Windows 11 `10.0.26200`；i7-13700K（24 逻辑处理器）。
