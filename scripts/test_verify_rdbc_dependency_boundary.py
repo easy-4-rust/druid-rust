@@ -3,18 +3,17 @@
 
 from __future__ import annotations
 
-import json
-import os
-import stat
-import subprocess
-import sys
-import tempfile
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 from pathlib import Path
+
+import verify_rdbc_dependency_boundary as verifier
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
-VERIFIER = REPOSITORY_ROOT / "scripts" / "verify_rdbc_dependency_boundary.py"
 RDBC_MANIFEST = str(
     (REPOSITORY_ROOT / "crates" / "druid-rdbc" / "Cargo.toml").resolve()
 )
@@ -46,30 +45,18 @@ def dependency(
 
 
 class DependencyBoundaryVerifierTest(unittest.TestCase):
-    """Run the command against controlled Cargo metadata without touching the workspace."""
+    """Run the verifier against controlled Cargo metadata on every platform."""
 
-    def run_verifier(self, metadata: dict[str, object]) -> subprocess.CompletedProcess[str]:
-        """Provide one temporary fake Cargo executable that returns metadata."""
+    def run_verifier(self, metadata: dict[str, object]) -> SimpleNamespace:
+        """Inject fixture metadata at the Cargo boundary and capture command output."""
 
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            temporary_root = Path(temporary_directory)
-            fake_cargo = temporary_root / "cargo"
-            fake_cargo.write_text(
-                "#!/bin/sh\nprintf '%s' \"$RDBC_TEST_METADATA\"\n",
-                encoding="utf-8",
-            )
-            fake_cargo.chmod(fake_cargo.stat().st_mode | stat.S_IXUSR)
-            environment = os.environ.copy()
-            environment["PATH"] = f"{temporary_root}{os.pathsep}{environment['PATH']}"
-            environment["RDBC_TEST_METADATA"] = json.dumps(metadata)
-            return subprocess.run(
-                [sys.executable, str(VERIFIER)],
-                cwd=REPOSITORY_ROOT,
-                capture_output=True,
-                text=True,
-                check=False,
-                env=environment,
-            )
+        stdout, stderr = StringIO(), StringIO()
+        with patch.object(verifier, "cargo_metadata", return_value=metadata):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                returncode = verifier.main()
+        return SimpleNamespace(
+            returncode=returncode, stdout=stdout.getvalue(), stderr=stderr.getvalue()
+        )
 
     def test_rejects_registry_only_same_name_package(self) -> None:
         """A registry package named druid-rdbc is not the workspace contract crate."""
