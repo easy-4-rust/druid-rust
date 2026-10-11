@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
         working-directory: website
+      - name: Audit documentation dependencies
+        run: npm audit --audit-level=moderate
+        working-directory: website
       - name: Build site
         run: npm run build
         working-directory: website
