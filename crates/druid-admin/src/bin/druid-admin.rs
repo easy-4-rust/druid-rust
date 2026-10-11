@@ -29,6 +29,7 @@ use druid_admin::repository::MetricsRepository;
 use druid_metrics::protocol::metrics_ingest_server::MetricsIngestServer;
 
 const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_PENDING_TLS_HANDSHAKES: usize = 64;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -167,6 +168,10 @@ async fn join_handle_with_deadline<T>(
 struct TlsListener {
     listener: tokio::net::TcpListener,
     acceptor: tokio_rustls::TlsAcceptor,
+    handshakes: tokio::task::JoinSet<(
+        std::net::SocketAddr,
+        std::io::Result<tokio_rustls::server::TlsStream<tokio::net::TcpStream>>,
+    )>,
 }
 
 impl TlsListener {
@@ -174,6 +179,7 @@ impl TlsListener {
         Self {
             listener,
             acceptor: tokio_rustls::TlsAcceptor::from(config),
+            handshakes: tokio::task::JoinSet::new(),
         }
     }
 }
@@ -184,20 +190,44 @@ impl Listener for TlsListener {
 
     async fn accept(&mut self) -> (Self::Io, Self::Addr) {
         loop {
-            let (stream, address) = match self.listener.accept().await {
-                Ok(connection) => connection,
-                Err(error) => {
-                    tracing::error!(%error, "HTTP TLS listener accept failed");
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                    continue;
+            // 握手与监听并行推进；达到上限时停止接收，防止慢客户端无限占用任务。
+            tokio::select! {
+                accepted = self.listener.accept(), if self.handshakes.len() < MAX_PENDING_TLS_HANDSHAKES => {
+                    match accepted {
+                        Ok((stream, address)) => {
+                            let acceptor = self.acceptor.clone();
+                            self.handshakes.spawn(async move {
+                                let result = match tokio::time::timeout(
+                                    TLS_HANDSHAKE_TIMEOUT,
+                                    acceptor.accept(stream),
+                                ).await {
+                                    Ok(result) => result,
+                                    Err(_) => Err(std::io::Error::new(
+                                        std::io::ErrorKind::TimedOut,
+                                        "HTTP TLS handshake timed out",
+                                    )),
+                                };
+                                (address, result)
+                            });
+                        }
+                        Err(error) => {
+                            tracing::error!(%error, "HTTP TLS listener accept failed");
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                        }
+                    }
                 }
-            };
-            match tokio::time::timeout(TLS_HANDSHAKE_TIMEOUT, self.acceptor.accept(stream)).await {
-                Ok(Ok(stream)) => return (stream, address),
-                Ok(Err(error)) => {
-                    tracing::warn!(%error, "HTTP TLS handshake rejected");
+                completed = self.handshakes.join_next(), if !self.handshakes.is_empty() => {
+                    match completed {
+                        Some(Ok((address, Ok(stream)))) => return (stream, address),
+                        Some(Ok((_, Err(error)))) => {
+                            tracing::warn!(%error, "HTTP TLS handshake rejected");
+                        }
+                        Some(Err(error)) => {
+                            tracing::warn!(%error, "HTTP TLS handshake task failed");
+                        }
+                        None => {}
+                    }
                 }
-                Err(_) => tracing::warn!("HTTP TLS handshake timed out"),
             }
         }
     }

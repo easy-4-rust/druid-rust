@@ -514,6 +514,83 @@ async fn remote_http_and_grpc_use_tls_and_require_authentication() {
     let _ = child.wait().await;
 }
 
+#[tokio::test]
+async fn stalled_tls_handshake_does_not_block_another_http_client() {
+    let http_port = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve HTTP port")
+        .local_addr()
+        .expect("HTTP port")
+        .port();
+    let grpc_port = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve gRPC port")
+        .local_addr()
+        .expect("gRPC port")
+        .port();
+    let fixture_dir = format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR"));
+    let mut child = admin_command()
+        .env("DRUID_ADMIN_HTTP_ADDR", format!("127.0.0.1:{http_port}"))
+        .env("DRUID_ADMIN_GRPC_ADDR", format!("127.0.0.1:{grpc_port}"))
+        .env(
+            "DRUID_ADMIN_TLS_CERT_PATH",
+            format!("{fixture_dir}/admin-test-cert.pem"),
+        )
+        .env(
+            "DRUID_ADMIN_TLS_KEY_PATH",
+            format!("{fixture_dir}/admin-test-key.pem"),
+        )
+        .env("DRUID_ADMIN_AUTH_MODE", "basic")
+        .env("DRUID_ADMIN_LOGIN_USERNAME", "admin")
+        .env("DRUID_ADMIN_LOGIN_PASSWORD", "secret")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("spawn TLS admin");
+    let certificate =
+        reqwest::Certificate::from_pem(include_bytes!("fixtures/admin-test-cert.pem"))
+            .expect("valid test certificate");
+    let client = reqwest::Client::builder()
+        .add_root_certificate(certificate)
+        .build()
+        .expect("secure HTTP client");
+    let url = format!("https://127.0.0.1:{http_port}/health");
+    let startup_deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    loop {
+        if let Ok(response) = client.get(&url).send().await {
+            if response.status().is_success() {
+                break;
+            }
+        }
+        assert!(
+            tokio::time::Instant::now() < startup_deadline,
+            "TLS admin did not start"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+
+    let stalled = tokio::net::TcpStream::connect(("127.0.0.1", http_port))
+        .await
+        .expect("open stalled TLS socket");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let fresh_client = reqwest::Client::builder()
+        .add_root_certificate(
+            reqwest::Certificate::from_pem(include_bytes!("fixtures/admin-test-cert.pem"))
+                .expect("valid test certificate"),
+        )
+        .build()
+        .expect("independent TLS client");
+    let healthy = tokio::time::timeout(Duration::from_secs(1), fresh_client.get(&url).send())
+        .await
+        .expect("a slow TLS client must not block the next handshake")
+        .expect("second TLS handshake succeeds");
+    assert_eq!(healthy.status(), reqwest::StatusCode::OK);
+    drop(stalled);
+    child.kill().await.expect("stop TLS admin");
+    let _ = child.wait().await;
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn sigterm_forces_held_connection_exit_before_shutdown_deadline() {
