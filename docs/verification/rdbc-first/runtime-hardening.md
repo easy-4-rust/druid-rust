@@ -2,6 +2,8 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
+JDBC Agent 故障注入：`cargo test -p druid-wrapper --features jdbc-agent --lib --quiet` 本机 21/21 通过。沉默子进程启动按调用者配置的 75 ms 期限失败；不同身份的启动互不阻塞，同一身份的等待也遵守各自期限。超过 1 KiB 且无换行的帧在 EOF 前被拒绝，非法 ready/handshake 不回显注入的凭据标记。此项只覆盖 Agent 协议边界，不代替下表的跨平台运行预算或真实数据库验收。
+
 ## 2026-10-11 Pool 慢关闭组件核验
 
 `PoolInner` 使用有界 `mpsc` 和关闭队列 permit；溢出时显式异步关闭受 `close_timeout` 约束，补池目标通过 `watch` 合并。`PoolState` 暴露队列深度、拒绝数、超时数、补池目标和 worker 终止状态。本机以 `--locked` 重跑 `pool_close_backpressure_test`（11/11）、`task6_pool_maintenance_semantics_test_parity`（14/14）和 `task6_recycle_complete_contract_test`（16/16），均退出 0。这证明已测的慢关闭、维护和回收路径；全仓回归及 P06 其他任务仍未关闭。
