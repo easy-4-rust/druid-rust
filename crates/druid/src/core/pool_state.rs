@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 /// 连接池状态快照。
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct PoolState {
     pub name: String,
     pub driver_name: String,
@@ -77,4 +77,36 @@ pub struct PoolState {
     pub reset_count: u64,
     pub closed: bool,
     pub last_acquire_time: Option<Duration>,
+}
+
+impl std::fmt::Debug for PoolState {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // URL 和底层建连错误可能携带密码、令牌或连接属性，调试输出只呈现安全摘要。
+        formatter
+            .debug_struct("PoolState")
+            .field("name", &self.name)
+            .field("driver_name", &self.driver_name)
+            .field("url", &"<redacted connection URL>")
+            .field("max_open", &self.max_open)
+            .field("active_count", &self.active_count)
+            .field("idle_count", &self.idle_count)
+            .field("wait_count", &self.wait_count)
+            .field("close_queue_depth", &self.close_queue_depth)
+            .field(
+                "close_queue_rejected_total",
+                &self.close_queue_rejected_total,
+            )
+            .field("close_timeout_total", &self.close_timeout_total)
+            .field("refill_target", &self.refill_target)
+            .field("close_worker_terminated", &self.close_worker_terminated)
+            .field("connect_count", &self.connect_count)
+            .field("connect_error_count", &self.connect_error_count)
+            .field("fail_continuous", &self.fail_continuous)
+            .field(
+                "last_create_error",
+                &self.last_create_error.as_ref().map(|_| "<redacted>"),
+            )
+            .field("closed", &self.closed)
+            .finish_non_exhaustive()
+    }
 }
