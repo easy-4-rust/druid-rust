@@ -115,3 +115,45 @@ fn expired_boot_sessions_release_capacity_using_server_receive_time() {
     assert!(repository.get_datasource(&third_id).is_some());
     assert_eq!(repository.limit_counters(), (0, 2, 0));
 }
+
+#[test]
+fn full_snapshot_cannot_replace_newer_sequence_for_the_same_session() {
+    let repository = MetricsRepository::new();
+    let (id, newest) = entry("boot-1", 9, 90);
+    assert!(repository.upsert_datasource(id.clone(), newest));
+
+    let (_, stale) = entry("boot-1", 8, 80);
+    assert!(!repository.replace_stream(&id.service_identity, vec![(id.clone(), stale)]));
+    assert_eq!(repository.get_datasource(&id).unwrap().sequence, 9);
+    assert_eq!(
+        repository
+            .get_datasource(&id)
+            .unwrap()
+            .datasource
+            .active_count,
+        90
+    );
+
+    let mut second_id = id.clone();
+    second_id.identity = 8;
+    let (_, stale) = entry("boot-1", 8, 80);
+    let (_, mut additional) = entry("boot-1", 10, 100);
+    additional.datasource.identity = 8;
+    assert!(!repository.replace_stream(
+        &id.service_identity,
+        vec![(id.clone(), stale), (second_id.clone(), additional)]
+    ));
+    assert!(repository.get_datasource(&second_id).is_none());
+
+    let (_, fresh) = entry("boot-1", 10, 100);
+    assert!(repository.replace_stream(&id.service_identity, vec![(id.clone(), fresh)]));
+    assert_eq!(repository.get_datasource(&id).unwrap().sequence, 10);
+    assert_eq!(
+        repository
+            .get_datasource(&id)
+            .unwrap()
+            .datasource
+            .active_count,
+        100
+    );
+}

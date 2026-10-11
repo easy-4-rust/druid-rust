@@ -117,9 +117,14 @@ impl MetricsRepository {
         self.prune_expired(&mut inner);
         inner.ingest_count = inner.ingest_count.saturating_add(1);
         let mut seen = HashSet::with_capacity(entries.len());
-        let invalid = entries
-            .iter()
-            .any(|(id, _)| &id.service_identity != service_identity || !seen.insert(id.clone()));
+        let invalid = entries.iter().any(|(id, entry)| {
+            &id.service_identity != service_identity
+                || !seen.insert(id.clone())
+                || inner
+                    .entries
+                    .get(id)
+                    .is_some_and(|existing| entry.sequence <= existing.entry.sequence)
+        });
         if invalid {
             inner.rejected_count = inner.rejected_count.saturating_add(1);
             return false;
