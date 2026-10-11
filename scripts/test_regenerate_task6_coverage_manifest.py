@@ -55,13 +55,33 @@ class CoverageRegenerationTest(unittest.TestCase):
                  patch.object(regeneration, "fresh_report", return_value=(
                      {"data": [{"functions": []}]}, "0" * 64
                  )) as run:
-                document, reports, hashes = regeneration.build_manifest(root)
+                document, reports, hashes = regeneration.build_manifest(
+                    root, timeout_seconds=1800.0
+                )
             self.assertEqual(run.call_count, 7)
+            self.assertTrue(all(call.kwargs == {"timeout_seconds": 1800.0} for call in run.call_args_list))
             self.assertEqual(tuple(reports), verifier.COVERAGE_FAMILY_ORDER)
             self.assertEqual(tuple(hashes), verifier.COVERAGE_FAMILY_ORDER)
             rows = [row for family in document["families"] for row in family["requirements"]]
             self.assertEqual(len(rows), 105)
             self.assertTrue(all(row["source_sha256"] == frozen["src/family.rs"] for row in rows))
+
+    def test_fresh_report_passes_explicit_bounded_timeout_to_runner(self) -> None:
+        spec = verifier.EvidenceSpec(
+            test_target="test:duckdb_connection_adapter_test",
+            test_id="duckdb_standard_factory_emits_typed_runtime_trace",
+            profile="all-features",
+            category=verifier.RUNTIME_TRACE_CATEGORY,
+            family="DUCKDB",
+            version=verifier.TRACE_VERSION,
+            evidence_id="fixture",
+        )
+        with tempfile.TemporaryDirectory() as temporary, \
+             patch.object(verifier, "verify_evidence_source_closure"), \
+             patch.object(verifier, "run_bounded_process", side_effect=RuntimeError("stop")) as run:
+            with self.assertRaisesRegex(RuntimeError, "stop"):
+                regeneration.fresh_report(Path(temporary), spec, timeout_seconds=1800.0)
+        self.assertEqual(run.call_args.kwargs["timeout_seconds"], 1800.0)
 
     def test_drift_during_final_validation_preserves_existing_manifest(self) -> None:
         """全部报告返回后仍须检查输入，验证期间变化不能覆盖正式清单。"""
@@ -107,7 +127,7 @@ class CoverageRegenerationTest(unittest.TestCase):
                     for _ in verifier.COVERAGE_REQUIREMENT_IDS
                 ) for family in verifier.COVERAGE_FAMILY_ORDER}
 
-                def changed_report(*_):
+                def changed_report(*_, **__):
                     if mutation == "source":
                         source.write_text("fn anchor() { changed(); }\n", encoding="utf-8")
                     elif mutation == "removed":

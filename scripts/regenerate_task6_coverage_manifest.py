@@ -155,7 +155,7 @@ def exact_compiler_name(
 
 
 def fresh_report(
-    root: Path, spec: verifier.EvidenceSpec
+    root: Path, spec: verifier.EvidenceSpec, *, timeout_seconds: float
 ) -> tuple[dict[str, object], str]:
     """Generate one run-owned report/target and return its report plus raw digest."""
 
@@ -172,7 +172,7 @@ def fresh_report(
         result = verifier.run_bounded_process(
             verifier.cargo_evidence_command(spec, report_path),
             cwd=root,
-            timeout_seconds=verifier.DEFAULT_EVIDENCE_TIMEOUT_SECONDS,
+            timeout_seconds=timeout_seconds,
             output_limit=verifier.DEFAULT_EVIDENCE_OUTPUT_LIMIT,
             env=environment,
         )
@@ -219,7 +219,7 @@ def require_unchanged_build_inputs(root: Path, snapshot: dict[str, str]) -> None
 
 
 def build_manifest(
-    root: Path,
+    root: Path, *, timeout_seconds: float = verifier.DEFAULT_EVIDENCE_TIMEOUT_SECONDS,
 ) -> tuple[dict[str, object], dict[str, dict[str, object]], dict[str, str]]:
     """Run all families before constructing one in-memory canonical manifest."""
 
@@ -253,7 +253,7 @@ def build_manifest(
     report_hashes: dict[str, str] = {}
     for spec in specs:
         require_unchanged_build_inputs(root, input_snapshot)
-        report, report_hash = fresh_report(root, spec)
+        report, report_hash = fresh_report(root, spec, timeout_seconds=timeout_seconds)
         require_unchanged_build_inputs(root, input_snapshot)
         reports[spec.family] = report
         report_hashes[spec.family] = report_hash
@@ -355,11 +355,21 @@ def main() -> int:
         "--root", type=Path, default=Path(__file__).resolve().parent.parent
     )
     parser.add_argument("--write", action="store_true")
+    parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=int(verifier.DEFAULT_EVIDENCE_TIMEOUT_SECONDS),
+        help="每个独立覆盖测试的最长运行秒数（1-3600；默认 600）",
+    )
     arguments = parser.parse_args()
+    if not 1 <= arguments.timeout_seconds <= 3600:
+        parser.error("--timeout-seconds must be between 1 and 3600")
     root = arguments.root.resolve()
     try:
         input_snapshot = snapshot_build_inputs(root)
-        document, reports, report_hashes = build_manifest(root)
+        document, reports, report_hashes = build_manifest(
+            root, timeout_seconds=float(arguments.timeout_seconds)
+        )
         specs = family_specs(document)
         verifier.validate_coverage_manifest(root, specs)
         adapter_specs = tuple(
