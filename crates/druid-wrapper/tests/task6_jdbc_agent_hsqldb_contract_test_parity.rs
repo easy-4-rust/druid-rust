@@ -43,6 +43,29 @@ async fn task6_jdbc_agent_hsqldb_contract_test_jdbc_agent_hsqldb_contract_when_c
         .create()
         .await
         .expect("a second physical connection must use an isolated Agent session");
+    let capabilities = connection.capabilities();
+    assert!(capabilities.transactions);
+    assert!(capabilities.savepoints);
+    assert!(capabilities.catalogs);
+    assert!(capabilities.schemas);
+    assert!(!capabilities.callable_statements);
+
+    let catalog = connection
+        .catalog()
+        .expect("advertised catalog must be readable");
+    connection
+        .set_catalog(catalog.as_deref())
+        .await
+        .expect("advertised catalog must be settable");
+    assert_eq!(connection.catalog().unwrap(), catalog);
+    let schema = connection
+        .schema()
+        .expect("advertised schema must be readable");
+    connection
+        .set_schema(schema.as_deref())
+        .await
+        .expect("advertised schema must be settable");
+    assert_eq!(connection.schema().unwrap(), schema);
 
     connection
         .exec(
