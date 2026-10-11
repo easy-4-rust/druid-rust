@@ -181,6 +181,12 @@ impl IngestHandler {
                 };
                 let mut state = self.state.lock().expect("ingest lock poisoned");
                 self.prune_expired_streams(&mut state);
+                if !state.streams.contains_key(&key) {
+                    // 新 epoch 接管同一服务身份的容量槽；旧流由上层 broker 取消并围栏。
+                    state
+                        .streams
+                        .retain(|existing, _| existing.service_identity != key.service_identity);
+                }
                 if !state.streams.contains_key(&key) && state.streams.len() >= self.max_streams {
                     return Some(self.make_snapshot_transaction_error(
                         hdr,

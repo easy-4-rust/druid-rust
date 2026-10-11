@@ -123,6 +123,51 @@ async fn goodbye_releases_stream_capacity_for_next_session() {
 }
 
 #[tokio::test]
+async fn successor_epoch_reuses_the_same_service_capacity_slot() {
+    let handler = IngestHandler::new().with_limits(1, 1);
+    init_stream(&handler, "svc", "instance-a", "boot-a", 41).await;
+
+    let hello = ClientFrame {
+        payload: Some(client_frame::Payload::Hello(ClientHello {
+            header: Some(make_header(0, "svc", "instance-a", "boot-a", 42)),
+            supported_protocol_version: 1,
+            full_snapshot_requested: false,
+        })),
+    };
+    let response = handler.handle_frame(&hello).await;
+    assert!(matches!(
+        response.and_then(|frame| frame.payload),
+        Some(server_frame::Payload::HelloAck(HelloAck {
+            require_full_snapshot: true,
+            ..
+        }))
+    ));
+    init_stream(&handler, "svc", "instance-a", "boot-a", 42).await;
+
+    let retired = handler
+        .handle_frame(&make_batch_frame(2, "svc", "instance-a", "boot-a", 41))
+        .await;
+    assert!(matches!(
+        retired.and_then(|frame| frame.payload),
+        Some(server_frame::Payload::Error(_))
+    ));
+
+    let unrelated = handler
+        .handle_frame(&make_full_snapshot_frame(
+            1,
+            "svc",
+            "instance-b",
+            "boot-b",
+            1,
+        ))
+        .await;
+    assert!(matches!(
+        unrelated.and_then(|frame| frame.payload),
+        Some(server_frame::Payload::Error(_))
+    ));
+}
+
+#[tokio::test]
 async fn expired_disconnected_stream_releases_capacity_for_new_session() {
     let handler = IngestHandler::new()
         .with_limits(1, 1)
