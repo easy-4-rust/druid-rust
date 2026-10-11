@@ -8,7 +8,7 @@ members = [
     "crates/druid-metrics",
     "crates/druid-bench",
 ]
-exclude = ["vendor/toasty-driver-sqlite"]
+exclude = ["vendor/toasty-driver-sqlite", "vendor/libsql-http1"]
 
 [workspace.package]
 version       = "0.0.0-design"
@@ -170,6 +170,10 @@ inventory       = "0.3.24"
 indexmap        = "2"
 
 [patch.crates-io]
+# libSQL 0.9.30 的默认远程连接器只协商 HTTP/1；移除其未使用的
+# Hyper HTTP/2 feature，避免把尚未修复的 h2 0.3.x 纳入依赖闭包。
+# 上游迁移 Hyper 1.x 并发布后，应移除该本地源码补丁。
+libsql = { path = "vendor/libsql-http1" }
 # Toasty 0.9.0 的 SQLite driver 仅使用 rusqlite 的稳定 API，但其发布清单
 # 锁到 rusqlite 0.40/libsqlite3-sys 0.38；SQLx 0.8 使用
 # libsqlite3-sys 0.30.1。将 rusqlite 锁到 API 兼容的
