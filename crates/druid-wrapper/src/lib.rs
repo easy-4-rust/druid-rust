@@ -4,20 +4,120 @@
 //! Rust 迁移按等价职责在本 crate 内部聚合 RBDC、SQLx、bb8 与 deadpool Adapter。
 
 mod managed_wrapper_pool;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "toasty",
+    feature = "rbdc",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql",
+    feature = "jdbc-agent"
+))]
 mod prepared_parameter_materializer;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "toasty",
+    feature = "rbdc",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql",
+    feature = "jdbc-agent"
+))]
 mod prepared_parameter_meta_data_snapshot;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "toasty",
+    feature = "rbdc",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql",
+    feature = "jdbc-agent"
+))]
 mod prepared_parameter_state;
 mod proxool_config_key;
+#[cfg(any(feature = "sqlx", feature = "toasty"))]
 mod sqlite_returning_key_plan;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "toasty",
+    feature = "rbdc",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql",
+    feature = "jdbc-agent"
+))]
 mod standard_adapter_database_meta_data;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "toasty",
+    feature = "rbdc",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql",
+    feature = "jdbc-agent"
+))]
 mod standard_adapter_executor;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "toasty",
+    feature = "rbdc",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql",
+    feature = "jdbc-agent"
+))]
 mod standard_adapter_prepared_statement;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "toasty",
+    feature = "rbdc",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql",
+    feature = "jdbc-agent"
+))]
 mod standard_adapter_result_set;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "toasty",
+    feature = "rbdc",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql",
+    feature = "jdbc-agent"
+))]
 mod standard_adapter_statement;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "toasty",
+    feature = "rbdc",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql",
+    feature = "jdbc-agent"
+))]
 mod standard_query_result;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "toasty",
+    feature = "rbdc",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql",
+    feature = "jdbc-agent"
+))]
 mod standard_statement_state;
 /// P04 Task 4 的 opaque runtime-trace evidence API；仅用于仓库内适配器验收。
 #[doc(hidden)]
+#[cfg(any(
+    feature = "sqlx",
+    feature = "toasty",
+    feature = "rbdc",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql",
+    feature = "jdbc-agent"
+))]
 pub mod task4_runtime_trace;
 #[cfg(feature = "sqlx")]
 mod wrapper_data_source_factory;

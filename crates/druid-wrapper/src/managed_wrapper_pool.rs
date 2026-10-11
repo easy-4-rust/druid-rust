@@ -60,6 +60,7 @@ impl ManagedWrapperPool {
         }
     }
 
+    #[cfg(any(feature = "sqlx", test))]
     pub(crate) fn with_shutdown<T>(provider: impl Into<String>, inner: Arc<T>) -> Self
     where
         T: Pool + WrapperPoolShutdown + 'static,
