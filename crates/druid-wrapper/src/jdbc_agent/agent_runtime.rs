@@ -6,7 +6,7 @@ use std::fs::File;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::{mpsc, oneshot};
 
@@ -353,19 +353,38 @@ impl AgentRuntime {
         serde_json::from_slice(&bytes).map_err(Self::protocol_error)
     }
 
-    async fn read_line(
-        stdout: &mut BufReader<ChildStdout>,
+    async fn read_line<R: AsyncBufRead + Unpin>(
+        stdout: &mut R,
         frame_limit: usize,
     ) -> Result<Vec<u8>, RdbcError> {
         let mut bytes = Vec::new();
-        let length = stdout
-            .read_until(b'\n', &mut bytes)
-            .await
-            .map_err(Self::io_error)?;
-        if length == 0 {
-            return Err(RdbcError::DriverError(
-                "JDBC Agent transport reached EOF".to_owned(),
-            ));
+        loop {
+            let available = stdout.fill_buf().await.map_err(Self::io_error)?;
+            if available.is_empty() {
+                if bytes.is_empty() {
+                    return Err(RdbcError::DriverError(
+                        "JDBC Agent transport reached EOF".to_owned(),
+                    ));
+                }
+                break;
+            }
+            let newline = available.iter().position(|byte| *byte == b'\n');
+            let take = newline.map_or(available.len(), |position| position + 1);
+            let observed = bytes.len().saturating_add(take);
+            // CRLF 允许比正文上限多两个终止字节；未结束的帧最多暂存一个 CR。
+            let allowed = frame_limit.saturating_add(if newline.is_some() { 2 } else { 1 });
+            if observed > allowed
+                || (newline.is_none() && observed > frame_limit && available[take - 1] != b'\r')
+            {
+                return Err(RdbcError::DriverError(format!(
+                    "JDBC Agent frame size {observed} exceeds configured limit {frame_limit}"
+                )));
+            }
+            bytes.extend_from_slice(&available[..take]);
+            stdout.consume(take);
+            if newline.is_some() {
+                break;
+            }
         }
         if bytes.last() == Some(&b'\n') {
             bytes.pop();
@@ -435,5 +454,53 @@ impl Drop for AgentRuntime {
         if let Ok(mut child) = self.child.lock() {
             let _ = child.start_kill();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn oversized_unterminated_frame_fails_before_eof() {
+        let (mut writer, reader) = tokio::io::duplex(8192);
+        writer
+            .write_all(&vec![b'x'; 4096])
+            .await
+            .expect("write oversized frame without newline");
+        let mut reader = BufReader::new(reader);
+        let result = tokio::time::timeout(
+            Duration::from_millis(200),
+            AgentRuntime::read_line(&mut reader, 1024),
+        )
+        .await
+        .expect("oversized frame must fail before EOF or newline");
+        assert!(
+            matches!(result, Err(RdbcError::DriverError(message)) if message.contains("frame size"))
+        );
+    }
+
+    #[tokio::test]
+    async fn frame_limit_preserves_crlf_and_eof_terminated_frames() {
+        let (mut writer, reader) = tokio::io::duplex(16);
+        writer
+            .write_all(b"abc\r\n")
+            .await
+            .expect("write CRLF frame");
+        let mut reader = BufReader::new(reader);
+        assert_eq!(
+            AgentRuntime::read_line(&mut reader, 3).await.unwrap(),
+            b"abc"
+        );
+
+        let (mut writer, reader) = tokio::io::duplex(16);
+        writer.write_all(b"abc").await.expect("write EOF frame");
+        drop(writer);
+        let mut reader = BufReader::new(reader);
+        assert_eq!(
+            AgentRuntime::read_line(&mut reader, 3).await.unwrap(),
+            b"abc"
+        );
     }
 }

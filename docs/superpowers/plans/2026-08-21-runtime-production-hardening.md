@@ -275,6 +275,8 @@ git commit -m "feat(admin): unify management plane security"
 Scenarios: slow driver close, saturated metrics queue, Admin unavailable/restart, duplicate batch,
 sequence gap, expired repository entries, invalid auth, SIGTERM during pending ACK, and a JDBC
 Agent that never sends ready/handshake (startup must fail within the configured request timeout).
+An Agent sending an oversized frame without a newline must fail at the configured frame limit,
+without waiting for EOF or allocating the entire frame.
 
 - [ ] **Step 2: 运行性能和 shutdown 测量**
 
