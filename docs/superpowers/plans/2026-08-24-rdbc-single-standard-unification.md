@@ -633,17 +633,19 @@ lifecycle semantics or owner cleanup.
 | `BUFFERED_ROW_SET` | `COMPLETED_EARLY_TASK6` | `druid_rdbc::extensions::BufferedRowSet` | `crates/druid-rdbc/src/extensions/buffered_row_set.rs` |
 | `RESULT_SET_EXT` | `COMPLETED_EARLY_TASK6` | `druid_rdbc::result_set::ResultSetExt` | `crates/druid-rdbc/src/result_set/result_set_ext.rs` |
 | `VALUE_LEVEL_RESOURCE_HANDLES` | `COMPLETED_EARLY_TASK6` | `druid_rdbc::types::resource_handle aliases` | `crates/druid-rdbc/src/types/resource_handle.rs` |
-| `RESOURCE_OPERATIONS_AND_FACTORY` | `TASK7_PENDING` | `ResourceOperations` + `ResourceHandleFactory` | standard operations/factory behavior |
-| `RESOURCE_TRAIT_LIFECYCLE` | `TASK7_PENDING` | standard resource traits | 1-based access, free-after-use and SQLXML state |
-| `RDBC_RESULT_SET_FORWARDING` | `TASK7_PENDING` | retired `RdbcResultSet` handoff | distinct forwarding identity, not RowSetResultSet |
+| `RESOURCE_OPERATIONS_AND_FACTORY` | `IMPLEMENTED_TESTED` | `ResourceOperations` + `ResourceHandleFactory` | `resource_standard_contract_test` 31/31；标准 operations/factory 源码已核对 |
+| `RESOURCE_TRAIT_LIFECYCLE` | `IMPLEMENTED_TESTED` | standard resource traits | 同一 31/31 契约覆盖 1-based、free-after-use、SQLXML 消耗/释放状态 |
+| `RDBC_RESULT_SET_FORWARDING` | `IMPLEMENTED_TESTED` | `SharedResultSet` | `task7_shared_result_set_contract_test` 6/6；共享转发身份独立于 `BufferedRowSet` |
 | `CAPABILITY_TRUTHFULNESS` | `TASK7_PENDING` | `ConnectionCapabilities` | capability=true behavior evidence |
 | `DRUID_OWNER_RELEASE_EXACTLY_ONCE` | `TASK7_PENDING` | Druid resource owner/release | driver release and owner notification exactly once |
 | `DRUID_CANCELLATION_HARDENING` | `TASK7_PENDING` | Druid supervised release | caller cancellation safety |
 | `SQLX_BUFFERED_RENAME` | `TASK7_PENDING` | `SqlxStreamingResultSet` rename | truthful eager/buffered naming |
 | `ASYNC_RESULT_SET_STREAMING` | `TASK7_PENDING` | `SqlxAsyncResultSet` | bounded first-row consumption and Stream adapter |
 
-Task 7 remaining denominator: **8**. The three completed-early rows are excluded from Task 7
-implementation work, but remain part of Task 6 behavior-preservation evidence.
+Task 7 remaining implementation denominator: **5**. The three completed-early Task 6 rows and
+the three `IMPLEMENTED_TESTED` Task 7 rows do not count as remaining implementation work; Task 7
+itself stays open until all eight obligations and the full GREEN matrix are verified. The
+completed-early rows remain part of Task 6 behavior-preservation evidence.
 
 - [ ] **Step 1: Write RED shared tests**
 
