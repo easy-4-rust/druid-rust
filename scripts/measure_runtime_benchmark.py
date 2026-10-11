@@ -86,6 +86,19 @@ def runtime_budget_violations(
     ]
 
 
+def write_budgeted_evidence(
+    measurement: dict, limits: dict[str, int | float], output: Path
+) -> None:
+    """Persist the full measurement before rejecting an exceeded release budget."""
+    violations = runtime_budget_violations(measurement, limits)
+    measurement["budget"] = {"limits": limits, "violations": violations}
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(measurement, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(json.dumps(measurement, sort_keys=True))
+    if violations:
+        raise RuntimeError("runtime benchmark budget exceeded: " + "; ".join(violations))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-log", type=Path, required=True)
@@ -146,13 +159,7 @@ def main() -> int:
     }
     if any(not math.isfinite(value) or value <= 0 for value in limits.values()):
         parser.error("runtime budgets must be finite positive values")
-    violations = runtime_budget_violations(payload, limits)
-    payload["budget"] = {"limits": limits, "violations": violations}
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps(payload, sort_keys=True))
-    if violations:
-        raise RuntimeError("runtime benchmark budget exceeded: " + "; ".join(violations))
+    write_budgeted_evidence(payload, limits, args.output)
     return 0
 
 

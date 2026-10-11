@@ -1,5 +1,7 @@
 """Contract checks for the runtime benchmark evidence parser."""
 
+from contextlib import redirect_stdout
+from io import StringIO
 import json
 from pathlib import Path
 import tempfile
@@ -8,6 +10,7 @@ import unittest
 from measure_runtime_benchmark import (
     benchmark_executable,
     benchmark_summary,
+    write_budgeted_evidence,
     runtime_budget_violations,
     sample_percentiles_ms,
 )
@@ -57,6 +60,17 @@ class RuntimeBenchmarkEvidenceTest(unittest.TestCase):
         self.assertEqual(len(violations), 5)
         for metric in limits:
             self.assertTrue(any(metric in violation for violation in violations))
+
+    def test_exceeded_budget_preserves_json_before_failing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "evidence" / "runtime-measurement.json"
+            measurement = {"schema": "druid-runtime-benchmark-v1", "p99_ms": 101.0}
+            with redirect_stdout(StringIO()):
+                with self.assertRaisesRegex(RuntimeError, "p99_ms=101.0 exceeds 100.0"):
+                    write_budgeted_evidence(measurement, {"p99_ms": 100.0}, output)
+            saved = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(saved["budget"]["limits"], {"p99_ms": 100.0})
+            self.assertEqual(saved["budget"]["violations"], ["p99_ms=101.0 exceeds 100.0"])
 
 
 if __name__ == "__main__":
