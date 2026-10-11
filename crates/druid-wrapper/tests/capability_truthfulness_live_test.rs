@@ -1,11 +1,10 @@
 //! 在 CI 的 PostgreSQL/MySQL 服务上验证 SQLx/Toasty 宣称的事务与保存点能力。
-#![cfg(feature = "sqlx")]
+#![cfg(all(feature = "sqlx", any(feature = "postgresql", feature = "mysql")))]
 
 use druid_rdbc::connection::Connection;
 use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::types::{Row, Value};
 use druid_wrapper::sqlx::SqlxConnectionFactory;
-#[cfg(any(feature = "postgresql", feature = "mysql"))]
 use druid_wrapper::toasty::ToastyConnectionFactory;
 
 #[tokio::test]
@@ -19,7 +18,6 @@ async fn live_backend_capability_claims_match_committed_rows() {
 
     let mut factories: Vec<Box<dyn ConnectionFactory>> =
         vec![Box::new(SqlxConnectionFactory::new(url.clone()))];
-    #[cfg(any(feature = "postgresql", feature = "mysql"))]
     factories.push(Box::new(
         ToastyConnectionFactory::new(url)
             .await
