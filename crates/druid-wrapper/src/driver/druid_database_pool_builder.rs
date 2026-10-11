@@ -32,7 +32,7 @@ impl DruidDatabasePoolBuilder {
             url: if url.starts_with("rdbc:") {
                 "rdbc:<redacted>".to_owned()
             } else {
-                url.clone()
+                "<redacted connection URL>".to_owned()
             },
         })?;
         Ok(Self::new(parsed.profile(), url))

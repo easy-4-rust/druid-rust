@@ -478,6 +478,18 @@ fn task6_driver_registry_test_unified_rdbc_url_rejects_non_rdbc_scheme_and_user_
     );
 }
 
+#[test]
+fn connection_config_diagnostics_redact_native_urls_and_invalid_input() {
+    let secret_url = "postgres://user:canary-secret@localhost/db?password=canary-secret";
+    let config = DatabaseConnectionConfig::new("postgresql", secret_url).unwrap();
+    assert!(!format!("{config:?}").contains("canary-secret"));
+
+    let error = DruidDatabasePoolBuilder::from_rdbc_url(secret_url)
+        .err()
+        .expect("non-RDBC URL must fail");
+    assert!(!error.to_string().contains("canary-secret"));
+}
+
 #[tokio::test]
 async fn task6_driver_registry_test_profile_builder_installs_protocol_family_checker_and_sorter() {
     let mysql_pool = DruidDatabasePoolBuilder::new("tidb", "mysql://localhost/contract")

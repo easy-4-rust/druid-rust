@@ -59,13 +59,12 @@ impl DatabaseConnectionConfig {
 
 impl std::fmt::Debug for DatabaseConnectionConfig {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let display_url = if self.url.starts_with("rdbc:") {
-            self.url
-                .split_once('?')
-                .map_or(self.url.as_str(), |(url, _)| url)
-        } else {
-            self.url.as_str()
-        };
+        // Only the validated RDBC projection is safe to expose. Native URLs
+        // may carry credentials in user-info, paths, or arbitrary query keys.
+        let display_url = druid::sql::RdbcUrl::parse(&self.url).map_or_else(
+            |_| "<redacted connection URL>".to_owned(),
+            |url| url.redacted(),
+        );
         formatter
             .debug_struct("DatabaseConnectionConfig")
             .field("profile_id", &self.profile_id)

@@ -111,6 +111,7 @@ async fn production_trace_logs_path_without_query_credentials() {
     let logs = CapturedLogs::default();
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW)
         .without_time()
         .with_writer(logs.clone())
         .finish();
