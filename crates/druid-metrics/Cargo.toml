@@ -17,7 +17,7 @@ client   = ["dep:tonic", "dep:tonic-prost", "dep:tokio-stream"]
 server   = ["dep:tonic", "dep:tonic-prost"]
 
 [dependencies]
-druid   = { path = "../druid" }
+druid   = { version = "0.0.0-design", path = "../druid" }
 tokio        = { workspace = true, features = ["full", "sync"] }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
