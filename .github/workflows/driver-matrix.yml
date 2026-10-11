@@ -101,9 +101,13 @@ jobs:
         run: python3 scripts/verify_benchmark_targets.py
       - name: Check isolated driver features
         run: |
-          for feature in driver-catalog sqlx toasty rbdc sqlx-bb8 sqlx-deadpool; do
-            cargo check -p druid-wrapper --no-default-features --features "$feature" --lib
+          for feature in driver-catalog sqlx toasty toasty-sqlite rbdc sqlx-bb8 sqlx-deadpool; do
+            cargo check -p druid-wrapper --no-default-features --features "$feature" --tests
           done
+      - name: Verify no-default and Toasty SQLite runtime contracts
+        run: |
+          cargo test -p druid-wrapper --no-default-features --tests
+          cargo test -p druid-wrapper --no-default-features --features toasty-sqlite --test toasty_connection_adapter_test
       - name: Verify catalog-only runtime behavior
         run: cargo test -p druid-wrapper --no-default-features --features driver-catalog --test driver_catalog_feature_isolation_test
       - run: cargo check --workspace --all-targets --all-features
