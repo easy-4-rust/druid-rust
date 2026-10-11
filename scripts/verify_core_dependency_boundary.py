@@ -42,6 +42,7 @@ def main() -> int:
         cwd=Path(__file__).resolve().parent.parent,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         print(f"ERROR: cargo tree failed:\n{result.stderr}", file=sys.stderr)

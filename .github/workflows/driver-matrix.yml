@@ -87,6 +87,10 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo check --workspace --all-targets
       - run: cargo check -p druid-wrapper --no-default-features
+      - name: Verify core and standard dependency boundaries
+        run: |
+          python3 scripts/verify_core_dependency_boundary.py
+          python3 scripts/verify_rdbc_dependency_boundary.py
       - name: Verify optional driver dependency boundaries
         run: python3 scripts/verify_feature_dependency_boundaries.py
       - name: Verify package publication and CI target ownership
