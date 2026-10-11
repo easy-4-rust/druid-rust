@@ -338,6 +338,8 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-semver-checks
+      - name: Test SemVer breaking API verifier
+        run: python3 scripts/test_verify_rdbc_single_standard_breaking_api.py
       - name: Capture SemVer reports against the decision baseline
         run: |
           mkdir -p api/observed
@@ -355,7 +357,11 @@ jobs:
           cargo semver-checks --package druid-wrapper --baseline-rev "$SEMVER_BASELINE_REV" --release-type patch --all-features --verbose > api/observed/druid-wrapper.semver-checks.txt 2>&1
           wrapper_status=$?
           printf 'druid-rdbc=%s\ndruid=%s\ndruid-wrapper=%s\n' "$rdbc_status" "$druid_status" "$wrapper_status" | tee api/observed/semver-exit-codes.txt
-          test "$rdbc_status" -eq 0 && test "$druid_status" -eq 0 && test "$wrapper_status" -eq 0
+          python3 scripts/verify_rdbc_single_standard_breaking_api.py \
+            --allowlist api/rdbc-single-standard-breaking.allowlist.tsv \
+            --rdbc-report api/observed/druid-rdbc.semver-checks.txt --rdbc-exit-code "$rdbc_status" \
+            --druid-report api/observed/druid.semver-checks.txt --druid-exit-code "$druid_status" \
+            --wrapper-report api/observed/druid-wrapper.semver-checks.txt --wrapper-exit-code "$wrapper_status"
       - name: Upload SemVer reports
         if: always()
         uses: actions/upload-artifact@v4
