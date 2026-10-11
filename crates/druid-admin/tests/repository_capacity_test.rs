@@ -157,3 +157,41 @@ fn full_snapshot_cannot_replace_newer_sequence_for_the_same_session() {
         100
     );
 }
+
+#[test]
+fn full_repository_accepts_existing_identity_updates_without_exceeding_either_limit() {
+    let config = MetricsRepositoryConfig::try_new(64, 4, 1, Duration::from_secs(60), 1 << 20)
+        .expect("valid bounded repository");
+    let repository = MetricsRepository::with_config(config);
+    for service in 0..64 {
+        for datasource in 0..4 {
+            let (mut id, mut value) = entry(&format!("boot-{service}"), 1, 1);
+            id.identity = datasource;
+            value.datasource.identity = datasource;
+            assert!(repository.upsert_datasource(id, value));
+        }
+    }
+    assert_eq!(repository.len(), 256);
+
+    let (mut existing_id, mut updated) = entry("boot-0", 2, 99);
+    existing_id.identity = 0;
+    updated.datasource.identity = 0;
+    assert!(repository.upsert_datasource(existing_id.clone(), updated));
+    assert_eq!(
+        repository
+            .get_datasource(&existing_id)
+            .unwrap()
+            .datasource
+            .active_count,
+        99
+    );
+
+    let (new_service_id, new_service) = entry("boot-over-cap", 1, 1);
+    assert!(!repository.upsert_datasource(new_service_id, new_service));
+    let (mut extra_id, mut extra) = entry("boot-0", 1, 1);
+    extra_id.identity = 4;
+    extra.datasource.identity = 4;
+    assert!(!repository.upsert_datasource(extra_id, extra));
+    assert_eq!(repository.len(), 256);
+    assert_eq!(repository.limit_counters(), (2, 0, 0));
+}
