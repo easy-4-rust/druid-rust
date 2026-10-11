@@ -20,6 +20,11 @@ from typing import NoReturn
 
 from verify_rdbc_public_paths import VerificationError as RustLexError
 from verify_rdbc_public_paths import tokenize
+from verify_task6_migration_authority import (
+    AUTHORITY as TASK6_MIGRATION_AUTHORITY,
+    load_rows as load_task6_migration_rows,
+    verify_repository as verify_task6_migration_authority,
+)
 
 
 BASELINE = "bb91193d9bb488b107b8c9ac6dd56f8756ed9593"
@@ -509,6 +514,30 @@ def gate_baseline_disposed(root: Path, rows: list[DispositionRow]) -> GateResult
     """Require every frozen live row to realize its reviewed disposition."""
 
     failures: list[str] = []
+    migrated_sources: set[str] = set()
+    if any(
+        row.disposition == "USE_RDBC_ERROR"
+        and row.path.is_relative_to(RDBC_SOURCE_ROOT)
+        and not (root / row.path).is_file()
+        for row in rows
+    ):
+        try:
+            # Exact targets, the 479-method handoff and the 1,283-test ledger must
+            # remain valid before a removed physical file can count as disposed.
+            verify_task6_migration_authority(root)
+            authority_rows = load_task6_migration_rows(root / TASK6_MIGRATION_AUTHORITY)
+            by_source: dict[str, list[dict[str, str]]] = {}
+            for authority_row in authority_rows:
+                by_source.setdefault(authority_row["source_file"], []).append(authority_row)
+            migrated_sources = {
+                source_path
+                for source_path, source_rows in by_source.items()
+                if source_rows and all(
+                    source_row["state"] == "TASK6_CLOSED" for source_row in source_rows
+                )
+            }
+        except (OSError, UnicodeError, RuntimeError) as error:
+            failures.append(f"Task 6 migration authority is not verified: {error}")
     for row in rows:
         source = root / row.path
         if row.disposition == "DELETE_COMPAT_DEFINITION":
@@ -516,6 +545,8 @@ def gate_baseline_disposed(root: Path, rows: list[DispositionRow]) -> GateResult
                 failures.append(f"not deleted: {row.path}")
             continue
         if not source.is_file():
+            if row.path.is_relative_to(RDBC_SOURCE_ROOT) and row.path.as_posix() in migrated_sources:
+                continue
             failures.append(f"missing disposed production file: {row.path}")
             continue
         druid_count = rust_identifier_count(source.read_bytes(), "DruidError")

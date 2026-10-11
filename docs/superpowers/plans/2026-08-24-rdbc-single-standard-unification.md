@@ -103,6 +103,8 @@ WAIVER_EXIT_GATE_5_BASELINE_DISPOSED
 WAIVER_EXIT_GATE_6_COMPAT_VERIFIED
 ```
 
+Gate 5 对已删除的 RDBC 旧文件只接受完整 Task 6 迁移权威表验证后、同一旧源码对应的每个迁移行均为 `TASK6_CLOSED` 的情况。仍为 `TASK7_PENDING`、缺少权威映射的 wrapper 文件，以及尚未证明标准错误委托关系的存续文件继续失败。
+
 ```bash
 python3 scripts/verify_rdbc_error_waiver_exit.py \
   --disposition docs/verification/rdbc-first/rdbc-error-disposition.tsv \
