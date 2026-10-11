@@ -493,6 +493,7 @@ impl PipelineOwnership {
         self.changed.notified().await;
     }
 
+    #[cfg(any(feature = "client", test))]
     pub(crate) fn registered_change(&self) -> impl std::future::Future<Output = ()> + '_ {
         // `notify_waiters` 不保存许可；先 enable 再检查计数，避免 ACK 抢在首次 poll 前丢失。
         let mut changed = Box::pin(self.changed.notified());

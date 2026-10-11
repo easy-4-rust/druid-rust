@@ -244,6 +244,7 @@ impl PushProgress {
         self.ownership.changed().await;
     }
 
+    #[cfg(feature = "client")]
     pub(crate) fn registered_change(&self) -> impl std::future::Future<Output = ()> + '_ {
         self.ownership.registered_change()
     }
