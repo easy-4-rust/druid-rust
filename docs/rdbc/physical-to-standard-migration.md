@@ -251,3 +251,9 @@ pub use druid_rdbc::error::SqlExceptionKind::InvalidAuthorizationSpec;
 | `LibSqlDatabaseMetaData`、`HttpSqlDatabaseMetaData`、`DuckDbDatabaseMetaData` | 调用 `Connection::database_meta_data`，接收 `Box<dyn druid_rdbc::metadata::DatabaseMetaData>`；各后端委托 `StandardAdapterDatabaseMetaData`。 |
 
 调用方若依赖旧具体类型的构造器或字段，须改为标准连接的能力调用。当前 Wrapper 生产源码已无这些旧类型引用；预编译矩阵、适配器边界和 Toasty 原生元数据测试分别通过 15/15、4/4、9/9。这是预发布公开路径迁移，仍需外部消费者与完整实库矩阵验收，不据此关闭 P04/P05/P07。
+
+## Wrapper 自动 trait 迁移（pre-release）
+
+`druid-wrapper/auto_trait_impl_removed` 的 23 条报告涵盖七种工厂或外部池管理器（部分路径重复）失去 `UnwindSafe`、`RefUnwindSafe`，以及 `JdbcAgentConnection` 失去 `Sync`、`UnwindSafe`、`RefUnwindSafe`。新工厂持有可共享的驱动、连接器或运行轨迹状态；JDBC Agent 连接独占可变传输对象，标准 `Connection` 合同仅要求 `Send`。这些自动 trait 不属于可安全强制恢复的连接并发或 panic 恢复承诺。
+
+下游若以这些具体类型作为 `catch_unwind` 边界，应在自身已验证状态恢复语义后显式包装该边界；若共享 `JdbcAgentConnection`，应通过标准连接所有权与同步机制串行访问，不能假定连接对象自身为 `Sync`。本项只批准预发布 API 迁移，不证明 panic 后连接可继续使用，也不关闭并发、故障注入或实库验收。
