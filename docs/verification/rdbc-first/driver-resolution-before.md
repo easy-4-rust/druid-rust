@@ -23,3 +23,5 @@
 验证：具名 provider RED 测试先因缺少注册/查询 API 编译失败，新增接口后 1/1 通过；SQLite 直接连接与建池 1/1、SQLx 产品档案 16/16、全 feature 产品档案 17/17、全 feature SQLite/原生/HTTP 解析 2/2、无 SQLx 的目录隔离 1/1，以及无默认 feature/全 feature 编译均通过。此记录仅关闭 P05 的产品工厂查找缺口；P05 整体还需当前提交的公共 API、SemVer、CI 和最终范围验收。
 
 补充验证：`verify_wrapper_standard_impls.py` 在 D 盘 Cargo/临时目录下通过，报告 31 个活跃标准适配器、21 个已闭合消费者、7 个运行跟踪家族及 7 个编译覆盖家族；`verify_feature_dependency_boundaries.py` 与 `verify_package_ownership.py` 通过；`cargo check --workspace --all-targets --locked` 通过。当前 SemVer 报告把默认 feature 缩减识别为 `druid-wrapper/feature_not_enabled_by_default`。审查确认 `sqlite` 只是 `toasty-sqlite` 的别名，后者仍在默认集合中；生产源码没有仅由该别名控制的分支，默认 Toasty SQLite 连接测试通过，故该指纹已批准。其他 10 类仍待迁移和外部消费者审核，不能据此宣布 P05 完成。
+
+2026-10-12 当前源码复测：`driver_resolution_path_test` 在 `driver-catalog sqlx` 下 1/1；`verify_feature_dependency_boundaries.py` 与 `verify_package_ownership.py` 均通过。Wrapper 的无默认 feature、单独 `sqlx`、`sqlx-bb8`、`sqlx-deadpool`、`toasty-sqlite`、`rbdc` 及 `--all-features` 七种编译组合全部退出 0；`cargo check --workspace --all-targets --all-features --locked` 退出 0。单 feature 编译仍有未使用代码告警；完整 P05 验收继续等待当前 CI、公共 API 与 SemVer 审查。
