@@ -81,6 +81,21 @@ pub struct DruidPooledStatement {
 }
 
 impl DruidPooledStatement {
+    /// JDBC 兼容值：处理更多结果时关闭当前结果集。
+    pub const CLOSE_CURRENT_RESULT: i32 = 1;
+    /// JDBC 兼容值：处理更多结果时保留当前结果集。
+    pub const KEEP_CURRENT_RESULT: i32 = 2;
+    /// JDBC 兼容值：处理更多结果时关闭所有结果集。
+    pub const CLOSE_ALL_RESULTS: i32 = 3;
+    /// JDBC 兼容值：批处理成功但更新数量未知。
+    pub const SUCCESS_NO_INFO: i32 = -2;
+    /// JDBC 兼容值：批处理中的语句执行失败。
+    pub const EXECUTE_FAILED: i32 = -3;
+    /// JDBC 兼容值：请求返回生成键。
+    pub const RETURN_GENERATED_KEYS: i32 = 1;
+    /// JDBC 兼容值：不请求返回生成键。
+    pub const NO_GENERATED_KEYS: i32 = 2;
+
     /// 测试专用：读取原查询登记的实际结果资源，返回同一共享资源。
     /// 对应 Java: Statement#getResultSet；不创建游标、不重新执行 SQL。
     #[cfg(test)]

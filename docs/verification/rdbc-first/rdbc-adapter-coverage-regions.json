@@ -658,7 +658,7 @@
           "requirement_id": "EXACT_TEST_IDENTITY",
           "requirement_kind": "TEST_IDENTITY_FUNCTION",
           "source_path": "crates/druid-wrapper/tests/rbdc_connection_adapter_test.rs",
-          "source_sha256": "3042ed0502834c16de5a362b688fb2b227322427cb1bf1adb428f0f1b2e0c1e0",
+          "source_sha256": "79b16d6a8965ec21cfebf68a3e40b1013b853f7db53a1fb6f320b68c6808e5c0",
           "source_function": "rbdc_standard_factory_emits_typed_runtime_trace",
           "compiler_function_name": "_RNvCs5zMWWmId0y7_28rbdc_connection_adapter_tests_47rbdc_standard_factory_emits_typed_runtime_trace",
           "anchor_id": "test_identity.rbdc",

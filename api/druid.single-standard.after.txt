@@ -698,6 +698,13 @@ impl druid_rdbc::wrapper::wrapper::Wrapper for druid::core::druid_pooled_result_
 pub mod druid::core::druid_pooled_statement
 pub struct druid::core::druid_pooled_statement::DruidPooledStatement
 impl druid::core::druid_pooled_statement::DruidPooledStatement
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::CLOSE_ALL_RESULTS: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::CLOSE_CURRENT_RESULT: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::EXECUTE_FAILED: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::KEEP_CURRENT_RESULT: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::NO_GENERATED_KEYS: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::RETURN_GENERATED_KEYS: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::SUCCESS_NO_INFO: i32
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::attribute(&self, &str) -> core::option::Option<druid::core::proxy_attributes::ProxyAttributeValue>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::attributes(&self) -> std::collections::hash::map::HashMap<alloc::string::String, druid::core::proxy_attributes::ProxyAttributeValue>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::attributes_size(&self) -> usize
@@ -4606,6 +4613,13 @@ pub fn druid::core::druid_pooled_result_set::DruidPooledResultSet::was_null(&sel
 impl druid_rdbc::wrapper::wrapper::Wrapper for druid::core::druid_pooled_result_set::DruidPooledResultSet
 pub struct druid::core::DruidPooledStatement
 impl druid::core::druid_pooled_statement::DruidPooledStatement
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::CLOSE_ALL_RESULTS: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::CLOSE_CURRENT_RESULT: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::EXECUTE_FAILED: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::KEEP_CURRENT_RESULT: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::NO_GENERATED_KEYS: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::RETURN_GENERATED_KEYS: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::SUCCESS_NO_INFO: i32
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::attribute(&self, &str) -> core::option::Option<druid::core::proxy_attributes::ProxyAttributeValue>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::attributes(&self) -> std::collections::hash::map::HashMap<alloc::string::String, druid::core::proxy_attributes::ProxyAttributeValue>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::attributes_size(&self) -> usize
@@ -10468,6 +10482,13 @@ pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>:
 pub mod druid::sql::statement
 pub struct druid::sql::statement::Statement
 impl druid::core::druid_pooled_statement::DruidPooledStatement
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::CLOSE_ALL_RESULTS: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::CLOSE_CURRENT_RESULT: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::EXECUTE_FAILED: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::KEEP_CURRENT_RESULT: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::NO_GENERATED_KEYS: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::RETURN_GENERATED_KEYS: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::SUCCESS_NO_INFO: i32
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::attribute(&self, &str) -> core::option::Option<druid::core::proxy_attributes::ProxyAttributeValue>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::attributes(&self) -> std::collections::hash::map::HashMap<alloc::string::String, druid::core::proxy_attributes::ProxyAttributeValue>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::attributes_size(&self) -> usize
@@ -13132,6 +13153,13 @@ pub fn druid::sql::sql_utils::SqlUtils::parse_statements(&str, druid::sql::db_ty
 pub fn druid::sql::sql_utils::SqlUtils::to_sql_string(&[sqlparser::ast::Statement]) -> alloc::string::String
 pub struct druid::sql::Statement
 impl druid::core::druid_pooled_statement::DruidPooledStatement
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::CLOSE_ALL_RESULTS: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::CLOSE_CURRENT_RESULT: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::EXECUTE_FAILED: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::KEEP_CURRENT_RESULT: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::NO_GENERATED_KEYS: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::RETURN_GENERATED_KEYS: i32
+pub const druid::core::druid_pooled_statement::DruidPooledStatement::SUCCESS_NO_INFO: i32
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::attribute(&self, &str) -> core::option::Option<druid::core::proxy_attributes::ProxyAttributeValue>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::attributes(&self) -> std::collections::hash::map::HashMap<alloc::string::String, druid::core::proxy_attributes::ProxyAttributeValue>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::attributes_size(&self) -> usize
