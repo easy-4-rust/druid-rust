@@ -1,6 +1,6 @@
 crate	lint	count	sha256	status	reason
 druid	constructible_struct_adds_field	26	cbc005b076406a845ed13cd5d603684e4d324f7ac92b622b411525a952ca3d04	pending	review migration and consumers
-druid	enum_missing	6	606b2b447aac12a4cd979e6aaffc1ecfb07f41b39787f4addee1a360e884bf76	pending	review migration and consumers
+druid	enum_missing	6	606b2b447aac12a4cd979e6aaffc1ecfb07f41b39787f4addee1a360e884bf76	approved	Pre-release ResultSetStatement enum is replaced by ResultSet::get_statement returning the shared standard Statement identity; PseudoColumnUsage and ClientInfoStatus old Druid paths re-export their canonical RDBC enums with identical TypeId and values; callable matrix standard_value_ownership_test and standard_client_info_status_test pass
 druid	function_missing	2	39c16cc43f852a13718eb89d89453b1d4ccc48e2635729c5559e060e2700dadf	approved	Pre-release inventory lookup removed; use druid-rdbc DriverRegistry for standard providers or Wrapper DruidDriverRegistry for product profiles; no current workspace callers
 druid	inherent_associated_pub_const_missing	28	a50b75cb5b24b00b874920f823380a4299b710790bd85a1486c387fe29fc9d4a	pending	review migration and consumers
 druid	inherent_method_missing	2582	0619f279d81d0592a438092a65dc74d68ec976341e5967f8f4aec1adaaa245ae	pending	review migration and consumers
