@@ -189,9 +189,14 @@ pub struct druid_rdbc::driver::DriverRegistry
 impl druid_rdbc::driver::DriverRegistry
 pub async fn druid_rdbc::driver::DriverRegistry::connect(&self, &str, &druid_rdbc::driver::ConnectionProperties) -> core::result::Result<core::option::Option<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>>, druid_rdbc::RdbcError>
 pub fn druid_rdbc::driver::DriverRegistry::descriptors(&self) -> &[druid_rdbc::driver::DriverExtensionDescriptor]
+pub fn druid_rdbc::driver::DriverRegistry::factory_provider(&self, &str) -> core::option::Option<alloc::sync::Arc<dyn druid_rdbc::driver::ConnectionFactoryProvider>>
+pub fn druid_rdbc::driver::DriverRegistry::factory_provider_count(&self) -> usize
 pub fn druid_rdbc::driver::DriverRegistry::first_accepted_driver(&self, &str) -> core::option::Option<alloc::sync::Arc<dyn druid_rdbc::driver::Driver>>
 pub const fn druid_rdbc::driver::DriverRegistry::new() -> Self
 pub fn druid_rdbc::driver::DriverRegistry::register(&mut self, druid_rdbc::driver::DriverExtensionDescriptor)
+pub fn druid_rdbc::driver::DriverRegistry::register_factory_provider(&mut self, impl core::convert::Into<alloc::string::String>, alloc::sync::Arc<dyn druid_rdbc::driver::ConnectionFactoryProvider>)
+impl core::fmt::Debug for druid_rdbc::driver::DriverRegistry
+pub fn druid_rdbc::driver::DriverRegistry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub trait druid_rdbc::driver::ConnectionFactory: core::marker::Send + core::marker::Sync + 'static
 pub fn druid_rdbc::driver::ConnectionFactory::close<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 mut alloc::boxed::Box<dyn druid_rdbc::connection::Connection>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
 pub fn druid_rdbc::driver::ConnectionFactory::connection_url(&self) -> core::option::Option<&str>
@@ -200,6 +205,10 @@ pub fn druid_rdbc::driver::ConnectionFactory::create_with_properties<'life0, 'li
 pub fn druid_rdbc::driver::ConnectionFactory::name(&self) -> &str
 pub fn druid_rdbc::driver::ConnectionFactory::user_name(&self) -> core::option::Option<&str>
 pub fn druid_rdbc::driver::ConnectionFactory::validate<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 mut alloc::boxed::Box<dyn druid_rdbc::connection::Connection>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub trait druid_rdbc::driver::ConnectionFactoryProvider: core::marker::Send + core::marker::Sync + 'static
+pub fn druid_rdbc::driver::ConnectionFactoryProvider::factory(&self, &str, &druid_rdbc::driver::ConnectionProperties, core::option::Option<&str>) -> alloc::sync::Arc<dyn druid_rdbc::driver::ConnectionFactory>
+impl<F> druid_rdbc::driver::ConnectionFactoryProvider for F where F: core::ops::function::Fn(&str, &druid_rdbc::driver::ConnectionProperties, core::option::Option<&str>) -> alloc::sync::Arc<dyn druid_rdbc::driver::ConnectionFactory> + core::marker::Send + core::marker::Sync + 'static
+pub fn F::factory(&self, &str, &druid_rdbc::driver::ConnectionProperties, core::option::Option<&str>) -> alloc::sync::Arc<dyn druid_rdbc::driver::ConnectionFactory>
 pub trait druid_rdbc::driver::Driver: core::marker::Send + core::marker::Sync + 'static
 pub fn druid_rdbc::driver::Driver::accepts_url(&self, &str) -> bool
 pub fn druid_rdbc::driver::Driver::connect<'life0, 'life1, 'life2, 'async_trait>(&'life0 self, &'life1 str, &'life2 druid_rdbc::driver::ConnectionProperties) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait, 'life2: 'async_trait

@@ -186,6 +186,7 @@ pub fn druid_wrapper::driver::DruidDriverRegistry::from_manifest(druid_wrapper::
 pub fn druid_wrapper::driver::DruidDriverRegistry::profile(&self, &druid_wrapper::driver::DatabaseProfileId) -> core::result::Result<&druid_wrapper::driver::DatabaseProfile, druid_wrapper::driver::DriverRegistryError>
 pub fn druid_wrapper::driver::DruidDriverRegistry::profiles(&self) -> impl core::iter::traits::exact_size::ExactSizeIterator<Item = &druid_wrapper::driver::DatabaseProfile>
 pub fn druid_wrapper::driver::DruidDriverRegistry::resolve(&self, &druid_wrapper::driver::DatabaseConnectionConfig) -> core::result::Result<druid_wrapper::driver::ResolvedDatabaseDriver, druid_wrapper::driver::DriverRegistryError>
+pub fn druid_wrapper::driver::DruidDriverRegistry::standard_registry(&self) -> &druid_rdbc::driver::driver_registry::DriverRegistry
 pub fn druid_wrapper::driver::DruidDriverRegistry::supported_count(&self) -> usize
 pub fn druid_wrapper::driver::DruidDriverRegistry::with_jdbc_agent(self, druid_wrapper::jdbc_agent::JdbcAgentOptions) -> Self
 pub struct druid_wrapper::driver::ResolvedDatabaseDriver

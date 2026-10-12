@@ -31,6 +31,7 @@ use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::driver::ConnectionProperties;
 use druid_rdbc::driver::DriverRegistry;
 use std::collections::HashMap;
+use std::panic::AssertUnwindSafe;
 #[cfg(any(
     feature = "sqlx",
     feature = "jdbc-agent",
@@ -41,11 +42,23 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// 将产品档案解析为 Druid canonical 连接工厂的只读注册中心。
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DruidDriverRegistry {
     manifest: DriverManifest,
     profile_indexes: HashMap<DatabaseProfileId, usize>,
-    providers: DriverRegistry,
+    // 产品注册表只在构造阶段变更；解析阶段不会修改注册表本身。
+    // 保留原公开类型的 unwind 自动 trait，不把标准端口的动态对象约束扩散给驱动实现。
+    providers: AssertUnwindSafe<DriverRegistry>,
+}
+
+impl Clone for DruidDriverRegistry {
+    fn clone(&self) -> Self {
+        Self {
+            manifest: self.manifest.clone(),
+            profile_indexes: self.profile_indexes.clone(),
+            providers: AssertUnwindSafe(self.providers.0.clone()),
+        }
+    }
 }
 
 impl DruidDriverRegistry {
@@ -109,7 +122,7 @@ impl DruidDriverRegistry {
         Ok(Self {
             manifest,
             profile_indexes,
-            providers,
+            providers: AssertUnwindSafe(providers),
         })
     }
 
@@ -117,7 +130,7 @@ impl DruidDriverRegistry {
     #[cfg(feature = "jdbc-agent")]
     #[must_use]
     pub fn with_jdbc_agent(mut self, options: JdbcAgentOptions) -> Self {
-        self.providers.register_factory_provider(
+        self.providers.0.register_factory_provider(
             "jdbc-agent",
             Arc::new(
                 move |url: &str, properties: &ConnectionProperties, query: Option<&str>| {
@@ -139,7 +152,7 @@ impl DruidDriverRegistry {
     /// 返回产品档案使用的标准 provider 注册表，供外部检查安装状态。
     #[must_use]
     pub fn standard_registry(&self) -> &DriverRegistry {
-        &self.providers
+        &self.providers.0
     }
 
     #[cfg(any(
@@ -156,7 +169,7 @@ impl DruidDriverRegistry {
         url: &str,
         properties: &HashMap<String, String>,
     ) -> Result<Arc<dyn ConnectionFactory>, DriverRegistryError> {
-        let provider = self.providers.factory_provider(key).ok_or_else(|| {
+        let provider = self.providers.0.factory_provider(key).ok_or_else(|| {
             DriverRegistryError::UnsupportedRuntime {
                 profile: profile.id().to_string(),
                 runtime: format!("provider {key} is not installed"),
@@ -279,7 +292,7 @@ impl DruidDriverRegistry {
                             url: diagnostic_url.clone(),
                         });
                     }
-                    if self.providers.factory_provider("jdbc-agent").is_none() {
+                    if self.providers.0.factory_provider("jdbc-agent").is_none() {
                         return Err(DriverRegistryError::UnsupportedRuntime {
                             profile: profile.id().to_string(),
                             runtime: "JdbcAgent".to_owned(),
