@@ -14,9 +14,9 @@
           "requirement_id": "EXACT_TEST_IDENTITY",
           "requirement_kind": "TEST_IDENTITY_FUNCTION",
           "source_path": "crates/druid-wrapper/tests/duckdb_connection_adapter_test.rs",
-          "source_sha256": "4a43bca0123a34fb6468a020ae9891e182e9f37f7f101647417dff267ee6e78f",
+          "source_sha256": "921fc79787bd2f8f16c48f30069d3927aae07ab09abefc187f02d6b564777f6d",
           "source_function": "duckdb_standard_factory_emits_typed_runtime_trace",
-          "compiler_function_name": "_RNvCsh9zDlU1ULLN_30duckdb_connection_adapter_tests_49duckdb_standard_factory_emits_typed_runtime_trace",
+          "compiler_function_name": "_RNvCs9uoz0VBrVfK_30duckdb_connection_adapter_tests_49duckdb_standard_factory_emits_typed_runtime_trace",
           "anchor_id": "test_identity.duckdb",
           "minimum_count": 1
         },
@@ -24,9 +24,9 @@
           "requirement_id": "FAMILY_FACTORY_FUNCTION",
           "requirement_kind": "FAMILY_FACTORY_FUNCTION",
           "source_path": "crates/druid-wrapper/src/duckdb/duckdb_connection_factory.rs",
-          "source_sha256": "5ab8a8996ab91b2c0d627e8babcc2b2659e9dc420483378302d1e616b0e06a30",
+          "source_sha256": "5168b4f7185ca19517913bb448198da6a2e721f240c79244cae20fd038fc705b",
           "source_function": "create_adapter_core",
-          "compiler_function_name": "_RNvMNtNtCs95LXlyj3QO3_13druid_wrapper6duckdb25duckdb_connection_factoryNtB2_23DuckDbConnectionFactory19create_adapter_core",
+          "compiler_function_name": "_RNvMs_NtNtCs1TGmd20drRn_13druid_wrapper6duckdb25duckdb_connection_factoryNtB4_23DuckDbConnectionFactory19create_adapter_core",
           "anchor_id": "family_factory.duckdb",
           "minimum_count": 1
         },
@@ -34,9 +34,9 @@
           "requirement_id": "FAMILY_EXECUTOR_FUNCTION",
           "requirement_kind": "FAMILY_EXECUTOR_FUNCTION",
           "source_path": "crates/druid-wrapper/src/duckdb/duckdb_connection_adapter.rs",
-          "source_sha256": "90f4742dac973556ded3e91ed6aab2d6ae4ff6b7d45e72e0281ebc469c0edc1e",
+          "source_sha256": "840b8ec7e8a91592981aadd55e1027d44eba35d1abe3e080bac653a071806b75",
           "source_function": "standard_execute_update_core",
-          "compiler_function_name": "_RNvXs_NtNtCs95LXlyj3QO3_13druid_wrapper6duckdb25duckdb_connection_adapterNtB4_23DuckDbConnectionAdapterNtNtB8_25standard_adapter_executor20AdapterExecutionCore28standard_execute_update_core",
+          "compiler_function_name": "_RNvXs_NtNtCs1TGmd20drRn_13druid_wrapper6duckdb25duckdb_connection_adapterNtB4_23DuckDbConnectionAdapterNtNtB8_25standard_adapter_executor20AdapterExecutionCore28standard_execute_update_core",
           "anchor_id": "family_executor.duckdb",
           "minimum_count": 1
         },
@@ -46,7 +46,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_factory_create",
-          "compiler_function_name": "_RNvMs1_NtCs95LXlyj3QO3_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
+          "compiler_function_name": "_RNvMs1_NtCs1TGmd20drRn_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
           "anchor_id": "typed_stage.FactoryCreate",
           "minimum_count": 1
         },
@@ -56,7 +56,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_create",
-          "compiler_function_name": "_RNvMs1_NtCs95LXlyj3QO3_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
+          "compiler_function_name": "_RNvMs1_NtCs1TGmd20drRn_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
           "anchor_id": "typed_stage.ConnectionCreate",
           "minimum_count": 1
         },
@@ -66,7 +66,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_create",
-          "compiler_function_name": "_RNvMs1_NtCs95LXlyj3QO3_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
+          "compiler_function_name": "_RNvMs1_NtCs1TGmd20drRn_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
           "anchor_id": "typed_stage.StatementCreate",
           "minimum_count": 1
         },
@@ -76,7 +76,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_update",
-          "compiler_function_name": "_RNvMs1_NtCs95LXlyj3QO3_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
+          "compiler_function_name": "_RNvMs1_NtCs1TGmd20drRn_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
           "anchor_id": "typed_stage.StatementUpdate",
           "minimum_count": 1
         },
@@ -86,7 +86,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_create",
-          "compiler_function_name": "_RNvMs1_NtCs95LXlyj3QO3_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
+          "compiler_function_name": "_RNvMs1_NtCs1TGmd20drRn_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
           "anchor_id": "typed_stage.PreparedCreate",
           "minimum_count": 1
         },
@@ -96,7 +96,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_parameter_set",
-          "compiler_function_name": "_RNvMs1_NtCs95LXlyj3QO3_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
+          "compiler_function_name": "_RNvMs1_NtCs1TGmd20drRn_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
           "anchor_id": "typed_stage.ParameterSet",
           "minimum_count": 1
         },
@@ -106,7 +106,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_query",
-          "compiler_function_name": "_RNvMs1_NtCs95LXlyj3QO3_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
+          "compiler_function_name": "_RNvMs1_NtCs1TGmd20drRn_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
           "anchor_id": "typed_stage.PreparedQuery",
           "minimum_count": 1
         },
@@ -116,7 +116,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_next",
-          "compiler_function_name": "_RNvMs1_NtCs95LXlyj3QO3_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
+          "compiler_function_name": "_RNvMs1_NtCs1TGmd20drRn_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
           "anchor_id": "typed_stage.ResultNext",
           "minimum_count": 1
         },
@@ -126,7 +126,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_set_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs95LXlyj3QO3_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
+          "compiler_function_name": "_RNvMs1_NtCs1TGmd20drRn_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
           "anchor_id": "typed_stage.ResultSetMetadata",
           "minimum_count": 1
         },
@@ -136,7 +136,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_database_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs95LXlyj3QO3_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
+          "compiler_function_name": "_RNvMs1_NtCs1TGmd20drRn_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
           "anchor_id": "typed_stage.DatabaseMetadata",
           "minimum_count": 1
         },
@@ -146,7 +146,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_close",
-          "compiler_function_name": "_RNvMs1_NtCs95LXlyj3QO3_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
+          "compiler_function_name": "_RNvMs1_NtCs1TGmd20drRn_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
           "anchor_id": "typed_stage.ConnectionClose",
           "minimum_count": 1
         },
@@ -156,7 +156,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_validation_success",
-          "compiler_function_name": "_RNvNtCs95LXlyj3QO3_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
+          "compiler_function_name": "_RNvNtCs1TGmd20drRn_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
           "anchor_id": "typed_validation.success",
           "minimum_count": 1
         }
@@ -175,9 +175,9 @@
           "requirement_id": "EXACT_TEST_IDENTITY",
           "requirement_kind": "TEST_IDENTITY_FUNCTION",
           "source_path": "crates/druid-wrapper/src/http_sql/http_sql_connection_factory.rs",
-          "source_sha256": "8abf499e05812d4a61872335b874b578147e0adc9d7e31434e838e0af2eceb63",
+          "source_sha256": "98d22e3339c1b20c1e3964cca4998f23f4fc9853cee27275f0ea9ea9e43d637c",
           "source_function": "http_sql_standard_factory_uses_deterministic_transport_owned_core",
-          "compiler_function_name": "_RNvNtNtNtCs8m1WuUeZXxW_13druid_wrapper8http_sql27http_sql_connection_factory5testss_65http_sql_standard_factory_uses_deterministic_transport_owned_core",
+          "compiler_function_name": "_RNvNtNtNtCs802hUfNRp4N_13druid_wrapper8http_sql27http_sql_connection_factory5testss_65http_sql_standard_factory_uses_deterministic_transport_owned_core",
           "anchor_id": "test_identity.http_sql",
           "minimum_count": 1
         },
@@ -185,9 +185,9 @@
           "requirement_id": "FAMILY_FACTORY_FUNCTION",
           "requirement_kind": "FAMILY_FACTORY_FUNCTION",
           "source_path": "crates/druid-wrapper/src/http_sql/http_sql_connection_factory.rs",
-          "source_sha256": "8abf499e05812d4a61872335b874b578147e0adc9d7e31434e838e0af2eceb63",
+          "source_sha256": "98d22e3339c1b20c1e3964cca4998f23f4fc9853cee27275f0ea9ea9e43d637c",
           "source_function": "create_adapter_core",
-          "compiler_function_name": "_RNvMNtNtCs8m1WuUeZXxW_13druid_wrapper8http_sql27http_sql_connection_factoryNtB2_24HttpSqlConnectionFactory19create_adapter_core",
+          "compiler_function_name": "_RNvMNtNtCs802hUfNRp4N_13druid_wrapper8http_sql27http_sql_connection_factoryNtB2_24HttpSqlConnectionFactory19create_adapter_core",
           "anchor_id": "family_factory.http_sql",
           "minimum_count": 1
         },
@@ -197,7 +197,7 @@
           "source_path": "crates/druid-wrapper/src/http_sql/http_sql_connection_adapter.rs",
           "source_sha256": "47a182d3be4b4df002566f5b58588fae8a216d462d1df799a78173dcc2feb633",
           "source_function": "standard_execute_update_core",
-          "compiler_function_name": "_RNvXs1_NtNtCs8m1WuUeZXxW_13druid_wrapper8http_sql27http_sql_connection_adapterNtB5_24HttpSqlConnectionAdapterNtNtB9_25standard_adapter_executor20AdapterExecutionCore28standard_execute_update_core",
+          "compiler_function_name": "_RNvXs1_NtNtCs802hUfNRp4N_13druid_wrapper8http_sql27http_sql_connection_adapterNtB5_24HttpSqlConnectionAdapterNtNtB9_25standard_adapter_executor20AdapterExecutionCore28standard_execute_update_core",
           "anchor_id": "family_executor.http_sql",
           "minimum_count": 1
         },
@@ -207,7 +207,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_factory_create",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
           "anchor_id": "typed_stage.FactoryCreate",
           "minimum_count": 1
         },
@@ -217,7 +217,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_create",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
           "anchor_id": "typed_stage.ConnectionCreate",
           "minimum_count": 1
         },
@@ -227,7 +227,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_create",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
           "anchor_id": "typed_stage.StatementCreate",
           "minimum_count": 1
         },
@@ -237,7 +237,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_update",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
           "anchor_id": "typed_stage.StatementUpdate",
           "minimum_count": 1
         },
@@ -247,7 +247,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_create",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
           "anchor_id": "typed_stage.PreparedCreate",
           "minimum_count": 1
         },
@@ -257,7 +257,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_parameter_set",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
           "anchor_id": "typed_stage.ParameterSet",
           "minimum_count": 1
         },
@@ -267,7 +267,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_query",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
           "anchor_id": "typed_stage.PreparedQuery",
           "minimum_count": 1
         },
@@ -277,7 +277,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_next",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
           "anchor_id": "typed_stage.ResultNext",
           "minimum_count": 1
         },
@@ -287,7 +287,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_set_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
           "anchor_id": "typed_stage.ResultSetMetadata",
           "minimum_count": 1
         },
@@ -297,7 +297,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_database_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
           "anchor_id": "typed_stage.DatabaseMetadata",
           "minimum_count": 1
         },
@@ -307,7 +307,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_close",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
           "anchor_id": "typed_stage.ConnectionClose",
           "minimum_count": 1
         },
@@ -317,7 +317,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_validation_success",
-          "compiler_function_name": "_RNvNtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
+          "compiler_function_name": "_RNvNtCs802hUfNRp4N_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
           "anchor_id": "typed_validation.success",
           "minimum_count": 1
         }
@@ -336,9 +336,9 @@
           "requirement_id": "EXACT_TEST_IDENTITY",
           "requirement_kind": "TEST_IDENTITY_FUNCTION",
           "source_path": "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection_factory.rs",
-          "source_sha256": "de3b70684da64dd64cf3487d105f54b8041d0d9de36b89e0397dd278430cc8dc",
+          "source_sha256": "6d9b61342c320634b14dcf4d9b74f285d7866652968534d1f056450785bc259e",
           "source_function": "jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
-          "compiler_function_name": "_RNvNtNtNtCs8m1WuUeZXxW_13druid_wrapper10jdbc_agent29jdbc_agent_connection_factory5testss_65jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
+          "compiler_function_name": "_RNvNtNtNtCs802hUfNRp4N_13druid_wrapper10jdbc_agent29jdbc_agent_connection_factory5testss_65jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
           "anchor_id": "test_identity.jdbc_agent",
           "minimum_count": 1
         },
@@ -346,9 +346,9 @@
           "requirement_id": "FAMILY_FACTORY_FUNCTION",
           "requirement_kind": "FAMILY_FACTORY_FUNCTION",
           "source_path": "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection_factory.rs",
-          "source_sha256": "de3b70684da64dd64cf3487d105f54b8041d0d9de36b89e0397dd278430cc8dc",
+          "source_sha256": "6d9b61342c320634b14dcf4d9b74f285d7866652968534d1f056450785bc259e",
           "source_function": "create_adapter_core",
-          "compiler_function_name": "_RNvMNtNtCs8m1WuUeZXxW_13druid_wrapper10jdbc_agent29jdbc_agent_connection_factoryNtB2_26JdbcAgentConnectionFactory19create_adapter_core",
+          "compiler_function_name": "_RNvMNtNtCs802hUfNRp4N_13druid_wrapper10jdbc_agent29jdbc_agent_connection_factoryNtB2_26JdbcAgentConnectionFactory19create_adapter_core",
           "anchor_id": "family_factory.jdbc_agent",
           "minimum_count": 1
         },
@@ -356,9 +356,9 @@
           "requirement_id": "FAMILY_EXECUTOR_FUNCTION",
           "requirement_kind": "FAMILY_EXECUTOR_FUNCTION",
           "source_path": "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs",
-          "source_sha256": "694a47d76ea8c3d5d376880f2669f7aef7051a1c70b4d845f3ac14124666bbc2",
+          "source_sha256": "8e11796d31cfa2dab258f412de0c0b1955e87cf43119072550f9d8e9e8f5f003",
           "source_function": "standard_execute_update_core",
-          "compiler_function_name": "_RNvXs2_NtNtCs8m1WuUeZXxW_13druid_wrapper10jdbc_agent21jdbc_agent_connectionNtB5_19JdbcAgentConnectionNtNtB9_25standard_adapter_executor20AdapterExecutionCore28standard_execute_update_core",
+          "compiler_function_name": "_RNvXs2_NtNtCs802hUfNRp4N_13druid_wrapper10jdbc_agent21jdbc_agent_connectionNtB5_19JdbcAgentConnectionNtNtB9_25standard_adapter_executor20AdapterExecutionCore28standard_execute_update_core",
           "anchor_id": "family_executor.jdbc_agent",
           "minimum_count": 1
         },
@@ -368,7 +368,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_factory_create",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
           "anchor_id": "typed_stage.FactoryCreate",
           "minimum_count": 1
         },
@@ -378,7 +378,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_create",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
           "anchor_id": "typed_stage.ConnectionCreate",
           "minimum_count": 1
         },
@@ -388,7 +388,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_create",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
           "anchor_id": "typed_stage.StatementCreate",
           "minimum_count": 1
         },
@@ -398,7 +398,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_update",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
           "anchor_id": "typed_stage.StatementUpdate",
           "minimum_count": 1
         },
@@ -408,7 +408,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_create",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
           "anchor_id": "typed_stage.PreparedCreate",
           "minimum_count": 1
         },
@@ -418,7 +418,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_parameter_set",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
           "anchor_id": "typed_stage.ParameterSet",
           "minimum_count": 1
         },
@@ -428,7 +428,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_query",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
           "anchor_id": "typed_stage.PreparedQuery",
           "minimum_count": 1
         },
@@ -438,7 +438,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_next",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
           "anchor_id": "typed_stage.ResultNext",
           "minimum_count": 1
         },
@@ -448,7 +448,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_set_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
           "anchor_id": "typed_stage.ResultSetMetadata",
           "minimum_count": 1
         },
@@ -458,7 +458,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_database_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
           "anchor_id": "typed_stage.DatabaseMetadata",
           "minimum_count": 1
         },
@@ -468,7 +468,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_close",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
           "anchor_id": "typed_stage.ConnectionClose",
           "minimum_count": 1
         },
@@ -478,7 +478,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_validation_success",
-          "compiler_function_name": "_RNvNtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
+          "compiler_function_name": "_RNvNtCs802hUfNRp4N_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
           "anchor_id": "typed_validation.success",
           "minimum_count": 1
         }
@@ -497,9 +497,9 @@
           "requirement_id": "EXACT_TEST_IDENTITY",
           "requirement_kind": "TEST_IDENTITY_FUNCTION",
           "source_path": "crates/druid-wrapper/src/libsql/libsql_connection_factory.rs",
-          "source_sha256": "450ec8474e0d7262b37b01a54a66416ad862c40232807bc68b2e5177669712b4",
+          "source_sha256": "9cf315efa8faf678c53191e469f72d381e899bad630a5eca04c9dadaaa558538",
           "source_function": "libsql_standard_factory_uses_deterministic_transport_owned_core",
-          "compiler_function_name": "_RNvNtNtNtCs8m1WuUeZXxW_13druid_wrapper6libsql25libsql_connection_factory5testss_63libsql_standard_factory_uses_deterministic_transport_owned_core",
+          "compiler_function_name": "_RNvNtNtNtCs802hUfNRp4N_13druid_wrapper6libsql25libsql_connection_factory5testss_63libsql_standard_factory_uses_deterministic_transport_owned_core",
           "anchor_id": "test_identity.libsql",
           "minimum_count": 1
         },
@@ -507,9 +507,9 @@
           "requirement_id": "FAMILY_FACTORY_FUNCTION",
           "requirement_kind": "FAMILY_FACTORY_FUNCTION",
           "source_path": "crates/druid-wrapper/src/libsql/libsql_connection_factory.rs",
-          "source_sha256": "450ec8474e0d7262b37b01a54a66416ad862c40232807bc68b2e5177669712b4",
+          "source_sha256": "9cf315efa8faf678c53191e469f72d381e899bad630a5eca04c9dadaaa558538",
           "source_function": "create_adapter_core",
-          "compiler_function_name": "_RNvMs_NtNtCs8m1WuUeZXxW_13druid_wrapper6libsql25libsql_connection_factoryNtB4_23LibSqlConnectionFactory19create_adapter_core",
+          "compiler_function_name": "_RNvMs_NtNtCs802hUfNRp4N_13druid_wrapper6libsql25libsql_connection_factoryNtB4_23LibSqlConnectionFactory19create_adapter_core",
           "anchor_id": "family_factory.libsql",
           "minimum_count": 1
         },
@@ -519,7 +519,7 @@
           "source_path": "crates/druid-wrapper/src/libsql/libsql_connection_adapter.rs",
           "source_sha256": "7c240d9f1d55991eddffa63457391eaf2e10d1bd57d56a1606ac6b5104a980e5",
           "source_function": "standard_execute_update_core",
-          "compiler_function_name": "_RNvXs0_NtNtCs8m1WuUeZXxW_13druid_wrapper6libsql25libsql_connection_adapterNtB5_23LibSqlConnectionAdapterNtNtB9_25standard_adapter_executor20AdapterExecutionCore28standard_execute_update_core",
+          "compiler_function_name": "_RNvXs0_NtNtCs802hUfNRp4N_13druid_wrapper6libsql25libsql_connection_adapterNtB5_23LibSqlConnectionAdapterNtNtB9_25standard_adapter_executor20AdapterExecutionCore28standard_execute_update_core",
           "anchor_id": "family_executor.libsql",
           "minimum_count": 1
         },
@@ -529,7 +529,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_factory_create",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
           "anchor_id": "typed_stage.FactoryCreate",
           "minimum_count": 1
         },
@@ -539,7 +539,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_create",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
           "anchor_id": "typed_stage.ConnectionCreate",
           "minimum_count": 1
         },
@@ -549,7 +549,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_create",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
           "anchor_id": "typed_stage.StatementCreate",
           "minimum_count": 1
         },
@@ -559,7 +559,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_update",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
           "anchor_id": "typed_stage.StatementUpdate",
           "minimum_count": 1
         },
@@ -569,7 +569,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_create",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
           "anchor_id": "typed_stage.PreparedCreate",
           "minimum_count": 1
         },
@@ -579,7 +579,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_parameter_set",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
           "anchor_id": "typed_stage.ParameterSet",
           "minimum_count": 1
         },
@@ -589,7 +589,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_query",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
           "anchor_id": "typed_stage.PreparedQuery",
           "minimum_count": 1
         },
@@ -599,7 +599,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_next",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
           "anchor_id": "typed_stage.ResultNext",
           "minimum_count": 1
         },
@@ -609,7 +609,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_set_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
           "anchor_id": "typed_stage.ResultSetMetadata",
           "minimum_count": 1
         },
@@ -619,7 +619,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_database_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
           "anchor_id": "typed_stage.DatabaseMetadata",
           "minimum_count": 1
         },
@@ -629,7 +629,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_close",
-          "compiler_function_name": "_RNvMs1_NtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
+          "compiler_function_name": "_RNvMs1_NtCs802hUfNRp4N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
           "anchor_id": "typed_stage.ConnectionClose",
           "minimum_count": 1
         },
@@ -639,7 +639,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_validation_success",
-          "compiler_function_name": "_RNvNtCs8m1WuUeZXxW_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
+          "compiler_function_name": "_RNvNtCs802hUfNRp4N_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
           "anchor_id": "typed_validation.success",
           "minimum_count": 1
         }
@@ -660,7 +660,7 @@
           "source_path": "crates/druid-wrapper/tests/rbdc_connection_adapter_test.rs",
           "source_sha256": "3042ed0502834c16de5a362b688fb2b227322427cb1bf1adb428f0f1b2e0c1e0",
           "source_function": "rbdc_standard_factory_emits_typed_runtime_trace",
-          "compiler_function_name": "_RNvCs6g2jtu4W0Ka_28rbdc_connection_adapter_tests_47rbdc_standard_factory_emits_typed_runtime_trace",
+          "compiler_function_name": "_RNvCsdoGORKCPS2l_28rbdc_connection_adapter_tests_47rbdc_standard_factory_emits_typed_runtime_trace",
           "anchor_id": "test_identity.rbdc",
           "minimum_count": 1
         },
@@ -670,7 +670,7 @@
           "source_path": "crates/druid-wrapper/src/rbdc/rbdc_connection_factory.rs",
           "source_sha256": "c0cc45642549c8e880e7f07c05c11987cb6307b079b15d61b41b7739f9258728",
           "source_function": "create_adapter_core",
-          "compiler_function_name": "_RNvMNtNtCs9LQPoUuCV6N_13druid_wrapper4rbdc23rbdc_connection_factoryNtB2_21RbdcConnectionFactory19create_adapter_core",
+          "compiler_function_name": "_RNvMNtNtCsbv70ahoKyVN_13druid_wrapper4rbdc23rbdc_connection_factoryNtB2_21RbdcConnectionFactory19create_adapter_core",
           "anchor_id": "family_factory.rbdc",
           "minimum_count": 1
         },
@@ -680,7 +680,7 @@
           "source_path": "crates/druid-wrapper/src/rbdc/rbdc_connection_adapter.rs",
           "source_sha256": "6794f2e485d1668c4c942bdd6c129e9fab79cbd80258765fc0e40268e03690ff",
           "source_function": "standard_execute_update_core",
-          "compiler_function_name": "_RNvXs_NtNtCs9LQPoUuCV6N_13druid_wrapper4rbdc23rbdc_connection_adapterNtB4_21RbdcConnectionAdapterNtNtB8_25standard_adapter_executor20AdapterExecutionCore28standard_execute_update_core",
+          "compiler_function_name": "_RNvXs_NtNtCsbv70ahoKyVN_13druid_wrapper4rbdc23rbdc_connection_adapterNtB4_21RbdcConnectionAdapterNtNtB8_25standard_adapter_executor20AdapterExecutionCore28standard_execute_update_core",
           "anchor_id": "family_executor.rbdc",
           "minimum_count": 1
         },
@@ -690,7 +690,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_factory_create",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
           "anchor_id": "typed_stage.FactoryCreate",
           "minimum_count": 1
         },
@@ -700,7 +700,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_create",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
           "anchor_id": "typed_stage.ConnectionCreate",
           "minimum_count": 1
         },
@@ -710,7 +710,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_create",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
           "anchor_id": "typed_stage.StatementCreate",
           "minimum_count": 1
         },
@@ -720,7 +720,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_update",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
           "anchor_id": "typed_stage.StatementUpdate",
           "minimum_count": 1
         },
@@ -730,7 +730,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_create",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
           "anchor_id": "typed_stage.PreparedCreate",
           "minimum_count": 1
         },
@@ -740,7 +740,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_parameter_set",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
           "anchor_id": "typed_stage.ParameterSet",
           "minimum_count": 1
         },
@@ -750,7 +750,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_query",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
           "anchor_id": "typed_stage.PreparedQuery",
           "minimum_count": 1
         },
@@ -760,7 +760,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_next",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
           "anchor_id": "typed_stage.ResultNext",
           "minimum_count": 1
         },
@@ -770,7 +770,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_set_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
           "anchor_id": "typed_stage.ResultSetMetadata",
           "minimum_count": 1
         },
@@ -780,7 +780,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_database_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
           "anchor_id": "typed_stage.DatabaseMetadata",
           "minimum_count": 1
         },
@@ -790,7 +790,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_close",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
           "anchor_id": "typed_stage.ConnectionClose",
           "minimum_count": 1
         },
@@ -800,7 +800,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_validation_success",
-          "compiler_function_name": "_RNvNtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
+          "compiler_function_name": "_RNvNtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
           "anchor_id": "typed_validation.success",
           "minimum_count": 1
         }
@@ -821,7 +821,7 @@
           "source_path": "crates/druid-wrapper/tests/statement_executor_ownership_test.rs",
           "source_sha256": "645e87968e8854575b3e78e6e50620ccc2f2c25a32280746ad3c0db0442786e7",
           "source_function": "sqlx_standard_factory_emits_typed_runtime_trace",
-          "compiler_function_name": "_RNvCsjLpFR0nBi2r_33statement_executor_ownership_tests_47sqlx_standard_factory_emits_typed_runtime_trace",
+          "compiler_function_name": "_RNvCs2MiWPpJmqnY_33statement_executor_ownership_tests_47sqlx_standard_factory_emits_typed_runtime_trace",
           "anchor_id": "test_identity.sqlx",
           "minimum_count": 1
         },
@@ -831,7 +831,7 @@
           "source_path": "crates/druid-wrapper/src/sqlx/sqlx_connection_factory.rs",
           "source_sha256": "b36aed419e0f8e58fe25a334c14bd2461ce0bfc0a39f10d94021a5798531ea10",
           "source_function": "create_adapter_core",
-          "compiler_function_name": "_RNvMNtNtCs9LQPoUuCV6N_13druid_wrapper4sqlx23sqlx_connection_factoryNtB2_21SqlxConnectionFactory19create_adapter_core",
+          "compiler_function_name": "_RNvMNtNtCsbv70ahoKyVN_13druid_wrapper4sqlx23sqlx_connection_factoryNtB2_21SqlxConnectionFactory19create_adapter_core",
           "anchor_id": "family_factory.sqlx",
           "minimum_count": 1
         },
@@ -839,9 +839,9 @@
           "requirement_id": "FAMILY_EXECUTOR_FUNCTION",
           "requirement_kind": "FAMILY_EXECUTOR_FUNCTION",
           "source_path": "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
-          "source_sha256": "0cf315fdd3010b33d87dcac85d9369e9b601c3d0c553ec6a256228affe9a7f60",
+          "source_sha256": "4f3dabcffa1739b688a378db8419612f59a3ba22a70716aef3535fa4c899d2f0",
           "source_function": "execute_update_result",
-          "compiler_function_name": "_RNvMNtNtCs9LQPoUuCV6N_13druid_wrapper4sqlx21sqlx_connection_actorNtB2_19SqlxConnectionActor21execute_update_result",
+          "compiler_function_name": "_RNvMNtNtCsbv70ahoKyVN_13druid_wrapper4sqlx21sqlx_connection_actorNtB2_19SqlxConnectionActor21execute_update_result",
           "anchor_id": "family_executor.sqlx",
           "minimum_count": 1
         },
@@ -851,7 +851,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_factory_create",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
           "anchor_id": "typed_stage.FactoryCreate",
           "minimum_count": 1
         },
@@ -861,7 +861,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_create",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
           "anchor_id": "typed_stage.ConnectionCreate",
           "minimum_count": 1
         },
@@ -871,7 +871,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_create",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
           "anchor_id": "typed_stage.StatementCreate",
           "minimum_count": 1
         },
@@ -881,7 +881,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_update",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
           "anchor_id": "typed_stage.StatementUpdate",
           "minimum_count": 1
         },
@@ -891,7 +891,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_create",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
           "anchor_id": "typed_stage.PreparedCreate",
           "minimum_count": 1
         },
@@ -901,7 +901,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_parameter_set",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
           "anchor_id": "typed_stage.ParameterSet",
           "minimum_count": 1
         },
@@ -911,7 +911,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_query",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
           "anchor_id": "typed_stage.PreparedQuery",
           "minimum_count": 1
         },
@@ -921,7 +921,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_next",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
           "anchor_id": "typed_stage.ResultNext",
           "minimum_count": 1
         },
@@ -931,7 +931,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_set_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
           "anchor_id": "typed_stage.ResultSetMetadata",
           "minimum_count": 1
         },
@@ -941,7 +941,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_database_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
           "anchor_id": "typed_stage.DatabaseMetadata",
           "minimum_count": 1
         },
@@ -951,7 +951,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_close",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
           "anchor_id": "typed_stage.ConnectionClose",
           "minimum_count": 1
         },
@@ -961,7 +961,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_validation_success",
-          "compiler_function_name": "_RNvNtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
+          "compiler_function_name": "_RNvNtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
           "anchor_id": "typed_validation.success",
           "minimum_count": 1
         }
@@ -980,9 +980,9 @@
           "requirement_id": "EXACT_TEST_IDENTITY",
           "requirement_kind": "TEST_IDENTITY_FUNCTION",
           "source_path": "crates/druid-wrapper/tests/toasty_connection_adapter_test.rs",
-          "source_sha256": "62a421ee677da2c23e6c58ca381e7687547f66780a3bc1635868c10be80ef391",
+          "source_sha256": "2bcf1ebc80c555c6ebecbd616f38a7278772efbb7e9ee14278561ac761fce56f",
           "source_function": "toasty_standard_factory_emits_typed_runtime_trace",
-          "compiler_function_name": "_RNvCs8cwr2eePBDU_30toasty_connection_adapter_tests_49toasty_standard_factory_emits_typed_runtime_trace",
+          "compiler_function_name": "_RNvCsfxzjGaJNKVq_30toasty_connection_adapter_tests_49toasty_standard_factory_emits_typed_runtime_trace",
           "anchor_id": "test_identity.toasty",
           "minimum_count": 1
         },
@@ -990,9 +990,9 @@
           "requirement_id": "FAMILY_FACTORY_FUNCTION",
           "requirement_kind": "FAMILY_FACTORY_FUNCTION",
           "source_path": "crates/druid-wrapper/src/toasty/toasty_connection_factory.rs",
-          "source_sha256": "7d5b7bedccf0334da0cb9933673bba0e2f1aa964fde4798d872a2739aa163e89",
+          "source_sha256": "2a9e3cc7519d4b74d3e2cb7f02388adfd67819a797d0e1eb16c47f26ad303152",
           "source_function": "create_adapter_core",
-          "compiler_function_name": "_RNvMs_NtNtCs9LQPoUuCV6N_13druid_wrapper6toasty25toasty_connection_factoryNtB4_23ToastyConnectionFactory19create_adapter_core",
+          "compiler_function_name": "_RNvMs_NtNtCsbv70ahoKyVN_13druid_wrapper6toasty25toasty_connection_factoryNtB4_23ToastyConnectionFactory19create_adapter_core",
           "anchor_id": "family_factory.toasty",
           "minimum_count": 1
         },
@@ -1000,9 +1000,9 @@
           "requirement_id": "FAMILY_EXECUTOR_FUNCTION",
           "requirement_kind": "FAMILY_EXECUTOR_FUNCTION",
           "source_path": "crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs",
-          "source_sha256": "73ee7e4c4ffa5575236b5ce7ee13a80c017c97010c7bddf97f24fb48b3732f38",
+          "source_sha256": "795df414b43249b469e0ac5e2d83a6489c3537315581b45e1b1d977ee1e52ab3",
           "source_function": "standard_execute_update_result_core",
-          "compiler_function_name": "_RNvXs0_NtNtCs9LQPoUuCV6N_13druid_wrapper6toasty25toasty_connection_adapterNtB5_23ToastyConnectionAdapterNtNtB9_25standard_adapter_executor20AdapterExecutionCore35standard_execute_update_result_core",
+          "compiler_function_name": "_RNvXs0_NtNtCsbv70ahoKyVN_13druid_wrapper6toasty25toasty_connection_adapterNtB5_23ToastyConnectionAdapterNtNtB9_25standard_adapter_executor20AdapterExecutionCore35standard_execute_update_result_core",
           "anchor_id": "family_executor.toasty",
           "minimum_count": 1
         },
@@ -1012,7 +1012,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_factory_create",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_factory_create",
           "anchor_id": "typed_stage.FactoryCreate",
           "minimum_count": 1
         },
@@ -1022,7 +1022,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_create",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_connection_create",
           "anchor_id": "typed_stage.ConnectionCreate",
           "minimum_count": 1
         },
@@ -1032,7 +1032,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_create",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_create",
           "anchor_id": "typed_stage.StatementCreate",
           "minimum_count": 1
         },
@@ -1042,7 +1042,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_statement_update",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_statement_update",
           "anchor_id": "typed_stage.StatementUpdate",
           "minimum_count": 1
         },
@@ -1052,7 +1052,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_create",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter37task4_coverage_anchor_prepared_create",
           "anchor_id": "typed_stage.PreparedCreate",
           "minimum_count": 1
         },
@@ -1062,7 +1062,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_parameter_set",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter35task4_coverage_anchor_parameter_set",
           "anchor_id": "typed_stage.ParameterSet",
           "minimum_count": 1
         },
@@ -1072,7 +1072,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_prepared_query",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter36task4_coverage_anchor_prepared_query",
           "anchor_id": "typed_stage.PreparedQuery",
           "minimum_count": 1
         },
@@ -1082,7 +1082,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_next",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter33task4_coverage_anchor_result_next",
           "anchor_id": "typed_stage.ResultNext",
           "minimum_count": 1
         },
@@ -1092,7 +1092,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_result_set_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter41task4_coverage_anchor_result_set_metadata",
           "anchor_id": "typed_stage.ResultSetMetadata",
           "minimum_count": 1
         },
@@ -1102,7 +1102,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_database_metadata",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter39task4_coverage_anchor_database_metadata",
           "anchor_id": "typed_stage.DatabaseMetadata",
           "minimum_count": 1
         },
@@ -1112,7 +1112,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_connection_close",
-          "compiler_function_name": "_RNvMs1_NtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
+          "compiler_function_name": "_RNvMs1_NtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_traceNtB5_19RuntimeTraceEmitter38task4_coverage_anchor_connection_close",
           "anchor_id": "typed_stage.ConnectionClose",
           "minimum_count": 1
         },
@@ -1122,7 +1122,7 @@
           "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
           "source_sha256": "4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e",
           "source_function": "task4_coverage_anchor_validation_success",
-          "compiler_function_name": "_RNvNtCs9LQPoUuCV6N_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
+          "compiler_function_name": "_RNvNtCsbv70ahoKyVN_13druid_wrapper19task4_runtime_trace40task4_coverage_anchor_validation_success",
           "anchor_id": "typed_validation.success",
           "minimum_count": 1
         }
