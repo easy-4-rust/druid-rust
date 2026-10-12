@@ -10,6 +10,8 @@
 
 2026-10-12 本机复测：Pool `pool_close_backpressure_test` 11/11；Metrics `task_supervision_test`、`shutdown_test`、`queue_semantics_test` 合计 14/14；Admin `grpc_network_e2e_test` 与 `repository_capacity_test` 合计 52/52，`admin_binary_test` 16/16，均使用 `--locked` 并退出 0。网络用例覆盖 Admin 重启、重复/跳号批次、服务不可用、命令认证及关闭；仍缺这些故障场景各自的数值运行预算与跨平台验收，不据此关闭 Task5。
 
+2026-10-12 修正 Metrics 饱和测试夹具：原用例立即释放数据源和注册句柄，不能证明真实 sampler 的容量 1 队列发生合并。加入 `coalesced_total > 0` 后测试先失败；保持 20 个源及句柄存活后，确认所有源被采样、发生合并，`queue_semantics_test` 4/4 与相关 Supervisor/shutdown 合计 14/14 通过；`cargo test -p druid-metrics --locked` 整个 crate 退出 0。仍需独立的吞吐、延迟与关闭预算。
+
 JDBC Agent 故障注入：`cargo test -p druid-wrapper --features jdbc-agent --lib --quiet` 本机 21/21 通过。沉默子进程启动按调用者配置的 75 ms 期限失败；不同身份的启动互不阻塞，同一身份的等待也遵守各自期限。超过 1 KiB 且无换行的帧在 EOF 前被拒绝，非法 ready/handshake 不回显注入的凭据标记。此项只覆盖 Agent 协议边界，不代替下表的跨平台运行预算或真实数据库验收。
 
 ## 2026-10-11 Pool 慢关闭组件核验

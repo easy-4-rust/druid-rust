@@ -294,7 +294,7 @@ async fn runtime_end_to_end_with_many_datasources() {
 }
 
 #[tokio::test]
-async fn queue_saturation_does_not_panic() {
+async fn queue_saturation_coalesces_live_sources_without_panicking() {
     // Stress test: capacity-1 queue with many datasources and rapid sampling
     let config = DruidMetricsConfig::builder()
         .queue_capacity(1)
@@ -304,13 +304,26 @@ async fn queue_saturation_does_not_panic() {
 
     let runtime = DruidMetricsRuntime::start(config).await.unwrap();
 
+    // Runtime 仅持有弱引用；在饱和窗口内同时保留数据源和注册句柄，
+    // 确保这里验证的是真实采样器路径。
+    let mut sources = Vec::new();
+    let mut guards = Vec::new();
     for i in 0..20 {
         let source = Arc::new(MockDataSource::new(i, &format!("stress_ds_{i}")));
-        let _guard = runtime.register(source);
+        guards.push(runtime.register(Arc::clone(&source) as Arc<dyn DataSourceMonitorable>));
+        sources.push(source);
     }
+
+    assert_eq!(runtime.self_metrics().registered_datasources(), 20);
 
     // Let it run for a while -- should not panic
     tokio::time::sleep(Duration::from_millis(500)).await;
 
+    assert!(runtime.self_metrics().coalesced_total() > 0);
+    assert!(sources
+        .iter()
+        .all(|source| source.snapshot_count.load(Ordering::Relaxed) > 0));
+
     runtime.shutdown(Duration::from_secs(2)).await.unwrap();
+    drop(guards);
 }
