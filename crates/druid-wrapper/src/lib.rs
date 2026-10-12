@@ -162,17 +162,6 @@ pub mod sqlx;
 #[cfg(feature = "toasty")]
 pub mod toasty;
 
-/// Ensure driver extension `inventory::submit!` registrations are linked.
-///
-/// Test binaries and downstream consumers should call this once at startup
-/// (or reference it) to prevent the linker from stripping the statics.
-#[cfg(feature = "driver-catalog")]
-pub fn init_driver_extensions() {
-    // Touch the module so the linker retains its statics.
-    #[cfg(feature = "toasty")]
-    driver::extensions::init();
-}
-
 pub use managed_wrapper_pool::ManagedWrapperPool;
 pub use proxool_config_key::ProxoolConfigKey;
 #[cfg(feature = "sqlx")]

@@ -105,6 +105,8 @@ capability=true 必须有该 adapter 的实际行为证据。默认 false、方�
 
 `0.0.0-design` 阶段允许经批准的预发布破坏性修正；仍必须具备原基线、精确 breaking allowlist、真实 public API/SemVer 输出、external implementor 及迁移证据。[迁移映射](physical-to-standard-migration.md) 中 TASK7_PENDING 目标不能作为已存在实现。
 
+旧 `druid::core::lookup_driver_extension` 与 Wrapper `init_driver_extensions` inventory 入口已退出。产品建池应通过 `DruidDriverRegistry::resolve` 或 `DruidDatabasePoolBuilder`；Java 风格的进程内显式驱动注册继续通过 `DriverManager`。该入口删除属于预发布 API 变化，必须计入 SemVer 报告及迁移验收。
+
 最终验收必须同时具备：单一标准和 zero Physical 公共名、配置 adapter 的直接实现、Druid holder/代理合同、回收/关闭唯一性、69 对象语义分母、错误 waiver、共享 conformance、API/SemVer、Java 差分与真实数据库、fmt/check/clippy/test/doc、all-features、MSRV 和依赖 DAG。每项结论采用 PROVED/CONTRADICTED/INCOMPLETE/NOT_VERIFIED 并链接真实证据。
 
 当前 C1/C2 完整通过记录只证明其冻结范围；全 features 回归仍失败，不能据此声明标准整体完成。最新范围和未完成项以验证状态与机器终态为准。

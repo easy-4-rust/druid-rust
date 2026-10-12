@@ -1838,7 +1838,6 @@ dependencies = [
  "duckdb",
  "fs2",
  "futures",
- "inventory",
  "jiff",
  "libsql",
  "parking_lot",
