@@ -1134,4 +1134,3 @@ pub druid_wrapper::WrapperPoolState::url: alloc::string::String
 pub druid_wrapper::WrapperPoolState::wait_count: usize
 impl druid_wrapper::WrapperPoolState
 pub fn druid_wrapper::WrapperPoolState::from_pool_state(impl core::convert::Into<alloc::string::String>, druid::core::pool_state::PoolState) -> Self
-pub fn druid_wrapper::init_driver_extensions()

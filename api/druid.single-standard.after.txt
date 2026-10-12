@@ -303,18 +303,6 @@ pub mod druid::core::driver
 pub use druid::core::driver::ConnectionProperties
 pub use druid::core::driver::Driver
 pub use druid::core::driver::DriverProperty
-pub mod druid::core::driver_extension_descriptor
-pub struct druid::core::driver_extension_descriptor::DriverExtensionDescriptor
-pub druid::core::driver_extension_descriptor::DriverExtensionDescriptor::checker: core::option::Option<fn() -> alloc::sync::Arc<dyn druid::core::valid_connection_checker::ValidConnectionChecker>>
-pub druid::core::driver_extension_descriptor::DriverExtensionDescriptor::db_type: &'static str
-pub druid::core::driver_extension_descriptor::DriverExtensionDescriptor::factory: druid::core::driver_extension_factory::DriverExtensionFactory
-pub druid::core::driver_extension_descriptor::DriverExtensionDescriptor::sorter: core::option::Option<fn() -> alloc::sync::Arc<dyn druid::core::exception_sorter::ExceptionSorter>>
-impl inventory::Collect for druid::core::driver_extension_descriptor::DriverExtensionDescriptor
-pub mod druid::core::driver_extension_factory
-pub type druid::core::driver_extension_factory::DriverExtensionFactory = for<'a> fn(&'a str) -> druid::core::driver_extension_factory::DriverExtensionFactoryFuture<'a>
-pub type druid::core::driver_extension_factory::DriverExtensionFactoryFuture<'a> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::sync::Arc<dyn druid_rdbc::driver::connection_factory::ConnectionFactory>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'a)>>
-pub mod druid::core::driver_extension_registry
-pub fn druid::core::driver_extension_registry::lookup_driver_extension(&str) -> core::result::Result<&'static druid::core::driver_extension_descriptor::DriverExtensionDescriptor, druid_rdbc::error::rdbc_error::RdbcError>
 pub mod druid::core::druid_connection_holder
 #[repr(u8)] pub enum druid::core::druid_connection_holder::ConnectionState
 pub druid::core::druid_connection_holder::ConnectionState::Active = 1
@@ -4239,12 +4227,6 @@ impl druid::core::exception_sorter::ExceptionSorter for druid::core::db2_excepti
 pub fn druid::core::db2_exception_sorter::Db2ExceptionSorter::class_name(&self) -> &'static str
 pub fn druid::core::db2_exception_sorter::Db2ExceptionSorter::config_from_properties(&mut self, core::option::Option<&druid::core::exception_sorter::ExceptionSorterProperties>)
 pub fn druid::core::db2_exception_sorter::Db2ExceptionSorter::is_exception_fatal(&self, &druid_rdbc::error::sql_exception::SqlException) -> bool
-pub struct druid::core::DriverExtensionDescriptor
-pub druid::core::DriverExtensionDescriptor::checker: core::option::Option<fn() -> alloc::sync::Arc<dyn druid::core::valid_connection_checker::ValidConnectionChecker>>
-pub druid::core::DriverExtensionDescriptor::db_type: &'static str
-pub druid::core::DriverExtensionDescriptor::factory: druid::core::driver_extension_factory::DriverExtensionFactory
-pub druid::core::DriverExtensionDescriptor::sorter: core::option::Option<fn() -> alloc::sync::Arc<dyn druid::core::exception_sorter::ExceptionSorter>>
-impl inventory::Collect for druid::core::driver_extension_descriptor::DriverExtensionDescriptor
 pub struct druid::core::DruidConnectionHolder
 pub druid::core::DruidConnectionHolder::created_at: std::time::Instant
 pub druid::core::DruidConnectionHolder::id: u64
@@ -6769,9 +6751,6 @@ pub fn druid::core::XaResource::recover<'life0, 'async_trait>(&'life0 self, i32)
 pub fn druid::core::XaResource::rollback<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
 pub fn druid::core::XaResource::set_transaction_timeout<'life0, 'async_trait>(&'life0 mut self, u64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid::core::XaResource::start<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::lookup_driver_extension(&str) -> core::result::Result<&'static druid::core::driver_extension_descriptor::DriverExtensionDescriptor, druid_rdbc::error::rdbc_error::RdbcError>
-pub type druid::core::DriverExtensionFactory = for<'a> fn(&'a str) -> druid::core::driver_extension_factory::DriverExtensionFactoryFuture<'a>
-pub type druid::core::DriverExtensionFactoryFuture<'a> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::sync::Arc<dyn druid_rdbc::driver::connection_factory::ConnectionFactory>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'a)>>
 pub type druid::core::ExceptionSorterProperties = alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
 pub type druid::core::FilterChain = druid::core::filter_chain_impl::FilterChainImpl
 pub mod druid::dynamic

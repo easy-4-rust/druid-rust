@@ -189,6 +189,7 @@ pub struct druid_rdbc::driver::DriverRegistry
 impl druid_rdbc::driver::DriverRegistry
 pub async fn druid_rdbc::driver::DriverRegistry::connect(&self, &str, &druid_rdbc::driver::ConnectionProperties) -> core::result::Result<core::option::Option<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>>, druid_rdbc::RdbcError>
 pub fn druid_rdbc::driver::DriverRegistry::descriptors(&self) -> &[druid_rdbc::driver::DriverExtensionDescriptor]
+pub fn druid_rdbc::driver::DriverRegistry::first_accepted_driver(&self, &str) -> core::option::Option<alloc::sync::Arc<dyn druid_rdbc::driver::Driver>>
 pub const fn druid_rdbc::driver::DriverRegistry::new() -> Self
 pub fn druid_rdbc::driver::DriverRegistry::register(&mut self, druid_rdbc::driver::DriverExtensionDescriptor)
 pub trait druid_rdbc::driver::ConnectionFactory: core::marker::Send + core::marker::Sync + 'static
