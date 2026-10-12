@@ -169,11 +169,12 @@ impl std::fmt::Debug for JdbcAgentConnectionFactory {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("JdbcAgentConnectionFactory")
-            .field("url", &self.url)
-            .field("validation_query", &self.validation_query)
-            .field("user_name", &self.user_name)
+            // URL、校验 SQL、用户名及任意属性名均可能携带敏感信息。
+            .field("has_url", &!self.url.is_empty())
+            .field("has_validation_query", &self.validation_query.is_some())
+            .field("has_user_name", &self.user_name.is_some())
             .field("has_password", &self.password.is_some())
-            .field("property_names", &self.properties.keys())
+            .field("property_count", &self.properties.len())
             .field("options", &self.options)
             .finish_non_exhaustive()
     }

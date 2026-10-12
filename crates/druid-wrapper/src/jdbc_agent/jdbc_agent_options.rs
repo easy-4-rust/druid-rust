@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// JDBC Agent 子进程启动和协议防护配置。
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JdbcAgentOptions {
     program: OsString,
     arguments: Vec<OsString>,
@@ -20,6 +20,21 @@ pub struct JdbcAgentOptions {
     jvm_options_hash: String,
     artifact_leases: Vec<Arc<File>>,
     contract_fault_injection: bool,
+}
+
+impl std::fmt::Debug for JdbcAgentOptions {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // 启动命令、参数和进程身份可能携带凭据，诊断输出只保留容量与运行状态。
+        formatter
+            .debug_struct("JdbcAgentOptions")
+            .field("argument_count", &self.arguments.len())
+            .field("request_timeout", &self.request_timeout)
+            .field("max_frame_bytes", &self.max_frame_bytes)
+            .field("idle_timeout", &self.idle_timeout)
+            .field("artifact_lease_count", &self.artifact_leases.len())
+            .field("contract_fault_injection", &self.contract_fault_injection)
+            .finish_non_exhaustive()
+    }
 }
 
 impl JdbcAgentOptions {

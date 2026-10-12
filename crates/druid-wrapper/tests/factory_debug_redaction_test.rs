@@ -43,3 +43,50 @@ async fn toasty_factory_debug_hides_url() {
     assert!(!debug.contains("sqlite::memory:"), "{debug}");
     assert!(debug.contains("<redacted connection URL>"), "{debug}");
 }
+
+#[cfg(feature = "jdbc-agent")]
+#[test]
+fn jdbc_agent_factory_debug_hides_connection_and_process_secrets() {
+    let options = druid_wrapper::jdbc_agent::JdbcAgentOptions::new("canary-program-secret")
+        .argument("canary-argument-secret")
+        .runtime_identity(
+            "canary-agent-key-secret",
+            "canary-artifact-secret",
+            "canary-hash-secret",
+        );
+    let options_debug = format!("{options:?}");
+    let factory = druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory::new(
+        "jdbc:postgresql://host.invalid/db?password=canary-url-secret",
+        Some("SELECT 'canary-validation-secret'".to_owned()),
+        options,
+    )
+    .user_name("canary-user-secret")
+    .password("canary-password-secret")
+    .property("canary-property-name-secret", "canary-property-secret");
+    let factory_debug = format!("{factory:?}");
+
+    for secret in [
+        "canary-program-secret",
+        "canary-argument-secret",
+        "canary-agent-key-secret",
+        "canary-artifact-secret",
+        "canary-hash-secret",
+    ] {
+        assert!(!options_debug.contains(secret), "{options_debug}");
+        assert!(!factory_debug.contains(secret), "{factory_debug}");
+    }
+    for secret in [
+        "canary-url-secret",
+        "canary-validation-secret",
+        "canary-user-secret",
+        "canary-password-secret",
+        "canary-property-secret",
+        "canary-property-name-secret",
+    ] {
+        assert!(!factory_debug.contains(secret), "{factory_debug}");
+    }
+    assert!(
+        factory_debug.contains("has_password: true"),
+        "{factory_debug}"
+    );
+}
