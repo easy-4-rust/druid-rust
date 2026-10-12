@@ -485,7 +485,8 @@ pub fn druid::core::druid_pooled_connection::DruidPooledConnection::data_source(
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::discard_connection(&mut self) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::gloabl_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::global_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
-pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception<E>(&mut self, &E) -> bool where E: core::clone::Clone + core::convert::Into<druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception(&mut self, &druid::core::error::DruidError) -> bool
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_rdbc_exception(&mut self, &druid_rdbc::error::rdbc_error::RdbcError) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::id(&self) -> u64
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::is_recycled(&self) -> bool
 pub const fn druid::core::druid_pooled_connection::DruidPooledConnection::last_validate_time_millis(&self) -> u64
@@ -2827,7 +2828,8 @@ pub fn druid::core::druid_pooled_connection::DruidPooledConnection::data_source(
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::discard_connection(&mut self) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::gloabl_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::global_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
-pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception<E>(&mut self, &E) -> bool where E: core::clone::Clone + core::convert::Into<druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception(&mut self, &druid::core::error::DruidError) -> bool
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_rdbc_exception(&mut self, &druid_rdbc::error::rdbc_error::RdbcError) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::id(&self) -> u64
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::is_recycled(&self) -> bool
 pub const fn druid::core::druid_pooled_connection::DruidPooledConnection::last_validate_time_millis(&self) -> u64
@@ -2924,7 +2926,8 @@ pub fn druid::core::druid_pooled_connection::DruidPooledConnection::data_source(
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::discard_connection(&mut self) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::gloabl_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::global_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
-pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception<E>(&mut self, &E) -> bool where E: core::clone::Clone + core::convert::Into<druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception(&mut self, &druid::core::error::DruidError) -> bool
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_rdbc_exception(&mut self, &druid_rdbc::error::rdbc_error::RdbcError) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::id(&self) -> u64
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::is_recycled(&self) -> bool
 pub const fn druid::core::druid_pooled_connection::DruidPooledConnection::last_validate_time_millis(&self) -> u64
@@ -4406,7 +4409,8 @@ pub fn druid::core::druid_pooled_connection::DruidPooledConnection::data_source(
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::discard_connection(&mut self) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::gloabl_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::global_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
-pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception<E>(&mut self, &E) -> bool where E: core::clone::Clone + core::convert::Into<druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception(&mut self, &druid::core::error::DruidError) -> bool
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_rdbc_exception(&mut self, &druid_rdbc::error::rdbc_error::RdbcError) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::id(&self) -> u64
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::is_recycled(&self) -> bool
 pub const fn druid::core::druid_pooled_connection::DruidPooledConnection::last_validate_time_millis(&self) -> u64
@@ -5559,7 +5563,8 @@ pub fn druid::core::druid_pooled_connection::DruidPooledConnection::data_source(
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::discard_connection(&mut self) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::gloabl_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::global_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
-pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception<E>(&mut self, &E) -> bool where E: core::clone::Clone + core::convert::Into<druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception(&mut self, &druid::core::error::DruidError) -> bool
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_rdbc_exception(&mut self, &druid_rdbc::error::rdbc_error::RdbcError) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::id(&self) -> u64
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::is_recycled(&self) -> bool
 pub const fn druid::core::druid_pooled_connection::DruidPooledConnection::last_validate_time_millis(&self) -> u64
@@ -8687,7 +8692,8 @@ pub fn druid::core::druid_pooled_connection::DruidPooledConnection::data_source(
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::discard_connection(&mut self) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::gloabl_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::global_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
-pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception<E>(&mut self, &E) -> bool where E: core::clone::Clone + core::convert::Into<druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception(&mut self, &druid::core::error::DruidError) -> bool
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_rdbc_exception(&mut self, &druid_rdbc::error::rdbc_error::RdbcError) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::id(&self) -> u64
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::is_recycled(&self) -> bool
 pub const fn druid::core::druid_pooled_connection::DruidPooledConnection::last_validate_time_millis(&self) -> u64
@@ -9164,7 +9170,8 @@ pub fn druid::core::druid_pooled_connection::DruidPooledConnection::data_source(
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::discard_connection(&mut self) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::gloabl_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::global_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
-pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception<E>(&mut self, &E) -> bool where E: core::clone::Clone + core::convert::Into<druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception(&mut self, &druid::core::error::DruidError) -> bool
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_rdbc_exception(&mut self, &druid_rdbc::error::rdbc_error::RdbcError) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::id(&self) -> u64
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::is_recycled(&self) -> bool
 pub const fn druid::core::druid_pooled_connection::DruidPooledConnection::last_validate_time_millis(&self) -> u64
@@ -12476,7 +12483,8 @@ pub fn druid::core::druid_pooled_connection::DruidPooledConnection::data_source(
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::discard_connection(&mut self) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::gloabl_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::global_variables(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, serde_json::value::Value>>
-pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception<E>(&mut self, &E) -> bool where E: core::clone::Clone + core::convert::Into<druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_exception(&mut self, &druid::core::error::DruidError) -> bool
+pub fn druid::core::druid_pooled_connection::DruidPooledConnection::handle_rdbc_exception(&mut self, &druid_rdbc::error::rdbc_error::RdbcError) -> bool
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::id(&self) -> u64
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::is_recycled(&self) -> bool
 pub const fn druid::core::druid_pooled_connection::DruidPooledConnection::last_validate_time_millis(&self) -> u64
