@@ -38,7 +38,8 @@ target/
 *.war
 *.ear
 *.tar
-#*.zip
+*.zip
+*.pdb
 *.tar.gz
 
 ### logs ####
