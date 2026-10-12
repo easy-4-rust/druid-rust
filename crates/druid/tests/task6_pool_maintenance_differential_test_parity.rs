@@ -480,7 +480,7 @@ async fn task6_pool_maintenance_differential_test_successful_validation_clears_o
         1042,
         "fatal connection error".to_owned(),
     )));
-    let discarded = connection.handle_exception(&fatal);
+    let discarded = connection.handle_rdbc_exception(&fatal);
     assert!(
         discarded,
         "fatal-sorted exception must discard the connection"
@@ -532,7 +532,7 @@ async fn task6_pool_maintenance_differential_test_failing_validation_keeps_on_fa
         1042,
         "fatal connection error".to_owned(),
     )));
-    assert!(connection.handle_exception(&fatal));
+    assert!(connection.handle_rdbc_exception(&fatal));
     let _ = connection.close().await;
     assert!(pool.is_on_fatal_error());
     // fatal 置位后再翻验证为失败。
@@ -580,7 +580,7 @@ async fn task6_pool_maintenance_differential_test_on_fatal_error_max_active_gate
             1042,
             "fatal connection error".to_owned(),
         )));
-        assert!(connection.handle_exception(&fatal));
+        assert!(connection.handle_rdbc_exception(&fatal));
         let _ = connection.close().await;
     }
     assert!(!pool.is_on_fatal_error(), "threshold not exceeded yet");
@@ -591,7 +591,7 @@ async fn task6_pool_maintenance_differential_test_on_fatal_error_max_active_gate
         1042,
         "fatal connection error".to_owned(),
     )));
-    assert!(connection.handle_exception(&fatal));
+    assert!(connection.handle_rdbc_exception(&fatal));
     let _ = connection.close().await;
     assert!(
         pool.is_on_fatal_error(),
@@ -630,7 +630,7 @@ async fn task6_pool_maintenance_differential_test_pool_trait_get_preserves_fatal
             1042,
             "fatal connection error".to_owned(),
         )));
-        assert!(connection.handle_exception(&fatal));
+        assert!(connection.handle_rdbc_exception(&fatal));
         let _ = connection.close().await;
     }
 
@@ -641,7 +641,7 @@ async fn task6_pool_maintenance_differential_test_pool_trait_get_preserves_fatal
         1042,
         "fatal connection error".to_owned(),
     )));
-    assert!(trigger.handle_exception(&fatal));
+    assert!(trigger.handle_rdbc_exception(&fatal));
     let _ = trigger.close().await;
     assert!(pool.is_on_fatal_error());
 

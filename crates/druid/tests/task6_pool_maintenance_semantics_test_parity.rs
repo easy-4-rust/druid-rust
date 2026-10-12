@@ -466,7 +466,7 @@ async fn task6_pool_maintenance_semantics_test_fatal_error_forces_idle_connectio
         1042,
         "fatal connection error".to_owned(),
     )));
-    assert!(conn.handle_exception(&fatal));
+    assert!(conn.handle_rdbc_exception(&fatal));
     let _ = conn.close().await;
     assert!(pool.is_on_fatal_error());
 

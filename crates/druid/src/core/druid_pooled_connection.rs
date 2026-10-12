@@ -545,12 +545,15 @@ impl DruidPooledConnection {
     /// 对应 Java：
     /// `DruidDataSource#handleConnectionException` → `handleFatalError`。
     /// 非 SQL 错误和未命中 sorter 的 SQL 错误保持连接可复用。
-    pub fn handle_exception<E>(&mut self, error: &E) -> bool
-    where
-        E: Clone + Into<RdbcError>,
-    {
-        let error = error.clone().into();
+    pub fn handle_exception(&mut self, error: &DruidError) -> bool {
+        let error = RdbcError::from(error.clone());
         self.handle_exception_with_sql(&error, None)
+    }
+
+    /// 处理标准 RDBC 错误，返回该错误是否使连接不可复用。
+    /// 参数 `error` 为标准错误；返回值表示是否已触发连接丢弃。
+    pub fn handle_rdbc_exception(&mut self, error: &RdbcError) -> bool {
+        self.handle_exception_with_sql(error, None)
     }
 
     fn handle_exception_with_sql(&mut self, error: &RdbcError, sql: Option<&str>) -> bool {
