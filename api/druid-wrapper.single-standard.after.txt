@@ -189,6 +189,8 @@ pub fn druid_wrapper::driver::DruidDriverRegistry::resolve(&self, &druid_wrapper
 pub fn druid_wrapper::driver::DruidDriverRegistry::standard_registry(&self) -> &druid_rdbc::driver::driver_registry::DriverRegistry
 pub fn druid_wrapper::driver::DruidDriverRegistry::supported_count(&self) -> usize
 pub fn druid_wrapper::driver::DruidDriverRegistry::with_jdbc_agent(self, druid_wrapper::jdbc_agent::JdbcAgentOptions) -> Self
+impl core::clone::Clone for druid_wrapper::driver::DruidDriverRegistry
+pub fn druid_wrapper::driver::DruidDriverRegistry::clone(&self) -> Self
 pub struct druid_wrapper::driver::ResolvedDatabaseDriver
 impl druid_wrapper::driver::ResolvedDatabaseDriver
 pub fn druid_wrapper::driver::ResolvedDatabaseDriver::factory(&self) -> alloc::sync::Arc<dyn druid_rdbc::driver::connection_factory::ConnectionFactory>
