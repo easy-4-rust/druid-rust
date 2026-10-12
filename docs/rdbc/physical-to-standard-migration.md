@@ -240,3 +240,14 @@ pub use druid_rdbc::error::SqlExceptionKind::InvalidAuthorizationSpec;
 | `RdbcXmlSource::physical`、`RdbcXmlResult::physical` | 分别使用 `value()` 得到 `dyn XmlSource` / `dyn XmlResult`；旧 `PhysicalXmlSource` / `PhysicalXmlResult` 实现须迁入标准扩展接口。 |
 
 这九项是预发布 API 迁移，不代表 Task7 的资源能力、取消监管和实库验收已关闭。`resource_standard_contract_test` 当前 31/31 通过，全工作区默认目标通过；外部下游仍需按上表迁移并单独编译验证。
+
+## Wrapper 具体语句与元数据类型迁移（pre-release）
+
+`druid-wrapper/struct_missing` 的 11 条路径是 9 个已退休的具体类型；RBDC 与 Toasty 的预编译语句各有模块路径和重导出路径，因此各计两条。旧具体类型不能用类型别名恢复：新实现共享同一标准执行器，并由连接返回 trait 对象。
+
+| 旧类型 | 当前获取方式 |
+| --- | --- |
+| `RbdcPreparedStatement`、`LibSqlPreparedStatement`、`HttpSqlPreparedStatement`、`ToastyPreparedStatement`、`DuckDbPreparedStatement`、`JdbcAgentPreparedStatement` | 在对应未池化连接上调用 `Connection::prepare_statement`，接收 `Box<dyn druid_rdbc::statement::PreparedStatement>`；各后端委托 `StandardAdapterPreparedStatement`。 |
+| `LibSqlDatabaseMetaData`、`HttpSqlDatabaseMetaData`、`DuckDbDatabaseMetaData` | 调用 `Connection::database_meta_data`，接收 `Box<dyn druid_rdbc::metadata::DatabaseMetaData>`；各后端委托 `StandardAdapterDatabaseMetaData`。 |
+
+调用方若依赖旧具体类型的构造器或字段，须改为标准连接的能力调用。当前 Wrapper 生产源码已无这些旧类型引用；预编译矩阵、适配器边界和 Toasty 原生元数据测试分别通过 15/15、4/4、9/9。这是预发布公开路径迁移，仍需外部消费者与完整实库矩阵验收，不据此关闭 P04/P05/P07。

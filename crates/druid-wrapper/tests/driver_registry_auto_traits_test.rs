@@ -1,4 +1,5 @@
 //! 产品注册表保持既有的 panic 边界自动 trait 合同。
+#![cfg(feature = "driver-catalog")]
 
 use druid_wrapper::driver::DruidDriverRegistry;
 use std::panic::{RefUnwindSafe, UnwindSafe};
