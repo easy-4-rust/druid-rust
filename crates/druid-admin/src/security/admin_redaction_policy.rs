@@ -48,22 +48,32 @@ impl AdminRedactionPolicy {
                         .filter(|byte| byte.is_ascii_alphanumeric())
                         .map(|byte| byte.to_ascii_lowercase() as char)
                         .collect::<String>();
-                    if matches!(
-                        normalized.as_str(),
-                        "url"
-                            | "jdbcurl"
-                            | "connectionurl"
-                            | "username"
-                            | "sql"
-                            | "formattedsql"
-                            | "rawsql"
-                            | "lastslowparameters"
-                            | "bindparameters"
-                            | "sqlparameters"
-                            | "lasterrormessage"
-                            | "lasterrorstacktrace"
-                            | "lasterror"
-                    ) {
+                    // 属性映射可嵌套任意深度；凭据键不能依赖固定 DTO 字段名。
+                    let credential = normalized.ends_with("password")
+                        || normalized.ends_with("secret")
+                        || normalized.ends_with("token")
+                        || matches!(
+                            normalized.as_str(),
+                            "apikey" | "accesskey" | "secretkey" | "authorization"
+                        );
+                    if credential
+                        || matches!(
+                            normalized.as_str(),
+                            "url"
+                                | "jdbcurl"
+                                | "connectionurl"
+                                | "username"
+                                | "sql"
+                                | "formattedsql"
+                                | "rawsql"
+                                | "lastslowparameters"
+                                | "bindparameters"
+                                | "sqlparameters"
+                                | "lasterrormessage"
+                                | "lasterrorstacktrace"
+                                | "lasterror"
+                        )
+                    {
                         *field = Value::String("[REDACTED]".to_owned());
                     } else {
                         self.redact_json(field);
@@ -72,5 +82,34 @@ impl AdminRedactionPolicy {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AdminRedactionPolicy;
+    use serde_json::json;
+
+    #[test]
+    fn secure_policy_redacts_nested_credentials_without_hiding_counts() {
+        let mut response = json!({
+            "Content": {
+                "connectionProperties": {
+                    "password": "database-secret",
+                    "apiToken": "api-secret",
+                    "clientSecret": "client-secret",
+                    "accessKey": "access-secret",
+                    "activeCount": 3
+                }
+            }
+        });
+
+        AdminRedactionPolicy::secure().redact_json(&mut response);
+
+        let properties = &response["Content"]["connectionProperties"];
+        for field in ["password", "apiToken", "clientSecret", "accessKey"] {
+            assert_eq!(properties[field], "[REDACTED]", "{field} must be hidden");
+        }
+        assert_eq!(properties["activeCount"], 3);
     }
 }
