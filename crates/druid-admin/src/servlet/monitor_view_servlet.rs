@@ -995,49 +995,6 @@ fn command_broker_error_response(error: &str) -> Response {
     command_error_response(status, message)
 }
 
-#[cfg(test)]
-mod command_error_security_tests {
-    use axum::body::to_bytes;
-
-    use super::{command_broker_error_response, StatusCode};
-
-    #[tokio::test]
-    async fn broker_diagnostics_are_not_reflected_to_command_clients() {
-        let secret = "postgres://operator:very-secret@example.test/db";
-        for (diagnostic, expected_status) in [
-            (
-                format!("command ID has a conflicting canonical payload: {secret}"),
-                StatusCode::CONFLICT,
-            ),
-            (
-                format!("command broker full: {secret}"),
-                StatusCode::TOO_MANY_REQUESTS,
-            ),
-            (
-                format!("command result deadline exceeded: {secret}"),
-                StatusCode::GATEWAY_TIMEOUT,
-            ),
-            (
-                format!("no live stream matches the requested identity: {secret}"),
-                StatusCode::SERVICE_UNAVAILABLE,
-            ),
-            (
-                format!("unexpected broker failure: {secret}"),
-                StatusCode::BAD_REQUEST,
-            ),
-        ] {
-            let response = command_broker_error_response(&diagnostic);
-            assert_eq!(response.status(), expected_status);
-            let body = to_bytes(response.into_body(), 4096)
-                .await
-                .expect("response body");
-            let body = std::str::from_utf8(&body).expect("JSON response");
-            assert!(!body.contains(secret));
-            assert!(!body.contains("operator"));
-        }
-    }
-}
-
 async fn connection_response(
     state: MonitorViewServlet,
     id: i64,
@@ -1403,4 +1360,47 @@ fn static_resource(resource: &str) -> Option<&'static str> {
         )),
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod command_error_security_tests {
+    use axum::body::to_bytes;
+
+    use super::{command_broker_error_response, StatusCode};
+
+    #[tokio::test]
+    async fn broker_diagnostics_are_not_reflected_to_command_clients() {
+        let secret = "postgres://operator:very-secret@example.test/db";
+        for (diagnostic, expected_status) in [
+            (
+                format!("command ID has a conflicting canonical payload: {secret}"),
+                StatusCode::CONFLICT,
+            ),
+            (
+                format!("command broker full: {secret}"),
+                StatusCode::TOO_MANY_REQUESTS,
+            ),
+            (
+                format!("command result deadline exceeded: {secret}"),
+                StatusCode::GATEWAY_TIMEOUT,
+            ),
+            (
+                format!("no live stream matches the requested identity: {secret}"),
+                StatusCode::SERVICE_UNAVAILABLE,
+            ),
+            (
+                format!("unexpected broker failure: {secret}"),
+                StatusCode::BAD_REQUEST,
+            ),
+        ] {
+            let response = command_broker_error_response(&diagnostic);
+            assert_eq!(response.status(), expected_status);
+            let body = to_bytes(response.into_body(), 4096)
+                .await
+                .expect("response body");
+            let body = std::str::from_utf8(&body).expect("JSON response");
+            assert!(!body.contains(secret));
+            assert!(!body.contains("operator"));
+        }
+    }
 }
