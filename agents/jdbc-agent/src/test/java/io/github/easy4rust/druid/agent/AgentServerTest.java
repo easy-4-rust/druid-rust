@@ -9,6 +9,9 @@ import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PipedInputStream;
@@ -17,18 +20,54 @@ import java.nio.charset.StandardCharsets;
 import java.net.SocketTimeoutException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.SQLTransientConnectionException;
+import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** JDBC Agent JSON-RPC、多 session 与真实 H2 JDBC 驱动的最小契约测试。 */
 class AgentServerTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Test
+    void rejectsOversizedFrameBeforeNewlineOrEof() throws Exception {
+        InputStream endlessUntilLimit = new InputStream() {
+            private int remaining = 16 * 1024 * 1024 + 1;
+
+            @Override
+            public int read() throws IOException {
+                if (remaining == 0) {
+                    throw new IOException("reader consumed beyond frame limit");
+                }
+                remaining--;
+                return 'x';
+            }
+
+            @Override
+            public int read(byte[] target, int offset, int length) throws IOException {
+                if (length == 0) {
+                    return 0;
+                }
+                if (remaining == 0) {
+                    throw new IOException("reader consumed beyond frame limit");
+                }
+                int count = Math.min(length, remaining);
+                Arrays.fill(target, offset, offset + count, (byte) 'x');
+                remaining -= count;
+                return count;
+            }
+        };
+        try (AgentServer server = new AgentServer(endlessUntilLimit, new ByteArrayOutputStream())) {
+            IOException error = assertThrows(IOException.class, server::run);
+            assertEquals("JSON-RPC request exceeds maximum frame size", error.getMessage());
+        }
+    }
 
     @Test
     void preservesSQLExceptionHierarchyCauseAndNextException() {

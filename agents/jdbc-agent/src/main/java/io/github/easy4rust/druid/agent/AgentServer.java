@@ -7,12 +7,12 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.BufferedReader;
+import java.io.BufferedInputStream;
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.math.BigDecimal;
@@ -64,8 +64,9 @@ public final class AgentServer implements Closeable {
             "remote-prepare",
             "native-prepared-batch");
 
-    private final BufferedReader input;
+    private final InputStream input;
     private final BufferedWriter output;
+    private boolean skipLineFeed;
     private final ObjectMapper objectMapper;
     private final Map<String, AgentSession> sessions = new ConcurrentHashMap<>();
     private final ExecutorService requests = Executors.newCachedThreadPool();
@@ -80,8 +81,7 @@ public final class AgentServer implements Closeable {
      * @param output JSON-RPC NDJSON 输出流
      */
     public AgentServer(InputStream input, OutputStream output) {
-        this.input = new BufferedReader(new InputStreamReader(
-                Objects.requireNonNull(input, "input"), StandardCharsets.UTF_8));
+        this.input = new BufferedInputStream(Objects.requireNonNull(input, "input"));
         this.output = new BufferedWriter(new OutputStreamWriter(
                 Objects.requireNonNull(output, "output"), StandardCharsets.UTF_8));
         this.objectMapper = new ObjectMapper();
@@ -101,7 +101,7 @@ public final class AgentServer implements Closeable {
 
         try {
             String line;
-            while (!shuttingDown.get() && Objects.nonNull(line = input.readLine())) {
+            while (!shuttingDown.get() && Objects.nonNull(line = readFrame())) {
                 String frame = line;
                 requests.submit(() -> handleFrame(frame));
             }
@@ -113,6 +113,32 @@ public final class AgentServer implements Closeable {
             requests.shutdown();
             awaitRequests();
         }
+    }
+
+    /** 在读取阶段限制原始 UTF-8 帧字节数，避免无换行输入先占满内存。 */
+    private String readFrame() throws IOException {
+        ByteArrayOutputStream frame = new ByteArrayOutputStream();
+        int value;
+        while ((value = input.read()) != -1) {
+            if (skipLineFeed) {
+                skipLineFeed = false;
+                if (value == '\n') {
+                    continue;
+                }
+            }
+            if (value == '\n') {
+                return frame.toString(StandardCharsets.UTF_8);
+            }
+            if (value == '\r') {
+                skipLineFeed = true;
+                return frame.toString(StandardCharsets.UTF_8);
+            }
+            if (frame.size() >= MAX_FRAME_BYTES) {
+                throw new IOException("JSON-RPC request exceeds maximum frame size");
+            }
+            frame.write(value);
+        }
+        return frame.size() == 0 ? null : frame.toString(StandardCharsets.UTF_8);
     }
 
     private void handleFrame(String line) {
