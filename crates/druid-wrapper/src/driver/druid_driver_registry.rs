@@ -21,6 +21,15 @@ use druid::sql::RdbcUrl;
     feature = "http-sql"
 ))]
 use druid_rdbc::driver::ConnectionFactory;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "jdbc-agent",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql"
+))]
+use druid_rdbc::driver::ConnectionProperties;
+use druid_rdbc::driver::DriverRegistry;
 use std::collections::HashMap;
 #[cfg(any(
     feature = "sqlx",
@@ -36,8 +45,7 @@ use std::sync::Arc;
 pub struct DruidDriverRegistry {
     manifest: DriverManifest,
     profile_indexes: HashMap<DatabaseProfileId, usize>,
-    #[cfg(feature = "jdbc-agent")]
-    jdbc_agent_options: Option<JdbcAgentOptions>,
+    providers: DriverRegistry,
 }
 
 impl DruidDriverRegistry {
@@ -48,6 +56,50 @@ impl DruidDriverRegistry {
 
     /// 从已校验清单创建注册中心。
     pub fn from_manifest(manifest: DriverManifest) -> Result<Self, DriverRegistryError> {
+        #[allow(unused_mut, reason = "the feature-free catalog installs no providers")]
+        let mut providers = DriverRegistry::new();
+        #[cfg(feature = "sqlx")]
+        providers.register_factory_provider(
+            "sqlx",
+            Arc::new(|url: &str, _: &ConnectionProperties, _: Option<&str>| {
+                Arc::new(SqlxConnectionFactory::new(url)) as Arc<dyn ConnectionFactory>
+            }),
+        );
+        #[cfg(feature = "duckdb-native")]
+        providers.register_factory_provider(
+            "duckdb-native",
+            Arc::new(|url: &str, _: &ConnectionProperties, _: Option<&str>| {
+                Arc::new(DuckDbConnectionFactory::new(url)) as Arc<dyn ConnectionFactory>
+            }),
+        );
+        #[cfg(feature = "libsql-native")]
+        providers.register_factory_provider(
+            "libsql-native",
+            Arc::new(
+                |url: &str, properties: &ConnectionProperties, _: Option<&str>| {
+                    let mut factory = LibSqlConnectionFactory::new(url);
+                    for (name, value) in properties {
+                        factory = factory.property(name, value);
+                    }
+                    Arc::new(factory) as Arc<dyn ConnectionFactory>
+                },
+            ),
+        );
+        #[cfg(feature = "http-sql")]
+        for provider in [HttpSqlProvider::Rqlite, HttpSqlProvider::CloudflareD1] {
+            providers.register_factory_provider(
+                format!("http-sql:{}", provider.as_str()),
+                Arc::new(
+                    move |url: &str, properties: &ConnectionProperties, _: Option<&str>| {
+                        let mut factory = HttpSqlConnectionFactory::new(provider, url);
+                        for (name, value) in properties {
+                            factory = factory.property(name, value);
+                        }
+                        Arc::new(factory) as Arc<dyn ConnectionFactory>
+                    },
+                ),
+            );
+        }
         let profile_indexes = manifest
             .profiles()
             .iter()
@@ -57,8 +109,7 @@ impl DruidDriverRegistry {
         Ok(Self {
             manifest,
             profile_indexes,
-            #[cfg(feature = "jdbc-agent")]
-            jdbc_agent_options: None,
+            providers,
         })
     }
 
@@ -66,8 +117,56 @@ impl DruidDriverRegistry {
     #[cfg(feature = "jdbc-agent")]
     #[must_use]
     pub fn with_jdbc_agent(mut self, options: JdbcAgentOptions) -> Self {
-        self.jdbc_agent_options = Some(options);
+        self.providers.register_factory_provider(
+            "jdbc-agent",
+            Arc::new(
+                move |url: &str, properties: &ConnectionProperties, query: Option<&str>| {
+                    let mut factory = JdbcAgentConnectionFactory::new(
+                        url,
+                        query.map(str::to_owned),
+                        options.clone(),
+                    );
+                    for (name, value) in properties {
+                        factory = factory.property(name, value);
+                    }
+                    Arc::new(factory) as Arc<dyn ConnectionFactory>
+                },
+            ),
+        );
         self
+    }
+
+    /// 返回产品档案使用的标准 provider 注册表，供外部检查安装状态。
+    #[must_use]
+    pub fn standard_registry(&self) -> &DriverRegistry {
+        &self.providers
+    }
+
+    #[cfg(any(
+        feature = "sqlx",
+        feature = "jdbc-agent",
+        feature = "duckdb-native",
+        feature = "libsql-native",
+        feature = "http-sql"
+    ))]
+    fn factory_from_provider(
+        &self,
+        key: &str,
+        profile: &DatabaseProfile,
+        url: &str,
+        properties: &HashMap<String, String>,
+    ) -> Result<Arc<dyn ConnectionFactory>, DriverRegistryError> {
+        let provider = self.providers.factory_provider(key).ok_or_else(|| {
+            DriverRegistryError::UnsupportedRuntime {
+                profile: profile.id().to_string(),
+                runtime: format!("provider {key} is not installed"),
+            }
+        })?;
+        let properties: ConnectionProperties = properties
+            .iter()
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect();
+        Ok(provider.factory(url, &properties, profile.validation_query()))
     }
 
     /// 查询指定产品档案。
@@ -152,8 +251,8 @@ impl DruidDriverRegistry {
                 #[cfg(feature = "sqlx")]
                 {
                     let driver_url = Self::normalize_sqlx_url(&profile, &driver_url)?;
-                    let factory: Arc<dyn ConnectionFactory> =
-                        Arc::new(SqlxConnectionFactory::new(driver_url));
+                    let factory =
+                        self.factory_from_provider("sqlx", &profile, &driver_url, &properties)?;
                     Ok(ResolvedDatabaseDriver::new(profile, display_url, factory))
                 }
                 #[cfg(not(feature = "sqlx"))]
@@ -180,21 +279,18 @@ impl DruidDriverRegistry {
                             url: diagnostic_url.clone(),
                         });
                     }
-                    let options = self.jdbc_agent_options.clone().ok_or_else(|| {
-                        DriverRegistryError::UnsupportedRuntime {
+                    if self.providers.factory_provider("jdbc-agent").is_none() {
+                        return Err(DriverRegistryError::UnsupportedRuntime {
                             profile: profile.id().to_string(),
                             runtime: "JdbcAgent".to_owned(),
-                        }
-                    })?;
-                    let mut factory = JdbcAgentConnectionFactory::new(
-                        &driver_url,
-                        profile.validation_query().map(str::to_owned),
-                        options,
-                    );
-                    for (name, value) in &properties {
-                        factory = factory.property(name, value);
+                        });
                     }
-                    let factory: Arc<dyn ConnectionFactory> = Arc::new(factory);
+                    let factory = self.factory_from_provider(
+                        "jdbc-agent",
+                        &profile,
+                        &driver_url,
+                        &properties,
+                    )?;
                     Ok(ResolvedDatabaseDriver::new(
                         profile,
                         display_url.clone(),
@@ -212,8 +308,12 @@ impl DruidDriverRegistry {
                                 url: diagnostic_url.clone(),
                             });
                         }
-                        let factory: Arc<dyn ConnectionFactory> =
-                            Arc::new(DuckDbConnectionFactory::new(&driver_url));
+                        let factory = self.factory_from_provider(
+                            "duckdb-native",
+                            &profile,
+                            &driver_url,
+                            &properties,
+                        )?;
                         return Ok(ResolvedDatabaseDriver::new(
                             profile,
                             display_url.clone(),
@@ -237,11 +337,12 @@ impl DruidDriverRegistry {
                                 url: diagnostic_url.clone(),
                             });
                         }
-                        let mut factory = LibSqlConnectionFactory::new(&driver_url);
-                        for (name, value) in &properties {
-                            factory = factory.property(name, value);
-                        }
-                        let factory: Arc<dyn ConnectionFactory> = Arc::new(factory);
+                        let factory = self.factory_from_provider(
+                            "libsql-native",
+                            &profile,
+                            &driver_url,
+                            &properties,
+                        )?;
                         return Ok(ResolvedDatabaseDriver::new(
                             profile,
                             display_url.clone(),
@@ -280,11 +381,12 @@ impl DruidDriverRegistry {
                             profile: profile.id().to_string(),
                             runtime: format!("unknown HTTP SQL provider {}", profile.provider_id()),
                         })?;
-                    let mut factory = HttpSqlConnectionFactory::new(provider, &driver_url);
-                    for (name, value) in &properties {
-                        factory = factory.property(name, value);
-                    }
-                    let factory: Arc<dyn ConnectionFactory> = Arc::new(factory);
+                    let factory = self.factory_from_provider(
+                        &format!("http-sql:{}", provider.as_str()),
+                        &profile,
+                        &driver_url,
+                        &properties,
+                    )?;
                     Ok(ResolvedDatabaseDriver::new(profile, display_url, factory))
                 }
             }
