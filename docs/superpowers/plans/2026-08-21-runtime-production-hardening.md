@@ -222,7 +222,8 @@ git commit -m "fix(admin): bound metrics repository lifecycle"
 - Modify: `crates/druid-admin/src/lib.rs`
 - Modify: `crates/druid-admin/src/ingest/ingest_service.rs`
 - Modify: `crates/druid-admin/src/bin/druid-admin.rs`
-- Test: `crates/druid-admin/tests/security_e2e_test.rs`
+- Test: `crates/druid-admin/tests/admin_binary_test.rs`
+- Test: `crates/druid-admin/tests/grpc_network_e2e_test.rs`
 - Modify: `docs/security/druid-admin-threat-model.md`
 
 **Interfaces:**
@@ -236,7 +237,7 @@ credentials succeed, loopback dev mode remains explicit, and non-loopback startu
 - [ ] **Step 2: Run RED**
 
 ```bash
-cargo test -p druid-admin --test security_e2e_test -- --nocapture
+cargo test -p druid-admin --test admin_binary_test -- --nocapture
 ```
 
 Expected: FAIL because standalone HTTP and gRPC do not share security.
@@ -250,7 +251,7 @@ configured, raw SQL and slow parameters according to policy.
 - [ ] **Step 4: Run GREEN/security regression**
 
 ```bash
-cargo test -p druid-admin --test security_e2e_test
+cargo test -p druid-admin --test admin_binary_test
 cargo test -p druid-admin --test servlet_test
 cargo test -p druid-admin --test grpc_network_e2e_test
 ```
