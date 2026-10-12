@@ -112,7 +112,7 @@ required-features = ["sqlx-bb8", "sqlx-deadpool", "toasty", "rbdc"]
 
 [[test]]
 name = "task6_database_profile_live_contract_test_parity"
-required-features = ["driver-catalog", "sqlx"]
+required-features = ["driver-catalog"]
 
 [[test]]
 name = "task6_driver_registry_test_parity"

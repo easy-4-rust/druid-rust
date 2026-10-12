@@ -422,7 +422,7 @@ CANONICAL_EVIDENCE_BINDINGS = {
     "SQLX": (
         "test:statement_executor_ownership_test",
         "sqlx_standard_factory_emits_typed_runtime_trace",
-        "default",
+        "all-features",
         "statement_executor_ownership_test::sqlx_standard_factory_emits_typed_runtime_trace",
         "task4.sqlx.runtime-trace-v1",
     ),
@@ -436,7 +436,7 @@ CANONICAL_EVIDENCE_BINDINGS = {
     "RBDC": (
         "test:rbdc_connection_adapter_test",
         "rbdc_standard_factory_emits_typed_runtime_trace",
-        "default",
+        "all-features",
         "rbdc_connection_adapter_test::rbdc_standard_factory_emits_typed_runtime_trace",
         "task4.rbdc.runtime-trace-v1",
     ),
@@ -472,7 +472,7 @@ CANONICAL_EVIDENCE_BINDINGS = {
 IDENTITY_EVIDENCE_BINDING = (
     "test:standard_adapter_conformance_test",
     "catalog_data_sources_implement_canonical_wrapper_identity",
-    "default",
+    "all-features",
     "standard_adapter_conformance_test::catalog_data_sources_implement_canonical_wrapper_identity",
 )
 SQL_EXECUTION_MARKERS = (

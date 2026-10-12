@@ -284,7 +284,7 @@ it depends on `druid-rdbc` and its runtime libraries, not on a `druid-core` faca
 | :--- | :---: | :--- |
 | `druid` / `config-http` | No | Optional HTTP configuration dependency |
 | `druid` / `sqlite`, `postgresql`, `mysql`, `turso` | No | Empty feature entries; they do not activate a database driver |
-| `druid-wrapper` / `driver-catalog`, `sqlite` | Yes | Driver catalog and Toasty SQLite integration |
+| `druid-wrapper` / `driver-catalog`, `toasty-sqlite` | Yes | Driver catalog and Toasty SQLite integration |
 | `druid-wrapper` / `postgresql`, `mysql`, `turso` | No | Toasty provider feature selection |
 | `druid-wrapper` / `duckdb-native`, `http-sql`, `libsql-native` | No | Optional native/HTTP driver dependencies |
 | `druid-wrapper` / `jdbc-agent`, `managed-driver-install` | No | JDBC Agent bridge and managed driver tooling |
