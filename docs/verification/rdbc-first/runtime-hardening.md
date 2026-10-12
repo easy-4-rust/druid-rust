@@ -12,6 +12,8 @@
 
 2026-10-12 修正 Metrics 饱和测试夹具：原用例立即释放数据源和注册句柄，不能证明真实 sampler 的容量 1 队列发生合并。加入 `coalesced_total > 0` 后测试先失败；保持 20 个源及句柄存活后，确认所有源被采样、发生合并，`queue_semantics_test` 4/4 与相关 Supervisor/shutdown 合计 14/14 通过；`cargo test -p druid-metrics --locked` 整个 crate 退出 0。仍需独立的吞吐、延迟与关闭预算。
 
+2026-10-12 发现队列饱和同时错误增加 `snapshot_busy_total`：真实采样器测试新断言先以 608 对 0 失败；修复后只增加 `coalesced_total`，实际 Busy 数据源仍只增加 `snapshot_busy_total`。`queue_semantics_test` 4/4、Metrics 默认 feature 128/128、`--all-features` 129/129 通过。此项修正告警归因，不代替数值预算。
+
 JDBC Agent 故障注入：`cargo test -p druid-wrapper --features jdbc-agent --lib --quiet` 本机 21/21 通过。沉默子进程启动按调用者配置的 75 ms 期限失败；不同身份的启动互不阻塞，同一身份的等待也遵守各自期限。超过 1 KiB 且无换行的帧在 EOF 前被拒绝，非法 ready/handshake 不回显注入的凭据标记。此项只覆盖 Agent 协议边界，不代替下表的跨平台运行预算或真实数据库验收。
 
 ## 2026-10-11 Pool 慢关闭组件核验

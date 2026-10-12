@@ -68,9 +68,8 @@ async fn sample_all(
                 match snapshot_tx.try_send(pending) {
                     Ok(()) => {}
                     Err(mpsc::error::TrySendError::Full(_)) => {
-                        // Queue saturated: increment coalesced counter, don't block SQL
+                        // 队列饱和只计入合并次数，不把背压误报为数据源 Busy；SQL 路径不阻塞。
                         self_metrics.increment_coalesced_total();
-                        self_metrics.increment_snapshot_busy_total();
                     }
                     Err(mpsc::error::TrySendError::Closed(_)) => break,
                 }

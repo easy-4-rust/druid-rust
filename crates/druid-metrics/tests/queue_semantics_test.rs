@@ -197,71 +197,26 @@ async fn saturated_metrics_queue_never_blocks_datasource_operations() {
 
 #[tokio::test]
 async fn busy_datasource_increments_snapshot_busy_total() {
-    // Test busy detection directly: register a BusyDataSource and verify
-    // the sampler increments snapshot_busy_total.
-    use parking_lot::RwLock;
-
-    let metrics = Arc::new(druid_metrics::self_metrics::RuntimeSelfMetrics::new());
-    let registry: Arc<RwLock<Vec<druid_metrics::registry::RegistryEntry>>> =
-        Arc::new(RwLock::new(Vec::new()));
-
+    // 使用真实 runtime 验证 Busy 与队列合并分别计数。
+    let config = DruidMetricsConfig::builder()
+        .queue_capacity(1)
+        .sample_interval(Duration::from_millis(5))
+        .build()
+        .unwrap();
+    let runtime = DruidMetricsRuntime::start(config).await.unwrap();
     let busy_source = Arc::new(BusyDataSource::new(100, "busy_ds"));
-    let entry = druid_metrics::registry::RegistryEntry::new(
-        100,
-        Arc::downgrade(&busy_source) as std::sync::Weak<dyn DataSourceMonitorable>,
-    );
-    registry.write().push(entry);
-
-    // Create a large-capacity channel (not the bottleneck)
-    let (_tx, _rx): (
-        tokio::sync::mpsc::Sender<druid_metrics::aggregator::PendingSnapshot>,
-        _,
-    ) = tokio::sync::mpsc::channel(1024);
-
-    let cancel = tokio_util::sync::CancellationToken::new();
-    let sampler_cancel = cancel.clone();
-    let sampler_registry = Arc::clone(&registry);
-    let sampler_metrics = Arc::clone(&metrics);
-
-    let sampler_handle = tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(Duration::from_millis(10));
-        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-        for _ in 0..5 {
-            tokio::select! {
-                () = sampler_cancel.cancelled() => break,
-                _ = ticker.tick() => {
-                    let entries: Vec<druid_metrics::registry::RegistryEntry> = {
-                        let guard = sampler_registry.read();
-                        guard.clone()
-                    };
-                    for entry in &entries {
-                        if let Some(source) = entry.weak_ref.upgrade() {
-                            match source.try_snapshot() {
-                                Ok(_) => {
-                                    // Shouldn't happen for BusyDataSource
-                                }
-                                Err(druid::stats::SnapshotUnavailable::Busy) => {
-                                    sampler_metrics.increment_snapshot_busy_total();
-                                }
-                                Err(_) => {}
-                            }
-                        }
-                    }
-                }
-            }
+    let guard = runtime.register(Arc::clone(&busy_source) as Arc<dyn DataSourceMonitorable>);
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while runtime.self_metrics().snapshot_busy_total() == 0 {
+            tokio::time::sleep(Duration::from_millis(1)).await;
         }
-    });
-
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    cancel.cancel();
-    sampler_handle.await.unwrap();
-
-    let busy_count = metrics.snapshot_busy_total();
-    assert!(
-        busy_count > 0,
-        "expected snapshot_busy_total > 0 for busy datasource, got {busy_count}"
-    );
+    })
+    .await
+    .expect("真实采样器应识别 Busy 数据源");
+    assert!(busy_source.busy_count.load(Ordering::Relaxed) > 0);
+    assert_eq!(runtime.self_metrics().coalesced_total(), 0);
+    runtime.shutdown(Duration::from_secs(2)).await.unwrap();
+    drop(guard);
 }
 
 #[tokio::test]
@@ -320,6 +275,7 @@ async fn queue_saturation_coalesces_live_sources_without_panicking() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     assert!(runtime.self_metrics().coalesced_total() > 0);
+    assert_eq!(runtime.self_metrics().snapshot_busy_total(), 0);
     assert!(sources
         .iter()
         .all(|source| source.snapshot_count.load(Ordering::Relaxed) > 0));
