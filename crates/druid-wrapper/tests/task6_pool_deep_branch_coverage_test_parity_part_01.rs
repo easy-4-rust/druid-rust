@@ -815,7 +815,7 @@ async fn task6_pool_deep_branch_coverage_test_on_fatal_error_detected_by_excepti
         SqlException::driver(1042, "fatal connection error".to_owned())
             .with_class_name("com.alibaba.druid.mock.MockConnectionClosedException"),
     ));
-    assert!(conn1.handle_exception(&fatal));
+    assert!(conn1.handle_rdbc_exception(&fatal));
 
     // Trigger fatal error on second connection to exceed on_fatal_error_max_active=1.
     let mut conn2 = pool.get().await.unwrap();
@@ -823,7 +823,7 @@ async fn task6_pool_deep_branch_coverage_test_on_fatal_error_detected_by_excepti
         SqlException::driver(1042, "fatal connection error 2".to_owned())
             .with_class_name("com.alibaba.druid.mock.MockConnectionClosedException"),
     ));
-    assert!(conn2.handle_exception(&fatal2));
+    assert!(conn2.handle_rdbc_exception(&fatal2));
     // After 2 fatal errors with max_active=1, on_fatal_error should be set.
     assert!(pool.is_on_fatal_error());
 }
