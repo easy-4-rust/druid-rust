@@ -242,6 +242,7 @@ jobs:
         run: |
           mkdir -p target/contract-evidence
           cargo test -p druid-wrapper --all-features --test task6_database_profile_live_contract_test_parity -- --nocapture
+          cargo test -p druid-wrapper --all-features --test capability_truthfulness_live_test sqlite_capability_claims_match_committed_rows -- --exact
       - name: Upload auditable contract record
         uses: actions/upload-artifact@v4
         with:
