@@ -227,3 +227,16 @@ pub use druid_rdbc::error::SqlExceptionKind::InvalidAuthorizationSpec;
 具体标准SQL异常先按记录的标准类名确定kind，随后使用recoverable标志和SQLState作为fallback。12个具体标准类的空SQLState与冲突SQLState已取得24条Java/Rust同输入一致证据；不能扩大为任意vendor子类继承认证。
 
 [本轮实现与验证边界](../verification/rdbc-first/task8-constant-exception-contract-recovery-2026-10-08.md)。
+
+## 旧资源句柄方法迁移（pre-release）
+
+`druid-rdbc/inherent_method_missing` 的 9 项由标准资源收敛引起，迁移时需要区分公开生命周期与 Druid 内部 owner 状态：
+
+| 旧方法 | 当前入口与影响 |
+| --- | --- |
+| `RdbcArray::state`、`RdbcBlob::state`、`RdbcClob::state`、`RdbcNClob::state`、`RdbcSqlXml::state` | 使用各句柄的 `is_freed()` 判断已确认释放；`Releasing` 等 owner 中间状态不再作为 RDBC 公共枚举暴露。取消或失败后的 `free()` 仍须按原错误/重试合同处理，不能把 `!is_freed()` 等同于可读。 |
+| `RdbcRef::state` | Java `Ref` 没有 `free`。当前句柄直接委托标准 `Ref` 的读写操作并保留克隆身份；调用方应处理操作返回的错误和父连接生命周期，不再查询凭空附加的释放状态。 |
+| `RdbcOpaqueObject::physical` | 使用 `value()` 得到 `dyn OpaqueObjectValue`，或 `downcast_ref<T>()` 作受控类型访问；旧 `PhysicalRdbcOpaqueObject` 实现须迁入标准值接口。 |
+| `RdbcXmlSource::physical`、`RdbcXmlResult::physical` | 分别使用 `value()` 得到 `dyn XmlSource` / `dyn XmlResult`；旧 `PhysicalXmlSource` / `PhysicalXmlResult` 实现须迁入标准扩展接口。 |
+
+这九项是预发布 API 迁移，不代表 Task7 的资源能力、取消监管和实库验收已关闭。`resource_standard_contract_test` 当前 31/31 通过，全工作区默认目标通过；外部下游仍需按上表迁移并单独编译验证。
