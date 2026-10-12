@@ -7,6 +7,33 @@ use futures::stream::{self, BoxStream, StreamExt};
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
+async fn rbdc_capabilities_do_not_claim_unsupported_transactions_or_savepoints() {
+    let factory = factory(Arc::new(Mutex::new(Vec::new())));
+    let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+        .await
+        .expect("RBDC connection");
+    let capabilities = connection.capabilities();
+    assert!(!capabilities.transactions);
+    assert!(!capabilities.savepoints);
+    assert!(!capabilities.catalogs);
+    assert!(!capabilities.schemas);
+    assert!(!capabilities.callable_statements);
+    assert!(matches!(
+        connection.commit().await,
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_commit"
+        })
+    ));
+    assert!(matches!(
+        connection.set_savepoint().await,
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_set_savepoint"
+        })
+    ));
+    connection.close().await.expect("close RBDC connection");
+}
+
+#[tokio::test]
 async fn rbdc_standard_factory_emits_typed_runtime_trace() {
     use druid_rdbc::connection::Connection;
 
