@@ -12,6 +12,13 @@ pub struct ResolvedDatabaseDriver {
 }
 
 impl ResolvedDatabaseDriver {
+    #[cfg(any(
+        feature = "sqlx",
+        feature = "jdbc-agent",
+        feature = "duckdb-native",
+        feature = "libsql-native",
+        feature = "http-sql"
+    ))]
     pub(crate) fn new(
         profile: DatabaseProfile,
         url: String,

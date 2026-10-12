@@ -38,8 +38,6 @@ mod proxool_config_key;
 #[cfg(any(feature = "sqlx", feature = "toasty"))]
 mod sqlite_returning_key_plan;
 #[cfg(any(
-    feature = "sqlx",
-    feature = "toasty",
     feature = "rbdc",
     feature = "duckdb-native",
     feature = "libsql-native",

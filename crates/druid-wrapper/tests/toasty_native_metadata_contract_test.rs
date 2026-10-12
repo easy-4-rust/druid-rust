@@ -1,5 +1,5 @@
 //! 同一真实Toasty SQLite查询的原生元数据交接控制。
-#![cfg(feature = "sqlite")]
+#![cfg(feature = "toasty-sqlite")]
 use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::result_set::{ColumnIndex, ResultSetExt};

@@ -9,8 +9,7 @@ fn catalog_without_sqlx_reports_uninstalled_runtime() {
         .expect("SQLite profile id must be valid");
     let error = registry
         .resolve(&config)
-        .err()
-        .expect("SQLx must remain unavailable until its feature is selected");
+        .expect_err("SQLx must remain unavailable until its feature is selected");
     assert!(matches!(
         error,
         DriverRegistryError::UnsupportedRuntime { .. }

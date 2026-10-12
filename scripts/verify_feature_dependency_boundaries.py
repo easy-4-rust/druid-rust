@@ -98,6 +98,13 @@ def main() -> int:
     packages = json.loads(metadata.stdout)["packages"]
     wrapper = next(package for package in packages if package["name"] == "druid-wrapper")
     features = wrapper["features"]
+    expected_default = {"driver-catalog", "toasty-sqlite"}
+    actual_default = set(features.get("default", []))
+    if actual_default != expected_default:
+        errors.append(
+            "default features must be driver-catalog,toasty-sqlite; got: "
+            + ",".join(sorted(actual_default))
+        )
     dependencies = {dependency["name"]: dependency for dependency in wrapper["dependencies"]}
     for feature, owned_deps in FEATURE_DEPS.items():
         enabled = set(features.get(feature, []))

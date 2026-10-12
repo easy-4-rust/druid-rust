@@ -9,7 +9,7 @@ repository.workspace = true
 publish      = false
 
 [features]
-default = ["driver-catalog", "sqlite", "sqlx-bb8", "sqlx-deadpool", "rbdc"]
+default = ["driver-catalog", "toasty-sqlite"]
 driver-catalog = []
 sqlx = ["dep:sqlx"]
 sqlx-bb8 = ["sqlx", "dep:bb8"]
@@ -156,7 +156,7 @@ required-features = ["sqlx", "toasty-sqlite"]
 
 [[test]]
 name = "task6_rdbc_data_source_test_parity"
-required-features = ["driver-catalog"]
+required-features = ["driver-catalog", "sqlx"]
 
 [[test]]
 name = "task6_sqlite_wrapper_semantics_test_parity"

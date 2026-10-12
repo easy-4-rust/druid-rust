@@ -153,7 +153,7 @@ The five product crates already exist; their presence does not establish release
 | `druid-admin` | HTTP/gRPC management, repository, authentication, static UI and standalone binary | druid-metrics |
 
 `druid-bench` is the sixth workspace member and a verification helper, not a sixth product crate.
-Toasty integration belongs to `druid-wrapper`; its default features are `driver-catalog` and `sqlite`.
+Toasty integration belongs to `druid-wrapper`; its default features are `driver-catalog` and `toasty-sqlite`. SQLx, RBDC, and external pool adapters require explicit features.
 
 ### 4.2 Dependency direction
 

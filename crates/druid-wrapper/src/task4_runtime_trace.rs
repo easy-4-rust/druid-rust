@@ -18,8 +18,11 @@ static NEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FamilyId {
+    #[cfg(feature = "sqlx")]
     Sqlx,
+    #[cfg(feature = "toasty")]
     Toasty,
+    #[cfg(feature = "rbdc")]
     Rbdc,
     #[cfg(feature = "duckdb-native")]
     DuckDb,
@@ -34,8 +37,11 @@ enum FamilyId {
 impl FamilyId {
     const fn as_str(self) -> &'static str {
         match self {
+            #[cfg(feature = "sqlx")]
             Self::Sqlx => "SQLX",
+            #[cfg(feature = "toasty")]
             Self::Toasty => "TOASTY",
+            #[cfg(feature = "rbdc")]
             Self::Rbdc => "RBDC",
             #[cfg(feature = "duckdb-native")]
             Self::DuckDb => "DUCKDB",
@@ -319,12 +325,15 @@ macro_rules! family_session {
     };
 }
 
+#[cfg(feature = "sqlx")]
 family_session!(sqlx_trace_session, Sqlx, "task4.sqlx.runtime-trace-v1");
+#[cfg(feature = "toasty")]
 family_session!(
     toasty_trace_session,
     Toasty,
     "task4.toasty.runtime-trace-v1"
 );
+#[cfg(feature = "rbdc")]
 family_session!(rbdc_trace_session, Rbdc, "task4.rbdc.runtime-trace-v1");
 #[cfg(feature = "duckdb-native")]
 family_session!(
