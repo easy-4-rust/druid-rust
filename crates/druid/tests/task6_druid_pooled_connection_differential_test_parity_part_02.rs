@@ -144,6 +144,18 @@ impl ConnectionEventListener for TestConnectionEventListener {
     }
 }
 
+struct PanickingConnectionEventListener;
+
+impl ConnectionEventListener for PanickingConnectionEventListener {
+    fn connection_closed(&self, _connection_id: u64) {
+        panic!("connection event listener panic");
+    }
+
+    fn connection_error_occurred(&self, _connection_id: u64, _error: &DruidError) {
+        panic!("connection event listener panic");
+    }
+}
+
 #[derive(Debug)]
 struct TestStatementEventListener;
 
@@ -295,6 +307,55 @@ async fn task6_druid_pooled_connection_differential_test_remove_nonexistent_list
     let listener: Arc<dyn ConnectionEventListener> = Arc::new(TestConnectionEventListener::new());
     let removed = p.remove_connection_event_listener(&listener).unwrap();
     assert!(!removed);
+}
+
+#[tokio::test]
+async fn pooled_connection_listener_panic_does_not_skip_recycle_or_duplicate_close_event() {
+    let physical = make_physical().await;
+    let holder =
+        DruidConnectionHolder::with_standard_connection(physical, 77, std::time::Duration::ZERO, 0)
+            .await
+            .unwrap();
+    let returned = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&returned);
+    let mut pooled = DruidPooledConnection::with_standard_holder(
+        holder,
+        String::new(),
+        None,
+        false,
+        false,
+        Box::new(move |_, _| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            true
+        }),
+    );
+    let panicking: Arc<dyn ConnectionEventListener> = Arc::new(PanickingConnectionEventListener);
+    let recording = Arc::new(TestConnectionEventListener::new());
+    let recording_listener: Arc<dyn ConnectionEventListener> = recording.clone();
+    pooled.add_connection_event_listener(panicking).unwrap();
+    pooled
+        .add_connection_event_listener(recording_listener)
+        .unwrap();
+
+    Connection::close(&mut pooled).await.unwrap();
+    Connection::close(&mut pooled).await.unwrap();
+
+    assert_eq!(recording.closed_count.load(Ordering::SeqCst), 1);
+    assert_eq!(returned.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn pooled_connection_error_listener_panic_does_not_skip_fatal_discard() {
+    let mut pooled = make_pooled(make_physical().await).await;
+    let panicking: Arc<dyn ConnectionEventListener> = Arc::new(PanickingConnectionEventListener);
+    pooled.add_connection_event_listener(panicking).unwrap();
+    pooled.set_exception_sorter(Arc::new(AlwaysFatalSorter));
+    let error = DruidError::SqlException(Box::new(
+        SqlException::driver(17002, "connection reset").with_sql_state("08006"),
+    ));
+
+    assert!(pooled.handle_exception(&error));
+    assert!(pooled.connection_holder().unwrap().is_discard());
 }
 
 #[tokio::test]

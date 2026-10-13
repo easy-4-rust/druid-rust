@@ -24,6 +24,7 @@ use super::transaction_info::TransactionInfo;
 use crate::stats::StatsCollector;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -842,7 +843,12 @@ impl DruidPooledConnection {
         self.connection_closed_notified = true;
         if let Some(holder) = self.holder.as_ref() {
             for listener in holder.connection_event_listeners() {
-                listener.connection_closed(self.id);
+                if catch_unwind(AssertUnwindSafe(|| listener.connection_closed(self.id))).is_err() {
+                    tracing::error!(
+                        connection_id = self.id,
+                        "connection-closed listener panicked; continuing connection cleanup"
+                    );
+                }
             }
         }
     }
@@ -851,7 +857,16 @@ impl DruidPooledConnection {
         let product_error = DruidError::from(error.clone());
         if let Some(holder) = self.holder.as_ref() {
             for listener in holder.connection_event_listeners() {
-                listener.connection_error_occurred(self.id, &product_error);
+                if catch_unwind(AssertUnwindSafe(|| {
+                    listener.connection_error_occurred(self.id, &product_error)
+                }))
+                .is_err()
+                {
+                    tracing::error!(
+                        connection_id = self.id,
+                        "connection-error listener panicked; preserving database error handling"
+                    );
+                }
             }
         }
     }
