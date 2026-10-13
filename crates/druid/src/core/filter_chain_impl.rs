@@ -955,38 +955,15 @@ impl FilterChainImpl {
         Ok(())
     }
 
-    pub(crate) async fn standard_connection_meta_data_before(
+    /// 从首个过滤器包围完整标准 metadata 获取；参数为驱动连接及逻辑 ID。
+    pub(crate) async fn standard_connection_meta_data(
         &self,
+        connection: &mut dyn Connection,
         connection_id: u64,
-    ) -> Result<(), DruidError> {
-        for (index, filter) in self.before.iter().enumerate() {
-            if let Err(error) = filter
-                .standard_connection_get_meta_data_before(connection_id)
-                .await
-            {
-                let failure = Err(error.clone());
-                for completed in self.before[..index].iter().rev() {
-                    completed
-                        .standard_connection_get_meta_data_after(connection_id, &failure)
-                        .await?;
-                }
-                return Err(error);
-            }
-        }
-        Ok(())
-    }
-
-    pub(crate) async fn standard_connection_meta_data_after(
-        &self,
-        connection_id: u64,
-        result: &Result<(), DruidError>,
-    ) -> Result<(), DruidError> {
-        for filter in self.before.iter().rev() {
-            filter
-                .standard_connection_get_meta_data_after(connection_id, result)
-                .await?;
-        }
-        Ok(())
+    ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, DruidError> {
+        super::StandardConnectionMetaDataFilterChain::new(&self.before, connection, connection_id)
+            .connection_get_meta_data()
+            .await
     }
 
     pub(crate) fn standard_result_set_open_after_with_proxy(

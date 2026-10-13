@@ -1486,25 +1486,15 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
         let filter_chain = self.filter_chain.clone();
-        if let Some(filter_chain) = &filter_chain {
-            let result = filter_chain
-                .standard_connection_meta_data_before(self.id)
-                .await;
-            self.classify_result(result)?;
-        }
-        let raw_result = self.standard_mut()?.database_meta_data().await;
-        let filter_result = raw_result
-            .as_ref()
-            .map(|_| ())
-            .map_err(|error| DruidError::from(error.clone()));
-        let raw = self.classify_result(raw_result);
-        if let Some(filter_chain) = &filter_chain {
-            let after = filter_chain
-                .standard_connection_meta_data_after(self.id, &filter_result)
-                .await;
-            self.classify_result(after)?;
-        }
-        let raw = raw?;
+        let connection_id = self.id;
+        let raw_result = match &filter_chain {
+            Some(filter_chain) => filter_chain
+                .standard_connection_meta_data(self.standard_mut()?, connection_id)
+                .await
+                .map_err(RdbcError::from),
+            None => self.standard_mut()?.database_meta_data().await,
+        };
+        let raw = self.classify_result(raw_result)?;
         let resources = self
             .holder
             .as_ref()

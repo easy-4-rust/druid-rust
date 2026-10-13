@@ -463,6 +463,11 @@ metadata 结果没有调用方创建 Statement，必须返回 None，不返回�
 标准 RDBC `Statement` 方法为同步方法，因此标准链以同步 hook 分派；驱动错误和
 过滤器错误继续经过原有逻辑连接的异常分类，不因迁移绕开故障处理。
 
+连接 `database_meta_data` 保留 BASE 过滤器对完整返回对象的包围能力：按注册
+顺序进入、逆序退出，允许替换受管 metadata 或在驱动前短路；已有前置/后置
+通知继续在默认包围实现中执行。返回对象仍绑定当前连接租约与资源登记，过滤器
+或驱动错误均经过原有异常分类。
+
 固定 BASE 的 all_strong_getter_overloads_preserve_raw_spi_argument_identity 要求完整58次驱动调用。
 唯一标准结果集用 ResultSetRead 描述符承载 Decimal 的无 scale/指定 scale，以及日期时间
 Unspecified/Specified(None)/Specified(Some(Calendar))，不能在扩展 getter 中丢弃参数。

@@ -5,8 +5,8 @@ use super::{
     DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain, DruidError,
     DruidPooledConnection, ExecResult, PreparedInputParameter, RdbcClob, RdbcInputStream,
     RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter, RegisteredLob, SqlWarning,
-    StandardConnectionLobFilterChain, StandardConnectionWarningFilterChain,
-    StandardStatementWarningFilterChain, Value,
+    StandardConnectionLobFilterChain, StandardConnectionMetaDataFilterChain,
+    StandardConnectionWarningFilterChain, StandardStatementWarningFilterChain, Value,
 };
 use druid_rdbc::resource::{Blob, Clob, NClob};
 use std::time::{Duration, Instant};
@@ -323,6 +323,22 @@ pub trait BeforeFilter: Send + Sync {
         _result: &Result<(), DruidError>,
     ) -> Result<(), DruidError> {
         Ok(())
+    }
+
+    /// 包围完整标准 metadata 获取；参数为连接链，返回可替换的受管原始对象。
+    /// 对应 Java: Filter#connection_getMetaData。默认兼容既有前置/后置通知。
+    async fn standard_connection_get_meta_data(
+        &self,
+        chain: &mut StandardConnectionMetaDataFilterChain<'_>,
+    ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, DruidError> {
+        let connection_id = chain.connection_id();
+        self.standard_connection_get_meta_data_before(connection_id)
+            .await?;
+        let result = chain.connection_get_meta_data().await;
+        let status = result.as_ref().map(|_| ()).map_err(Clone::clone);
+        self.standard_connection_get_meta_data_after(connection_id, &status)
+            .await?;
+        result
     }
 
     async fn on_statement_event(&self, _event: &StatementEvent) -> Result<(), DruidError> {
