@@ -143,6 +143,26 @@ flowchart LR
     Admin -. "可选 driver-catalog" .-> Wrapper
 ```
 
+### 4.1 应用、标准合同与数据库适配器
+
+`druid-rdbc` 定义与具体数据库无关的统一标准；`druid` 为应用提供连接池、过滤器和池化代理；`druid-wrapper` 将 SQLx、Toasty、RBDC、JDBC Agent 等后端接入该合同。标准合同覆盖连接执行链、元数据与类型、资源对象以及数据源和驱动入口：
+
+```mermaid
+flowchart TB
+    A["应用 / ORM"] --> P["druid：连接池、过滤器、池化代理"]
+    P --> C["druid-rdbc：统一标准合同"]
+    W["druid-wrapper：数据库适配器"] --> C
+    W --> D["SQLx / Toasty / RBDC / JDBC Agent 等"]
+
+    C --> S["Connection → Statement → ResultSet"]
+    S --> PS["PreparedStatement → CallableStatement"]
+    C --> M["Metadata / SQL 类型 / 异常"]
+    C --> R["LOB / Array / SQLXML / SQLData"]
+    C --> DS["DataSource / Driver / RowSet"]
+```
+
+图中依赖箭头表示模块依赖或适配关系；`Connection → Statement → ResultSet` 表示标准操作对象链，`PreparedStatement → CallableStatement` 表示接口特化关系。`druid-rdbc` 不持有池化 owner，owner、租约和回收策略属于 `druid`；具体数据库 I/O 属于 `druid-wrapper` 及其后端。
+
 历史上 13 个 workspace crate 曾在 2026-07-29 物理收敛为三个；下表只记录
 归并来源，不代表当前模块数量或目标拓扑：
 

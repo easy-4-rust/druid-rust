@@ -52,6 +52,8 @@ flowchart TB
 
 图中的箭头表达接口依赖与能力归属，不表示 trait 继承或数据库调用的完整时序。`druid-rdbc` 定义中立合同，`druid` 承担租约、回收和事件分发，`druid-wrapper` 承担真实后端执行。扩展唯一标准树比新增平行兼容接口更容易保持代理闭包。
 
+同一分层图必须出现在 `docs/druid-rust-Architecture.zh_CN.md` 的主架构说明中，并补充图例、owner/租约归属和实现能力边界；OpenSpec 内的设计图用于决策记录，不能替代面向仓库读者的架构文档。该文档交付由 MC-05 和任务 8.5 验收，不能作为后端能力或生产就绪证据。
+
 ### D2. 驱动查找与连接协商分别实现
 
 对应 [DN-01–03](specs/rdbc-driver-negotiation/spec.md)。保留查找入口的 `accepts_url` 判断；连接入口对注册快照逐个调用 `connect`，不先调用 `accepts_url` 或名称方法。保存首个 SQL 异常所有权，遇到后续成功立即返回，遍历结束才返回首个异常或无匹配。
