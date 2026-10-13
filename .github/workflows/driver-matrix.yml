@@ -212,6 +212,7 @@ jobs:
   sqlite-product-contract:
     name: SQLite contract (${{ matrix.platform.target }}, Rust ${{ matrix.rust.label }})
     runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
