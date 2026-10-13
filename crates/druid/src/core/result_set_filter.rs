@@ -12,6 +12,26 @@ use std::sync::Arc;
 #[allow(private_interfaces)]
 #[async_trait::async_trait]
 pub trait ResultSetFilter: Send + Sync {
+    /// 包围结果集警告读取；参数为上下文和惰性后续调用，返回可改写的完整警告链。
+    /// 对应 Java: Filter#resultSet_getWarnings。
+    fn standard_result_set_get_warnings(
+        &self,
+        _context: &ResultSetFilterContext,
+        next: &mut dyn FnMut() -> Result<Option<druid_rdbc::error::SqlWarning>, DruidError>,
+    ) -> Result<Option<druid_rdbc::error::SqlWarning>, DruidError> {
+        next()
+    }
+
+    /// 包围结果集警告清除；参数为上下文和惰性后续调用，返回原操作结果。
+    /// 对应 Java: Filter#resultSet_clearWarnings。
+    fn standard_result_set_clear_warnings(
+        &self,
+        _context: &ResultSetFilterContext,
+        next: &mut dyn FnMut() -> Result<(), DruidError>,
+    ) -> Result<(), DruidError> {
+        next()
+    }
+
     /// 包围原行操作；参数为上下文、独立操作身份与惰性后续调用，返回原结果。
     /// 默认继续下一Filter。对应 Java: Filter#resultSet_insertRow/updateRow/deleteRow/refreshRow/cancelRowUpdates/moveToInsertRow/moveToCurrentRow。
     fn standard_result_set_row_operation(

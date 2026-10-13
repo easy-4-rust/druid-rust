@@ -1563,12 +1563,30 @@ impl ResultSet for DruidPooledResultSet {
 
     fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, RdbcError> {
         self.ensure_open()?;
-        self.record_operation_result(self.resource.access_core(|raw| raw.warnings()))
+        let result = self.resource.access_core(|raw| {
+            let mut terminal = || raw.warnings().map_err(super::DruidError::from);
+            match &self.resource.filter_chain {
+                Some(filters) => filters
+                    .standard_result_set_get_warnings(&self.filter_context, &mut terminal)
+                    .map_err(RdbcError::from),
+                None => terminal().map_err(RdbcError::from),
+            }
+        });
+        self.record_operation_result(result)
     }
 
     fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
-        self.record_operation_result(self.resource.access_core(ResultSet::clear_warnings))
+        let result = self.resource.access_core(|raw| {
+            let mut terminal = || raw.clear_warnings().map_err(super::DruidError::from);
+            match &self.resource.filter_chain {
+                Some(filters) => filters
+                    .standard_result_set_clear_warnings(&self.filter_context, &mut terminal)
+                    .map_err(RdbcError::from),
+                None => terminal().map_err(RdbcError::from),
+            }
+        });
+        self.record_operation_result(result)
     }
 
     fn cursor_name(&self) -> Result<Option<String>, RdbcError> {

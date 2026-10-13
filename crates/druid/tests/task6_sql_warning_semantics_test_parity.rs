@@ -6,7 +6,7 @@ use druid::core::{
     AfterFilter, BeforeFilter, Connection, ConnectionEvent, ConnectionFactory,
     ConnectionRecycleDisposition, DruidConnectionHolder, DruidError, DruidPooledConnection,
     ExceptionSorter, ExceptionSorterProperties, ExecContext, ExecResult, FilterChain, RdbcError,
-    SqlException, SqlWarning,
+    ResultSetFilter, ResultSetFilterContext, SqlException, SqlWarning,
 };
 use druid_rdbc::metadata::{
     ColumnDescriptor, ColumnNullability, ResultSetMetaData, ResultSetMetaDataSnapshot,
@@ -81,6 +81,25 @@ impl BeforeFilter for WarningOverrideFilter {
     fn standard_statement_clear_warnings(
         &self,
         _chain: &mut druid::core::StandardStatementWarningFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl ResultSetFilter for WarningOverrideFilter {
+    fn standard_result_set_get_warnings(
+        &self,
+        _context: &ResultSetFilterContext,
+        _next: &mut dyn FnMut() -> Result<Option<SqlWarning>, DruidError>,
+    ) -> Result<Option<SqlWarning>, DruidError> {
+        Ok(Some(SqlWarning::new("result-set-overridden", None, 0)))
+    }
+
+    fn standard_result_set_clear_warnings(
+        &self,
+        _context: &ResultSetFilterContext,
+        _next: &mut dyn FnMut() -> Result<(), DruidError>,
     ) -> Result<(), DruidError> {
         Ok(())
     }
@@ -190,6 +209,43 @@ impl AfterFilter for WarningEventFilter {
                 .push(format!("{}-after", self.name));
         }
         Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl ResultSetFilter for WarningEventFilter {
+    fn standard_result_set_get_warnings(
+        &self,
+        _context: &ResultSetFilterContext,
+        next: &mut dyn FnMut() -> Result<Option<SqlWarning>, DruidError>,
+    ) -> Result<Option<SqlWarning>, DruidError> {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}-rs-get-before", self.name));
+        let result = next();
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}-rs-get-after", self.name));
+        result
+    }
+
+    fn standard_result_set_clear_warnings(
+        &self,
+        _context: &ResultSetFilterContext,
+        next: &mut dyn FnMut() -> Result<(), DruidError>,
+    ) -> Result<(), DruidError> {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}-rs-clear-before", self.name));
+        let result = next();
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}-rs-clear-after", self.name));
+        result
     }
 }
 
@@ -455,8 +511,10 @@ async fn task6_warning_connection_with_filter_log(
     let mut chain = FilterChain::new();
     chain.add_before(outer.clone() as Arc<dyn BeforeFilter>);
     chain.add_before(inner.clone() as Arc<dyn BeforeFilter>);
-    chain.add_after(outer as Arc<dyn AfterFilter>);
-    chain.add_after(inner as Arc<dyn AfterFilter>);
+    chain.add_after(outer.clone() as Arc<dyn AfterFilter>);
+    chain.add_after(inner.clone() as Arc<dyn AfterFilter>);
+    chain.add_result_set(outer as Arc<dyn ResultSetFilter>);
+    chain.add_result_set(inner as Arc<dyn ResultSetFilter>);
     let connection = DruidPooledConnection::with_standard_holder(
         holder,
         "warning-filter-order".to_owned(),
@@ -563,7 +621,9 @@ async fn statement_and_prepared_warning_filters_can_short_circuit_failing_driver
     .await
     .unwrap();
     let mut filters = FilterChain::new();
-    filters.add_before(Arc::new(WarningOverrideFilter));
+    let override_filter = Arc::new(WarningOverrideFilter);
+    filters.add_before(override_filter.clone() as Arc<dyn BeforeFilter>);
+    filters.add_result_set(override_filter as Arc<dyn ResultSetFilter>);
     let mut connection = DruidPooledConnection::with_standard_holder(
         holder,
         "warning-short-circuit".to_owned(),
@@ -580,6 +640,21 @@ async fn statement_and_prepared_warning_filters_can_short_circuit_failing_driver
         "statement-overridden"
     );
     statement.clear_warnings().unwrap();
+    let mut rows = statement.execute_query("SELECT 1").await.unwrap();
+    assert_eq!(
+        rows.warnings().unwrap().unwrap().message(),
+        "result-set-overridden"
+    );
+    rows.clear_warnings().unwrap();
+    rows.close().await.unwrap();
+    assert!(matches!(
+        rows.warnings(),
+        Err(RdbcError::ConnectionDiscarded)
+    ));
+    assert!(matches!(
+        rows.clear_warnings(),
+        Err(RdbcError::ConnectionDiscarded)
+    ));
     let mut prepared =
         Connection::prepare_statement(&mut connection, "SELECT ?", StatementOptions::default())
             .await
@@ -589,6 +664,36 @@ async fn statement_and_prepared_warning_filters_can_short_circuit_failing_driver
         "statement-overridden"
     );
     prepared.clear_warnings().unwrap();
+}
+
+#[tokio::test]
+async fn result_set_warning_filters_preserve_order_and_driver_clear() {
+    let (mut connection, log) = task6_warning_connection_with_filter_log().await;
+    let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .unwrap();
+    let mut rows = statement.execute_query("SELECT 1").await.unwrap();
+    log.lock().unwrap().clear();
+    assert_eq!(rows.warnings().unwrap().unwrap().message(), "outer");
+    rows.clear_warnings().unwrap();
+    assert!(rows.warnings().unwrap().is_none());
+    assert_eq!(
+        *log.lock().unwrap(),
+        [
+            "outer-rs-get-before",
+            "inner-rs-get-before",
+            "inner-rs-get-after",
+            "outer-rs-get-after",
+            "outer-rs-clear-before",
+            "inner-rs-clear-before",
+            "inner-rs-clear-after",
+            "outer-rs-clear-after",
+            "outer-rs-get-before",
+            "inner-rs-get-before",
+            "inner-rs-get-after",
+            "outer-rs-get-after",
+        ]
+    );
 }
 
 #[tokio::test]

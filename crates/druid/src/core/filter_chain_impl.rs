@@ -1025,6 +1025,50 @@ impl FilterChainImpl {
         invoke(&self.result_set, context, operation, terminal)
     }
 
+    /// 按注册顺序读取结果集警告；参数为上下文及驱动末端，返回完整警告链。
+    pub(crate) fn standard_result_set_get_warnings(
+        &self,
+        context: &ResultSetFilterContext,
+        terminal: &mut dyn FnMut() -> Result<Option<SqlWarning>, DruidError>,
+    ) -> Result<Option<SqlWarning>, DruidError> {
+        fn invoke(
+            filters: &[Arc<dyn super::ResultSetFilter>],
+            context: &ResultSetFilterContext,
+            terminal: &mut dyn FnMut() -> Result<Option<SqlWarning>, DruidError>,
+        ) -> Result<Option<SqlWarning>, DruidError> {
+            match filters.split_first() {
+                Some((filter, remaining)) => filter
+                    .standard_result_set_get_warnings(context, &mut || {
+                        invoke(remaining, context, terminal)
+                    }),
+                None => terminal(),
+            }
+        }
+        invoke(&self.result_set, context, terminal)
+    }
+
+    /// 按注册顺序清除结果集警告；参数为上下文及驱动末端，返回原结果。
+    pub(crate) fn standard_result_set_clear_warnings(
+        &self,
+        context: &ResultSetFilterContext,
+        terminal: &mut dyn FnMut() -> Result<(), DruidError>,
+    ) -> Result<(), DruidError> {
+        fn invoke(
+            filters: &[Arc<dyn super::ResultSetFilter>],
+            context: &ResultSetFilterContext,
+            terminal: &mut dyn FnMut() -> Result<(), DruidError>,
+        ) -> Result<(), DruidError> {
+            match filters.split_first() {
+                Some((filter, remaining)) => filter
+                    .standard_result_set_clear_warnings(context, &mut || {
+                        invoke(remaining, context, terminal)
+                    }),
+                None => terminal(),
+            }
+        }
+        invoke(&self.result_set, context, terminal)
+    }
+
     /// 按注册顺序包围属性调用；参数为原请求和末端，保留短路及错误反向退出。
     /// 对应 Java: FilterChainImpl 的 ResultSet 属性方法。
     pub(crate) fn standard_result_set_property(
