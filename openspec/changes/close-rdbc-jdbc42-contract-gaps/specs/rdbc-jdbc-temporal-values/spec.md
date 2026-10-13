@@ -14,6 +14,10 @@ JDBC 对齐的 Timestamp SHALL 按 Java 8 默认时区规则在 epoch 毫秒与�
 - **WHEN** 默认时区为 Asia/Shanghai，使用 epoch 毫秒 0 构造 Timestamp
 - **THEN** 本地字段为 1970-01-01 08:00:00，读取 epoch 毫秒仍为 0
 
+#### Scenario: 默认时区变化后保留同一时刻
+- **WHEN** 创建 Timestamp 后将进程默认时区从 UTC 改为 Asia/Shanghai
+- **THEN** epoch 毫秒保持不变，后续本地字段读取按新的默认时区显示
+
 #### Scenario: 上海本地零点
 - **WHEN** 默认时区为 Asia/Shanghai，从字符串 1970-01-01 00:00:00 构造 Timestamp
 - **THEN** 返回 epoch 毫秒 -28800000

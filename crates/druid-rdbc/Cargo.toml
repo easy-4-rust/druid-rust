@@ -12,6 +12,7 @@ futures.workspace = true
 bitflags.workspace = true
 bigdecimal.workspace = true
 chrono.workspace = true
+jiff.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 url.workspace = true
 uuid.workspace = true

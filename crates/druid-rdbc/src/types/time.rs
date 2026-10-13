@@ -1,4 +1,4 @@
-use chrono::NaiveTime;
+use chrono::{Duration, NaiveTime, Timelike};
 
 use crate::error::RdbcError;
 use crate::types::Value;
@@ -26,7 +26,7 @@ impl Time {
     /// Creates the same SQL `TIME` from `value`; corresponds to Java `valueOf(LocalTime)`.
     #[must_use]
     pub fn from_local_time(value: NaiveTime) -> Self {
-        Self(value)
+        Self(value - Duration::nanoseconds(i64::from(value.nanosecond())))
     }
 
     /// Returns local time without a date or time zone. Corresponds to Java: `toLocalTime`.
