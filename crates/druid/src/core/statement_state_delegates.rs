@@ -35,6 +35,15 @@ macro_rules! delegate_statement_state_methods {
             druid_rdbc::statement::Statement::cancel(&mut self.$base)
         }
 
+        fn cancellation_control(
+            &self,
+        ) -> Result<
+            std::sync::Arc<dyn druid_rdbc::statement::StatementCancellation>,
+            druid_rdbc::error::RdbcError,
+        > {
+            druid_rdbc::statement::Statement::cancellation_control(&self.$base)
+        }
+
         fn set_cursor_name(&mut self, name: &str) -> Result<(), druid_rdbc::error::RdbcError> {
             druid_rdbc::statement::Statement::set_cursor_name(&mut self.$base, name)
         }
@@ -79,3 +88,57 @@ macro_rules! delegate_statement_state_methods {
 }
 
 pub(crate) use delegate_statement_state_methods;
+
+#[cfg(test)]
+mod cancellation_control_tests {
+    use druid_rdbc::error::RdbcError;
+    use druid_rdbc::statement::{Statement, StatementCancellation};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    struct CancellationCounter(Arc<AtomicUsize>);
+
+    #[async_trait::async_trait]
+    impl StatementCancellation for CancellationCounter {
+        async fn cancel(&self) -> Result<(), RdbcError> {
+            self.0.fetch_add(1, Ordering::AcqRel);
+            Ok(())
+        }
+    }
+
+    struct CancellationTarget(Arc<AtomicUsize>);
+
+    druid_rdbc::impl_standard_wrapper!(CancellationTarget => Statement);
+
+    #[async_trait::async_trait]
+    impl Statement for CancellationTarget {
+        fn cancellation_control(&self) -> Result<Arc<dyn StatementCancellation>, RdbcError> {
+            Ok(Arc::new(CancellationCounter(Arc::clone(&self.0))))
+        }
+    }
+
+    struct DelegatingStatement {
+        statement_base: CancellationTarget,
+    }
+
+    druid_rdbc::impl_standard_wrapper!(DelegatingStatement => Statement);
+
+    #[async_trait::async_trait]
+    impl Statement for DelegatingStatement {
+        delegate_statement_state_methods!(statement_base);
+    }
+
+    #[tokio::test]
+    async fn prepared_and_callable_state_delegate_macro_forwards_cancellation_control() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let statement = DelegatingStatement {
+            statement_base: CancellationTarget(Arc::clone(&calls)),
+        };
+
+        let control = Statement::cancellation_control(&statement)
+            .expect("pooled prepared/callable facade must expose its target control");
+
+        control.cancel().await.unwrap();
+        assert_eq!(calls.load(Ordering::Acquire), 1);
+    }
+}
