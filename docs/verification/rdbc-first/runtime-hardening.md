@@ -6,6 +6,8 @@
 
 2026-10-13 Admin 全局计数预算：默认额外限制整个最新状态仓库为 4,096 个 datasource 和 16,384 条 SQL identity，保留原五参数配置构造函数并提供可收紧的 `with_global_limits`。新增测试验证全局 datasource/SQL 预算超限时 incremental batch 与权威快照均原子拒绝，既有 identity 覆盖不重复占位；本机 `repository_capacity_test` 7/7、`ingest_test` 11/11、`prometheus_test` 8/8 通过。计数限制不能替代字节/RSS 上限：SQL 文本及其他字符串大小仍需在入口和运行预算中测量、约束。
 
+2026-10-13 Admin TTL HTTP 可见性：`expired_boot_session_disappears_from_rest_and_prometheus` 经真实 Axum 路由验证，TTL 前 `/druid/api/datasources` 有 1 项、单项详情返回 200、`/metrics` 的 datasource gauge 为 1；过期后列表为空、详情 404、gauge 为 0，客户端时间戳故意设为最大值也无法延长服务端 TTL。本机 `prometheus_test` 9/9 通过，该单项随后重复 10/10 通过；这些短周期验证不代替长期 churn 或进程内存预算。
+
 2026-10-13 Metrics 饱和关闭组合验证：当前 Windows/Rust 1.97.1 的真实 runtime 以队列容量 1、20 个保持注册的数据源、1 ms 采样周期运行至少 100 ms，新增 `saturated_runtime_shutdown_drains_and_joins_every_owned_task` 测试要求先发生合并，再检查关闭后受监管任务、未刷新工作和注册数均为 0。完整 `queue_semantics_test` 5/5 PASS；直接运行同一测试可执行文件 20/20 PASS，合并次数每次 159–239，关闭耗时 123–333 µs（20 样本最近秩 p99=333 µs），轮询所得进程峰值工作集最高 5,420 KiB。这是本机参考基线，尚未给出跨平台验收阈值；Admin 数值预算、SIGTERM 待 ACK 及完整故障矩阵继续开放。
 
 2026-10-13 [CI run 38331373881](https://github.com/easy-4-rust/druid-rust/actions/runs/38331373881) 的 PostgreSQL/MySQL 均在重启 hook 与建池后借用连接超时；[CI run 38332281893](https://github.com/easy-4-rust/druid-rust/actions/runs/38332281893) 的原生直连探针进一步确认，容器内部报告 healthy 后，旧随机映射宿主机端口立即返回 `Connection refused (os error 111)`。改为固定映射端口并同时检查宿主机连通性后，[CI run 38332794498](https://github.com/easy-4-rust/druid-rust/actions/runs/38332794498) 的 PostgreSQL 16.15 与 MySQL 8.4.11 真实产品合同均成功，上传的证据 JSON 各含 `database-restart` 等 13 项合同、对应源码 SHA `a656764fbb04603accedb3a28836f1b824386b34`。这只关闭两项实库重启故障的当前验证缺口；P06 数值故障预算及整轮发布门禁仍未关闭。

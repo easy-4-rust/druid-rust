@@ -55,6 +55,12 @@ async fn start_server_with_datasource_count(
         assert!(repo.upsert_datasource(id, entry));
     }
 
+    start_server_with_repository(repo).await
+}
+
+async fn start_server_with_repository(
+    repo: MetricsRepository,
+) -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {
     let app = druid_admin::standalone_router(repo);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -63,6 +69,69 @@ async fn start_server_with_datasource_count(
     });
     tokio::time::sleep(Duration::from_millis(50)).await;
     (addr, handle)
+}
+
+#[tokio::test]
+async fn expired_boot_session_disappears_from_rest_and_prometheus() {
+    let config = MetricsRepositoryConfig::try_new(2, 2, 2, Duration::from_secs(1), 1 << 20)
+        .expect("valid TTL budget");
+    let repository = MetricsRepository::with_config(config);
+    let identity = ServiceIdentity::try_new("expired-service", "pod-1", "expired-boot").unwrap();
+    let id = DataSourceId {
+        service_identity: identity.clone(),
+        identity: 7,
+    };
+    let entry = DataSourceEntry {
+        datasource: DataSourceContent {
+            identity: 7,
+            service_id: Some(identity.shared_service_id()),
+            service_name: Some("expired-service".into()),
+            instance_id: Some("pod-1".into()),
+            boot_id: Some("expired-boot".into()),
+            ..Default::default()
+        },
+        sql_stats: HashMap::new(),
+        wall: WallResult::default(),
+        last_updated_ms: i64::MAX,
+        sequence: 1,
+    };
+    assert!(repository.upsert_datasource(id, entry));
+    let (addr, handle) = start_server_with_repository(repository).await;
+    let rest_url = format!("http://{addr}/druid/api/datasources");
+    let metrics_url = format!("http://{addr}/metrics");
+    let mut detail_url =
+        reqwest::Url::parse(&format!("http://{addr}/druid/api/datasources/7")).unwrap();
+    detail_url
+        .query_pairs_mut()
+        .append_pair("serviceId", identity.service_id());
+
+    let before: serde_json::Value = reqwest::get(&rest_url).await.unwrap().json().await.unwrap();
+    assert_eq!(before["Content"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        reqwest::get(detail_url.clone()).await.unwrap().status(),
+        200
+    );
+    let before_metrics = reqwest::get(&metrics_url)
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(before_metrics.contains("druid_admin_datasource_count 1"));
+
+    tokio::time::sleep(Duration::from_millis(1_100)).await;
+    let after: serde_json::Value = reqwest::get(&rest_url).await.unwrap().json().await.unwrap();
+    assert!(after["Content"].as_array().unwrap().is_empty());
+    assert_eq!(reqwest::get(detail_url).await.unwrap().status(), 404);
+    let after_metrics = reqwest::get(&metrics_url)
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(after_metrics.contains("druid_admin_datasource_count 0"));
+    assert!(!after_metrics.contains("expired-boot"));
+    handle.abort();
 }
 
 /// /metrics must return 200 OK.
