@@ -111,7 +111,9 @@ sequenceDiagram
 
 协议实现按两个有界里程碑验收：6.2 验证分支关联状态机、JDK 8 常量、prepare 投票、一阶段提交、未知分支及非法输入无副作用；6.3 再验证 recover 扫描边界、资源管理器身份、超时及 owner 失效。6.3 的测试按“失败用例 → 最小实现 → 外部消费者兼容性 → 直接受影响回归”推进。6.2 通过后停止并交付证据，不自动进入 6.3；真实 JDBC Agent 数据源恢复闭环单独留在 6.4，不能由示例状态机或 mock 替代。
 
-优先复用 JDBC Agent 接入真正的 JDBC XAResource，验收需选定支持恢复的实际数据源，执行 prepare 后重建连接、recover、commit/rollback 的闭环。具体已有数据库环境在准备批固定；不能用 mock 或普通本地事务代替实库恢复证据。未配置该环境时标准合同测试仍可完成，实库任务保持 NOT_RUN。
+优先复用 JDBC Agent 接入真正的 JDBC `XADataSource`/`XAConnection`/`XAResource`，不能把 `DriverManager.getConnection` 返回的普通连接伪装成 XA。Agent session 持有物理 `XAConnection`、当前逻辑 JDBC `Connection` 和 XAResource；RDBC 的 SQL 调用和 XA 操作通过同一 session 串行化，逻辑连接关闭仅释放逻辑句柄，owner 关闭才释放 XAConnection 并使资源失效。驱动 XADataSource 的实例化与属性配置必须明确、失败时 fail closed，不基于 URL 名称猜测 XA 能力。
+
+验收需选定支持恢复的实际数据源，执行 start→SQL 写入→end→prepare、关闭原 session、重建 session→recover→commit/rollback，再通过独立 JDBC 连接读取数据库最终状态。协议必须无损传递 Xid 三部分、flags、投票和 XA 错误码。准备批当前选定 JDBC Agent + H2 2.3.232；先验证 H2 本身能完成关闭连接后的恢复。如其驱动不支持目标语义，应以记录的失败作为证据，再选支持 XA 恢复的实际 Testcontainers 数据源。不能用 mock、内存 ledger 或普通本地事务代替实库恢复证据；无可运行环境时相关任务保持 `NOT_RUN`。
 
 ### D7. 公共数据源的失败结果进入类型合同
 
