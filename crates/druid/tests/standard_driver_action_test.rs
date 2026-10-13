@@ -14,6 +14,28 @@ struct AcceptingButRefusingDriver;
 
 struct SecondCandidateDriver;
 
+struct NameObservationDriver(Arc<AtomicUsize>);
+
+#[async_trait::async_trait]
+impl Driver for NameObservationDriver {
+    fn name(&self) -> &str {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        "name_observation_driver"
+    }
+
+    fn accepts_url(&self, _url: &str) -> bool {
+        false
+    }
+
+    async fn connect(
+        &self,
+        _url: &str,
+        _properties: &ConnectionProperties,
+    ) -> Result<Option<Box<dyn Connection>>, RdbcError> {
+        Ok(None)
+    }
+}
+
 struct ReentrantDriver {
     registered: Arc<dyn Driver>,
     callback_completed: Arc<AtomicUsize>,
@@ -198,6 +220,19 @@ async fn connection_lookup_continues_after_first_driver_returns_none() {
         standard_result,
         Err(RdbcError::DriverError(ref message)) if message == "second candidate reached"
     ));
+}
+
+#[tokio::test]
+async fn manager_connection_lookup_does_not_query_unrelated_driver_metadata() {
+    let name_calls = Arc::new(AtomicUsize::new(0));
+    let driver: Arc<dyn Driver> = Arc::new(NameObservationDriver(Arc::clone(&name_calls)));
+    DriverManager::register_driver(Arc::clone(&driver));
+
+    let result = DriverManager::get_connection("rdbc:name-observation-test://localhost/db").await;
+
+    assert!(DriverManager::deregister_driver(&driver));
+    assert!(matches!(result, Err(RdbcError::DriverError(_))));
+    assert_eq!(name_calls.load(Ordering::SeqCst), 0);
 }
 
 #[test]

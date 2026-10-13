@@ -329,7 +329,8 @@ Metadata 分为 live runtime 与 immutable snapshot：
 Java 兼容 `DriverManager` 保留显式注册顺序和回调身份；`get_driver` 的首个 URL
 接受者选择及 `get_connection` 的连接协商均委托 standard `DriverRegistry`。
 注册表锁必须在第三方 `accepts_url`/`connect` 回调前释放。产品档案工厂仍须经
-canonical provider registry 收敛；此兼容入口调整不单独关闭 P05。
+canonical provider registry 收敛。兼容连接查找不调用无关驱动的 `name()`；
+注册顺序和 URL 协商由 standard registry 决定。此兼容入口调整不单独关闭 P05。
 
 ## 9. JDBC naming and semantic inventory
 

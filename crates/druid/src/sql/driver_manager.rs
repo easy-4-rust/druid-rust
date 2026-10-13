@@ -224,8 +224,8 @@ impl DriverManager {
         // 兼容层只保存 Java 注册顺序；连接协商委托唯一标准 registry 算法。
         let mut registry = DriverRegistry::new();
         for driver in Self::drivers() {
-            let name = driver.name().to_owned();
-            registry.register(DriverExtensionDescriptor::new(name, driver, None));
+            // 标准协商只需要 driver 实例；查询无关驱动的名称会引入额外外部回调。
+            registry.register(DriverExtensionDescriptor::new("", driver, None));
         }
         Self::with_login_timeout(registry.connect(url, properties)).await
     }
