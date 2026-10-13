@@ -122,6 +122,9 @@ async fn production_trace_logs_path_without_query_credentials() {
     // 将路由构造和 future 创建都放在 subscriber 内，避免测试线程并行时
     // 在订阅生效前初始化并缓存 tracing callsite。
     let response = async move {
+        // 其他并行用例可能先用 INFO subscriber 注册同一 DEBUG callsite。
+        // 在本用例的订阅生效后重算 interest，确保验证的是生产请求 span。
+        tracing::callsite::rebuild_interest_cache();
         let app = druid_admin::standalone_router(druid_admin::MetricsRepository::new());
         app.oneshot(
             Request::builder()
