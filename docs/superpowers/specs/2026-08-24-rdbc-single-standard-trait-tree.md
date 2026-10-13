@@ -458,6 +458,11 @@ metadata 结果没有调用方创建 Statement，必须返回 None，不返回�
 
 ### Task 6 强类型读取与资源更新重载保真澄清
 
+语句与准备语句的 `warnings` / `clear_warnings` 保留 BASE `BeforeFilter` 的
+有序 around-hook：过滤器可以改写返回警告、阻断驱动调用或包围清除调用。
+标准 RDBC `Statement` 方法为同步方法，因此标准链以同步 hook 分派；驱动错误和
+过滤器错误继续经过原有逻辑连接的异常分类，不因迁移绕开故障处理。
+
 固定 BASE 的 all_strong_getter_overloads_preserve_raw_spi_argument_identity 要求完整58次驱动调用。
 唯一标准结果集用 ResultSetRead 描述符承载 Decimal 的无 scale/指定 scale，以及日期时间
 Unspecified/Specified(None)/Specified(Some(Calendar))，不能在扩展 getter 中丢弃参数。

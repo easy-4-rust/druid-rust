@@ -70,6 +70,20 @@ impl BeforeFilter for WarningOverrideFilter {
     ) -> Result<(), DruidError> {
         Ok(())
     }
+
+    fn standard_statement_get_warnings(
+        &self,
+        _chain: &mut druid::core::StandardStatementWarningFilterChain<'_>,
+    ) -> Result<Option<SqlWarning>, DruidError> {
+        Ok(Some(SqlWarning::new("statement-overridden", None, 0)))
+    }
+
+    fn standard_statement_clear_warnings(
+        &self,
+        _chain: &mut druid::core::StandardStatementWarningFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -108,6 +122,36 @@ impl BeforeFilter for WarningEventFilter {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(format!("{}-clear-after", self.name));
+        result
+    }
+    fn standard_statement_get_warnings(
+        &self,
+        chain: &mut druid::core::StandardStatementWarningFilterChain<'_>,
+    ) -> Result<Option<SqlWarning>, DruidError> {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}-statement-get-before", self.name));
+        let result = chain.statement_get_warnings();
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}-statement-get-after", self.name));
+        result
+    }
+    fn standard_statement_clear_warnings(
+        &self,
+        chain: &mut druid::core::StandardStatementWarningFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}-statement-clear-before", self.name));
+        let result = chain.statement_clear_warnings();
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}-statement-clear-after", self.name));
         result
     }
     async fn on_connection_event(&self, event: &ConnectionEvent) -> Result<(), DruidError> {
@@ -465,6 +509,86 @@ async fn task6_sql_warning_semantics_test_connection_warning_chain_preserves_ord
             "outer-get-after",
         ]
     );
+}
+
+#[tokio::test]
+async fn statement_and_prepared_warning_filters_preserve_registered_around_order() {
+    let (mut connection, log) = task6_warning_connection_with_filter_log().await;
+    let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(statement.warnings().unwrap().unwrap().message(), "outer");
+    statement.clear_warnings().unwrap();
+    let mut prepared =
+        Connection::prepare_statement(&mut connection, "SELECT ?", StatementOptions::default())
+            .await
+            .unwrap();
+    assert!(prepared.warnings().unwrap().is_none());
+    prepared.clear_warnings().unwrap();
+    assert_eq!(
+        *log.lock().unwrap(),
+        [
+            "outer-statement-get-before",
+            "inner-statement-get-before",
+            "inner-statement-get-after",
+            "outer-statement-get-after",
+            "outer-statement-clear-before",
+            "inner-statement-clear-before",
+            "inner-statement-clear-after",
+            "outer-statement-clear-after",
+            "outer-statement-get-before",
+            "inner-statement-get-before",
+            "inner-statement-get-after",
+            "outer-statement-get-after",
+            "outer-statement-clear-before",
+            "inner-statement-clear-before",
+            "inner-statement-clear-after",
+            "outer-statement-clear-after",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn statement_and_prepared_warning_filters_can_short_circuit_failing_driver() {
+    let holder = DruidConnectionHolder::with_standard_connection(
+        Box::new(WarningConnection {
+            connection_state: WarningState::new(false, false),
+            statement_state: WarningState::new(true, true),
+            closed: false,
+        }),
+        94,
+        Duration::ZERO,
+        0,
+    )
+    .await
+    .unwrap();
+    let mut filters = FilterChain::new();
+    filters.add_before(Arc::new(WarningOverrideFilter));
+    let mut connection = DruidPooledConnection::with_standard_holder(
+        holder,
+        "warning-short-circuit".to_owned(),
+        Some(Arc::new(filters)),
+        false,
+        false,
+        Box::new(|_, _| true),
+    );
+    let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        statement.warnings().unwrap().unwrap().message(),
+        "statement-overridden"
+    );
+    statement.clear_warnings().unwrap();
+    let mut prepared =
+        Connection::prepare_statement(&mut connection, "SELECT ?", StatementOptions::default())
+            .await
+            .unwrap();
+    assert_eq!(
+        prepared.warnings().unwrap().unwrap().message(),
+        "statement-overridden"
+    );
+    prepared.clear_warnings().unwrap();
 }
 
 #[tokio::test]

@@ -616,6 +616,24 @@ impl FilterChainImpl {
             .await
     }
 
+    /// 按注册顺序读取标准语句警告；参数为驱动语句，返回完整警告链。
+    pub(crate) fn standard_statement_get_warnings(
+        &self,
+        statement: &mut dyn druid_rdbc::statement::Statement,
+    ) -> Result<Option<SqlWarning>, DruidError> {
+        super::StandardStatementWarningFilterChain::new(&self.before, statement)
+            .statement_get_warnings()
+    }
+
+    /// 按注册顺序清除标准语句警告；参数为驱动语句，返回操作结果。
+    pub(crate) fn standard_statement_clear_warnings(
+        &self,
+        statement: &mut dyn druid_rdbc::statement::Statement,
+    ) -> Result<(), DruidError> {
+        super::StandardStatementWarningFilterChain::new(&self.before, statement)
+            .statement_clear_warnings()
+    }
+
     /// 在标准连接上以注册顺序创建 Blob，返回已登记结果。
     pub(crate) async fn connection_create_blob(
         &self,

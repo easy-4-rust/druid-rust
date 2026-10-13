@@ -1099,12 +1099,19 @@ impl Statement for DruidPooledStatement {
 
     fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, RdbcError> {
         self.ensure_open()?;
-        let result = self
-            .inner
-            .statement
-            .try_lock()
-            .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
-            .warnings();
+        let result = {
+            let mut statement = self
+                .inner
+                .statement
+                .try_lock()
+                .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?;
+            match &self.inner.filter_chain {
+                Some(chain) => chain
+                    .standard_statement_get_warnings(statement.as_mut())
+                    .map_err(RdbcError::from),
+                None => statement.warnings(),
+            }
+        };
         self.inner
             .policy
             .classify(result, self.last_sql().as_deref())
@@ -1121,12 +1128,19 @@ impl Statement for DruidPooledStatement {
     }
 
     fn clear_warnings(&mut self) -> Result<(), RdbcError> {
-        let result = self
-            .inner
-            .statement
-            .try_lock()
-            .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
-            .clear_warnings();
+        let result = {
+            let mut statement = self
+                .inner
+                .statement
+                .try_lock()
+                .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?;
+            match &self.inner.filter_chain {
+                Some(chain) => chain
+                    .standard_statement_clear_warnings(statement.as_mut())
+                    .map_err(RdbcError::from),
+                None => statement.clear_warnings(),
+            }
+        };
         self.inner
             .policy
             .classify(result, self.last_sql().as_deref())

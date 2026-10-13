@@ -5,7 +5,8 @@ use super::{
     DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain, DruidError,
     DruidPooledConnection, ExecResult, PreparedInputParameter, RdbcClob, RdbcInputStream,
     RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter, RegisteredLob, SqlWarning,
-    StandardConnectionLobFilterChain, StandardConnectionWarningFilterChain, Value,
+    StandardConnectionLobFilterChain, StandardConnectionWarningFilterChain,
+    StandardStatementWarningFilterChain, Value,
 };
 use druid_rdbc::resource::{Blob, Clob, NClob};
 use std::time::{Duration, Instant};
@@ -170,6 +171,24 @@ pub trait BeforeFilter: Send + Sync {
         chain: &mut StandardConnectionWarningFilterChain<'_>,
     ) -> Result<(), DruidError> {
         chain.connection_clear_warnings().await
+    }
+
+    /// 包围标准语句的警告读取；参数为语句链，返回可改写的完整警告。
+    /// 对应 Java: Filter#statement_getWarnings；标准 RDBC 方法是同步的。
+    fn standard_statement_get_warnings(
+        &self,
+        chain: &mut StandardStatementWarningFilterChain<'_>,
+    ) -> Result<Option<SqlWarning>, DruidError> {
+        chain.statement_get_warnings()
+    }
+
+    /// 包围标准语句的警告清除；参数为语句链，返回过滤或驱动结果。
+    /// 对应 Java: Filter#statement_clearWarnings；标准 RDBC 方法是同步的。
+    fn standard_statement_clear_warnings(
+        &self,
+        chain: &mut StandardStatementWarningFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        chain.statement_clear_warnings()
     }
 
     /// 创建 Blob；参数为标准连接链，返回已登记的受管资源。
