@@ -16,11 +16,11 @@
 
 SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号传入缓冲查询、流式游标、通用 `Statement::execute`、PreparedStatement 查询/更新和生成键查询路径。SQLite progress handler 在数据库 VM 中检查中断/截止时间；执行收尾等待 worker 释放句柄并清理 handler，无法确认时将物理连接标记为不可复用。`execute` 的返回类型预检也在取消和超时控制下，避免描述阶段阻塞后才进入可取消执行。
 
-新增正向执行测试分别运行递归 CTE 缓冲查询、普通 `execute`、普通/预编译更新、PreparedStatement 查询和生成键查询；均在预算内以 SQLState `HY008` 结束，且随后同一连接可继续查询。另测了调用方丢弃执行 Future 后同一连接仍可恢复；此项只证明资源恢复，不将 Future drop 当成后端取消证据。既有合同测试还覆盖流式游标取消、重复请求、迟到请求不污染下一代、预取消只消费一次及新语句隔离。
+新增正向执行测试分别运行递归 CTE 缓冲查询、普通 `execute`、普通/预编译更新、PreparedStatement 查询、生成键查询和请求生成键的长时间更新；均在预算内以 SQLState `HY008` 结束，且随后同一连接可继续查询。生成键更新额外验证取消后不提交行，也不发布部分或上一轮生成键。另测了调用方丢弃执行 Future 后同一连接仍可恢复；此项只证明资源恢复，不将 Future drop 当成后端取消证据。既有合同测试还覆盖流式游标取消、重复请求、迟到请求不污染下一代、预取消只消费一次及新语句隔离。
 
 本次验证：
 
-- `cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test --locked --offline`：13 passed，1 项真实 PostgreSQL 用例默认忽略。
+- `cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test --locked --offline`：14 passed，1 项真实 PostgreSQL 用例默认忽略。
 - 使用运行中的 PostgreSQL 18.6 容器并注入临时进程级 `DRUID_DATABASE_URL`，执行 `cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test live_postgres_cancellation_control_reports_feature_not_supported --locked --offline -- --ignored --nocapture`：1 passed；验证真实 PostgreSQL 连接上的取消控制明确返回 `0A000`。
 - `cargo test -p druid --lib --locked --offline`：155 passed。
 - `cargo fmt -p druid-wrapper`：通过。
@@ -32,6 +32,6 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 |---|---|
 | `crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs` | `385E4FA7D3194AD245C9361A6F79E0672EB7C4B5ECA0AE392544CC43FE83D2CD` |
 | `crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs` | `E7698DADB9DF2F0858925519241787331F39D85DAA5FFF9CD7665E99D6387610` |
-| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `060F3061129BA04AD4BC558CF80667D0812AF916044444097B53957E81C2E7EB` |
+| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `C9BE1234149C54E4944BF944AAC45443C79C3B0CAC8580BE43D02578720D668C` |
 
 **边界与未完成项：**SQLite 用例证明真实 SQLite VM 执行路径中断及连接清理，但不是外部数据库服务器日志/会话终态证据。PostgreSQL 实库仅验证明确不支持/`0A000`；MySQL 等后端的逐项不支持证据、旧池租约缓存复用覆盖、生成键更新长执行覆盖，以及取消未确认时 owner 丢弃连接的故障注入仍未完成。因此 tasks 4.2–4.7 保持未勾选；本记录不关闭取消批，也不代表 JDBC 全面对齐或生产就绪。

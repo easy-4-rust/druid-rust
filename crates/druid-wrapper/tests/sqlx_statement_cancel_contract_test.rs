@@ -576,6 +576,73 @@ async fn independent_cancel_interrupts_running_sqlite_generated_key_query() {
     connection.close().await.unwrap();
 }
 
+/// 请求生成键的 PreparedStatement 更新必须在读取/发布键之前响应执行中取消。
+#[tokio::test]
+async fn independent_cancel_interrupts_running_sqlite_generated_key_update() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    connection
+        .exec(
+            "CREATE TABLE generated_key_cancel_update (id INTEGER PRIMARY KEY AUTOINCREMENT, value INTEGER)",
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    let mut statement = connection
+        .prepare_statement_with_generated_keys(
+            r#"INSERT INTO generated_key_cancel_update(value)
+               WITH RECURSIVE counter(value) AS (
+                   VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000
+               ) SELECT sum(value) FROM counter"#,
+            StatementOptions::default(),
+            GeneratedKeys::ReturnGeneratedKeys,
+        )
+        .await
+        .unwrap();
+    let cancellation = statement.cancellation_control().unwrap();
+    let cancel_task = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        cancellation.cancel().await
+    });
+
+    let update = statement.execute_prepared_update();
+    let outcome = tokio::time::timeout(Duration::from_secs(2), update)
+        .await
+        .expect("取消必须在预算内中断生成键更新");
+    cancel_task.await.unwrap().unwrap();
+    assert!(matches!(
+        outcome,
+        Err(RdbcError::SqlException(ref error)) if error.sql_state() == Some("HY008")
+    ));
+
+    let mut keys = statement.generated_keys().await.unwrap();
+    assert!(
+        !keys.next().await.unwrap(),
+        "取消失败的更新不能发布部分或上一轮生成键"
+    );
+    keys.close().await.unwrap();
+    assert_eq!(
+        connection
+            .fetch(
+                "SELECT COUNT(*) FROM generated_key_cancel_update",
+                Vec::new()
+            )
+            .await
+            .unwrap()[0]
+            .values,
+        vec![Value::Int(0)],
+        "被取消的生成键更新不得提交行"
+    );
+    assert_eq!(
+        connection.fetch("SELECT 15", Vec::new()).await.unwrap()[0].values,
+        vec![Value::Int(15)],
+        "清理完成后连接仍应可复用"
+    );
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
 /// 丢弃 Rust 执行 Future 不应伪装成 Statement 取消，之后连接仍须在有界时间内恢复可用。
 #[tokio::test]
 async fn dropping_running_sqlite_execution_future_keeps_connection_recoverable() {
