@@ -1,5 +1,5 @@
 /// 管理端下游 HTTP 请求错误。
-#[derive(Debug, thiserror::Error)]
+#[derive(thiserror::Error)]
 pub enum HttpError {
     /// 网络或 TLS 失败。
     #[error("downstream request failed")]
@@ -21,4 +21,26 @@ pub enum HttpError {
         #[source]
         source: serde_json::Error,
     },
+}
+
+impl std::fmt::Debug for HttpError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Request { .. } => formatter
+                .debug_struct("Request")
+                .field("url", &"[REDACTED]")
+                .field("source", &"[REDACTED]")
+                .finish(),
+            Self::Status { status, .. } => formatter
+                .debug_struct("Status")
+                .field("url", &"[REDACTED]")
+                .field("status", status)
+                .finish(),
+            Self::Json { .. } => formatter
+                .debug_struct("Json")
+                .field("url", &"[REDACTED]")
+                .field("source", &"[REDACTED]")
+                .finish(),
+        }
+    }
 }

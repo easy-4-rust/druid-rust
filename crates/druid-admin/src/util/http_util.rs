@@ -16,7 +16,8 @@ impl HttpUtil {
         client: &dyn HttpClient,
         url: &str,
     ) -> Result<T, HttpError> {
-        tracing::info!(url, "collecting druid admin endpoint");
+        // 下游 URL 可能含 userinfo 或 query 凭据；日志仅记录固定事件。
+        tracing::info!("collecting druid admin endpoint");
         let value = client.get_json(url).await?;
         serde_json::from_value(value).map_err(|source| HttpError::Json {
             url: url.to_owned(),

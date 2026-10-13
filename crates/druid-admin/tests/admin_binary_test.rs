@@ -152,6 +152,64 @@ async fn production_trace_logs_path_without_query_credentials() {
     }
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn downstream_collection_logs_and_error_debug_hide_url_credentials() {
+    struct FixtureClient;
+
+    #[async_trait::async_trait]
+    impl druid_admin::util::HttpClient for FixtureClient {
+        async fn get_json(
+            &self,
+            _url: &str,
+        ) -> Result<serde_json::Value, druid_admin::util::HttpError> {
+            Ok(serde_json::json!({"ResultCode": 1}))
+        }
+    }
+
+    let url = "https://url-user:url-password@example.invalid/druid/sql.json?token=query-secret";
+    let logs = CapturedLogs::default();
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .without_time()
+        .with_writer(logs.clone())
+        .finish();
+    let response =
+        async { druid_admin::util::HttpUtil::get::<serde_json::Value>(&FixtureClient, url).await }
+            .with_subscriber(subscriber)
+            .await
+            .expect("fixture response");
+    assert_eq!(response["ResultCode"], 1);
+
+    let request_source = reqwest::Client::new()
+        .get("http://[")
+        .build()
+        .expect_err("malformed URL has a request error");
+    let json_source = serde_json::from_str::<serde_json::Value>("{")
+        .expect_err("malformed JSON has a decode error");
+    let errors = [
+        druid_admin::util::HttpError::Request {
+            url: url.to_owned(),
+            source: request_source,
+        },
+        druid_admin::util::HttpError::Status {
+            url: url.to_owned(),
+            status: reqwest::StatusCode::BAD_GATEWAY,
+        },
+        druid_admin::util::HttpError::Json {
+            url: url.to_owned(),
+            source: json_source,
+        },
+    ];
+    let output = format!("{} {errors:?}", logs.text());
+    assert!(
+        output.contains("502"),
+        "status remains diagnosable: {output}"
+    );
+    for secret in ["url-user", "url-password", "query-secret"] {
+        assert!(!output.contains(secret), "{secret} leaked: {output}");
+    }
+}
+
 #[tokio::test]
 async fn secure_defaults() {
     let defaults = druid_admin::config::AdminServerConfig::default();
