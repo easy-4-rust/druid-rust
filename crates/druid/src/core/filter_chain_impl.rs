@@ -6,7 +6,8 @@ use super::{
     AfterFilter, BatchExecContext, BeforeFilter, ClobProxy, Connection, ConnectionEvent,
     ConnectionEventContext, ConnectionFactory, DruidError, DruidPooledConnection, ExecContext,
     ExecResult, PoolState, RdbcClob, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcString,
-    RdbcWriter, ResultSetFilter, ResultSetFilterContext, StatementEvent, StatementEventContext,
+    RdbcWriter, ResultSetFilter, ResultSetFilterContext, SqlWarning,
+    StandardConnectionWarningFilterChain, StatementEvent, StatementEventContext,
 };
 use druid_rdbc::result_set::ColumnIndex;
 use std::collections::HashMap;
@@ -588,6 +589,26 @@ impl FilterChainImpl {
         )
         .connection_close()
         .await
+    }
+
+    /// 通过标准连接按注册顺序读取警告，允许过滤器包围或短路。
+    pub async fn connection_get_warnings(
+        &self,
+        connection: &mut dyn Connection,
+    ) -> Result<Option<SqlWarning>, DruidError> {
+        StandardConnectionWarningFilterChain::new(&self.before, connection)
+            .connection_get_warnings()
+            .await
+    }
+
+    /// 通过标准连接按注册顺序清除警告，允许过滤器包围或短路。
+    pub async fn connection_clear_warnings(
+        &self,
+        connection: &mut dyn Connection,
+    ) -> Result<(), DruidError> {
+        StandardConnectionWarningFilterChain::new(&self.before, connection)
+            .connection_clear_warnings()
+            .await
     }
 
     pub async fn connection_open(

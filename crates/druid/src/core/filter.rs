@@ -4,7 +4,8 @@ use super::{
     ClobFilterChain, ConnectionCloseFilterChain, ConnectionOpenFilterChain, ConnectionOpenResult,
     DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain, DruidError,
     DruidPooledConnection, ExecResult, PreparedInputParameter, RdbcClob, RdbcInputStream,
-    RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter, Value,
+    RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter, SqlWarning,
+    StandardConnectionWarningFilterChain, Value,
 };
 use std::time::{Duration, Instant};
 
@@ -150,6 +151,24 @@ pub trait BeforeFilter: Send + Sync {
         chain: &mut ConnectionCloseFilterChain<'_>,
     ) -> Result<(), DruidError> {
         chain.connection_close().await
+    }
+
+    /// 读取连接警告；参数为标准连接调用链，返回可由过滤器改写的警告。
+    /// 对应 Java: Filter#connection_getWarnings。
+    async fn connection_get_warnings(
+        &self,
+        chain: &mut StandardConnectionWarningFilterChain<'_>,
+    ) -> Result<Option<SqlWarning>, DruidError> {
+        chain.connection_get_warnings().await
+    }
+
+    /// 清除连接警告；参数为标准连接调用链，返回过滤或底层操作结果。
+    /// 对应 Java: Filter#connection_clearWarnings。
+    async fn connection_clear_warnings(
+        &self,
+        chain: &mut StandardConnectionWarningFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        chain.connection_clear_warnings().await
     }
 
     async fn before(&self, context: &mut ExecContext<'_>) -> Result<(), DruidError>;

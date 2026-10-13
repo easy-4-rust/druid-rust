@@ -1115,7 +1115,14 @@ impl DruidPooledConnection {
 
     /// 返回 canonical connection warning chain。
     pub async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
-        self.standard_mut()?.warnings().await
+        let chain = self.filter_chain.clone();
+        match chain {
+            Some(chain) if chain.before_count() > 0 => chain
+                .connection_get_warnings(self.standard_mut()?)
+                .await
+                .map_err(RdbcError::from),
+            _ => self.standard_mut()?.warnings().await,
+        }
     }
 
     /// 清除连接警告链。
@@ -1124,7 +1131,14 @@ impl DruidPooledConnection {
     /// Java 捕获底层 `SQLException` 并交给 `handleException`，Rust 因此必须
     /// 执行 fatal sorter。
     pub async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
-        let result = self.standard_mut()?.clear_warnings().await;
+        let chain = self.filter_chain.clone();
+        let result = match chain {
+            Some(chain) if chain.before_count() > 0 => chain
+                .connection_clear_warnings(self.standard_mut()?)
+                .await
+                .map_err(RdbcError::from),
+            _ => self.standard_mut()?.clear_warnings().await,
+        };
         self.classify_result(result)
     }
 }
@@ -1911,15 +1925,14 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
     }
 
     async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
-        self.standard_mut()?.warnings().await
+        DruidPooledConnection::warnings(self).await
     }
 
     async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         let event = ConnectionEvent::ClearWarnings;
         let started_at = Instant::now();
         self.before_connection_event(&event).await?;
-        let result = self.standard_mut()?.clear_warnings().await;
-        self.classify_result(result)?;
+        DruidPooledConnection::clear_warnings(self).await?;
         self.after_connection_event(&event, started_at).await
     }
 

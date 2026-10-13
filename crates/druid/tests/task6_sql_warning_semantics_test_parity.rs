@@ -45,6 +45,33 @@ struct WarningEventFilter {
     log: Arc<Mutex<Vec<String>>>,
 }
 
+struct WarningOverrideFilter;
+
+#[async_trait::async_trait]
+impl BeforeFilter for WarningOverrideFilter {
+    fn name(&self) -> &str {
+        "warning-override"
+    }
+
+    async fn before(&self, _context: &mut ExecContext<'_>) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    async fn connection_get_warnings(
+        &self,
+        _chain: &mut druid::core::StandardConnectionWarningFilterChain<'_>,
+    ) -> Result<Option<SqlWarning>, DruidError> {
+        Ok(Some(SqlWarning::new("overridden", None, 0)))
+    }
+
+    async fn connection_clear_warnings(
+        &self,
+        _chain: &mut druid::core::StandardConnectionWarningFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+}
+
 #[async_trait::async_trait]
 impl BeforeFilter for WarningEventFilter {
     fn name(&self) -> &str {
@@ -52,6 +79,36 @@ impl BeforeFilter for WarningEventFilter {
     }
     async fn before(&self, _context: &mut ExecContext<'_>) -> Result<(), DruidError> {
         Ok(())
+    }
+    async fn connection_get_warnings(
+        &self,
+        chain: &mut druid::core::StandardConnectionWarningFilterChain<'_>,
+    ) -> Result<Option<SqlWarning>, DruidError> {
+        self.log
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(format!("{}-get-before", self.name));
+        let result = chain.connection_get_warnings().await;
+        self.log
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(format!("{}-get-after", self.name));
+        result
+    }
+    async fn connection_clear_warnings(
+        &self,
+        chain: &mut druid::core::StandardConnectionWarningFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        self.log
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(format!("{}-clear-before", self.name));
+        let result = chain.connection_clear_warnings().await;
+        self.log
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(format!("{}-clear-after", self.name));
+        result
     }
     async fn on_connection_event(&self, event: &ConnectionEvent) -> Result<(), DruidError> {
         if matches!(event, ConnectionEvent::ClearWarnings) {
@@ -389,8 +446,47 @@ async fn task6_sql_warning_semantics_test_connection_warning_chain_preserves_ord
     assert_eq!(
         *log.lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner),
-        ["outer-before", "inner-before", "inner-after", "outer-after"]
+        [
+            "outer-get-before",
+            "inner-get-before",
+            "inner-get-after",
+            "outer-get-after",
+            "outer-before",
+            "inner-before",
+            "outer-clear-before",
+            "inner-clear-before",
+            "inner-clear-after",
+            "outer-clear-after",
+            "inner-after",
+            "outer-after",
+            "outer-get-before",
+            "inner-get-before",
+            "inner-get-after",
+            "outer-get-after",
+        ]
     );
+}
+
+#[tokio::test]
+async fn connection_warning_filter_can_short_circuit_standard_driver() {
+    let state = WarningState::new(true, true);
+    let mut connection = WarningConnection {
+        connection_state: state,
+        statement_state: WarningState::new(false, false),
+        closed: false,
+    };
+    let mut chain = FilterChain::new();
+    chain.add_before(Arc::new(WarningOverrideFilter));
+    let warning = chain
+        .connection_get_warnings(&mut connection)
+        .await
+        .expect("short-circuit must avoid the failing standard driver")
+        .expect("filter supplies a warning");
+    assert_eq!(warning.message(), "overridden");
+    chain
+        .connection_clear_warnings(&mut connection)
+        .await
+        .expect("short-circuit must avoid the failing standard driver clear");
 }
 
 #[tokio::test]
