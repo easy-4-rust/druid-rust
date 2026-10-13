@@ -86,6 +86,8 @@ JDBC Agent 的 Rust 客户端 SHALL 仅在调用方显式配置 XA 数据源时�
 
 启用 XA 的新增配置和协商 SHALL 保持既有普通 JDBC Agent 连接载荷及运行时握手行为不变；普通连接不得被迫发送 XA 属性、能力请求或额外握手字段。XA 能力只由显式 XA 配置建立的 session 响应协商确认，不能由 URL、驱动名称或普通连接属性推断。
 
+XA 配置 SHALL 提供明确的 XADataSource 类名和属性映射；配置解析、类加载、实例化、属性设置或握手任一步失败时，客户端 SHALL 返回带来源的错误并关闭已创建资源，不得回退到 DriverManager/普通 JDBC Connection。XA owner、逻辑连接和 XA RPC SHALL 共享同一个 session 串行化边界；逻辑句柄关闭后旧代次必须立即失效，新句柄不得被旧代次的迟到操作触达。底层传输进入结果不确定或不可恢复状态时，owner SHALL 被隔离并拒绝再次借出。
+
 本要求只要求 JDBC Agent 与已验证支持恢复的后端闭环，不要求 SQLx、Toasty 或其他适配器普遍支持 XA。后端未配置 XA 或能力未协商时，必须 fail closed 并返回精确的不支持错误。
 
 #### Scenario: 显式 XA 配置创建客户端资源
@@ -103,6 +105,18 @@ JDBC Agent 的 Rust 客户端 SHALL 仅在调用方显式配置 XA 数据源时�
 #### Scenario: XA owner 与逻辑连接分别关闭
 - **WHEN** 事务管理器关闭逻辑 SQL 连接但仍持有 XA owner
 - **THEN** 同一 session 的合法 XA 操作仍可继续；当 XA owner 关闭后，所有关联句柄均失效且不能触达已关闭资源
+
+#### Scenario: 显式 XA 配置失败时不降级
+- **WHEN** XADataSource 类名无效、属性配置失败、Agent 拒绝 XA 协商或握手返回未协商 XA
+- **THEN** 创建操作返回可诊断错误并清理已创建资源，不打开普通连接作为替代；若 session 未协商 XA，标准能力错误保持 SQLState `0A000`
+
+#### Scenario: 逻辑代次隔离
+- **WHEN** 旧逻辑连接关闭并从同一 XA owner 获取新逻辑连接后，旧句柄再次执行 SQL 或迟到的关闭请求到达
+- **THEN** 旧句柄被确定地拒绝，迟到操作不关闭、不修改新逻辑连接或 XA owner
+
+#### Scenario: owner 关闭及传输故障处置
+- **WHEN** owner 被重复关闭，或一次 SQL/XA 请求使传输状态无法确认
+- **THEN** 重复关闭幂等；不确定 session 被标记不可复用，所有关联逻辑句柄和资源拒绝后续操作，原始协议/SQL 错误及清理错误可诊断且互不覆盖
 
 #### Scenario: 客户端跨 session 恢复
 - **WHEN** 客户端通过 Agent prepare 一个事务分支、关闭原 session，再建立新的 XA session 并恢复
