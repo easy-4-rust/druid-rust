@@ -294,18 +294,21 @@ async fn slow_physical_close_obeys_configured_deadline() {
 }
 
 #[tokio::test]
-async fn shutdown_deadline_aborts_stalled_close_worker() {
+async fn shutdown_deadline_retains_stalled_close_worker_until_it_finishes() {
     let entered = Arc::new(AtomicUsize::new(0));
+    let gate = Arc::new(Semaphore::new(0));
+    let closed = Arc::new(AtomicUsize::new(0));
     let factory = Arc::new(SlowCloseFactory {
-        gate: Arc::new(Semaphore::new(0)),
+        gate: Arc::clone(&gate),
         entered: Arc::clone(&entered),
-        closed: Arc::new(AtomicUsize::new(0)),
+        closed: Arc::clone(&closed),
     });
     let pool = DruidPool::builder()
         .name("stalled-close-shutdown")
         .driver_name("test")
         .factory(factory)
         .max_open(1)
+        .close_queue_capacity(1)
         .close_timeout(Duration::from_secs(2))
         .shutdown_timeout(Duration::from_millis(50))
         .build()
@@ -321,11 +324,26 @@ async fn shutdown_deadline_aborts_stalled_close_worker() {
     .await
     .expect("close worker enters physical close");
 
+    let mut queued = pool.get().await.expect("borrow queued connection");
+    queued.discard_connection();
+    assert_eq!(pool.state().close_queue_depth, 1);
+
     tokio::time::timeout(Duration::from_millis(500), pool.close())
         .await
         .expect("shutdown deadline bounds stalled worker");
-    assert_eq!(pool.state().close_queue_depth, 0);
+    assert_eq!(pool.state().close_queue_depth, 1);
     assert!(!pool.state().close_worker_terminated);
+    gate.add_permits(2);
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while closed.load(Ordering::Acquire) != 2 || !pool.state().close_worker_terminated {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("shutdown timeout retains owned close work");
+    pool.close().await;
+    assert_eq!(pool.state().close_queue_depth, 0);
+    assert!(pool.state().close_worker_terminated);
 }
 
 #[tokio::test]

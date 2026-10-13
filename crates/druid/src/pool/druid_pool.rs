@@ -1431,8 +1431,11 @@ impl DruidPool {
             return true;
         };
         if tokio::time::timeout_at(deadline, &mut *task).await.is_err() {
-            task.abort();
-            tracing::warn!("pool close worker exceeded configured shutdown deadline");
+            // 超时只结束本次等待；worker 继续持有已入队连接并完成关闭。
+            // 保留 JoinHandle，后续 close/restart 可以继续等待同一项清理。
+            tracing::warn!(
+                "pool close worker exceeded configured shutdown deadline; cleanup continues"
+            );
             return false;
         }
         slot.take();
