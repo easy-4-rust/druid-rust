@@ -4,9 +4,10 @@ use super::{
     ClobFilterChain, ConnectionCloseFilterChain, ConnectionOpenFilterChain, ConnectionOpenResult,
     DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain, DruidError,
     DruidPooledConnection, ExecResult, PreparedInputParameter, RdbcClob, RdbcInputStream,
-    RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter, SqlWarning,
-    StandardConnectionWarningFilterChain, Value,
+    RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter, RegisteredLob, SqlWarning,
+    StandardConnectionLobFilterChain, StandardConnectionWarningFilterChain, Value,
 };
+use druid_rdbc::resource::{Blob, Clob, NClob};
 use std::time::{Duration, Instant};
 
 pub mod config;
@@ -169,6 +170,30 @@ pub trait BeforeFilter: Send + Sync {
         chain: &mut StandardConnectionWarningFilterChain<'_>,
     ) -> Result<(), DruidError> {
         chain.connection_clear_warnings().await
+    }
+
+    /// 创建 Blob；参数为标准连接链，返回已登记的受管资源。
+    async fn connection_create_blob(
+        &self,
+        chain: &mut StandardConnectionLobFilterChain<'_>,
+    ) -> Result<RegisteredLob<dyn Blob>, DruidError> {
+        chain.connection_create_blob().await
+    }
+
+    /// 创建 Clob；参数为标准连接链，返回已登记的受管资源。
+    async fn connection_create_clob(
+        &self,
+        chain: &mut StandardConnectionLobFilterChain<'_>,
+    ) -> Result<RegisteredLob<dyn Clob>, DruidError> {
+        chain.connection_create_clob().await
+    }
+
+    /// 创建 NClob；参数为标准连接链，返回已登记的受管资源。
+    async fn connection_create_n_clob(
+        &self,
+        chain: &mut StandardConnectionLobFilterChain<'_>,
+    ) -> Result<RegisteredLob<dyn NClob>, DruidError> {
+        chain.connection_create_n_clob().await
     }
 
     async fn before(&self, context: &mut ExecContext<'_>) -> Result<(), DruidError>;

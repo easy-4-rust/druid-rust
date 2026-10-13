@@ -639,8 +639,8 @@ lifecycle semantics or owner cleanup.
 | `RESOURCE_TRAIT_LIFECYCLE` | `IMPLEMENTED_TESTED` | standard resource traits | 同一 31/31 契约覆盖 1-based、free-after-use、SQLXML 消耗/释放状态 |
 | `RDBC_RESULT_SET_FORWARDING` | `IMPLEMENTED_TESTED` | `SharedResultSet` | `task7_shared_result_set_contract_test` 6/6；共享转发身份独立于 `BufferedRowSet` |
 | `CAPABILITY_TRUTHFULNESS` | `TASK7_PENDING` | `ConnectionCapabilities` | JDBC Agent callable 误报已修复；H2/HSQLDB 已验证 catalog/schema/savepoint；SQLx/Toasty 的 SQLite、PostgreSQL、MySQL 已通过事务和保存点实库合同，PostgreSQL/MySQL 在 [CI #38332794498](https://github.com/easy-4-rust/druid-rust/actions/runs/38332794498) 的对应实库任务通过；RBDC 与 DuckDB 已验证未声明事务/保存点且对应调用返回 UnsupportedOperation；仍需其余启用后端及发布门禁证据 |
-| `DRUID_OWNER_RELEASE_EXACTLY_ONCE` | `IMPLEMENTED_TESTED` | Druid resource owner/release | `resource_owner_cancellation_test` 112/112；driver release、重复通知与父租约处置合同 |
-| `DRUID_CANCELLATION_HARDENING` | `IMPLEMENTED_TESTED` | Druid supervised release | 同一 112/112 合同覆盖取消、重试与父连接清理 |
+| `DRUID_OWNER_RELEASE_EXACTLY_ONCE` | `IMPLEMENTED_TESTED` | Druid resource owner/release | `resource_owner_cancellation_test` 118/118；driver release、重复通知与父租约处置合同 |
+| `DRUID_CANCELLATION_HARDENING` | `IMPLEMENTED_TESTED` | Druid supervised release | 同一 118/118 合同覆盖取消、重试与父连接清理；标准 Blob/Clob/NClob 创建过滤链在返回外层过滤器前登记资源，覆盖替换、短路、取消及失败清理后丢弃租约 |
 | `SQLX_BUFFERED_RENAME` | `IMPLEMENTED_TESTED` | `SqlxBufferedResultSet` | 编译模块与 Task 4 live 清单均指向真实缓冲实现；旧 Streaming 文件已退休 |
 | `ASYNC_RESULT_SET_STREAMING` | `IMPLEMENTED_TESTED` | `SqlxAsyncResultSet` | `async_result_set_test` 15/15；容量 1 请求队列、按 next 拉取与提前释放同一 actor |
 

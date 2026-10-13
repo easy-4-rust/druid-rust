@@ -1542,7 +1542,21 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
         policy.ensure_open()?;
-        let admission = registry.begin_admission(policy.resource_generation())?;
+        let admission = Arc::new(registry.begin_admission(policy.resource_generation())?);
+        let filter_chain = self.filter_chain.clone();
+        if let Some(chain) = filter_chain.filter(|chain| chain.before_count() > 0) {
+            let result = chain
+                .connection_create_blob(
+                    self.standard_mut()?,
+                    Arc::clone(&registry),
+                    Arc::clone(&admission),
+                    Arc::clone(&policy),
+                )
+                .await
+                .map(super::registered_lob::RegisteredLob::into_inner)
+                .map_err(RdbcError::from);
+            return self.classify_result(result);
+        }
         let raw_result = self.standard_mut()?.create_blob().await;
         let raw = self.classify_result(raw_result)?;
         // 驱动返回后直到 registry 接管前不再 await，取消不会丢失已创建资源。
@@ -1578,7 +1592,21 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
         policy.ensure_open()?;
-        let admission = registry.begin_admission(policy.resource_generation())?;
+        let admission = Arc::new(registry.begin_admission(policy.resource_generation())?);
+        let filter_chain = self.filter_chain.clone();
+        if let Some(chain) = filter_chain.filter(|chain| chain.before_count() > 0) {
+            let result = chain
+                .connection_create_clob(
+                    self.standard_mut()?,
+                    Arc::clone(&registry),
+                    Arc::clone(&admission),
+                    Arc::clone(&policy),
+                )
+                .await
+                .map(super::registered_lob::RegisteredLob::into_inner)
+                .map_err(RdbcError::from);
+            return self.classify_result(result);
+        }
         let raw_result = self.standard_mut()?.create_clob().await;
         let raw = self.classify_result(raw_result)?;
         // 驱动返回后直到 registry 接管前不再 await，取消不会丢失已创建资源。
@@ -1614,7 +1642,21 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
         policy.ensure_open()?;
-        let admission = registry.begin_admission(policy.resource_generation())?;
+        let admission = Arc::new(registry.begin_admission(policy.resource_generation())?);
+        let filter_chain = self.filter_chain.clone();
+        if let Some(chain) = filter_chain.filter(|chain| chain.before_count() > 0) {
+            let result = chain
+                .connection_create_n_clob(
+                    self.standard_mut()?,
+                    Arc::clone(&registry),
+                    Arc::clone(&admission),
+                    Arc::clone(&policy),
+                )
+                .await
+                .map(super::registered_lob::RegisteredLob::into_inner)
+                .map_err(RdbcError::from);
+            return self.classify_result(result);
+        }
         let raw_result = self.standard_mut()?.create_n_clob().await;
         let raw = self.classify_result(raw_result)?;
         // 驱动返回后直到 registry 接管前不再 await，取消不会丢失已创建资源。

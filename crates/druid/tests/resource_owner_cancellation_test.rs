@@ -2,7 +2,11 @@
 //! 对应 Java: DruidPooledConnection、DruidPooledResultSet 和 java.sql 资源。
 //! 保留已验证的104项候选合同；正式Cargo运行另行记录，不能由源复制推定通过。
 
-use druid::core::{ConnectionRecycleDisposition, DruidConnectionHolder, DruidPooledConnection};
+use druid::core::{
+    BeforeFilter, ConnectionRecycleDisposition, DruidConnectionHolder, DruidError,
+    DruidPooledConnection, ExecContext, FilterChain, RegisteredLob,
+    StandardConnectionLobFilterChain,
+};
 use druid_rdbc::connection::Connection;
 use druid_rdbc::error::{RdbcError, SqlException};
 use druid_rdbc::resource::{Blob, Clob, NClob};
@@ -472,6 +476,13 @@ impl Connection for DriverConnection {
     }
 }
 async fn pooled(control: Arc<Control>) -> DruidPooledConnection {
+    pooled_with_filter(control, None).await
+}
+
+async fn pooled_with_filter(
+    control: Arc<Control>,
+    filter_chain: Option<Arc<FilterChain>>,
+) -> DruidPooledConnection {
     let holder = DruidConnectionHolder::with_standard_connection(
         Box::new(DriverConnection {
             control: control.clone(),
@@ -487,7 +498,7 @@ async fn pooled(control: Arc<Control>) -> DruidPooledConnection {
     DruidPooledConnection::with_standard_holder_and_disposition_observer(
         holder,
         "blob-contract".into(),
-        None,
+        filter_chain,
         false,
         false,
         Box::new(move |disposition| {
@@ -499,6 +510,364 @@ async fn pooled(control: Arc<Control>) -> DruidPooledConnection {
             true
         }),
     )
+}
+
+struct LobCreationFilter {
+    name: &'static str,
+    log: Arc<Mutex<Vec<String>>>,
+    replace_blob: bool,
+    replacement_probe: Arc<Mutex<Option<payload_fixture::ReleaseProbe>>>,
+}
+
+struct PausedLobFilter {
+    created: Arc<tokio::sync::Notify>,
+    resume: Arc<tokio::sync::Notify>,
+}
+
+struct ReplaceAfterLobFilter {
+    replacement_probe: Arc<Mutex<Option<payload_fixture::ReleaseProbe>>>,
+}
+
+#[async_trait::async_trait]
+impl BeforeFilter for ReplaceAfterLobFilter {
+    fn name(&self) -> &str {
+        "replace-after-lob"
+    }
+
+    async fn before(&self, _context: &mut ExecContext<'_>) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    async fn connection_create_blob(
+        &self,
+        chain: &mut StandardConnectionLobFilterChain<'_>,
+    ) -> Result<RegisteredLob<dyn Blob>, DruidError> {
+        let mut original = chain.connection_create_blob().await?;
+        assert_eq!(original.length().await.map_err(DruidError::from)?, 4);
+        drop(original);
+        let (replacement, probe) = payload_fixture::controlled(false);
+        *self.replacement_probe.lock().unwrap() = Some(probe);
+        chain.adopt_blob(replacement).await
+    }
+}
+
+#[async_trait::async_trait]
+impl BeforeFilter for PausedLobFilter {
+    fn name(&self) -> &str {
+        "paused-lob"
+    }
+
+    async fn before(&self, _context: &mut ExecContext<'_>) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    async fn connection_create_blob(
+        &self,
+        chain: &mut StandardConnectionLobFilterChain<'_>,
+    ) -> Result<RegisteredLob<dyn Blob>, DruidError> {
+        let blob = chain.connection_create_blob().await?;
+        self.created.notify_one();
+        self.resume.notified().await;
+        Ok(blob)
+    }
+}
+
+#[async_trait::async_trait]
+impl BeforeFilter for LobCreationFilter {
+    fn name(&self) -> &str {
+        self.name
+    }
+
+    async fn before(&self, _context: &mut ExecContext<'_>) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    async fn connection_create_blob(
+        &self,
+        chain: &mut StandardConnectionLobFilterChain<'_>,
+    ) -> Result<RegisteredLob<dyn Blob>, DruidError> {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}:blob:before", self.name));
+        let result = if self.replace_blob {
+            let (blob, probe) = payload_fixture::controlled(false);
+            *self.replacement_probe.lock().unwrap() = Some(probe);
+            chain.adopt_blob(blob).await
+        } else {
+            chain.connection_create_blob().await
+        };
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}:blob:after", self.name));
+        result
+    }
+
+    async fn connection_create_clob(
+        &self,
+        chain: &mut StandardConnectionLobFilterChain<'_>,
+    ) -> Result<RegisteredLob<dyn Clob>, DruidError> {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}:clob:before", self.name));
+        let result = chain.connection_create_clob().await;
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}:clob:after", self.name));
+        result
+    }
+
+    async fn connection_create_n_clob(
+        &self,
+        chain: &mut StandardConnectionLobFilterChain<'_>,
+    ) -> Result<RegisteredLob<dyn NClob>, DruidError> {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}:nclob:before", self.name));
+        let result = chain.connection_create_n_clob().await;
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{}:nclob:after", self.name));
+        result
+    }
+}
+
+fn lob_filter(
+    name: &'static str,
+    log: &Arc<Mutex<Vec<String>>>,
+    replace_blob: bool,
+    replacement_probe: &Arc<Mutex<Option<payload_fixture::ReleaseProbe>>>,
+) -> Arc<dyn BeforeFilter> {
+    Arc::new(LobCreationFilter {
+        name,
+        log: Arc::clone(log),
+        replace_blob,
+        replacement_probe: Arc::clone(replacement_probe),
+    })
+}
+
+#[tokio::test]
+async fn standard_lob_creation_filters_wrap_driver_in_registration_order() {
+    let control = Arc::new(Control::default());
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let probe = Arc::new(Mutex::new(None));
+    let mut filters = FilterChain::new();
+    filters.add_before(lob_filter("outer", &log, false, &probe));
+    filters.add_before(lob_filter("inner", &log, false, &probe));
+    let mut connection = pooled_with_filter(Arc::clone(&control), Some(Arc::new(filters))).await;
+
+    let mut blob = connection.create_blob().await.unwrap();
+    assert_eq!(blob.length().await.unwrap(), 4);
+    blob.free().await.unwrap();
+    connection
+        .create_clob()
+        .await
+        .unwrap()
+        .free()
+        .await
+        .unwrap();
+    connection
+        .create_n_clob()
+        .await
+        .unwrap()
+        .free()
+        .await
+        .unwrap();
+    assert_eq!(control.created.load(Ordering::SeqCst), 3);
+    assert_eq!(
+        *log.lock().unwrap(),
+        [
+            "outer:blob:before",
+            "inner:blob:before",
+            "inner:blob:after",
+            "outer:blob:after",
+            "outer:clob:before",
+            "inner:clob:before",
+            "inner:clob:after",
+            "outer:clob:after",
+            "outer:nclob:before",
+            "inner:nclob:before",
+            "inner:nclob:after",
+            "outer:nclob:after",
+        ]
+    );
+    connection.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn replacement_blob_is_registered_and_released_without_driver_factory() {
+    let control = Arc::new(Control::default());
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let replacement_probe = Arc::new(Mutex::new(None));
+    let mut filters = FilterChain::new();
+    filters.add_before(lob_filter("outer", &log, false, &replacement_probe));
+    filters.add_before(lob_filter("replacement", &log, true, &replacement_probe));
+    let mut connection = pooled_with_filter(Arc::clone(&control), Some(Arc::new(filters))).await;
+    let mut blob = connection.create_blob().await.unwrap();
+    assert_eq!(blob.length().await.unwrap(), 4);
+    assert_eq!(control.created.load(Ordering::SeqCst), 0);
+    blob.free().await.unwrap();
+    assert_eq!(
+        replacement_probe
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .calls
+            .load(Ordering::SeqCst),
+        1
+    );
+    connection.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn replacement_after_driver_creation_registers_both_resources() {
+    let control = Arc::new(Control::default());
+    let replacement_probe = Arc::new(Mutex::new(None));
+    let mut filters = FilterChain::new();
+    filters.add_before(Arc::new(ReplaceAfterLobFilter {
+        replacement_probe: Arc::clone(&replacement_probe),
+    }));
+    let mut connection = pooled_with_filter(Arc::clone(&control), Some(Arc::new(filters))).await;
+    let mut blob = connection.create_blob().await.unwrap();
+    assert_eq!(blob.length().await.unwrap(), 4);
+    assert_eq!(control.created.load(Ordering::SeqCst), 1);
+    blob.free().await.unwrap();
+    connection.close().await.unwrap();
+    assert_eq!(
+        control.probes.lock().unwrap()[0]
+            .calls
+            .load(Ordering::SeqCst),
+        1
+    );
+    assert_eq!(
+        replacement_probe
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .calls
+            .load(Ordering::SeqCst),
+        1
+    );
+}
+
+#[tokio::test]
+async fn cancelled_lob_filter_after_driver_creation_still_releases_resource() {
+    let control = Arc::new(Control::default());
+    control.block_free.store(true, Ordering::SeqCst);
+    let created = Arc::new(tokio::sync::Notify::new());
+    let resume = Arc::new(tokio::sync::Notify::new());
+    let mut filters = FilterChain::new();
+    filters.add_before(Arc::new(PausedLobFilter {
+        created: Arc::clone(&created),
+        resume,
+    }));
+    let mut connection = pooled_with_filter(Arc::clone(&control), Some(Arc::new(filters))).await;
+    let mut create = Box::pin(connection.create_blob());
+    tokio::select! {
+        result = &mut create => panic!("filter unexpectedly completed: {result:?}"),
+        () = created.notified() => {}
+    }
+    drop(create);
+    let probe = control.probes.lock().unwrap()[0].clone();
+    let close = tokio::spawn(async move { connection.close().await });
+    tokio::time::timeout(Duration::from_secs(1), probe.started.notified())
+        .await
+        .expect("cancel cleanup must reach the driver");
+    assert!(
+        !close.is_finished(),
+        "parent close must wait for slow release"
+    );
+    probe.finish.notify_one();
+    tokio::time::timeout(Duration::from_secs(1), close)
+        .await
+        .expect("parent close should finish after release")
+        .unwrap()
+        .unwrap();
+    assert_eq!(probe.calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn cancelled_replacement_lob_is_released_without_driver_creation() {
+    let control = Arc::new(Control::default());
+    let created = Arc::new(tokio::sync::Notify::new());
+    let resume = Arc::new(tokio::sync::Notify::new());
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let replacement_probe = Arc::new(Mutex::new(None));
+    let mut filters = FilterChain::new();
+    filters.add_before(Arc::new(PausedLobFilter {
+        created: Arc::clone(&created),
+        resume,
+    }));
+    filters.add_before(lob_filter("replacement", &log, true, &replacement_probe));
+    let mut connection = pooled_with_filter(Arc::clone(&control), Some(Arc::new(filters))).await;
+    let mut create = Box::pin(connection.create_blob());
+    tokio::select! {
+        result = &mut create => panic!("filter unexpectedly completed: {result:?}"),
+        () = created.notified() => {}
+    }
+    drop(create);
+    connection.close().await.unwrap();
+    assert_eq!(control.created.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        replacement_probe
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .calls
+            .load(Ordering::SeqCst),
+        1
+    );
+}
+
+#[tokio::test]
+async fn cancelled_lob_cleanup_failure_discards_lease() {
+    let control = Arc::new(Control::default());
+    control.block_free.store(true, Ordering::SeqCst);
+    let created = Arc::new(tokio::sync::Notify::new());
+    let mut filters = FilterChain::new();
+    filters.add_before(Arc::new(PausedLobFilter {
+        created: Arc::clone(&created),
+        resume: Arc::new(tokio::sync::Notify::new()),
+    }));
+    let mut connection = pooled_with_filter(Arc::clone(&control), Some(Arc::new(filters))).await;
+    connection.set_exception_sorter(Arc::new(CountingSorter(Arc::clone(&control))));
+    let mut create = Box::pin(connection.create_blob());
+    tokio::select! {
+        result = &mut create => panic!("filter unexpectedly completed: {result:?}"),
+        () = created.notified() => {}
+    }
+    drop(create);
+    let probe = control.probes.lock().unwrap()[0].clone();
+    let close = tokio::spawn(async move {
+        let first = connection.close().await;
+        (first, connection)
+    });
+    tokio::time::timeout(Duration::from_secs(1), probe.started.notified())
+        .await
+        .expect("cleanup must reach the driver");
+    probe.failures_remaining.store(1, Ordering::SeqCst);
+    probe.finish.notify_one();
+    let (first, mut connection) = tokio::time::timeout(Duration::from_secs(1), close)
+        .await
+        .expect("failed cleanup must finish")
+        .unwrap();
+    first.expect("pool close folds cleanup failure into discarded disposition");
+    assert_eq!(control.discards.load(Ordering::SeqCst), 1);
+    assert_eq!(probe.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(control.returns.lock().unwrap().len(), 1);
+    assert!(!control.returns.lock().unwrap()[0].is_reusable());
+    connection
+        .close()
+        .await
+        .expect("repeat close is idempotent");
 }
 async fn pooled_with_array_filter(control: Arc<Control>) -> DruidPooledConnection {
     let holder = DruidConnectionHolder::with_standard_connection(

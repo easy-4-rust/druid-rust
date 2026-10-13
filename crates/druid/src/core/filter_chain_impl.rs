@@ -1,14 +1,19 @@
 //! Druid filter-chain implementation for the canonical standard surface.
 
 use super::connection_info::ConnectionInfo;
+use super::standard_logical_policy::StandardLogicalPolicy;
+use super::standard_resource_admission::StandardResourceAdmission;
+use super::standard_resource_registry::StandardResourceRegistry;
 use super::standard_result_set_filter_chain::StandardResultSetFilterChain;
 use super::{
     AfterFilter, BatchExecContext, BeforeFilter, ClobProxy, Connection, ConnectionEvent,
     ConnectionEventContext, ConnectionFactory, DruidError, DruidPooledConnection, ExecContext,
     ExecResult, PoolState, RdbcClob, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcString,
-    RdbcWriter, ResultSetFilter, ResultSetFilterContext, SqlWarning,
-    StandardConnectionWarningFilterChain, StatementEvent, StatementEventContext,
+    RdbcWriter, RegisteredLob, ResultSetFilter, ResultSetFilterContext, SqlWarning,
+    StandardConnectionLobFilterChain, StandardConnectionWarningFilterChain, StatementEvent,
+    StatementEventContext,
 };
+use druid_rdbc::resource::{Blob, Clob, NClob};
 use druid_rdbc::result_set::ColumnIndex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -608,6 +613,45 @@ impl FilterChainImpl {
     ) -> Result<(), DruidError> {
         StandardConnectionWarningFilterChain::new(&self.before, connection)
             .connection_clear_warnings()
+            .await
+    }
+
+    /// 在标准连接上以注册顺序创建 Blob，返回已登记结果。
+    pub(crate) async fn connection_create_blob(
+        &self,
+        connection: &mut dyn Connection,
+        registry: Arc<StandardResourceRegistry>,
+        admission: Arc<StandardResourceAdmission>,
+        policy: Arc<StandardLogicalPolicy>,
+    ) -> Result<RegisteredLob<dyn Blob>, DruidError> {
+        StandardConnectionLobFilterChain::new(&self.before, connection, registry, policy, admission)
+            .connection_create_blob()
+            .await
+    }
+
+    /// 在标准连接上以注册顺序创建 Clob，返回已登记结果。
+    pub(crate) async fn connection_create_clob(
+        &self,
+        connection: &mut dyn Connection,
+        registry: Arc<StandardResourceRegistry>,
+        admission: Arc<StandardResourceAdmission>,
+        policy: Arc<StandardLogicalPolicy>,
+    ) -> Result<RegisteredLob<dyn Clob>, DruidError> {
+        StandardConnectionLobFilterChain::new(&self.before, connection, registry, policy, admission)
+            .connection_create_clob()
+            .await
+    }
+
+    /// 在标准连接上以注册顺序创建 NClob，返回已登记结果。
+    pub(crate) async fn connection_create_n_clob(
+        &self,
+        connection: &mut dyn Connection,
+        registry: Arc<StandardResourceRegistry>,
+        admission: Arc<StandardResourceAdmission>,
+        policy: Arc<StandardLogicalPolicy>,
+    ) -> Result<RegisteredLob<dyn NClob>, DruidError> {
+        StandardConnectionLobFilterChain::new(&self.before, connection, registry, policy, admission)
+            .connection_create_n_clob()
             .await
     }
 
