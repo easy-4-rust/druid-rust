@@ -39,10 +39,14 @@ pub trait Driver: Send + Sync + 'static {
     /// 返回 registry 与 diagnostics 使用的稳定 driver 名称。
     fn name(&self) -> &str;
 
-    /// 返回 driver 是否理解给定 URL。
+    /// 判断是否声明接受 URL；该入口用于驱动查找，不作为连接尝试的前置过滤。
+    /// 对应 Java：`Driver#acceptsURL`。
     fn accepts_url(&self, url: &str) -> bool;
 
-    /// 尝试连接；不理解 URL 时返回 `Ok(None)`。
+    /// 尝试建立连接；不理解 URL 时返回 `Ok(None)`。
+    ///
+    /// 注册表按顺序调用连接入口，不先调用 [`Self::accepts_url`]；SQL 异常允许尝试后续驱动，
+    /// 其他 RDBC 错误立即返回。对应 Java：`Driver#connect`。
     async fn connect(
         &self,
         url: &str,

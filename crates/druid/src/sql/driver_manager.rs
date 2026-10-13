@@ -9,6 +9,7 @@ use super::{Driver, DriverAction, RdbcLogWriter};
 use crate::core::RdbcError;
 use druid_rdbc::connection::Connection;
 use druid_rdbc::driver::{ConnectionProperties, DriverExtensionDescriptor, DriverRegistry};
+use druid_rdbc::error::SqlException;
 
 #[derive(Clone)]
 struct RegisteredDriver {
@@ -16,12 +17,11 @@ struct RegisteredDriver {
     action: Option<Arc<dyn DriverAction>>,
 }
 
-/// Basic service that manages process-wide RDBC drivers and opens connections.
+/// 管理进程级 RDBC 驱动注册、连接协商和诊断输出。
 ///
-/// Corresponds to Java: `java.sql.DriverManager`. Drivers are considered in registration order;
-/// the first driver accepting a URL opens the connection. A global login timeout bounds that
-/// operation, and the configured writer receives diagnostics. Server code usually uses
-/// `DataSource`, but both entry points retain the same driver-error semantics.
+/// `get_driver` 依注册顺序查询驱动的 URL 接受能力；连接入口依次调用驱动 `connect`，
+/// 首个连接成功即返回，SQL 异常保留首个错误并继续协商。整体登录期限限制一次连接协商。
+/// 对应 Java：`java.sql.DriverManager`。
 pub struct DriverManager;
 
 impl DriverManager {
@@ -214,7 +214,16 @@ impl DriverManager {
         }
         registry
             .first_accepted_driver(url)
-            .ok_or_else(|| RdbcError::DriverError("No suitable driver found".to_owned()))
+            .ok_or_else(Self::no_suitable_driver_error)
+    }
+
+    /// 创建 JDBC 无合适驱动异常；消息不回显可能包含凭据的 URL。
+    fn no_suitable_driver_error() -> RdbcError {
+        RdbcError::SqlException(Box::new(SqlException::new(
+            0,
+            Some("08001".to_owned()),
+            Some("No suitable driver found".to_owned()),
+        )))
     }
 
     async fn connect_registered(
@@ -242,6 +251,6 @@ impl DriverManager {
                 .await
                 .map_err(|_| RdbcError::LoginTimeout)?
         }?;
-        connection.ok_or_else(|| RdbcError::DriverError("No suitable driver found".to_owned()))
+        connection.ok_or_else(Self::no_suitable_driver_error)
     }
 }

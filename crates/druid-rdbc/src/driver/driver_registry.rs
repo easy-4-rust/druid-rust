@@ -85,20 +85,31 @@ impl DriverRegistry {
             .map(|descriptor| Arc::clone(descriptor.driver()))
     }
 
-    /// 按注册顺序寻找第一个接受 URL 的 driver。
+    /// 按注册顺序协商连接；空结果或 SQL 异常后继续尝试后续驱动。
+    ///
+    /// 所有驱动均未连接成功时返回遇到的首个 SQL 异常；若没有异常则返回 `None`。
+    /// 对应 Java：`DriverManager#getConnection`。
     pub async fn connect(
         &self,
         url: &str,
         properties: &ConnectionProperties,
     ) -> Result<Option<Box<dyn Connection>>, RdbcError> {
+        let mut first_sql_error = None;
         for descriptor in &self.descriptors {
-            if !descriptor.driver().accepts_url(url) {
-                continue;
-            }
-            if let Some(connection) = descriptor.driver().connect(url, properties).await? {
-                return Ok(Some(connection));
+            match descriptor.driver().connect(url, properties).await {
+                Ok(Some(connection)) => return Ok(Some(connection)),
+                Ok(None) => {}
+                Err(error @ RdbcError::SqlException(_)) => {
+                    if first_sql_error.is_none() {
+                        first_sql_error = Some(error);
+                    }
+                }
+                Err(error) => return Err(error),
             }
         }
-        Ok(None)
+        match first_sql_error {
+            Some(error) => Err(error),
+            None => Ok(None),
+        }
     }
 }
