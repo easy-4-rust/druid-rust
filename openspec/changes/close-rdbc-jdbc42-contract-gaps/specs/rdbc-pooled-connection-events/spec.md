@@ -30,6 +30,10 @@
 - **WHEN** 连接执行发生由错误分类器判定的致命 SQL 错误
 - **THEN** 连接错误监听器收到完整异常，失败连接不被重新借出
 
+#### Scenario: 致命传输错误可触发外部池隔离
+- **WHEN** XA owner 的 Agent 传输中断或结果不确定，且原始 `RdbcError` 不含 `SqlException`
+- **THEN** pooled owner 仍发送一次连接错误事件；事件原因标记连接不可继续使用并保留安全的传输错误上下文，调用方仍收到原始 `RdbcError`，外部池不得重新借出该 owner
+
 ### Requirement: PE-03 预编译语句事件保留标准身份
 
 系统 SHALL 为受池管理的 PreparedStatement 及其 CallableStatement 子类型提供关闭/失效事件；事件源 SHALL 是真实 pooled owner，并包含原语句身份及可用的 SQL 异常，不能用新建空对象替代。

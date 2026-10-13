@@ -88,7 +88,7 @@ JDBC Agent 的 Rust 客户端 SHALL 仅在调用方显式配置 XA 数据源时�
 
 XA 配置 SHALL 提供明确的 XADataSource 类名和属性映射；配置解析、类加载、实例化、属性设置或握手任一步失败时，客户端 SHALL 返回带来源的错误并关闭已创建资源，不得回退到 DriverManager/普通 JDBC Connection。XA owner、逻辑连接和 XA RPC SHALL 共享同一个 session 串行化边界；逻辑句柄关闭后旧代次必须立即失效，新句柄不得被旧代次的迟到操作触达。底层传输进入结果不确定或不可恢复状态时，owner SHALL 被隔离并拒绝再次借出。
 
-当 XA owner 同时作为标准 `PooledConnection` 暴露时，逻辑连接关闭 SHALL 通过该 owner 的连接事件注册表通知一次，事件源必须是实际且稳定的 XA owner。池归还逻辑连接不得等同于关闭 XA owner；在 XA 生命周期仍有效时，`XaResource` 必须继续可用。owner 关闭后，所有逻辑租约与资源均失效。传输错误触发隔离时，错误事件须携带原始 SQL 异常；清理错误不得覆盖导致隔离的主错误。事件回调不得在持有 session、池或事件注册表锁时运行。
+当 XA owner 同时作为标准 `PooledConnection` 暴露时，逻辑连接关闭 SHALL 通过该 owner 的连接事件注册表通知一次，事件源必须是实际且稳定的 XA owner。池归还逻辑连接不得等同于关闭 XA owner；在 XA 生命周期仍有效时，`XaResource` 必须继续可用。owner 关闭后，所有逻辑租约与资源均失效。传输错误触发隔离时，即使原始 `RdbcError` 不含 `SqlException`，也必须发出一次足以供外部池判定 discard 的连接错误事件，并保留安全的传输诊断上下文；调用方仍收到原始主错误，清理错误不得覆盖它。事件回调不得在持有 session、池或事件注册表锁时运行。
 
 本要求只要求 JDBC Agent 与已验证支持恢复的后端闭环，不要求 SQLx、Toasty 或其他适配器普遍支持 XA。后端未配置 XA 或能力未协商时，必须 fail closed 并返回精确的不支持错误。
 
@@ -114,7 +114,7 @@ XA 配置 SHALL 提供明确的 XADataSource 类名和属性映射；配置解�
 
 #### Scenario: XA owner 传输故障通知
 - **WHEN** SQL 或 XA RPC 返回致命错误或不确定传输状态
-- **THEN** owner 被隔离且不再借出，错误事件保留原始 SQL 异常；监听器重入或失败不会阻断 session 清理，也不会让错误连接重新进入池
+- **THEN** owner 被隔离且不再借出；即使原始错误不是 `SqlException`，标准连接错误事件仍携带可供外部池 discard 的原因及安全诊断上下文，调用方收到的仍是原始主错误；监听器重入或失败不会阻断 session 清理，也不会让错误连接重新进入池
 
 #### Scenario: 显式 XA 配置失败时不降级
 - **WHEN** XADataSource 类名无效、属性配置失败、Agent 拒绝 XA 协商或握手返回未协商 XA

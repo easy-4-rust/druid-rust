@@ -8,7 +8,7 @@ use druid_rdbc::data_source::{
     XaResourceManagerIdentity,
 };
 use druid_rdbc::data_source::{PooledConnection, XaConnection, XaError, XaResource};
-use druid_rdbc::error::RdbcError;
+use druid_rdbc::error::{RdbcError, SqlException};
 use serde_json::Value as JsonValue;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock, Weak};
@@ -62,9 +62,17 @@ impl JdbcAgentXaOwnerState {
     }
 
     pub(super) fn notify_connection_error(&self, error: &RdbcError) {
-        let Some(exception) = error.sql_exception().cloned() else {
-            return;
-        };
+        // 连接错误事件需要标准 SQL 异常载体。传输已不可用时，非 SQL 错误也
+        // 必须通知外部池丢弃 owner；事件只放安全的分类信息，原始错误仍返回调用方。
+        let exception = error.sql_exception().cloned().unwrap_or_else(|| {
+            SqlException::new(
+                0,
+                Some("08006".to_owned()),
+                Some("JDBC Agent transport is unusable; discard the XA owner".to_owned()),
+            )
+            .with_class_name("java.sql.SQLNonTransientConnectionException")
+            .with_assignable_type("java.sql.SQLNonTransientException")
+        });
         if self.fatal_event_notified.swap(true, Ordering::AcqRel) {
             return;
         }

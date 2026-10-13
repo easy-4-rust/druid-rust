@@ -1,6 +1,6 @@
 # JDBC Agent Rust XA 客户端证据
 
-本记录按 6.5.1–6.5.5 分阶段追加。6.5.1 关闭 RPC 合同测试与普通连接兼容性基线；6.5.2 关闭显式 XA 数据源入口、标准消费者、协议往返及未协商能力错误合同。6.5.3 owner/租约故障注入、6.5.4 Rust/PostgreSQL 端到端恢复和 6.5.5 消费者迁移/API 文档仍未关闭。
+本记录按 6.5.1–6.5.5 分阶段追加。6.5.1 关闭 RPC 合同测试与普通连接兼容性基线；6.5.2 关闭显式 XA 数据源入口、标准消费者、协议往返及未协商能力错误合同；6.5.3 已由 owner/租约故障注入、外部标准池真实 Agent+H2 消费和 Druid 原生池边界核验关闭。6.5.4 Rust/PostgreSQL 跨 session 恢复和 6.5.5 消费者迁移/API 文档仍未关闭。
 
 ## 6.5.1 XA RPC 合同与普通连接兼容
 
@@ -71,33 +71,40 @@ crates/druid-wrapper/src/standard_adapter_executor.rs 5CC69A7088A170BFC8F07E40EB
 crates/druid-wrapper/tests/jdbc_agent_xa_external_consumer.rs DB1BAF5B4674BB867750708CC6A051B4B69CA12B429DC428AD467966EA9A7C7D
 ```
 
-## 6.5.3 进行中：XA owner 事件与 sticky 故障隔离
+## 6.5.3 已完成：XA owner 事件与 sticky 故障隔离
 
 ### 已完成的适配器层证据
 
 - `JdbcAgentXaConnection` 实现标准连接事件监听器注册/移除，并为 `ConnectionEvent` 保留稳定的 `PooledConnectionSource`。该来源是与 XA owner 共用状态的标准池化代理，持有方可通过它继续获取逻辑租约或关闭 owner；不会形成自引用强环。
 - 逻辑连接关闭成功后仅通知一次；XA owner 和资源保持可用。再次借出时旧代次失效；被动关闭旧代次也产生一次关闭通知。回调执行前释放 session 与租约锁。
-- SQL/XA 请求导致底层 transport 不可用时，session 进入 sticky 隔离状态，之后请求快速失败；保留原始 SQL 异常的 SQLState， owner 错误事件最多通知一次。owner 关闭失败原样返回并发送连接错误事件；重复关闭仍幂等。
+- SQL/XA 请求导致底层 transport 不可用时，session 进入 sticky 隔离状态，之后请求快速失败；SQL 错误事件保留原始 SQL 异常。非 SQL transport 错误则映射为安全的标准连接失效事件（SQLState `08006`、`SQLNonTransientConnectionException`），不复制可能含敏感信息的原始错误文本；调用方仍收到原始 `RdbcError`。fatal owner 错误事件最多通知一次。
+- 真实 Agent EOF 注入测试确认外部标准池收到稳定 owner 的错误事件、标记 discard，后续 borrow 被拒绝，owner 也不再提供 XA resource。回调尝试获取 event source、重入注册新监听器并在末尾 panic；事件使用固定快照，新监听器不追溯收到当前事件，panic 被捕获，主错误返回与 sticky 隔离仍完成。
+- 正向真实 Agent+H2 测试确认关闭逻辑连接只归还 lease，XA owner/resource 继续可用，同一 owner 能再次发放新代次并执行请求。
 - 为避免错误宣称语句事件支持，JDBC Agent XA `PooledConnection` 的 statement listener 操作继续使用标准默认 `0A000`，直到 PreparedStatement 事件路径也被实现和验证。
 
-### 已运行验证
+### TDD 与已运行验证
 
+- TDD 红测：真实 Agent+H2 外部消费者首次运行失败于 owner 错误事件计数，实际 `0`、预期 `1`；修复后事件、SQLState、discard、禁止重借、资源失效和原始非 SQL 错误断言均通过。
+- 环境：Windows x86_64，Java `17.0.12`；JDBC Agent shaded jar `0.0.0-design`；H2 `2.3.232`。运行时 jar 为本地 ignored 构建产物，不加入 Git。
 - `cargo test -p druid-wrapper --features jdbc-agent --lib --locked --offline`：37 passed。
-- `cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_xa_external_consumer --locked --offline`：2 passed。
-- `cargo test -p druid-wrapper --features jdbc-agent jdbc_agent_xa_connection::tests --lib --locked --offline`：3 passed，覆盖逻辑关闭事件、致命 SQL 错误通知及 owner 关闭失败。
+- `cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_xa_external_consumer --locked --offline`：2 passed、2 个环境门控实库测试忽略。
+- 设置 `DRUID_JAVA_EXECUTABLE=D:\Java\jdk-17.0.12\bin\java.exe`、`DRUID_JDBC_AGENT_JAR=agents/jdbc-agent/target/druid-jdbc-agent.jar`、`DRUID_JDBC_DRIVER_JAR=agents/jdbc-agent/target/driver-libs/h2-2.3.232.jar` 后运行 `cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_xa_external_consumer --locked --offline -- --ignored --nocapture`：2 passed；包含真实 H2 XA session、逻辑租约归还和 `System.exit(23)` Agent EOF 故障注入。listener panic 是测试中的故障注入，panic hook 输出符合预期，测试仍通过。
 - `cargo fmt -p druid-wrapper -- --check`、`git diff --check`、`openspec validate close-rdbc-jdbc42-contract-gaps --strict --no-interactive`：均通过。
 
-### 尚未关闭的验收
+### 外部池与 Druid 原生池边界
 
-- 外部标准 XA 池消费者的借出/归还行为尚未实现；当前 `jdbc_agent_xa_external_consumer` 只证明公共接口兼容。
-- CodeGraph 核验到 Druid 原生池由普通 `ConnectionFactory` 创建 `Connection`，暴露 `DruidPooledConnection`；当前没有 XA owner 的池化入口。因此本项要求先验证并记录此产品边界，不将普通 Druid 代理测试冒充 XA 池正向证据。若实际验收要求 XA owner 由 Druid 原生池管理，需要单独设计 XA 池代理 API 与生命周期，不在此处假设已存在。
-- 适配器层 fake transport 测试不替代 Java Agent/PostgreSQL 实库恢复；6.5.4 仍需从 Rust RDBC 消费入口验证跨 session `recover` 与数据库读回。
+- 外部池只通过 `druid-rdbc` 的 `XaDataSource`、`XaConnection`、`PooledConnection` 和 `ConnectionEventListener` 完成实际借出、归还、重借与 discard；没有依赖 Druid 私有 holder。
+- CodeGraph 对源码边界的核验：`crates/druid-rdbc/src/driver/connection_factory.rs:20-21` 的 `ConnectionFactory::create` 返回 `Box<dyn Connection>`；`crates/druid/src/pool/config.rs:206,429` 的 native builder 只接收 `Arc<dyn ConnectionFactory>`；`crates/druid/src/pool/druid_pool.rs:375-376` 由 native pool 返回 `DruidPooledConnection`。因此现有 Druid native pool 没有 XA owner 池化入口。本任务按规格记录此边界，不伪称 XA owner 已由 `DruidPooledConnection` 管理；若未来要求该能力，应作为单独 API/生命周期设计。
+- 6.5.3 关闭只证明 owner/租约/池事件边界，不证明真实 PostgreSQL 跨 session `recover`；6.5.4 仍须从 Rust RDBC 消费入口验证恢复及独立数据库读回。
 
-### 本阶段源码 SHA-256
+### 本阶段源码与运行时 SHA-256
 
 ```text
-crates/druid-wrapper/src/jdbc_agent/jdbc_agent_xa_connection.rs BA2CBDA4075D4AE532859291725FC8642746679521DA388BA46CD991A20C259D
+agents/jdbc-agent/target/druid-jdbc-agent.jar 0C91D24212BE21DA2E12F20639FC254835EAD77026643F3F9BE915E2873BE645
+agents/jdbc-agent/target/driver-libs/h2-2.3.232.jar 8DAE62D22DB8982C3DCB3826EDB9C727C5D302063A67EEF7D63D82DE401F07D3
+crates/druid-wrapper/src/jdbc_agent/jdbc_agent_xa_connection.rs 3AEE549B1617DE7FB650258A1160972DF4E7945B1153BF0654A86158A027871E
 crates/druid-wrapper/src/jdbc_agent/jdbc_agent_xa_session.rs 40D677BED2879CBF5B5CDFB0545532401706817DCEC9E9C727F52A7BA48A16FB
 crates/druid-wrapper/src/jdbc_agent/jdbc_agent_xa_session_transport.rs 2E163C78560341C04A87872840CC6BC5917858310AE9AFD830E3BC0F7789502B
+crates/druid-wrapper/tests/jdbc_agent_xa_external_consumer.rs 4727F3C826225FE3600139FF8B8407650BB2427786BC069F77BBB5831D1347D7
 ```
 
