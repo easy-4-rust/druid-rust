@@ -108,3 +108,43 @@ crates/druid-wrapper/src/jdbc_agent/jdbc_agent_xa_session_transport.rs 2E163C785
 crates/druid-wrapper/tests/jdbc_agent_xa_external_consumer.rs 4727F3C826225FE3600139FF8B8407650BB2427786BC069F77BBB5831D1347D7
 ```
 
+## 6.5.4 Rust RDBC/PostgreSQL 跨 session XA 恢复
+
+### 真实后端闭环
+
+- Rust 外部消费者显式配置 `org.postgresql.xa.PGXADataSource`，通过 JDBC Agent 建立 XA session；RDBC `Connection::exec` 在同一 session 中执行建表和两笔分支写入。两条分支分别执行 `start → SQL INSERT → end(TMSUCCESS) → prepare`，并确认 PostgreSQL 返回 `XA_OK`。
+- 测试关闭逻辑 RDBC 连接及原 XA owner，销毁第一条 Agent session；随后通过同一显式 XA 数据源新建 owner/session，以 `TMSTARTRSCAN | TMENDRSCAN` 恢复并逐字段比较两个完整 Xid，再分别执行 phase-two commit 与 rollback。
+- Java Testcontainers 外层在 Rust 子进程结束后，用独立 `DriverManager` 连接查询表：只读到 `id=1, payload=commit-after-recovery`，未读到 rollback 分支的 `id=2`。因此数据库最终状态由独立 JDBC 会话核验，而非 Rust 返回值或 Agent 日志推断。
+- 同批运行的 Rust 普通/负向测试验证既有普通 `open_session` 载荷不变、普通 Agent session 在发送 XA RPC 前 fail closed，以及 Agent 未协商 XA 时保留 SQLState `0A000` 并清理 session。
+
+### 环境与精确命令
+
+- Windows 11 x86_64；Oracle Java `17.0.12`；Maven `3.9.9`；rustc `1.97.1 (8bab26f4f 2026-07-14)`；Cargo `1.97.1 (c980f4866 2026-06-30)`。
+- Docker Desktop Engine `29.8.1`；Testcontainers Java `2.0.5`；`postgres:18.6` image digest `sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722`；PostgreSQL JDBC `42.7.14`。容器启动参数为 `postgres -c max_prepared_transactions=10`。
+- Maven Agent 构建：`mvn -o -f agents/jdbc-agent/pom.xml -DskipTests package`，退出码 `0`。
+- 真实容器端到端：`mvn -o -f agents/jdbc-agent/pom.xml -Ddruid.rustXaIntegration=true -Dtest=RustXaClientRecoveryIntegrationTest test`，退出码 `0`；JUnit `1 passed, 0 failed, 0 skipped`。Java harness 中实际启动的 Rust 命令为：
+
+```powershell
+cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_xa_external_consumer --locked --offline rust_client_recovers_prepared_branches_across_sessions -- --ignored --exact --nocapture
+```
+
+该子进程退出码 `0`，实际运行 `1 passed; 0 failed; 0 ignored; 4 filtered out`；输出保存在被忽略的 `agents/jdbc-agent/target/rust-xa-client-recovery.log`。
+
+- Rust 客户端普通/负向与 XA 回归：`cargo test -p druid-wrapper --features jdbc-agent --lib --locked --offline`，退出码 `0`，`37 passed`。其中实际通过 `ordinary_open_session_payload_keeps_the_existing_contract`、`ordinary_agent_session_fails_closed_before_sending_xa_rpc`、`explicit_xa_configuration_fails_closed_when_agent_does_not_negotiate_xa` 和 `missing_xa_capability_preserves_0a000_when_session_cleanup_fails`。
+- 外部消费者常规模式：`cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_xa_external_consumer --locked --offline`，退出码 `0`，`2 passed, 3 ignored`；三项忽略测试均需真实外部 Agent 环境，其中 PostgreSQL 项由上面的 Java harness 实际启用并通过。
+- Agent 端协议回归：`mvn -o -f agents/jdbc-agent/pom.xml -Dtest=XaAgentProtocolTest test`，退出码 `0`，`2 passed`；作为 Rust 端到端闭环的额外 Agent 协议回归，不替代 Rust 客户端测试。
+- `cargo fmt -p druid-wrapper -- --check`、`git diff --check`、`openspec validate close-rdbc-jdbc42-contract-gaps --strict --no-interactive`：均退出码 `0`。
+
+### 源码身份
+
+以下 SHA-256 是本阶段测试后核对的源码/运行制品身份；Agent shaded jar 是本地构建文件，不加入 Git：
+
+| 文件 | SHA-256 |
+|---|---|
+| `crates/druid-wrapper/tests/jdbc_agent_xa_external_consumer.rs` | `6894F8C11A81B40898266248EBD9D589FE810EF9126D8BF3C76F8E606EB64494` |
+| `agents/jdbc-agent/src/test/java/io/github/easy4rust/druid/agent/RustXaClientRecoveryIntegrationTest.java` | `267444E1FE0D9D967E61167DFE62801148B24EA977F820904FF0020CD0E7BC2B` |
+| `agents/jdbc-agent/pom.xml` | `25B1FAEC81D887EAB23CB90E7AA05828D4CD2CFBD6B673EB000742089C009830` |
+| `agents/jdbc-agent/target/druid-jdbc-agent.jar` | `21454C2C872C85CCC9990203F1E11FD466E472EC13B19900F462F49C1CECBC04` |
+
+本项关闭 XA-03、XA-05 的 Rust 客户端真实恢复场景。它不代表 XA 配置文档/API/SemVer 审查（6.5.5）、CommonDataSource（第 7 批）、全 JDBC 覆盖门禁（第 8–9 批）或 P04–P07 已完成。
+

@@ -1,7 +1,7 @@
 use druid_rdbc::connection::Connection;
 use druid_rdbc::data_source::{
     CommonDataSource, ConnectionEvent, ConnectionEventListener, PooledConnectionSource,
-    XaConnection, XaDataSource, XaError, XaFlags, Xid,
+    XaConnection, XaDataSource, XaError, XaFlags, XaPrepareResult, Xid,
 };
 use druid_rdbc::error::RdbcError;
 use druid_wrapper::jdbc_agent::{JdbcAgentOptions, JdbcAgentXaDataSource};
@@ -271,4 +271,144 @@ async fn external_pool_discards_xa_owner_after_agent_transport_failure() {
         "an unusable owner must not hand out an XA resource"
     );
     let _ = pool.close().await;
+}
+
+/// 从 RDBC 客户端经 JDBC Agent 在 PostgreSQL 中恢复另一会话 prepare 的事务分支。
+/// 对应 Java: XADataSource/XAConnection/XAResource 两阶段提交合同。
+#[tokio::test]
+#[ignore = "requires PostgreSQL Testcontainers harness and JDBC Agent classpath"]
+async fn rust_client_recovers_prepared_branches_across_sessions() {
+    let agent_jar = std::env::var_os("DRUID_JDBC_AGENT_JAR")
+        .expect("set DRUID_JDBC_AGENT_JAR to the built JDBC Agent shaded jar");
+    let driver_jar = std::env::var_os("DRUID_JDBC_DRIVER_JAR")
+        .expect("set DRUID_JDBC_DRIVER_JAR to the PostgreSQL JDBC jar");
+    let java = std::env::var_os("DRUID_JAVA_EXECUTABLE").unwrap_or_else(|| "java".into());
+    let host = std::env::var("DRUID_XA_PG_HOST").expect("set PostgreSQL host");
+    let port = std::env::var("DRUID_XA_PG_PORT")
+        .expect("set PostgreSQL port")
+        .parse::<u16>()
+        .expect("PostgreSQL port must be a valid u16");
+    let database = std::env::var("DRUID_XA_PG_DATABASE").expect("set PostgreSQL database");
+    let user = std::env::var("DRUID_XA_PG_USER").expect("set PostgreSQL user");
+    let password = std::env::var("DRUID_XA_PG_PASSWORD").expect("set PostgreSQL password");
+    let options =
+        JdbcAgentOptions::java(java, [PathBuf::from(agent_jar), PathBuf::from(driver_jar)])
+            .expect("Java classpath must be representable on this platform");
+    let artifact_version = options.artifact_version().to_owned();
+    let jvm_options_hash = options.jvm_options_hash().to_owned();
+    let options = options
+        .runtime_identity("postgres-xa-recovery", artifact_version, jvm_options_hash)
+        .request_timeout(Duration::from_secs(60));
+    let data_source =
+        JdbcAgentXaDataSource::new("org.postgresql.xa.PGXADataSource", Map::new(), options)
+            .expect("PostgreSQL XA data source class must be explicit")
+            .property("serverNames", json!([host]))
+            .property("portNumbers", json!([port]))
+            .property("databaseName", json!(database))
+            .property("user", json!(user))
+            .property("password", json!(password));
+
+    let mut owner = data_source
+        .xa_connection()
+        .await
+        .expect("Rust client must negotiate a PostgreSQL XA session");
+    let mut connection = owner
+        .connection()
+        .await
+        .expect("XA owner must issue a logical RDBC connection");
+    connection
+        .exec("DROP TABLE IF EXISTS druid_rust_xa_recovery", Vec::new())
+        .await
+        .expect("test table cleanup must succeed");
+    connection
+        .exec(
+            "CREATE TABLE druid_rust_xa_recovery(id INTEGER PRIMARY KEY, payload VARCHAR(32))",
+            Vec::new(),
+        )
+        .await
+        .expect("test table creation must succeed");
+
+    let committed = Xid::new(0x4452_5549, vec![0x10, 0x20, 0x30], vec![0x01])
+        .expect("commit Xid must satisfy the standard limits");
+    let rolled_back = Xid::new(0x4452_5549, vec![0x10, 0x20, 0x30], vec![0x02])
+        .expect("rollback Xid must satisfy the standard limits");
+
+    for (xid, id, payload) in [
+        (&committed, 1, "commit-after-recovery"),
+        (&rolled_back, 2, "rollback-after-recovery"),
+    ] {
+        owner
+            .xa_resource()
+            .expect("XA resource must remain attached to the owner")
+            .start(xid, XaFlags::TMNOFLAGS)
+            .await
+            .expect("branch start must succeed");
+        connection
+            .exec(
+                &format!(
+                    "INSERT INTO druid_rust_xa_recovery(id, payload) VALUES ({id}, '{payload}')"
+                ),
+                Vec::new(),
+            )
+            .await
+            .expect("RDBC SQL write must join the XA branch");
+        owner
+            .xa_resource()
+            .expect("XA resource must remain attached to the owner")
+            .end(xid, XaFlags::TMSUCCESS)
+            .await
+            .expect("branch end must succeed");
+        let vote = owner
+            .xa_resource()
+            .expect("XA resource must remain attached to the owner")
+            .prepare(xid)
+            .await
+            .expect("PostgreSQL must prepare the branch");
+        assert_eq!(vote, XaPrepareResult::Ok);
+    }
+
+    connection
+        .close()
+        .await
+        .expect("logical RDBC connection must close before its XA owner");
+    drop(connection);
+    owner
+        .close()
+        .await
+        .expect("closing the original owner must close the first Agent session");
+
+    let mut recovery_owner = data_source
+        .xa_connection()
+        .await
+        .expect("a fresh Agent session must establish the same PostgreSQL XA resource");
+    let recovered = recovery_owner
+        .xa_resource()
+        .expect("recovery session must expose XA resource")
+        .recover(XaFlags::TMSTARTRSCAN | XaFlags::TMENDRSCAN)
+        .await
+        .expect("new session must recover prepared branches");
+    assert!(
+        recovered.contains(&committed),
+        "commit Xid must be recovered intact"
+    );
+    assert!(
+        recovered.contains(&rolled_back),
+        "rollback Xid must be recovered intact"
+    );
+    recovery_owner
+        .xa_resource()
+        .expect("recovery session must expose XA resource")
+        .commit(&committed, false)
+        .await
+        .expect("recovered commit branch must commit in phase two");
+    recovery_owner
+        .xa_resource()
+        .expect("recovery session must expose XA resource")
+        .rollback(&rolled_back)
+        .await
+        .expect("recovered rollback branch must roll back in phase two");
+    recovery_owner
+        .close()
+        .await
+        .expect("recovery Agent session must close cleanly");
 }

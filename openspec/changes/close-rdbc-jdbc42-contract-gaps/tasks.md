@@ -4,12 +4,12 @@
 
 ## 当前状态与执行边界
 
-- 进度：32/50 项完成；6.5.1–6.5.3 已分别由 Rust XA RPC 合同/兼容性、显式数据源与标准入口、owner/外部池真实生命周期证据关闭，证据见 [Rust XA 客户端证据](evidence/xa-rust-client.md)。其余 18 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
+- 进度：33/50 项完成；6.5.1–6.5.4 已分别由 Rust XA RPC 合同/兼容性、显式数据源与标准入口、owner/外部池真实生命周期、Rust 客户端经 Agent 在 PostgreSQL 的跨 session 恢复证据关闭，证据见 [Rust XA 客户端证据](evidence/xa-rust-client.md)。其余 17 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
 - 取消批证据见 [取消合同证据](evidence/cancellation-contract.md) 和 [SQLx 取消能力矩阵](evidence/sqlx-cancellation-capability-matrix.md)：SQLite runtime 3.46.0 VM 执行中断及同物理连接复用、批处理与结果集入口、清理屏障、Future drop/owner 关闭竞态及连接池精确丢弃计数、PostgreSQL/MySQL/Any/生成键选择精确 `0A000`、三类池化代理的真实租约/缓存隔离及取消代次测试均有记录；取消批 4.1–4.7 已关闭。
-- SQLx 后端×执行入口矩阵、真实 SQLite 执行终态与连接处置、逐路径支持/不支持测试、三类池化代理生命周期回归和用户文档已完成；XA 中立标准 API、JDK 8 常量/分支状态机及 6.3 扫描、身份、超时和示例 owner 失效均有独立证据。6.4 探测已证实 H2 2.3.232 不满足断开后恢复，并以 PostgreSQL 18.6 Testcontainers + pgjdbc 42.7.14 通过独立 JDBC 恢复试验；Agent 协议接入及端到端重建会话恢复仍未实现。探测记录见 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md)。取消范围保持关闭。
+- SQLx 后端×执行入口矩阵、真实 SQLite 执行终态与连接处置、逐路径支持/不支持测试、三类池化代理生命周期回归和用户文档已完成；XA 中立标准 API、JDK 8 常量/分支状态机及 6.3 扫描、身份、超时和示例 owner 失效均有独立证据。6.4 探测已证实 H2 2.3.232 不满足断开后恢复，并以 PostgreSQL 18.6 Testcontainers + pgjdbc 42.7.14 通过独立 JDBC 恢复试验；现已补齐真实 Agent 协议和 Rust RDBC 跨 session 恢复，细节见 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md) 与 [Rust XA 客户端证据](evidence/xa-rust-client.md)。取消范围保持关闭。
 - 每批只运行该批目标测试和直接受影响的回归；达到表格中的停止点即停并报告。最终综合门禁只在第 9 批运行一次，不循环重跑已通过的全量命令。
 - 真实后端、Java 8 或 XA 环境不可用时，相关任务记为 `NOT_RUN` 并说明阻断，不用 mock、编译成功或其他版本的 oracle 替代实际证据，也不自动安装依赖或扩大时间预算。
-- 执行顺序固定为：池事件批次 5 已完成；当前唯一下一项是 XA Rust 客户端实库恢复 6.5.4，完成后交付并停止。6.5.5、公共数据源 7.1–7.4、方法级证据 8.x 和综合验收 9.x 均为串行后续批次，只有收到明确继续指令后才启动；不得把本任务清单解释为持续自动执行授权。
+- 执行顺序固定为：池事件批次 5 已完成；XA Rust 客户端实库恢复 6.5.4 已完成；当前下一项为 XA 对外交付 6.5.5。随后按顺序处理公共数据源 7.1–7.4、方法级证据 8.x 和综合验收 9.x；每项独立验收、提交和推送，不循环重跑已通过的全量门禁。
 - 范围仅限本变更列出的七项能力、MC-06 的资源/结果集方法级验收及证据门禁。MC-06 只要求把现有后端能力和缺口准确分级，不要求所有后端实现所有 JDBC 扩展。额外发现登记到后续清单，不自动加任务；关闭本变更不代表 P04–P07、全 JDBC/TCK 合规或整个项目生产就绪。
 
 ### 架构视角的补充路线
@@ -32,11 +32,11 @@
 | 顺序 | 当前缺口 | 最小交付 | 通过证据 | 停止点 |
 |---|---|---|---|---|
 | A. XA owner 生命周期（已完成） | 非 SQL Agent 传输故障事件未通知外部池 | 已补安全连接错误事件投影、真实 Agent EOF discard 测试、逻辑租约复用测试及 Druid 普通池边界结论 | 红测 `0 != 1`，修复后真实 Agent+H2 两项集成测试通过；源码哈希与 CodeGraph 类型边界见 [XA 客户端证据](evidence/xa-rust-client.md#653-已完成xa-owner-事件与-sticky-故障隔离) | 已关闭 6.5.3；原生 Druid XA 池支持若未来需要须单独设计 |
-| B. XA 实库恢复 | Rust 客户端尚无 Agent + PostgreSQL 跨 session 真实读回 | 从 Rust RDBC 外部消费入口执行 prepare，关闭原 session，新建 session recover 后 commit/rollback，以独立 JDBC 连接读回结果；另运行普通模式 fail-closed | Testcontainers/Agent/PostgreSQL 版本、命令、退出码、完整 Xid 与最终读回、源码哈希 | 6.5.4 场景全通过；环境不可用则记录 `NOT_RUN` 和具体阻断并停止，不改成 mock 验收 |
-| C. XA 对外交付 | XA 配置和生命周期文档、API/SemVer 审查尚未验收 | 更新配置、生命周期、恢复/故障处置示例；编译并运行最小外部消费者；逐项审阅新增/弃用/破坏性 API | 文档示例结果、consumer 测试、API 差异和迁移记录 | 6.5.5 完成后 XA 批停止；不自动进入第 7 批 |
+| B. XA 实库恢复（已完成） | Rust 客户端尚无 Agent + PostgreSQL 跨 session 真实读回 | 已从 Rust RDBC 外部消费入口执行两条 XA 分支 prepare，关闭原 session，新建 session recover 后分别 commit/rollback，并由独立 JDBC 连接读回 | Testcontainers/Agent/PostgreSQL 版本、命令、退出码、完整 Xid 与最终读回、源码哈希，见 [Rust XA 客户端证据](evidence/xa-rust-client.md#654-rust-rdbc-postgresql-跨-session-xa-恢复) | 已关闭 6.5.4；完成后停止于本功能点 |
+| C. XA 对外交付（当前下一项） | XA 配置和生命周期文档、API/SemVer 审查尚未验收 | 更新配置、生命周期、恢复/故障处置示例；编译并运行最小外部消费者；逐项审阅新增/弃用/破坏性 API | 文档示例结果、consumer 测试、API 差异和迁移记录 | 6.5.5 完成后 XA 批停止；不自动进入第 7 批 |
 | D. 公共合同与关闭证据 | 第 7–9 批仍未完成 | 按既有任务依赖逐批完成 CommonDataSource、方法分母与资源/结果集有限矩阵，最后只运行一次综合门禁 | 7.x、8.x 对应证据及 9.x 最终门禁 | 每批独立停止；只有第 9 批通过才能关闭此 OpenSpec change，不能据此宣称 P04–P07 或全项目生产就绪 |
 
-当前 OpenSpec 交付仅包含规格与任务整理，不启动实现。后续获得明确继续指令后，唯一下一项为 B（6.5.4 Rust/PostgreSQL 跨 session XA 恢复）；B 完成或因环境阻断而记录 `NOT_RUN` 后即停止并报告。C/D 保持串行后续交付，不并行提前；对任何重复失败，只有实现、输入或环境发生可验证变化后才重跑，否则记录失败签名与所需条件。
+本轮已完成 B（6.5.4 Rust/PostgreSQL 跨 session XA 恢复）并验证数据库最终状态；下一项为 C（6.5.5 XA 对外交付）。C/D 仍按任务顺序执行；对任何重复失败，只有实现、输入或环境发生可验证变化后才重跑，否则记录失败签名与所需条件。
 
 | 批次 | 依赖 | 交付与停止点 |
 |---|---|---|
@@ -135,7 +135,7 @@
   - **标准事件层（PE-02）**：XA owner 通过标准 `PooledConnection` 的监听器注册表发出逻辑关闭与致命连接错误事件；断言事件源为实际稳定 owner、logical close 仅通知一次、SQL 异常完整保留；另注入 Agent EOF/不确定传输这类不含 `SqlException` 的 `RdbcError`，验证错误事件仍能驱动外部池 discard，调用方仍收到原始错误且没有凭据泄露。回调锁外执行，重入/失败不阻断处置。逻辑连接归还不能关闭 XA owner 或使 `XaResource` 失效。
   - **外部标准池与 Druid 边界层**：用一个只依赖 RDBC `XaDataSource`/`XaConnection`/`PooledConnection` 的最小外部池消费者验证借出、逻辑归还、再次借出、owner discard/close 的事件顺序与租约隔离；确认归还逻辑连接时 XA owner 未被提前关闭，致命/不确定状态 owner 不会重新入池。另检查 Druid 原生池入口的真实类型边界：若它只接收普通 `ConnectionFactory`/`Connection`，记录 XA owner 不经普通池代理的限制与示例用法，不伪称已由 Druid `DruidPooledConnection` 管理 XA；只有实际存在 XA 池代理时才要求该代理的正向生命周期回归。
   - 汇总三层命令、退出码、源码哈希和未运行项；环境可用，本项无 `NOT_RUN`。真实 PostgreSQL 跨 session 恢复仍由 6.5.4 独立验收，不能由本项 H2 生命周期证据替代。（XA-04、XA-05、PE-02、MC-02、MC-06）
-- [ ] 6.5.4 使用已通过 6.4 的 PostgreSQL Testcontainers 配置，从 Rust RDBC 消费入口完成 start→SQL 写入→end→prepare→关闭 session→新 session recover→commit/rollback，并以独立 JDBC 连接核对数据库最终状态；同时运行普通模式和明确不支持 XA 的负向测试。记录精确命令、版本、退出码和源码哈希；环境缺失记 `NOT_RUN`，本任务不得用 Agent Java 协议测试代替 Rust 端到端证据。（XA-03、XA-05、MC-02）
+- [x] 6.5.4 使用已通过 6.4 的 PostgreSQL Testcontainers 配置，从 Rust RDBC 消费入口完成 start→SQL 写入→end→prepare→关闭 session→新 session recover→commit/rollback，并以独立 JDBC 连接核对数据库最终状态；同时运行普通模式和明确不支持 XA 的负向测试。记录精确命令、版本、退出码和源码哈希；环境缺失记 `NOT_RUN`，本任务不得用 Agent Java 协议测试代替 Rust 端到端证据。（XA-03、XA-05、MC-02；证据见 [Rust XA 客户端证据](evidence/xa-rust-client.md#654-rust-rdbc-postgresql-跨-session-xa-恢复)）
 - [ ] 6.5.5 更新显式 XADataSource 配置、owner/逻辑租约生命周期、恢复步骤、错误处置和普通模式迁移示例；完成事务管理器最小外部消费者编译/行为验证及 API/SemVer 差异审查。将 6.5.2–6.5.5 的命令、真实后端版本、退出码、源码哈希和 `NOT_RUN` 阻断写入 `evidence/xa-rust-client.md`；运行 XA 定向测试与直接受影响回归，逐条核对 XA-01–05 场景后结束本批，不自动开始第 7 批。（XA-01–05、MC-02–04）
 
 ## 7. 补齐公共数据源配置
