@@ -26,6 +26,11 @@ HEADER = ("crate", "lint", "count", "sha256", "status", "reason")
 MODULE_MAP_HEADER = ("old_module", "target_file", "transition", "test_file")
 MODULE_FINDING = re.compile(r"(?m)^  mod (druid::[A-Za-z0-9_:]+), previously in file ")
 MODULE_TRANSITIONS = {"STANDARD_PORT", "PRIVATE_OWNER", "SPLIT_STANDARD"}
+STRUCT_MAP_HEADER = ("old_type", "target_file", "target_symbol", "transition", "test_file")
+STRUCT_FINDING = re.compile(
+    r"(?m)^  struct (druid::[A-Za-z0-9_:]+), previously in file ([^\n]+)$"
+)
+STRUCT_TRANSITIONS = {"STANDARD_PORT", "PRIVATE_OWNER", "RENAMED"}
 
 
 def findings_by_lint(report: str, exit_code: int) -> dict[str, tuple[int, str]]:
@@ -125,10 +130,71 @@ def verify_module_migration_map(report: str, path: Path, root: Path) -> None:
         )
 
 
+def verify_struct_migration_map(report: str, path: Path, root: Path) -> None:
+    """Bind each retired Druid struct identity to one concrete migration target."""
+    report = ANSI_ESCAPE.sub("", report)
+    sections = list(SECTION.finditer(report))
+    matching = [index for index, match in enumerate(sections) if match.group(1) == "struct_missing"]
+    if len(matching) != 1:
+        raise ValueError("expected one druid/struct_missing report section")
+    index = matching[0]
+    end = sections[index + 1].start() if index + 1 < len(sections) else len(report)
+    body = report[sections[index].end() : end]
+    findings = STRUCT_FINDING.findall(body)
+    paths = [item for item, _ in findings]
+    finding_lines = [line for line in body.splitlines() if line.startswith("  struct ")]
+    if not paths or len(paths) != len(set(paths)) or len(paths) != len(finding_lines):
+        raise ValueError("struct_missing paths are empty, duplicated, or unrecognized")
+    names = {item.rsplit("::", 1)[-1] for item in paths}
+    source_by_name: dict[str, str] = {}
+    for item, source in findings:
+        name = item.rsplit("::", 1)[-1]
+        normalized_source = SOURCE_LINE.sub(":<line>", WORKSPACE_PREFIX.sub("", source))
+        if name in source_by_name and source_by_name[name] != normalized_source:
+            raise ValueError(f"ambiguous retired struct identity: {name}")
+        source_by_name[name] = normalized_source
+
+    with path.open(encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        if tuple(reader.fieldnames or ()) != STRUCT_MAP_HEADER:
+            raise ValueError("struct migration map has an unexpected TSV header")
+        rows = list(reader)
+    mapped: set[str] = set()
+    for row in rows:
+        old_type = row["old_type"]
+        target_symbol = row["target_symbol"]
+        if old_type in mapped:
+            raise ValueError(f"duplicate struct migration: {old_type}")
+        mapped.add(old_type)
+        if row["transition"] not in STRUCT_TRANSITIONS:
+            raise ValueError(f"unknown struct transition: {old_type}")
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", target_symbol):
+            raise ValueError(f"invalid target symbol: {old_type}")
+        for column in ("target_file", "test_file"):
+            relative = Path(row[column])
+            if relative.is_absolute() or ".." in relative.parts or relative.suffix != ".rs":
+                raise ValueError(f"invalid struct {column}: {old_type}")
+            if not (root / relative).is_file():
+                raise ValueError(f"missing struct {column}: {old_type}: {relative}")
+        source = (root / row["target_file"]).read_text(encoding="utf-8")
+        declaration = re.compile(
+            rf"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?"
+            rf"(?:struct|trait|enum|type)\s+{re.escape(target_symbol)}\b"
+        )
+        if not declaration.search(source):
+            raise ValueError(f"missing migration target symbol: {old_type}:{target_symbol}")
+    if mapped != names:
+        raise ValueError(
+            f"struct migration mismatch: missing={sorted(names - mapped)} "
+            f"extra={sorted(mapped - names)}"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--allowlist", type=Path, required=True)
     parser.add_argument("--module-migration-map", type=Path)
+    parser.add_argument("--struct-migration-map", type=Path)
     for short, crate in (("rdbc", "druid-rdbc"), ("druid", "druid"), ("wrapper", "druid-wrapper")):
         parser.add_argument(f"--{short}-report", type=Path, required=True)
         parser.add_argument(f"--{short}-exit-code", type=int, required=True)
@@ -162,6 +228,14 @@ def main() -> int:
         verify_module_migration_map(
             args.druid_report.read_text(encoding="utf-8"),
             args.module_migration_map,
+            Path(__file__).resolve().parent.parent,
+        )
+    if ("druid", "struct_missing") in actual:
+        if args.struct_migration_map is None:
+            raise ValueError("druid/struct_missing requires an exact struct migration map")
+        verify_struct_migration_map(
+            args.druid_report.read_text(encoding="utf-8"),
+            args.struct_migration_map,
             Path(__file__).resolve().parent.parent,
         )
     missing = sorted(actual.keys() - allowlist.keys())

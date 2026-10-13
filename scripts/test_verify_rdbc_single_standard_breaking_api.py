@@ -28,6 +28,43 @@ def report(item: str, line: int = 4) -> str:
 
 
 class BreakingApiAllowlistTest(unittest.TestCase):
+    def test_struct_migration_map_binds_each_removed_type_to_a_real_target(self) -> None:
+        struct_report = (
+            "--- failure struct_missing: pub struct removed or renamed ---\n"
+            "Failed in:\n"
+            "  struct druid::core::OldHandle, previously in file old.rs:1\n"
+            "  struct druid::core::nested::OldHandle, previously in file old.rs:1\n"
+            "Summary semver requires new major version: 1 major and 0 minor checks failed\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "target.rs"
+            test = root / "contract_test.rs"
+            target.write_text("pub struct NewHandle;\n", encoding="utf-8")
+            test.write_text("// regression contract\n", encoding="utf-8")
+            mapping = root / "migration.tsv"
+            header = "old_type\ttarget_file\ttarget_symbol\ttransition\ttest_file\n"
+            row = "OldHandle\ttarget.rs\tNewHandle\tSTANDARD_PORT\tcontract_test.rs\n"
+            mapping.write_text(header + row, encoding="utf-8")
+            verifier.verify_struct_migration_map(struct_report, mapping, root)
+            mapping.write_text(header, encoding="utf-8")
+            with self.assertRaises(ValueError):
+                verifier.verify_struct_migration_map(struct_report, mapping, root)
+            mapping.write_text(header + row.replace("NewHandle", "MissingHandle"), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                verifier.verify_struct_migration_map(struct_report, mapping, root)
+            target.write_text("// pub struct NewHandle;\n", encoding="utf-8")
+            mapping.write_text(header + row, encoding="utf-8")
+            with self.assertRaises(ValueError):
+                verifier.verify_struct_migration_map(struct_report, mapping, root)
+            target.write_text("pub struct NewHandle;\n", encoding="utf-8")
+            conflicting_identity = struct_report.replace(
+                "nested::OldHandle, previously in file old.rs",
+                "nested::OldHandle, previously in file another.rs",
+            )
+            with self.assertRaises(ValueError):
+                verifier.verify_struct_migration_map(conflicting_identity, mapping, root)
+
     def test_module_migration_map_requires_every_reported_path_and_real_evidence(self) -> None:
         module_report = (
             "--- failure module_missing: pub module removed or renamed ---\n"
