@@ -2,7 +2,7 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
-2026-10-13 SIGTERM 待 ACK 进程试验准备：关闭错误的 HTTP 状态先复现 400（RED），将 broker 的 `shutting down` 归入脱敏 503 后，目标单测 GREEN，严格 Clippy 通过。新增 Unix-only 真实子进程试验：认证的 gRPC 流已收到命令而未 ACK 时发送 SIGTERM，要求 HTTP 等待者在 2 秒内收到脱敏 503、进程在 4 秒内退出，均早于 5 秒关闭期限；该试验在 Windows 本机仅通过语法格式检查，尚待 Linux CI 实际运行，不计为已通过故障注入。
+2026-10-13 SIGTERM 待 ACK 进程试验：关闭错误的 HTTP 状态先复现 400（RED），将 broker 的 `shutting down` 归入脱敏 503 后，目标单测 GREEN，严格 Clippy 通过。新增 Unix-only 真实子进程试验：认证的 gRPC 流已收到命令而未 ACK 时发送 SIGTERM，要求 HTTP 等待者在 2 秒内收到脱敏 503、进程在 4 秒内退出，均早于 5 秒关闭期限。[Linux Rust contracts](https://github.com/easy-4-rust/druid-rust/actions/runs/38397483551/job/115296951596) 日志明确显示 `sigterm_releases_pending_command_http_waiter_before_deadline ... ok`，同一 `admin_binary_test` 19/19 通过，已有的 held-connection SIGTERM 用例也通过。此结果只关闭待 ACK SIGTERM 故障场景，完整 P06 数值预算与其他故障注入仍开放。
 
 2026-10-13 Admin 待 ACK 关闭：新增真实 Tonic 双向流测试，先确认运维命令已送达且客户端未 ACK，再取消服务关闭令牌。原实现中命令等待者超过 1 秒仍未结束（RED）；broker 与 IngestService 共享关闭令牌后，等待者在 1 秒内明确失败、关闭后的新命令被拒绝、受监管 stream 与服务任务均退出（GREEN）。生产构建顺序的令牌绑定单测通过；同一二进制的待 ACK 关闭单项、命令日志满额重连与半关闭结果重放两项回归通过；严格 Clippy 通过。本机完整 gRPC 网络套件在运行至后段时 38/49，后续连接出现 TCP 10060/5 秒超时；同一二进制复制到 D 盘新路径后，曾失败的半关闭重连单项与新关闭单项均通过，重新跑完整套件仍在后段复现超时。覆盖编译并发时再次单跑新用例也在建立 TCP 连接前发生 Windows 10060，未执行到待 ACK 断言；编译结束后，从 D 盘新路径独立运行待 ACK、生产构建顺序和两项重连回归，4/4 通过。故不能把本机整套记为通过，仍须以跨平台 CI 和独立的进程级 SIGTERM 待 ACK 试验关闭 Task5。
 
