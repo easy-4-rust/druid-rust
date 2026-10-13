@@ -445,6 +445,10 @@ impl core::cmp::PartialEq for druid_rdbc::extensions::ArrayHandle
 pub fn druid_rdbc::extensions::ArrayHandle::eq(&self, &Self) -> bool
 impl core::fmt::Debug for druid_rdbc::extensions::ArrayHandle
 pub fn druid_rdbc::extensions::ArrayHandle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::ArrayHandle
+pub fn druid_rdbc::extensions::ArrayHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::ArrayHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::ArrayHandle::resource_id(&self) -> &str
 pub struct druid_rdbc::extensions::BlobHandle
 impl druid_rdbc::extensions::BlobHandle
 pub fn druid_rdbc::extensions::BlobHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
@@ -466,6 +470,10 @@ impl core::cmp::PartialEq for druid_rdbc::extensions::BlobHandle
 pub fn druid_rdbc::extensions::BlobHandle::eq(&self, &Self) -> bool
 impl core::fmt::Debug for druid_rdbc::extensions::BlobHandle
 pub fn druid_rdbc::extensions::BlobHandle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::BlobHandle
+pub fn druid_rdbc::extensions::BlobHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::BlobHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::BlobHandle::resource_id(&self) -> &str
 pub struct druid_rdbc::extensions::BufferedRowSet
 impl druid_rdbc::extensions::BufferedRowSet
 pub fn druid_rdbc::extensions::BufferedRowSet::new(alloc::vec::Vec<druid_rdbc::types::Row>) -> Self
@@ -623,6 +631,10 @@ impl core::cmp::PartialEq for druid_rdbc::extensions::ClobHandle
 pub fn druid_rdbc::extensions::ClobHandle::eq(&self, &Self) -> bool
 impl core::fmt::Debug for druid_rdbc::extensions::ClobHandle
 pub fn druid_rdbc::extensions::ClobHandle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::ClobHandle
+pub fn druid_rdbc::extensions::ClobHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::ClobHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::ClobHandle::resource_id(&self) -> &str
 pub struct druid_rdbc::extensions::ConnectionCapabilities
 pub druid_rdbc::extensions::ConnectionCapabilities::callable_statements: bool
 pub druid_rdbc::extensions::ConnectionCapabilities::catalogs: bool
@@ -665,6 +677,10 @@ pub async fn druid_rdbc::extensions::NClobHandle::set_character_stream(&self, i6
 pub async fn druid_rdbc::extensions::NClobHandle::set_string(&self, i64, &druid_rdbc::types::RdbcString) -> core::result::Result<i32, druid_rdbc::RdbcError>
 pub async fn druid_rdbc::extensions::NClobHandle::set_string_range(&self, i64, &druid_rdbc::types::RdbcString, i32, i32) -> core::result::Result<i32, druid_rdbc::RdbcError>
 pub async fn druid_rdbc::extensions::NClobHandle::truncate(&self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::NClobHandle
+pub fn druid_rdbc::extensions::NClobHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::NClobHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::NClobHandle::resource_id(&self) -> &str
 pub struct druid_rdbc::extensions::OutputStreamHandle
 impl druid_rdbc::extensions::OutputStreamHandle
 pub fn druid_rdbc::extensions::OutputStreamHandle::close(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
@@ -708,6 +724,10 @@ impl core::cmp::PartialEq for druid_rdbc::extensions::RefHandle
 pub fn druid_rdbc::extensions::RefHandle::eq(&self, &Self) -> bool
 impl core::fmt::Debug for druid_rdbc::extensions::RefHandle
 pub fn druid_rdbc::extensions::RefHandle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::RefHandle
+pub fn druid_rdbc::extensions::RefHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::RefHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::RefHandle::resource_id(&self) -> &str
 pub struct druid_rdbc::extensions::RowSetEvent
 impl druid_rdbc::extensions::RowSetEvent
 pub fn druid_rdbc::extensions::RowSetEvent::new(core::option::Option<druid_rdbc::extensions::SharedRowSet>) -> core::result::Result<Self, druid_rdbc::RdbcError>
@@ -1141,6 +1161,10 @@ impl core::cmp::PartialEq for druid_rdbc::extensions::SqlXmlHandle
 pub fn druid_rdbc::extensions::SqlXmlHandle::eq(&self, &Self) -> bool
 impl core::fmt::Debug for druid_rdbc::extensions::SqlXmlHandle
 pub fn druid_rdbc::extensions::SqlXmlHandle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::SqlXmlHandle
+pub fn druid_rdbc::extensions::SqlXmlHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::SqlXmlHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::SqlXmlHandle::resource_id(&self) -> &str
 pub struct druid_rdbc::extensions::WriterHandle
 impl druid_rdbc::extensions::WriterHandle
 pub fn druid_rdbc::extensions::WriterHandle::close(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
@@ -2293,6 +2317,10 @@ impl core::cmp::PartialEq for druid_rdbc::extensions::ArrayHandle
 pub fn druid_rdbc::extensions::ArrayHandle::eq(&self, &Self) -> bool
 impl core::fmt::Debug for druid_rdbc::extensions::ArrayHandle
 pub fn druid_rdbc::extensions::ArrayHandle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::ArrayHandle
+pub fn druid_rdbc::extensions::ArrayHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::ArrayHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::ArrayHandle::resource_id(&self) -> &str
 pub struct druid_rdbc::resource::RdbcBlob
 impl druid_rdbc::extensions::BlobHandle
 pub fn druid_rdbc::extensions::BlobHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
@@ -2314,6 +2342,10 @@ impl core::cmp::PartialEq for druid_rdbc::extensions::BlobHandle
 pub fn druid_rdbc::extensions::BlobHandle::eq(&self, &Self) -> bool
 impl core::fmt::Debug for druid_rdbc::extensions::BlobHandle
 pub fn druid_rdbc::extensions::BlobHandle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::BlobHandle
+pub fn druid_rdbc::extensions::BlobHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::BlobHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::BlobHandle::resource_id(&self) -> &str
 pub struct druid_rdbc::resource::RdbcClob
 impl druid_rdbc::extensions::ClobHandle
 pub fn druid_rdbc::extensions::ClobHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
@@ -2337,6 +2369,10 @@ impl core::cmp::PartialEq for druid_rdbc::extensions::ClobHandle
 pub fn druid_rdbc::extensions::ClobHandle::eq(&self, &Self) -> bool
 impl core::fmt::Debug for druid_rdbc::extensions::ClobHandle
 pub fn druid_rdbc::extensions::ClobHandle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::ClobHandle
+pub fn druid_rdbc::extensions::ClobHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::ClobHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::ClobHandle::resource_id(&self) -> &str
 pub struct druid_rdbc::resource::RdbcInputStream
 impl druid_rdbc::extensions::InputStreamHandle
 pub fn druid_rdbc::extensions::InputStreamHandle::close(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
@@ -2369,6 +2405,10 @@ pub async fn druid_rdbc::extensions::NClobHandle::set_character_stream(&self, i6
 pub async fn druid_rdbc::extensions::NClobHandle::set_string(&self, i64, &druid_rdbc::types::RdbcString) -> core::result::Result<i32, druid_rdbc::RdbcError>
 pub async fn druid_rdbc::extensions::NClobHandle::set_string_range(&self, i64, &druid_rdbc::types::RdbcString, i32, i32) -> core::result::Result<i32, druid_rdbc::RdbcError>
 pub async fn druid_rdbc::extensions::NClobHandle::truncate(&self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::NClobHandle
+pub fn druid_rdbc::extensions::NClobHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::NClobHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::NClobHandle::resource_id(&self) -> &str
 pub struct druid_rdbc::resource::RdbcOutputStream
 impl druid_rdbc::extensions::OutputStreamHandle
 pub fn druid_rdbc::extensions::OutputStreamHandle::close(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
@@ -2412,6 +2452,10 @@ impl core::cmp::PartialEq for druid_rdbc::extensions::RefHandle
 pub fn druid_rdbc::extensions::RefHandle::eq(&self, &Self) -> bool
 impl core::fmt::Debug for druid_rdbc::extensions::RefHandle
 pub fn druid_rdbc::extensions::RefHandle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::RefHandle
+pub fn druid_rdbc::extensions::RefHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::RefHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::RefHandle::resource_id(&self) -> &str
 pub struct druid_rdbc::resource::RdbcSqlXml
 impl druid_rdbc::extensions::SqlXmlHandle
 pub async fn druid_rdbc::extensions::SqlXmlHandle::binary_stream(&self) -> core::result::Result<druid_rdbc::extensions::InputStreamHandle, druid_rdbc::RdbcError>
@@ -2435,6 +2479,10 @@ impl core::cmp::PartialEq for druid_rdbc::extensions::SqlXmlHandle
 pub fn druid_rdbc::extensions::SqlXmlHandle::eq(&self, &Self) -> bool
 impl core::fmt::Debug for druid_rdbc::extensions::SqlXmlHandle
 pub fn druid_rdbc::extensions::SqlXmlHandle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::SqlXmlHandle
+pub fn druid_rdbc::extensions::SqlXmlHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::SqlXmlHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::SqlXmlHandle::resource_id(&self) -> &str
 pub struct druid_rdbc::resource::RdbcStruct
 impl druid_rdbc::resource::RdbcStruct
 pub async fn druid_rdbc::resource::RdbcStruct::attributes(&self) -> core::result::Result<alloc::vec::Vec<druid_rdbc::types::RdbcObject>, druid_rdbc::RdbcError>
@@ -2623,6 +2671,34 @@ pub fn druid_rdbc::resource::Ref::capabilities(&self) -> druid_rdbc::resource::R
 pub fn druid_rdbc::resource::Ref::object<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::RdbcObject, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::resource::Ref::object_with_type_map<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid_rdbc::types::RdbcTypeMap) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::RdbcObject, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
 pub fn druid_rdbc::resource::Ref::set_object<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::types::RdbcObject) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub trait druid_rdbc::resource::Resource: core::fmt::Debug + core::marker::Send + core::marker::Sync
+pub fn druid_rdbc::resource::Resource::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::Resource::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::Resource::resource_id(&self) -> &str
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::ArrayHandle
+pub fn druid_rdbc::extensions::ArrayHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::ArrayHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::ArrayHandle::resource_id(&self) -> &str
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::BlobHandle
+pub fn druid_rdbc::extensions::BlobHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::BlobHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::BlobHandle::resource_id(&self) -> &str
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::ClobHandle
+pub fn druid_rdbc::extensions::ClobHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::ClobHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::ClobHandle::resource_id(&self) -> &str
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::NClobHandle
+pub fn druid_rdbc::extensions::NClobHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::NClobHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::NClobHandle::resource_id(&self) -> &str
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::RefHandle
+pub fn druid_rdbc::extensions::RefHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::RefHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::RefHandle::resource_id(&self) -> &str
+impl druid_rdbc::resource::Resource for druid_rdbc::extensions::SqlXmlHandle
+pub fn druid_rdbc::extensions::SqlXmlHandle::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::extensions::SqlXmlHandle::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::extensions::SqlXmlHandle::resource_id(&self) -> &str
 pub trait druid_rdbc::resource::SqlData: core::marker::Send
 pub fn druid_rdbc::resource::SqlData::read_sql<'life0, 'life1, 'life2, 'async_trait>(&'life0 mut self, &'life1 mut dyn druid_rdbc::resource::SqlInput, &'life2 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait, 'life2: 'async_trait
 pub fn druid_rdbc::resource::SqlData::sql_type_name<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::string::String, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
