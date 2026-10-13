@@ -7,7 +7,8 @@
 //! com.alibaba.druid.pool.xa.DruidXADataSource 的协议层。
 
 use druid::core::xa::{
-    flags as xa_flags, XaPrepareResult, XaResource, XaState, XaTransactionState, Xid,
+    flags as xa_flags, XaError, XaErrorCode, XaPrepareResult, XaResource, XaState,
+    XaTransactionState, Xid,
 };
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -55,7 +56,7 @@ impl InMemoryLedger {
 
 #[async_trait::async_trait]
 impl XaResource for InMemoryLedger {
-    async fn start(&mut self, xid: &Xid, _flags: i32) -> Result<(), druid::core::DruidError> {
+    async fn start(&mut self, xid: &Xid, _flags: i32) -> Result<(), XaError> {
         let mut branches = self.branches.lock().unwrap();
         branches.insert(
             xid.global_transaction_id().to_vec(),
@@ -66,10 +67,10 @@ impl XaResource for InMemoryLedger {
             .unwrap()
             .0
             .start()
-            .map_err(|e| druid::core::DruidError::InvalidArgument(e.to_string()))
+            .map_err(|e| XaError::new(XaErrorCode::XAER_PROTO, e.to_string()))
     }
 
-    async fn end(&mut self, xid: &Xid, _flags: i32) -> Result<(), druid::core::DruidError> {
+    async fn end(&mut self, xid: &Xid, _flags: i32) -> Result<(), XaError> {
         self.branches
             .lock()
             .unwrap()
@@ -77,27 +78,27 @@ impl XaResource for InMemoryLedger {
             .unwrap()
             .0
             .end()
-            .map_err(|e| druid::core::DruidError::InvalidArgument(e.to_string()))
+            .map_err(|e| XaError::new(XaErrorCode::XAER_PROTO, e.to_string()))
     }
 
-    async fn prepare(&mut self, xid: &Xid) -> Result<XaPrepareResult, druid::core::DruidError> {
+    async fn prepare(&mut self, xid: &Xid) -> Result<XaPrepareResult, XaError> {
         let mut branches = self.branches.lock().unwrap();
         let (state, staged) = branches.get_mut(xid.global_transaction_id()).unwrap();
         state
             .prepare()
-            .map_err(|e| druid::core::DruidError::InvalidArgument(e.to_string()))?;
+            .map_err(|e| XaError::new(XaErrorCode::XAER_PROTO, e.to_string()))?;
         if staged.is_empty() {
             return Ok(XaPrepareResult::ReadOnly);
         }
         Ok(XaPrepareResult::Ok)
     }
 
-    async fn commit(&mut self, xid: &Xid, _one_phase: bool) -> Result<(), druid::core::DruidError> {
+    async fn commit(&mut self, xid: &Xid, _one_phase: bool) -> Result<(), XaError> {
         let mut branches = self.branches.lock().unwrap();
         let (mut state, staged) = branches.remove(xid.global_transaction_id()).unwrap();
         state
             .commit(false)
-            .map_err(|e| druid::core::DruidError::InvalidArgument(e.to_string()))?;
+            .map_err(|e| XaError::new(XaErrorCode::XAER_PROTO, e.to_string()))?;
         self.committed
             .lock()
             .unwrap()
@@ -105,15 +106,15 @@ impl XaResource for InMemoryLedger {
         Ok(())
     }
 
-    async fn rollback(&mut self, xid: &Xid) -> Result<(), druid::core::DruidError> {
+    async fn rollback(&mut self, xid: &Xid) -> Result<(), XaError> {
         let mut branches = self.branches.lock().unwrap();
         let (mut state, _staged) = branches.remove(xid.global_transaction_id()).unwrap();
         state
             .rollback()
-            .map_err(|e| druid::core::DruidError::InvalidArgument(e.to_string()))
+            .map_err(|e| XaError::new(XaErrorCode::XAER_PROTO, e.to_string()))
     }
 
-    async fn recover(&self, _flags: i32) -> Result<Vec<Xid>, druid::core::DruidError> {
+    async fn recover(&self, _flags: i32) -> Result<Vec<Xid>, XaError> {
         Ok(self
             .branches
             .lock()
@@ -123,7 +124,7 @@ impl XaResource for InMemoryLedger {
             .collect())
     }
 
-    async fn forget(&mut self, xid: &Xid) -> Result<(), druid::core::DruidError> {
+    async fn forget(&mut self, xid: &Xid) -> Result<(), XaError> {
         self.branches
             .lock()
             .unwrap()
@@ -131,18 +132,15 @@ impl XaResource for InMemoryLedger {
         Ok(())
     }
 
-    async fn get_transaction_timeout(&self) -> Result<u64, druid::core::DruidError> {
+    async fn get_transaction_timeout(&self) -> Result<u64, XaError> {
         Ok(0)
     }
 
-    async fn set_transaction_timeout(
-        &mut self,
-        _seconds: u64,
-    ) -> Result<bool, druid::core::DruidError> {
+    async fn set_transaction_timeout(&mut self, _seconds: u64) -> Result<bool, XaError> {
         Ok(false)
     }
 
-    async fn is_same_rm(&self, other: &dyn XaResource) -> Result<bool, druid::core::DruidError> {
+    async fn is_same_rm(&self, other: &dyn XaResource) -> Result<bool, XaError> {
         Ok(std::ptr::eq(
             std::ptr::from_ref::<dyn XaResource>(self).cast::<u8>(),
             std::ptr::from_ref::<dyn XaResource>(other).cast::<u8>(),
