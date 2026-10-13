@@ -285,24 +285,40 @@ async fn verify_database_restart_if_configured(
                     .expect("DRUID_CONTRACT_RESTART_ARGS_JSON 必须是字符串数组")
             })
             .unwrap_or_default();
-        let status = tokio::process::Command::new(program)
-            .args(arguments)
-            .status()
+        let mut command = tokio::process::Command::new(program);
+        command.args(arguments).kill_on_drop(true);
+        let status = tokio::time::timeout(Duration::from_secs(120), command.status())
             .await
+            .expect("数据库重启 hook 必须在截止时间内完成")
             .expect("数据库重启 hook 必须可执行");
         assert!(status.success(), "数据库重启 hook 必须成功");
+        eprintln!("contract-stage: restart-hook-complete");
     } else if std::env::var_os("DRUID_CONTRACT_EVIDENCE_PATH").is_some() {
         panic!("生成认证证据必须设置 DRUID_CONTRACT_RESTART_PROGRAM");
     }
 
-    let pool = configured_pool_builder(profile.id().as_str(), url, profile.runtime_mode())
-        .name(format!("contract-{}-restart", profile.id()))
-        .pool(|builder| builder.max_open(1).max_idle(1).test_on_borrow(true))
-        .build()
+    eprintln!("contract-stage: restart-pool-build");
+    let pool = tokio::time::timeout(
+        Duration::from_secs(30),
+        configured_pool_builder(profile.id().as_str(), url, profile.runtime_mode())
+            .name(format!("contract-{}-restart", profile.id()))
+            .pool(|builder| builder.max_open(1).max_idle(1).test_on_borrow(true))
+            .build(),
+    )
+    .await
+    .expect("数据库重启后建池必须在截止时间内完成")
+    .expect("数据库重启后必须能重新构建 DruidPool");
+    eprintln!("contract-stage: restart-pool-get");
+    let mut connection = tokio::time::timeout(Duration::from_secs(30), pool.get())
         .await
-        .expect("数据库重启后必须能重新构建 DruidPool");
-    let mut connection = pool.get().await.expect("数据库重启后必须能重新建连");
-    connection.ping().await.expect("数据库重启后 ping 必须成功");
+        .expect("数据库重启后借用必须在截止时间内完成")
+        .expect("数据库重启后必须能重新建连");
+    eprintln!("contract-stage: restart-ping");
+    tokio::time::timeout(Duration::from_secs(30), connection.ping())
+        .await
+        .expect("数据库重启后 ping 必须在截止时间内完成")
+        .expect("数据库重启后 ping 必须成功");
+    eprintln!("contract-stage: restart-fetch");
     assert_eq!(
         connection
             .fetch(select_sql, vec![Value::Int(4)])
@@ -316,6 +332,7 @@ async fn verify_database_restart_if_configured(
         .await
         .expect("数据库重启后必须清理契约表");
     connection.close().await.expect("重启后的连接必须归还");
+    eprintln!("contract-stage: restart-pool-close");
     pool.close().await;
     restart_program.is_some()
 }

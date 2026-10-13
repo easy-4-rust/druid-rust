@@ -2,7 +2,9 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
-2026-10-13 对 [CI run 38232002006](https://github.com/easy-4-rust/druid-rust/actions/runs/38232002006) 的终态审计：38 个作业成功、SemVer 失败；PostgreSQL、MySQL 和 x86_64 macOS/Windows 默认工具链 DuckDB 契约在约 6 小时后取消，均不计为实库通过。DuckDB 两个平台最后停在超时语句关闭后、同租约 `ping` 前；本机相同契约在旧实现第 11/25 次复现 20 秒卡死，延长后台中断至 10 秒仍卡死。改为取消回调立即调用原生 interrupt、保留后台重试后，当前 Windows `1.97.1` 同一实库契约连续 100/100 次在单次 20 秒期限内退出 0。PostgreSQL/MySQL 最后停在重启阶段；重启 hook 现输出阶段、限制 `docker restart` 为 90 秒，三个实库 CI 作业设 45 分钟硬期限。此修改尚待新 CI 跨平台与真实服务复验，Task5 仍开放。
+2026-10-13 对 [CI run 38232002006](https://github.com/easy-4-rust/druid-rust/actions/runs/38232002006) 的终态审计：38 个作业成功、SemVer 失败；PostgreSQL、MySQL 和 x86_64 macOS/Windows 默认工具链 DuckDB 契约在约 6 小时后取消，均不计为实库通过。DuckDB 两个平台最后停在超时语句关闭后、同租约 `ping` 前；本机相同契约在旧实现第 11/25 次复现 20 秒卡死，延长后台中断至 10 秒仍卡死。改为取消回调立即调用原生 interrupt、保留后台重试后，当前 Windows `1.97.1` 同一实库契约连续 100/100 次在单次 20 秒期限内退出 0。[新 CI run 38327320344](https://github.com/easy-4-rust/druid-rust/actions/runs/38327320344) 的 DuckDB 五目标双工具链契约 10/10 通过且证据聚合成功。PostgreSQL/MySQL 原运行停在重启阶段；重启 hook 现输出阶段、限制 `docker restart` 为 90 秒，实库 CI 作业设 45 分钟硬期限；该新运行的两项均在服务恢复 healthy 后、重建连接段挂起并被作业上限取消，没有生成认证证据。下一轮已为 hook 完成、建池、借用和 ping 增加阶段标记与 30 秒局部截止时间，整条测试限 10 分钟。Task5 保持开放。
+
+2026-10-13 本机 `cargo test --workspace --all-features --locked -j 1` 编译完成后在 Admin gRPC 网络套件 42/48 失败，独立同配置重跑仍为相同六项；默认 feature 重跑有大量初连超时，不能算本机全仓通过。相同源码的上述 CI Windows `Rust contracts` 作业中该套件 48/48 通过，故本机回环异常与代码缺陷尚需进一步区分。
 
 2026-10-12 当前本地 `main`（`a312854`）整 crate 复测：`cargo test -p druid-admin --locked --quiet` 退出 0，共 139/139 通过，其中网络测试结果块为 48/48。此结果确认当前 Windows 测试进程中的 Admin 行为回归；Metrics/Admin 的独立数值运行预算和跨平台故障验收仍未完成。
 
