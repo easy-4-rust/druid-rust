@@ -1,7 +1,7 @@
 use druid_rdbc::connection::Connection;
 use druid_rdbc::data_source::{
-    ConnectionEvent, ConnectionEventListener, PooledConnection, PooledConnectionSource,
-    StatementEvent, StatementEventListener, StatementSource,
+    ConnectionEvent, ConnectionEventListener, PooledConnection, PooledConnectionEventRegistry,
+    PooledConnectionSource, StatementEvent, StatementEventListener, StatementSource,
 };
 use druid_rdbc::error::{RdbcError, SqlException};
 use druid_rdbc::statement::{PreparedStatement, Statement};
@@ -216,4 +216,132 @@ fn external_listener_callbacks_receive_original_event_objects() {
             "statement-error"
         ]
     );
+}
+
+#[tokio::test]
+async fn pooled_connection_event_registry_preserves_owner_error_and_duplicate_semantics() {
+    let registry = PooledConnectionEventRegistry::new();
+    let counter = Arc::new(AtomicUsize::new(0));
+    let source = pool(&counter);
+    let listener = Arc::new(Listener::default());
+    let connection_listener: Arc<dyn ConnectionEventListener> = listener.clone();
+
+    registry.add_connection_event_listener(Arc::clone(&connection_listener));
+    registry.add_connection_event_listener(Arc::clone(&connection_listener));
+    assert_eq!(registry.notify_connection_closed(Arc::clone(&source)), 0);
+    assert!(registry.remove_connection_event_listener(&connection_listener));
+
+    let error = sql_error();
+    assert_eq!(
+        registry.notify_connection_error(Arc::clone(&source), Arc::clone(&error)),
+        0
+    );
+    assert!(registry.remove_connection_event_listener(&connection_listener));
+    assert!(!registry.remove_connection_event_listener(&connection_listener));
+
+    let statement_listener: Arc<dyn StatementEventListener> = listener.clone();
+    let statement = prepared(&counter);
+    registry.add_statement_event_listener(Arc::clone(&statement_listener));
+    registry.add_statement_event_listener(Arc::clone(&statement_listener));
+    assert_eq!(
+        registry.notify_statement_closed(Arc::clone(&source), Arc::clone(&statement)),
+        0
+    );
+    assert!(registry.remove_statement_event_listener(&statement_listener));
+    assert_eq!(
+        registry.notify_statement_error(
+            Arc::clone(&source),
+            Arc::clone(&statement),
+            Arc::clone(&error),
+        ),
+        0
+    );
+    assert!(registry.remove_statement_event_listener(&statement_listener));
+    assert!(!registry.remove_statement_event_listener(&statement_listener));
+
+    let events = listener.0.lock().unwrap();
+    assert_eq!(events.len(), 6, "duplicate registration is delivered twice");
+    assert_eq!(events[0].0, "connection-closed");
+    assert_eq!(events[1].0, "connection-closed");
+    assert_eq!(events[2].0, "connection-error");
+    assert_eq!(events[3].0, "statement-closed");
+    assert_eq!(events[4].0, "statement-closed");
+    assert_eq!(events[5].0, "statement-error");
+    assert!(events
+        .iter()
+        .all(|event| event.1 == Arc::as_ptr(&source) as usize));
+    assert!(events[0].3.is_none());
+    assert!(events[1].3.is_none());
+    assert_eq!(events[2].3, Some(Arc::as_ptr(&error) as usize));
+    assert!(events[3..5]
+        .iter()
+        .all(|event| event.2 == Some(Arc::as_ptr(&statement) as usize)));
+    assert_eq!(events[5].2, Some(Arc::as_ptr(&statement) as usize));
+    assert_eq!(events[5].3, Some(Arc::as_ptr(&error) as usize));
+}
+
+struct PanickingConnectionListener;
+impl ConnectionEventListener for PanickingConnectionListener {
+    fn connection_closed(&self, _event: &ConnectionEvent) {
+        panic!("listener panic is isolated");
+    }
+
+    fn connection_error_occurred(&self, _event: &ConnectionEvent) {
+        panic!("listener panic is isolated");
+    }
+}
+
+#[tokio::test]
+async fn pooled_connection_event_registry_counts_panics_and_continues_snapshot() {
+    let registry = PooledConnectionEventRegistry::new();
+    let source = pool(&Arc::new(AtomicUsize::new(0)));
+    let panicking: Arc<dyn ConnectionEventListener> = Arc::new(PanickingConnectionListener);
+    let recording = Arc::new(Listener::default());
+    let recording_listener: Arc<dyn ConnectionEventListener> = recording.clone();
+    registry.add_connection_event_listener(panicking);
+    registry.add_connection_event_listener(Arc::clone(&recording_listener));
+
+    assert_eq!(registry.notify_connection_closed(Arc::clone(&source)), 1);
+    assert_eq!(registry.notify_connection_closed(Arc::clone(&source)), 1);
+    assert_eq!(recording.0.lock().unwrap().len(), 2);
+}
+
+struct ReentrantConnectionListener {
+    registry: Arc<PooledConnectionEventRegistry>,
+    self_reference: Mutex<Option<std::sync::Weak<dyn ConnectionEventListener>>>,
+    calls: AtomicUsize,
+}
+
+impl ConnectionEventListener for ReentrantConnectionListener {
+    fn connection_closed(&self, _event: &ConnectionEvent) {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let listener = self
+            .self_reference
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+            .unwrap();
+        assert!(self.registry.remove_connection_event_listener(&listener));
+    }
+
+    fn connection_error_occurred(&self, _event: &ConnectionEvent) {}
+}
+
+#[tokio::test]
+async fn pooled_connection_event_registry_allows_reentrant_self_removal() {
+    let registry = Arc::new(PooledConnectionEventRegistry::new());
+    let concrete = Arc::new(ReentrantConnectionListener {
+        registry: Arc::clone(&registry),
+        self_reference: Mutex::new(None),
+        calls: AtomicUsize::new(0),
+    });
+    let listener: Arc<dyn ConnectionEventListener> = concrete.clone();
+    *concrete.self_reference.lock().unwrap() = Some(Arc::downgrade(&listener));
+    registry.add_connection_event_listener(Arc::clone(&listener));
+    let source = pool(&Arc::new(AtomicUsize::new(0)));
+
+    assert_eq!(registry.notify_connection_closed(Arc::clone(&source)), 0);
+    assert_eq!(registry.notify_connection_closed(source), 0);
+    assert_eq!(concrete.calls.load(Ordering::SeqCst), 1);
 }

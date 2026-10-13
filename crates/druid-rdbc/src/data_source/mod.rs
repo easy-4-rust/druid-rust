@@ -10,6 +10,7 @@ mod connection_pool_data_source;
 )]
 mod data_source;
 mod pooled_connection;
+mod pooled_connection_event_registry;
 mod statement_event;
 mod statement_event_listener;
 mod xa_connection;
@@ -21,6 +22,7 @@ pub use connection_event_listener::ConnectionEventListener;
 pub use connection_pool_data_source::ConnectionPoolDataSource;
 pub use data_source::DataSource;
 pub use pooled_connection::PooledConnection;
+pub use pooled_connection_event_registry::PooledConnectionEventRegistry;
 pub use statement_event::{StatementEvent, StatementSource};
 pub use statement_event_listener::StatementEventListener;
 pub use xa_connection::XaConnection;
