@@ -50,7 +50,9 @@ cargo test -p druid-wrapper --features sqlx-deadpool --test sqlx_deadpool_pool_t
 
 两个外部池集成用例各自验证 fatal disposition 后连接被丢弃，并由新物理连接完成后续查询；这与新增回归共同覆盖 bb8 和 deadpool 的“失败连接不再借出”处置路径。RDBC 注册表合同测试另行核对原 owner 与 `Arc<SqlException>` 身份保留。
 
-### 本次源码身份
+### PE-03 实现提交时源码身份
+
+本节哈希记录 PE-03 实现交付时的源码快照。5.4 后续复用了该回归文件扩展顺序与重复注册断言；当前哈希见 PE-05。
 
 | 文件 | SHA-256 |
 |---|---|
@@ -92,3 +94,36 @@ PreparedStatement 与 CallableStatement 现通过 holder 共享的监听器注�
 | `crates/druid/src/core/statement_event_listener.rs` | `6B4DC1B9E3B3A780EE28060D653187316CCC0D3E78826AB0202A20CC18023CD7` |
 | `crates/druid/tests/task6_druid_pooled_connection_differential_test_parity_part_02.rs` | `8E1F20BA2057EE78ED5C381F94C8C5809361CDAA6078C3D9C49DAC124AA75BC2` |
 | `crates/druid/tests/callable_cache_lifecycle_test.rs` | `944EFFC4319C344BABBA90A1752FB3EADD4CD00ECEC13CAD0103BB2B5DFDD3F6` |
+
+## PE-05：外部池示例、生命周期和顺序验收
+
+新增 [池化连接事件与生命周期](../../../../docs/rdbc/pooled-connection-events.md)，并从 [集成作者指南](../../../../docs/rdbc/integration-author-guide.md) 链接。文档给出外部池通过标准 listener registry 分发四类事件的关键示例，并说明 callback 需在 owner/池锁外运行。生命周期图与产品调用顺序核对如下：
+
+| 触发点 | 可观察顺序 | 验收边界 |
+|---|---|---|
+| Prepared/Callable 执行 SQL 异常且 fatal | fatal owner 处置 → statement error event → 原错误返回 | 非 SQL 异常不触发 SQL 事件；错误对象仍返回调用者 |
+| Prepared/Callable 关闭成功 | statement closed event（一次）→ resource unregister → after-close filter | 关闭重复调用不重复通知；关闭失败不伪报成功 |
+| 逻辑 Connection 关闭 | connection closed event（一次）→ reset/recycle 或 discard | 事件只表示租约开始归还，不表示物理连接可借出 |
+| 重复注册同一监听器 | 每一注册项各接收一次回调 | 单次 remove 只删除首个匹配项；remaining registration 继续接收 |
+
+实际运行命令均退出码 `0`：
+
+| 命令 | 结果 |
+|---|---|
+| `cargo fmt -p druid -p druid-rdbc -- --check` | 通过 |
+| `cargo test -p druid-rdbc --test standard_event_contract_test` | 8 passed；含 owner/statement/error identity、锁外重入、重复注册/逐次移除和 panic 快照继续 |
+| `cargo test -p druid-rdbc --test standard_external_implementor_test` | 1 passed；独立外部 crate 仅依赖 `druid-rdbc` 完成编译与运行 |
+| `cargo test -p druid --test task6_druid_pooled_connection_differential_test_parity_part_02` | 32 passed；包含连接/语句重复注册移除后仅一项回调、连接关闭先于归还回调、statement 重入/panic/关闭事件 |
+| `cargo test -p druid --test callable_cache_lifecycle_test` | 7 passed；新断言确认 Callable 的顺序为 `statement-error` → `statement-closed` |
+| `cargo test -p druid --test task6_connection_holder_coverage_test_parity` | 22 passed |
+| `openspec validate close-rdbc-jdbc42-contract-gaps --strict` | valid |
+| `git diff --check` | 通过 |
+
+产品层重复语义用例实际注册同一 `Arc` 两次、移除一次，再验证仅保留的注册项收到一次关闭通知；连接 listener 用例也覆盖了相同规则。RDBC registry 测试独立验证重复项逐次触发、逐次移除及未注册移除返回 false。现有实证覆盖规格要求的冻结 Java `CopyOnWriteArrayList` 默认对象相等语义；自定义 Java `equals` 的特殊监听器仍不宣称可直接映射到 Rust trait-object 身份。
+
+### 本批测试源码身份
+
+| 文件 | SHA-256 |
+|---|---|
+| `crates/druid/tests/callable_cache_lifecycle_test.rs` | `F57B86FCE63178764EDA2FA62662AC2FDD0756252C668F3B51FAF27A84A8E62E` |
+| `crates/druid/tests/task6_druid_pooled_connection_differential_test_parity_part_02.rs` | `ED343E4397B053C2AB605CD3BBF812D8DFD0E796D1E8ED2ACDD981158687DE0C` |

@@ -4,7 +4,7 @@
 
 ## 当前状态与执行边界
 
-- 进度：27/50 项完成（1.1–1.5、2.1–2.4、3.1–3.5、4.1–4.7、5.1–5.3、6.1–6.3）；其余 23 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
+- 进度：28/50 项完成（1.1–1.5、2.1–2.4、3.1–3.5、4.1–4.7、5.1–5.4、6.1–6.3）；其余 22 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
 - 取消批证据见 [取消合同证据](evidence/cancellation-contract.md) 和 [SQLx 取消能力矩阵](evidence/sqlx-cancellation-capability-matrix.md)：SQLite runtime 3.46.0 VM 执行中断及同物理连接复用、批处理与结果集入口、清理屏障、Future drop/owner 关闭竞态及连接池精确丢弃计数、PostgreSQL/MySQL/Any/生成键选择精确 `0A000`、三类池化代理的真实租约/缓存隔离及取消代次测试均有记录；取消批 4.1–4.7 已关闭。
 - SQLx 后端×执行入口矩阵、真实 SQLite 执行终态与连接处置、逐路径支持/不支持测试、三类池化代理生命周期回归和用户文档已完成；XA 中立标准 API、JDK 8 常量/分支状态机及 6.3 扫描、身份、超时和示例 owner 失效均有独立证据。6.4 探测已证实 H2 2.3.232 不满足断开后恢复，并以 PostgreSQL 18.6 Testcontainers + pgjdbc 42.7.14 通过独立 JDBC 恢复试验；Agent 协议接入及端到端重建会话恢复仍未实现。探测记录见 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md)。取消范围保持关闭。
 - 每批只运行该批目标测试和直接受影响的回归；达到表格中的停止点即停并报告。最终综合门禁只在第 9 批运行一次，不循环重跑已通过的全量命令。
@@ -98,7 +98,7 @@
 - [x] 5.1 从冻结 Druid 来源提取重复注册/移除案例，增加标准接口四个监听器方法及身份匹配合同；用仅依赖 `druid-rdbc` 的外部池实现编译、运行验证，无私有 holder 下转型。（PE-01；证据见 [池化事件证据](evidence/pooled-connection-events.md)）
 - [x] 5.2 将逻辑关闭、致命连接错误和物理 owner 清理接入统一通知；验证原 owner 身份、完整异常、重复关闭只归还一次和失败连接不会再借出。产品层事件已沿用 holder 快照，且现已隔离监听器 panic，避免跳过 fatal 处置或逻辑关闭回收；定向证据见 [池化事件证据](evidence/pooled-connection-events.md)。（PE-02）
 - [x] 5.3 贯通 PreparedStatement/CallableStatement 的关闭与失效事件；验证携带原语句身份、移除监听器生效、回调重入无锁死及可展开 panic 不跳过必要清理。Prepared 与 Callable 的执行 SQL 异常均发送错误事件；逻辑关闭只发送一次，并在锁外调用监听器快照。实现、命令、退出码与源码哈希见 [池化事件证据](evidence/pooled-connection-events.md#pe-03-preparedstatementcallablestatement-事件)。（PE-03、PE-04）
-- [ ] 5.4 更新外部池事件示例与生命周期说明，运行标准事件及产品 holder/逻辑代理回归；逐项核对事件顺序和冻结重复注册行为，证据落盘后结束本批。（PE-01–04、MC-03）
+- [x] 5.4 更新外部池事件示例与生命周期说明，运行标准事件及产品 holder/逻辑代理回归；逐项核对事件顺序和冻结重复注册行为，证据落盘后结束本批。文档见 [池化连接事件与生命周期](../../../docs/rdbc/pooled-connection-events.md)，命令、退出码、事件顺序与源码哈希见 [池化事件证据](evidence/pooled-connection-events.md#pe-05-外部池示例生命周期和顺序验收)。（PE-01–04、MC-03）
 
 ## 6. 提供可操作 XA 资源
 

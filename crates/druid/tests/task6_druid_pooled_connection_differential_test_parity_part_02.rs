@@ -145,6 +145,16 @@ impl ConnectionEventListener for TestConnectionEventListener {
     }
 }
 
+struct OrderedConnectionEventListener(Arc<Mutex<Vec<&'static str>>>);
+
+impl ConnectionEventListener for OrderedConnectionEventListener {
+    fn connection_closed(&self, _connection_id: u64) {
+        self.0.lock().unwrap().push("connection-closed");
+    }
+
+    fn connection_error_occurred(&self, _connection_id: u64, _error: &DruidError) {}
+}
+
 struct PanickingConnectionEventListener;
 
 impl ConnectionEventListener for PanickingConnectionEventListener {
@@ -408,8 +418,8 @@ async fn pooled_connection_listener_panic_does_not_skip_recycle_or_duplicate_clo
         DruidConnectionHolder::with_standard_connection(physical, 77, std::time::Duration::ZERO, 0)
             .await
             .unwrap();
-    let returned = Arc::new(AtomicUsize::new(0));
-    let observed = Arc::clone(&returned);
+    let order = Arc::new(Mutex::new(Vec::new()));
+    let observed = Arc::clone(&order);
     let mut pooled = DruidPooledConnection::with_standard_holder(
         holder,
         String::new(),
@@ -417,23 +427,26 @@ async fn pooled_connection_listener_panic_does_not_skip_recycle_or_duplicate_clo
         false,
         false,
         Box::new(move |_, _| {
-            observed.fetch_add(1, Ordering::SeqCst);
+            observed.lock().unwrap().push("recycle");
             true
         }),
     );
     let panicking: Arc<dyn ConnectionEventListener> = Arc::new(PanickingConnectionEventListener);
-    let recording = Arc::new(TestConnectionEventListener::new());
-    let recording_listener: Arc<dyn ConnectionEventListener> = recording.clone();
+    let recording: Arc<dyn ConnectionEventListener> =
+        Arc::new(OrderedConnectionEventListener(Arc::clone(&order)));
     pooled.add_connection_event_listener(panicking).unwrap();
     pooled
-        .add_connection_event_listener(recording_listener)
+        .add_connection_event_listener(Arc::clone(&recording))
         .unwrap();
+    pooled
+        .add_connection_event_listener(Arc::clone(&recording))
+        .unwrap();
+    assert!(pooled.remove_connection_event_listener(&recording).unwrap());
 
     Connection::close(&mut pooled).await.unwrap();
     Connection::close(&mut pooled).await.unwrap();
 
-    assert_eq!(recording.closed_count.load(Ordering::SeqCst), 1);
-    assert_eq!(returned.load(Ordering::SeqCst), 1);
+    assert_eq!(*order.lock().unwrap(), ["connection-closed", "recycle"]);
 }
 
 #[tokio::test]
@@ -465,7 +478,15 @@ async fn prepared_statement_close_notifies_registered_listener_once_with_origina
     let mut pooled = make_pooled(make_physical().await).await;
     let listener = Arc::new(RecordingStatementEventListener::default());
     let listener_trait: Arc<dyn StatementEventListener> = listener.clone();
-    pooled.add_statement_event_listener(listener_trait).unwrap();
+    pooled
+        .add_statement_event_listener(Arc::clone(&listener_trait))
+        .unwrap();
+    pooled
+        .add_statement_event_listener(Arc::clone(&listener_trait))
+        .unwrap();
+    assert!(pooled
+        .remove_statement_event_listener(&listener_trait)
+        .unwrap());
     let mut statement = pooled
         .prepare_statement("SELECT 1", StatementOptions::default())
         .await

@@ -353,10 +353,12 @@ struct CallableStatementEvents {
     errors: AtomicUsize,
     statement_id: AtomicUsize,
     error_has_sql_exception: AtomicUsize,
+    order: Mutex<Vec<&'static str>>,
 }
 
 impl StatementEventListener for CallableStatementEvents {
     fn statement_closed(&self, _connection_id: u64, statement_id: usize) {
+        self.order.lock().unwrap().push("statement-closed");
         self.statement_id.store(statement_id, Ordering::SeqCst);
         self.closed.fetch_add(1, Ordering::SeqCst);
     }
@@ -367,6 +369,7 @@ impl StatementEventListener for CallableStatementEvents {
         statement_id: usize,
         error: &DruidError,
     ) {
+        self.order.lock().unwrap().push("statement-error");
         self.statement_id.store(statement_id, Ordering::SeqCst);
         self.error_has_sql_exception.store(
             usize::from(error.sql_exception().is_some()),
@@ -399,6 +402,10 @@ async fn callable_statement_emits_error_and_close_events_with_its_identity() {
 
     statement.close().await.unwrap();
     assert_eq!(events.closed.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        *events.order.lock().unwrap(),
+        ["statement-error", "statement-closed"]
+    );
     drop(statement);
     drop(connection);
     pool.close().await;

@@ -42,6 +42,14 @@
 - **WHEN** 驱动确认某预编译语句失效
 - **THEN** 失效事件携带原语句和异常，已移除的监听器不会在随后新事件中被调用
 
+#### Scenario: Prepared 执行失败的事件顺序
+- **WHEN** PreparedStatement 或 CallableStatement 执行返回 SQL 异常
+- **THEN** 系统先完成错误分类及 fatal owner 处置（若适用），再发送语句错误事件，最后将原 SQL 异常返回调用方
+
+#### Scenario: 成功关闭后只通知一次
+- **WHEN** PreparedStatement 或 CallableStatement 底层关闭成功
+- **THEN** 系统先发送一次语句关闭事件，再注销语句资源；重复逻辑关闭不重复通知，底层关闭失败不发送成功事件
+
 ### Requirement: PE-04 通知支持重入且不阻断资源处置
 
 系统 SHALL 在不持有注册表或池资源锁的情况下通知监听器；一次通知使用固定快照，回调中的注册变更 SHALL 从下一次通知生效；回调失败不得阻止 owner 完成必要清理。
@@ -53,3 +61,7 @@
 #### Scenario: 回调发生 panic
 - **WHEN** 可展开的监听器回调发生 panic
 - **THEN** 必要资源清理仍完成，错误进入受控诊断；panic=abort 的进程终止不被声明为可恢复场景
+
+#### Scenario: 逻辑连接归还通知顺序
+- **WHEN** 应用关闭逻辑连接
+- **THEN** 系统先发送一次 connection-closed 通知，再开始 owner reset/recycle 或 discard；该通知本身不表示物理连接已可再次借出

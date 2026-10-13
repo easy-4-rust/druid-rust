@@ -19,6 +19,8 @@ flowchart TD
 
 外部池接入参考 [bb8](../../crates/druid-wrapper/src/sqlx/bb8/sqlx_bb8_pool.rs)、[deadpool](../../crates/druid-wrapper/src/sqlx/deadpool/sqlx_deadpool_pool.rs) 及 [ExternalConnectionLease](../../crates/druid/src/core/external_connection_lease.rs)。外部池负责归还租约，不把外部池桥接包装为 ConnectionFactory 再放入 DruidPool。
 
+实现标准池化连接事件时，按 [池化连接事件与生命周期](pooled-connection-events.md) 注册并分发 Connection/Statement 事件。通知只表达生命周期事实：逻辑连接关闭通知发生在租约回收开始前，不能用它推断物理连接已完成重置或可再次借出。
+
 原生池 builder 的真实接线入口为 [DruidPoolBuilder::factory](../../crates/druid/src/pool/config.rs)。池容量、初始化、validation、默认状态、prepared cache 与异常淘汰由 Druid 配置决定，adapter 不维护第二份池政策。
 
 ## 2. 实现唯一标准树
