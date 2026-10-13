@@ -23,6 +23,9 @@ FAILURE_SUMMARY = re.compile(
 )
 PASS_SUMMARY = re.compile(r"Summary no semver update required")
 HEADER = ("crate", "lint", "count", "sha256", "status", "reason")
+MODULE_MAP_HEADER = ("old_module", "target_file", "transition", "test_file")
+MODULE_FINDING = re.compile(r"(?m)^  mod (druid::[A-Za-z0-9_:]+), previously in file ")
+MODULE_TRANSITIONS = {"STANDARD_PORT", "PRIVATE_OWNER", "SPLIT_STANDARD"}
 
 
 def findings_by_lint(report: str, exit_code: int) -> dict[str, tuple[int, str]]:
@@ -79,9 +82,53 @@ def read_allowlist(path: Path) -> dict[tuple[str, str], tuple[int, str, str, str
     return result
 
 
+def verify_module_migration_map(report: str, path: Path, root: Path) -> None:
+    """Bind every retired druid module to an existing target and regression test."""
+    report = ANSI_ESCAPE.sub("", report)
+    sections = list(SECTION.finditer(report))
+    matching = [index for index, match in enumerate(sections) if match.group(1) == "module_missing"]
+    if len(matching) != 1:
+        raise ValueError("expected one druid/module_missing report section")
+    index = matching[0]
+    end = sections[index + 1].start() if index + 1 < len(sections) else len(report)
+    body = report[sections[index].end() : end]
+    modules = MODULE_FINDING.findall(body)
+    finding_lines = [line for line in body.splitlines() if line.startswith("  mod ")]
+    if not modules or len(modules) != len(set(modules)):
+        raise ValueError("module_missing paths are empty or duplicated")
+    if len(modules) != len(finding_lines):
+        raise ValueError("unrecognized module_missing finding")
+
+    with path.open(encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        if tuple(reader.fieldnames or ()) != MODULE_MAP_HEADER:
+            raise ValueError("module migration map has an unexpected TSV header")
+        rows = list(reader)
+    mapped: set[str] = set()
+    for row in rows:
+        old_module = row["old_module"]
+        if old_module in mapped:
+            raise ValueError(f"duplicate module migration: {old_module}")
+        mapped.add(old_module)
+        if row["transition"] not in MODULE_TRANSITIONS:
+            raise ValueError(f"unknown module transition: {old_module}")
+        for column in ("target_file", "test_file"):
+            relative = Path(row[column])
+            if relative.is_absolute() or ".." in relative.parts or relative.suffix != ".rs":
+                raise ValueError(f"invalid module {column}: {old_module}")
+            if not (root / relative).is_file():
+                raise ValueError(f"missing module {column}: {old_module}: {relative}")
+    if mapped != set(modules):
+        raise ValueError(
+            f"module migration mismatch: missing={sorted(set(modules) - mapped)} "
+            f"extra={sorted(mapped - set(modules))}"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--allowlist", type=Path, required=True)
+    parser.add_argument("--module-migration-map", type=Path)
     for short, crate in (("rdbc", "druid-rdbc"), ("druid", "druid"), ("wrapper", "druid-wrapper")):
         parser.add_argument(f"--{short}-report", type=Path, required=True)
         parser.add_argument(f"--{short}-exit-code", type=int, required=True)
@@ -109,6 +156,14 @@ def main() -> int:
         return 0
 
     allowlist = read_allowlist(args.allowlist)
+    if ("druid", "module_missing") in actual:
+        if args.module_migration_map is None:
+            raise ValueError("druid/module_missing requires an exact module migration map")
+        verify_module_migration_map(
+            args.druid_report.read_text(encoding="utf-8"),
+            args.module_migration_map,
+            Path(__file__).resolve().parent.parent,
+        )
     missing = sorted(actual.keys() - allowlist.keys())
     extra = sorted(allowlist.keys() - actual.keys())
     changed = sorted(

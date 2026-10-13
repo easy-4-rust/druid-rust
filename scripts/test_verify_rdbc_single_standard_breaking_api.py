@@ -13,6 +13,7 @@ SCRIPT = Path(__file__).with_name("verify_rdbc_single_standard_breaking_api.py")
 sys.path.insert(0, str(SCRIPT.parent))
 
 from verify_rdbc_single_standard_breaking_api import findings_by_lint  # noqa: E402
+import verify_rdbc_single_standard_breaking_api as verifier  # noqa: E402
 
 
 def report(item: str, line: int = 4) -> str:
@@ -27,6 +28,35 @@ def report(item: str, line: int = 4) -> str:
 
 
 class BreakingApiAllowlistTest(unittest.TestCase):
+    def test_module_migration_map_requires_every_reported_path_and_real_evidence(self) -> None:
+        module_report = (
+            "--- failure module_missing: pub module removed or renamed ---\n"
+            "Failed in:\n"
+            "  mod druid::core::physical_connection, previously in file old.rs:1\n"
+            "  mod druid::spi, previously in file old_spi.rs:1\n"
+            "Summary semver requires new major version: 1 major and 0 minor checks failed\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "target.rs"
+            test = root / "contract_test.rs"
+            target.write_text("// standard target\n", encoding="utf-8")
+            test.write_text("// regression contract\n", encoding="utf-8")
+            mapping = root / "migration.tsv"
+            header = "old_module\ttarget_file\ttransition\ttest_file\n"
+            rows = (
+                "druid::core::physical_connection\ttarget.rs\tSTANDARD_PORT\tcontract_test.rs\n"
+                "druid::spi\ttarget.rs\tSPLIT_STANDARD\tcontract_test.rs\n"
+            )
+            mapping.write_text(header + rows, encoding="utf-8")
+            verifier.verify_module_migration_map(module_report, mapping, root)
+            mapping.write_text(header + rows.splitlines(keepends=True)[0], encoding="utf-8")
+            with self.assertRaises(ValueError):
+                verifier.verify_module_migration_map(module_report, mapping, root)
+            mapping.write_text(header + rows.replace("contract_test.rs", "missing.rs"), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                verifier.verify_module_migration_map(module_report, mapping, root)
+
     def test_fingerprint_keeps_item_but_ignores_source_line(self) -> None:
         self.assertEqual(
             findings_by_lint(report("Removed"), 100),
