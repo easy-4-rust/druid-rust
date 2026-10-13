@@ -23,6 +23,8 @@
 - 禁用 feature 时不得编译或链接对应依赖。
 - DriverManager Java compatibility 行为保留，但不能形成第二条产品建池规则。
 
+2026-10-13 当前验证：`verify_feature_dependency_boundaries.py` 通过；`druid-wrapper` 的 `--no-default-features`、单独 `sqlx`、`sqlx-bb8`、`sqlx-deadpool`、`toasty-sqlite`、`rbdc` 六组 `cargo check --locked` 均退出 0。`verify_package_ownership.py` 验证 6 个 workspace package、2 个 binary 及 CI 调用归属。单独 `--all-features` 本机检查在 DuckDB 原生 C++ 编译时主动停止，不能计作通过；P04 的标准/兼容性前置条件及 P05 完整关闭仍开放。
+
 ---
 
 ### Task 1: 冻结三条当前解析路径并选定 canonical path
