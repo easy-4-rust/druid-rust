@@ -19,6 +19,16 @@
 - SQL 热路径不等待 Metrics 队列、网络或磁盘。
 - Admin 默认 loopback；非 loopback 使用 TLS+认证。
 
+## 2026-10-13 当前实现复核
+
+以下为当前源码的目标测试实测，不替代 Task 5 的完整故障与数值预算验收；因此本计划的任务关闭勾选仍保持开放。
+
+| 任务 | 已核对实现 | 本机 `--locked` 验证 |
+| --- | --- | --- |
+| Task 1 Pool | 有界关闭队列、补池 `watch` 最新目标、关闭超时与队列指标均已在生产路径使用 | `pool_close_backpressure_test` 11/11、`task6_pool_maintenance_semantics_test_parity` 14/14、`task6_recycle_complete_contract_test` 16/16 |
+| Task 2 Metrics | `MetricsSupervisor` 持有 `JoinSet` 并回收任务；配置项由聚合及关闭路径消费 | `task_supervision_test` 2/2、`shutdown_test` 8/8、`queue_semantics_test` 4/4、`aggregator_output_test` 17/17 |
+| Task 3 Admin | repository 按完整 service/session identity 保存最新状态，实施 TTL 与容量限制 | `repository_capacity_test` 4/4、`ingest_test` 11/11、`prometheus_test` 8/8 |
+
 ---
 
 ### Task 1: Pool close/refill 队列容量与慢关闭治理
