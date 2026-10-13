@@ -148,3 +148,37 @@ cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_xa_external_
 
 本项关闭 XA-03、XA-05 的 Rust 客户端真实恢复场景。它不代表 XA 配置文档/API/SemVer 审查（6.5.5）、CommonDataSource（第 7 批）、全 JDBC 覆盖门禁（第 8–9 批）或 P04–P07 已完成。
 
+## 6.5.5 XA 对外交付与 API/SemVer 审查
+
+### 文档和可视化
+
+- 新增 [JDBC Agent XA 集成指南](../../../../docs/jdbc-agent-xa.md)，并从中文 README 的 JDBC Agent 章节链接。指南说明 `jdbc-agent` feature、Agent 与 JDBC driver classpath、显式 `PGXADataSource` 属性、标准 RDBC 获取路径、秘密配置保护、普通连接迁移、恢复前提和故障隔离。
+- 指南 Mermaid 时序图明确事务管理器、`XaDataSource`、物理 `XaConnection` owner、逻辑 `Connection` 租约、`XaResource` 和数据库之间的关系。逻辑连接关闭只归还租约；关闭 owner 才关闭 XA session 并使资源失效。
+- 恢复步骤与 6.5.4 已运行的 PostgreSQL 闭环一致：`start → SQL → end → prepare → close logical connection → close original owner → new XA session → recover(full Xid) → phase-two commit/rollback`。明确 PostgreSQL 18.6/pgjdbc 42.7.14 是已验证组合；H2 不作为跨 session 恢复证据。
+- 普通 Agent 连接仍由普通 factory 创建，不能通过 URL 或驱动名称提升为 XA；未协商 XA 时保留 `0A000`。文档限制凭据示例使用环境变量，并说明 `JdbcAgentXaDataSource::Debug` 仅输出属性数量，不泄露属性值。
+
+### 外部消费者和真实后端验证
+
+- 在 `jdbc_agent_xa_external_consumer.rs` 增加只依赖 `druid-rdbc` 的完整公开合同编译样例：取得 `XaConnection`、执行 `XaResource::start`、通过逻辑连接执行 SQL 并关闭租约、调用 `end/prepare`，按投票 commit 或完成只读分支，最后关闭 owner。测试通过函数项引用强制编译该消费者样例；该 helper 本身为 compile-only，真实行为由同文件现有消费者测试和 6.5.4 PostgreSQL harness 验证。
+- `cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_xa_external_consumer --locked --offline`：退出码 `0`，2 passed、3 ignored。忽略项分别需要 H2 Agent、故障注入或由外部 Maven harness 驱动的 PostgreSQL 环境；普通消费者签名和显式数据源配置测试实际运行。
+- `mvn -o -f agents/jdbc-agent/pom.xml '-Ddruid.rustXaIntegration=true' '-Dtest=RustXaClientRecoveryIntegrationTest' test`：退出码 `0`，JUnit 1 passed、0 failed、0 skipped。Testcontainers `2.0.5` 实际运行 Docker Engine `29.8.1` 与 PostgreSQL `18.6`；该 Java harness 启动 Rust 外部消费者并从独立 JDBC 会话核对 commit/rollback 数据库终态。pgjdbc 为 `42.7.14`，详见 6.5.4 环境记录。
+- `cargo fmt -p druid-wrapper -- --check`、`git diff --check`、`openspec validate close-rdbc-jdbc42-contract-gaps --strict --no-interactive`：均退出码 `0`。广域 `cargo fmt --check` 在 Windows 遇到仓库中超长路径（OS error 206），故使用受影响包范围的 rustfmt 检查；未将广域命令报告为通过。
+
+### API 与 SemVer 评审
+
+- 当前源码公开的中立 API 为 `druid_rdbc::data_source::{XaDataSource, XaConnection, XaResource, Xid, XaFlags, XaPrepareResult, XaError}`；`XaConnection::xa_resource()` 是带默认不支持实现的新增方法，以保留既有外部实现的源兼容。`JdbcAgentXaDataSource` 通过 `druid-wrapper` 的 `jdbc-agent` feature 暴露，位于 `druid_wrapper::jdbc_agent`，具体连接/资源适配器类型不是应用必须依赖的标准合同。
+- 当前 workspace package version 为 `0.0.0-design`，本地 Git 没有版本 tag，核心 crate 配置为 `publish = false`；没有已发布稳定 SemVer 基线。因此本次是预发布、加法式接口记录，不能声称已经发布或承诺某一稳定版本。发布前应在确定版本策略时重新评审；移除/重命名公开接口需按最终兼容承诺处理，trait 默认方法维持当前的实现端源兼容性。
+- API 文本快照不是当前源码的有效差异证明：`api/druid-rdbc.single-standard.after.txt` 有 `xa_resource_name`，但未列出当前源码中的 `XaConnection::xa_resource()`；`api/druid-wrapper.single-standard.after.txt` 未列出当前 `JdbcAgentXaDataSource`。本机没有 `cargo-public-api` 命令，本项不安装工具、不伪造生成快照；本次用 CodeGraph 返回的当前源码、模块 re-export 和外部消费者编译结果完成定向审查。第 8 批的快照/失效门禁仍需独立完成。
+
+### 本阶段源码身份
+
+| 文件 | SHA-256 |
+|---|---|
+| `docs/jdbc-agent-xa.md` | `62449C0A4475091ECCFBB6879897E363C8527B397460D7BD50B10CCE2A298EF5` |
+| `README.zh-CN.md` | `EC42D53A803E3A5CF6351B1A34185178617050536DD49C22426A2CC5C2E96FCA` |
+| `crates/druid-wrapper/tests/jdbc_agent_xa_external_consumer.rs` | `C410C1EB9BD9AA1F1D993F95B1FCDC2FADB91BD55BD505357EC797FDD15B2216` |
+| `crates/druid-rdbc/src/data_source/xa_connection.rs` | `070AA62647D20A3D7A89E088AE39C1D782771E8FBCCC908250BDF03114242C79` |
+| `crates/druid-wrapper/src/jdbc_agent/mod.rs` | `BDF3AB1303E031368C7FB6D5313AAD848D7E11C585B836CEB8B82B985F64B406` |
+
+本项关闭 XA-06 和 6.5.5 的文档、公开消费者及手工 API/SemVer 审查。运行中的 PostgreSQL 测试提供实库行为证据；旧 API 快照保持标记过期，自动提取/失效门禁仍留给第 8 批。
+

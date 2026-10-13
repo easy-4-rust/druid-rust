@@ -243,6 +243,8 @@ API 签名尚未稳定。迁移账本将原始行为绑定到当前测试身份�
 
 ### 6.4 80 数据库目录与 JDBC Agent
 
+JDBC Agent XA 的显式配置、标准消费路径、owner/逻辑租约生命周期与 PostgreSQL 跨 session 恢复说明见[集成指南](docs/jdbc-agent-xa.md)。
+
 `druid-wrapper` 内置版本化 SQL-only 产品目录，共 80 项，交付阶段固定为
 15/25/40。Redis、MongoDB、Kafka、RabbitMQ、etcd、ZooKeeper 等非 SQL
 产品不会为了凑数进入目录。`declared`、`experimental`、`verified`、

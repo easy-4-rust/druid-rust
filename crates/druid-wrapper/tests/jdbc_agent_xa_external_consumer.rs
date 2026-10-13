@@ -23,6 +23,59 @@ async fn transaction_manager_starts_through_the_standard_resource(
         .await
 }
 
+/// 编译验证事务管理器可仅通过 RDBC trait 执行两阶段 XA 操作。
+async fn transaction_manager_uses_the_standard_xa_contract(
+    data_source: &dyn XaDataSource,
+    xid: &Xid,
+    sql: &str,
+) -> Result<(), String> {
+    let mut owner = data_source
+        .xa_connection()
+        .await
+        .map_err(|error| error.to_string())?;
+    let mut connection = owner
+        .connection()
+        .await
+        .map_err(|error| error.to_string())?;
+    owner
+        .xa_resource()
+        .map_err(|error| error.to_string())?
+        .start(xid, XaFlags::TMNOFLAGS)
+        .await
+        .map_err(|error| error.to_string())?;
+    connection
+        .exec(sql, Vec::new())
+        .await
+        .map_err(|error| error.to_string())?;
+    connection
+        .close()
+        .await
+        .map_err(|error| error.to_string())?;
+    drop(connection);
+    owner
+        .xa_resource()
+        .map_err(|error| error.to_string())?
+        .end(xid, XaFlags::TMSUCCESS)
+        .await
+        .map_err(|error| error.to_string())?;
+    let vote = owner
+        .xa_resource()
+        .map_err(|error| error.to_string())?
+        .prepare(xid)
+        .await
+        .map_err(|error| error.to_string())?;
+    match vote {
+        XaPrepareResult::Ok => owner
+            .xa_resource()
+            .map_err(|error| error.to_string())?
+            .commit(xid, false)
+            .await
+            .map_err(|error| error.to_string())?,
+        XaPrepareResult::ReadOnly => {}
+    }
+    owner.close().await.map_err(|error| error.to_string())
+}
+
 #[derive(Default)]
 struct PoolEventState {
     logical_returns: AtomicUsize,
@@ -151,6 +204,7 @@ fn real_h2_xa_data_source(identity: &str) -> JdbcAgentXaDataSource {
 fn public_xa_data_source_implements_only_the_rdbc_standard_contract() {
     assert_standard_xa_data_source::<JdbcAgentXaDataSource>();
     let _standard_resource_consumer = transaction_manager_starts_through_the_standard_resource;
+    let _two_phase_consumer = transaction_manager_uses_the_standard_xa_contract;
 
     let source = JdbcAgentXaDataSource::new(
         "org.postgresql.xa.PGXADataSource",
