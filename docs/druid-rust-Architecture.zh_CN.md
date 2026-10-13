@@ -80,16 +80,26 @@
 
 ```mermaid
 flowchart TB
-    RDBC["druid-rdbc<br/>Connection / Statement / ResultSet<br/>Metadata / Errors / Resources / Wrapper"]
-    Druid["druid<br/>Pool / Filter / SQL Parser / Wall / Stat / Dynamic"]
-    Wrapper["druid-wrapper<br/>SQLx / Toasty / RBDC / JDBC Agent<br/>bb8 / deadpool"]
+    App["应用 / ORM"]
+    Druid["druid<br/>连接池 / Filter / SQL Parser / Wall / Stat / Dynamic"]
+    Wrapper["druid-wrapper<br/>数据库适配器"]
+    Backends["SQLx / Toasty / RBDC / JDBC Agent<br/>bb8 / deadpool"]
+    subgraph RDBC["druid-rdbc：统一标准合同"]
+        Connection["Connection"] --> Statement["Statement"] --> ResultSet["ResultSet"]
+        Statement --> Prepared["PreparedStatement"] --> Callable["CallableStatement"]
+        Metadata["Metadata / SQL 类型 / 异常"]
+        Resources["LOB / Array / SQLXML / SQLData"]
+        Entrypoints["DataSource / Driver / RowSet"]
+    end
     Metrics["druid-metrics<br/>Snapshot / Aggregator / Single gRPC Protocol"]
     Admin["druid-admin<br/>Authenticated HTTP + gRPC / Repository / UI"]
     Bench["druid-bench<br/>Contracts / Differential / Benchmarks"]
 
-    Druid --> RDBC
-    Wrapper --> RDBC
-    Wrapper --> Druid
+    App --> Druid
+    Druid -->|池化代理实现标准连接合同| RDBC
+    Wrapper -->|数据库适配| RDBC
+    Wrapper -->|池生命周期集成| Druid
+    Wrapper --> Backends
     Metrics --> Druid
     Admin --> Metrics
     Admin --> Druid
@@ -97,6 +107,11 @@ flowchart TB
     Bench --> Druid
     Bench -. "可选 wrapper / 测试依赖" .-> Wrapper
 ```
+
+`Connection → Statement → ResultSet` 是标准操作对象链；`PreparedStatement → CallableStatement`
+表示接口特化。元数据、SQL 类型与异常，以及 LOB、Array、SQLXML、SQLData、DataSource、Driver
+和 RowSet 都属于 `druid-rdbc` 的合同范围。图中的 `druid-wrapper` 后端适配统一合同；池化代理与
+连接所有权仍由 `druid` 管理。
 
 上图描述当前 Cargo manifests 的直接产品依赖。它不代表目标 DAG 已验收：
 Admin 对 Druid 的直接依赖及可选 Wrapper 依赖仍须按正式 P07 核验，
@@ -145,23 +160,7 @@ flowchart LR
 
 ### 4.1 应用、标准合同与数据库适配器
 
-`druid-rdbc` 定义与具体数据库无关的统一标准；`druid` 为应用提供连接池、过滤器和池化代理；`druid-wrapper` 将 SQLx、Toasty、RBDC、JDBC Agent 等后端接入该合同。标准合同覆盖连接执行链、元数据与类型、资源对象以及数据源和驱动入口：
-
-```mermaid
-flowchart TB
-    A["应用 / ORM"] --> P["druid：连接池、过滤器、池化代理"]
-    P --> C["druid-rdbc：统一标准合同"]
-    W["druid-wrapper：数据库适配器"] --> C
-    W --> D["SQLx / Toasty / RBDC / JDBC Agent 等"]
-
-    C --> S["Connection → Statement → ResultSet"]
-    S --> PS["PreparedStatement → CallableStatement"]
-    C --> M["Metadata / SQL 类型 / 异常"]
-    C --> R["LOB / Array / SQLXML / SQLData"]
-    C --> DS["DataSource / Driver / RowSet"]
-```
-
-图中依赖箭头表示模块依赖或适配关系；`Connection → Statement → ResultSet` 表示标准操作对象链，`PreparedStatement → CallableStatement` 表示接口特化关系。`druid-rdbc` 不持有池化 owner，owner、租约和回收策略属于 `druid`；具体数据库 I/O 属于 `druid-wrapper` 及其后端。
+`druid-rdbc` 定义与具体数据库无关的统一标准；`druid` 为应用提供连接池、过滤器和池化代理；`druid-wrapper` 将 SQLx、Toasty、RBDC、JDBC Agent 等后端接入该合同。标准对象链和合同组成见第 3 节总架构图。`druid-rdbc` 不持有池化 owner，owner、租约和回收策略属于 `druid`；具体数据库 I/O 属于 `druid-wrapper` 及其后端。
 
 历史上 13 个 workspace crate 曾在 2026-07-29 物理收敛为三个；下表只记录
 归并来源，不代表当前模块数量或目标拓扑：
