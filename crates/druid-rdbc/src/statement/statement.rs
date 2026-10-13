@@ -1,7 +1,9 @@
 use crate::error::{RdbcError, SqlWarning};
 use crate::result_set::{ColumnIndex, ResultSet};
+use crate::statement::StatementCancellation;
 use crate::types::Value;
 use crate::wrapper::Wrapper;
+use std::sync::Arc;
 
 /// ResultSet cursor type descriptor。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -313,6 +315,24 @@ pub trait Statement: Wrapper + Send + 'static {
         Err(RdbcError::UnsupportedOperation {
             operation: "statement_cancel",
         })
+    }
+
+    /// 返回可独立持有的取消控制对象；默认以 SQLState `0A000` 报告不支持。
+    /// 调用方应在开始执行前取得句柄，且本方法不要求 Statement 实现 `Sync`。
+    /// 旧的 `&mut self` 取消入口不能与占用同一独占借用的执行 Future 同时调用：
+    ///
+    /// ```compile_fail
+    /// use druid_rdbc::statement::Statement;
+    /// fn cannot_cancel_while_execute_borrows_statement<S: Statement>(statement: &mut S) {
+    ///     let execution = statement.execute_query("SELECT 1");
+    ///     let _ = statement.cancel();
+    ///     drop(execution);
+    /// }
+    /// ```
+    fn cancellation_control(&self) -> Result<Arc<dyn StatementCancellation>, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "statement_cancellation_control",
+        ))
     }
 
     /// 设置 cursor name。

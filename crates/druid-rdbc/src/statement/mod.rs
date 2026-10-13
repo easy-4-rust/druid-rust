@@ -8,6 +8,7 @@ mod prepared_statement;
     reason = "one standard object per file keeps mod.rs declaration-only"
 )]
 mod statement;
+mod statement_cancellation;
 
 pub use callable_statement::{
     CallableInputParameter, CallableOutParameter, CallableParameter, CallableStatement,
@@ -19,3 +20,4 @@ pub use statement::{
     ResultSetConcurrency, ResultSetHoldability, ResultSetType, Statement, StatementExecuteResult,
     StatementOptions,
 };
+pub use statement_cancellation::StatementCancellation;
