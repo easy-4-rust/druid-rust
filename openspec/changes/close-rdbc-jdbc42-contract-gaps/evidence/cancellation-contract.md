@@ -27,6 +27,12 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 - `cargo fmt -p druid-wrapper`：通过。
 - `git diff --check`：通过。
 
+**Druid pooled owner 隔离覆盖（部分 4.2）**
+
+- `cargo test -p druid --lib cancellation_control --locked --offline`：4 passed。包括普通 Statement 在原租约失效后拒绝旧控制句柄、Prepared/Callable 状态代理委托，以及 Prepared/Callable 底层语句模拟缓存 checkout 后旧 owner gate 拒绝取消、新 owner 控制句柄仍可取消。
+- `cargo test -p druid --lib --locked --offline`：157 passed。
+- Prepared/Callable 测试将同一 raw statement 从旧逻辑 owner 转交给新 owner，验证 owner 身份隔离；当前仍缺真实 DruidPool + SQLx 驱动的端到端缓存命中、连接归还和竞争调度证据，因此任务 4.2/4.6 不关闭。
+
 对应源码 SHA-256（本次验证后）：
 
 | 文件 | SHA-256 |
@@ -34,5 +40,8 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 | `crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs` | `385E4FA7D3194AD245C9361A6F79E0672EB7C4B5ECA0AE392544CC43FE83D2CD` |
 | `crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs` | `E7698DADB9DF2F0858925519241787331F39D85DAA5FFF9CD7665E99D6387610` |
 | `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `4313F14DA3BF564C4DB298CBAF22F59A8EB49E4E6858A33F1F528A9B199A9636` |
+| `crates/druid/src/core/druid_pooled_statement/cancellation_control_tests.rs` | `8835DCF396F31638C2EA41C757038C6C52AB36D61302864D35FAADD940A24B8B` |
+| `crates/druid/src/core/druid_pooled_prepared_statement/cancellation_control_tests.rs` | `4BE7380EE089134193061F85E29DAF017F7B8584050F778A829922961C9FDF2C` |
+| `crates/druid/src/core/druid_pooled_callable_statement/cancellation_control_tests.rs` | `8FC4162F89C2D858C9F8ED7F07CE7606B86D096E70D8897893C1415102909B2C` |
 
-**边界与未完成项：**SQLite 用例证明真实 SQLite VM 执行路径中断及连接清理，但不是外部数据库服务器日志/会话终态证据。PostgreSQL 实库仅验证明确不支持/`0A000`；MySQL 等后端的逐项不支持证据、旧池租约缓存复用覆盖、生成键更新长执行覆盖，以及取消未确认时 owner 丢弃连接的故障注入仍未完成。因此 tasks 4.2–4.7 保持未勾选；本记录不关闭取消批，也不代表 JDBC 全面对齐或生产就绪。
+**边界与未完成项：**SQLite 用例证明真实 SQLite VM 执行路径中断及连接清理；PostgreSQL 18.6 和 MySQL 8.0.36 实库只验证当前明确不支持/`0A000`。Druid pooled Prepared/Callable 目前有底层句柄重交接隔离测试，但真实池缓存命中/租约归还端到端证据、所有后端/执行路径能力矩阵、取消未确认时 owner 丢弃连接的故障注入，以及外部数据库正向取消及服务端终态证据仍未完成。因此 tasks 4.2–4.7 保持未勾选；本记录不关闭取消批，也不代表 JDBC 全面对齐或生产就绪。
