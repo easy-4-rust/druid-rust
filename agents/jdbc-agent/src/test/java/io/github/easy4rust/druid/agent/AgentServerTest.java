@@ -18,8 +18,11 @@ import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.net.SocketTimeoutException;
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.SQLTransientConnectionException;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -34,6 +37,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AgentServerTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Test
+    void cancelsOnlyAnActiveRequestStatement() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:cancel-contract");
+             Statement statement = connection.createStatement()) {
+            AgentSession session = new AgentSession(connection, null);
+            assertEquals(false, session.cancel(17));
+            session.activate(17, statement);
+            assertEquals(true, session.cancel(17));
+            session.deactivate(17);
+            assertEquals(false, session.cancel(17));
+        }
+    }
 
     @Test
     void rejectsOversizedFrameBeforeNewlineOrEof() throws Exception {
@@ -191,7 +207,9 @@ class AgentServerTest {
                     sqlPayload(
                             "CREATE ALIAS IF NOT EXISTS SLEEP FOR 'java.lang.Thread.sleep(long)'",
                             JsonNodeFactory.instance.arrayNode()))));
-            read(responses);
+            JsonNode aliasResponse = read(responses);
+            assertEquals(16, aliasResponse.path("id").asLong());
+            assertTrue(aliasResponse.path("result").isObject());
             write(requests, request(17, "execute_query", sessionPayload(
                     firstSession,
                     sqlPayload("CALL SLEEP(400)", JsonNodeFactory.instance.arrayNode()))));
@@ -204,7 +222,15 @@ class AgentServerTest {
             JsonNode cancelResponse = firstConcurrentResponse.path("id").asLong() == 18
                     ? firstConcurrentResponse
                     : secondConcurrentResponse;
-            assertEquals(true, cancelResponse.at("/result/cancelled").asBoolean());
+            JsonNode queryResponse = firstConcurrentResponse.path("id").asLong() == 17
+                    ? firstConcurrentResponse
+                    : secondConcurrentResponse;
+            assertEquals(17, queryResponse.path("id").asLong());
+            assertEquals(18, cancelResponse.path("id").asLong());
+            assertTrue(cancelResponse.at("/result/cancelled").isBoolean());
+            // 取消和查询完成存在竞态；目标已完成时返回 false 是正确的协议结果。
+            assertTrue(cancelResponse.at("/result/cancelled").asBoolean()
+                    || queryResponse.path("result").isObject());
 
             write(requests, request(19, "unknown_method", sessionOnly(firstSession)));
             JsonNode error = read(responses).path("error");
