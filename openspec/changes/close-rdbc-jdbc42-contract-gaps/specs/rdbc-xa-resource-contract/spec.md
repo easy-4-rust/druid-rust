@@ -79,3 +79,25 @@ XA 资源 SHALL 不绕过原连接 owner 的关闭和错误处置；默认/自�
 #### Scenario: 驱动拒绝超时设置
 - **WHEN** 驱动不支持所请求的事务超时设置
 - **THEN** 返回其拒绝结果，后续读取不能声称新超时已生效
+
+### Requirement: XA-05 JDBC Agent XA 客户端闭环
+
+JDBC Agent 的 Rust 客户端 SHALL 仅在调用方显式配置 XA 数据源时请求 XA session，并 SHALL 将标准 RDBC `XaResource` 操作映射到已建立的同一 Agent session。SQL 连接句柄与 XA owner SHALL 分离：关闭逻辑连接不得提前关闭 XA owner；关闭 owner 后，连接及资源操作均须确定地失败。普通 JDBC Agent session SHALL 不声明 XA 能力。客户端 SHALL 无损保留 Xid、flags、prepare 投票和结构化 XA 错误。
+
+本要求只要求 JDBC Agent 与已验证支持恢复的后端闭环，不要求 SQLx、Toasty 或其他适配器普遍支持 XA。后端未配置 XA 或能力未协商时，必须 fail closed 并返回精确的不支持错误。
+
+#### Scenario: 显式 XA 配置创建客户端资源
+- **WHEN** 调用方配置 XADataSource 类名及属性，并通过 JDBC Agent 建立 session
+- **THEN** RDBC 客户端可从该 session 获取标准 `XaResource`，并使用同一底层 XA owner 执行 SQL 与 XA 分支操作
+
+#### Scenario: 普通 session 不被提升为 XA
+- **WHEN** 调用方使用普通 JDBC URL/属性建立 Agent session 后请求 XA 能力
+- **THEN** 客户端返回精确的不支持错误，不伪造 XA 资源或以本地事务替代
+
+#### Scenario: XA owner 与逻辑连接分别关闭
+- **WHEN** 事务管理器关闭逻辑 SQL 连接但仍持有 XA owner
+- **THEN** 同一 session 的合法 XA 操作仍可继续；当 XA owner 关闭后，所有关联句柄均失效且不能触达已关闭资源
+
+#### Scenario: 客户端跨 session 恢复
+- **WHEN** 客户端通过 Agent prepare 一个事务分支、关闭原 session，再建立新的 XA session 并恢复
+- **THEN** recover 返回完整 Xid，后续 commit/rollback 对真实数据库产生可查询的终态，协议错误码和投票保持原值
