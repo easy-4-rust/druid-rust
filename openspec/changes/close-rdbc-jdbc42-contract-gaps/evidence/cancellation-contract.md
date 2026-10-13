@@ -31,7 +31,14 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 
 - `cargo test -p druid --lib cancellation_control --locked --offline`：4 passed。包括普通 Statement 在原租约失效后拒绝旧控制句柄、Prepared/Callable 状态代理委托，以及 Prepared/Callable 底层语句模拟缓存 checkout 后旧 owner gate 拒绝取消、新 owner 控制句柄仍可取消。
 - `cargo test -p druid --lib --locked --offline`：157 passed。
-- Prepared/Callable 测试将同一 raw statement 从旧逻辑 owner 转交给新 owner，验证 owner 身份隔离；当前仍缺真实 DruidPool + SQLx 驱动的端到端缓存命中、连接归还和竞争调度证据，因此任务 4.2/4.6 不关闭。
+- 新增 `pooled_statement_cancellation_handle_expires_after_real_pool_lease_return`，使用真实 DruidPool + SQLx SQLite 借出、归还、再次借出连接，验证旧普通 Statement 句柄返回 `ConnectionDiscarded`，新租约仍可查询。
+- 新增 `pooled_prepared_cancellation_handle_cannot_cross_cached_checkout`，使用真实 DruidPool + SQLx SQLite 关闭并归还 PreparedStatement，再从实际 per-connection LRU checkout 同一语句；断言缓存命中计数为 1、旧取消句柄被拒绝、新句柄可中断 SQLite VM，且同一新租约后续查询成功。
+- 扩展 `callable_lease_return_recycles_raw_but_rejects_previous_logical_handle`：在真实 DruidPool 和可控合同 Callable 驱动中验证归还后同一 raw Callable 语句被下一租约复用、旧控制句柄被拒绝且不触达底层、新控制句柄只调用新 owner 的底层取消对象。SQLx `Connection#prepare_call` 默认不支持，因此本测试不声称 SQLx SQLite 提供 Callable 能力。
+- `cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test --locked --offline`：16 passed、2 ignored（实时 PostgreSQL/MySQL 负向用例）。
+- `cargo test -p druid --test callable_cache_lifecycle_test --locked --offline`：6 passed。
+- `cargo fmt -p druid -p druid-wrapper -- --check`：通过；`git diff --check`：通过。
+- 同一 SQLx 合同套件中的 `independent_cancel_control_is_generation_bound`、`late_cancel_control_does_not_become_pending_for_next_generation` 和 `cancel_releases_connection_while_old_cursor_is_retained` 分别验证同代重复请求、已完成代次迟到请求、同连接其他语句隔离及旧游标/新代次隔离；与三类 DruidPool 代理生命周期测试共同满足 4.2。
+- 因上述池归还与缓存 checkout、三类代理、迟到/重复/共享连接测试均有实际证据，任务 4.2 已关闭。仍缺取消未确认/清理失败时 owner 丢弃连接的故障注入和精确回收计数断言，4.3/4.6 不关闭。
 
 对应源码 SHA-256（本次验证后）：
 
@@ -43,5 +50,7 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 | `crates/druid/src/core/druid_pooled_statement/cancellation_control_tests.rs` | `8835DCF396F31638C2EA41C757038C6C52AB36D61302864D35FAADD940A24B8B` |
 | `crates/druid/src/core/druid_pooled_prepared_statement/cancellation_control_tests.rs` | `4BE7380EE089134193061F85E29DAF017F7B8584050F778A829922961C9FDF2C` |
 | `crates/druid/src/core/druid_pooled_callable_statement/cancellation_control_tests.rs` | `8FC4162F89C2D858C9F8ED7F07CE7606B86D096E70D8897893C1415102909B2C` |
+| `crates/druid/tests/callable_cache_lifecycle_test.rs` | `E4DC411EBB942229EF8F5CA39122B61D27CE30AB35265EC30798AD66CE137B59` |
+| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `22A365018F18C8858F975A94CD968CE7D44CB265C27B1E25994FCF8E5D385326` |
 
-**边界与未完成项：**SQLite 用例证明真实 SQLite VM 执行路径中断及连接清理；PostgreSQL 18.6 和 MySQL 8.0.36 实库只验证当前明确不支持/`0A000`。Druid pooled Prepared/Callable 目前有底层句柄重交接隔离测试，但真实池缓存命中/租约归还端到端证据、所有后端/执行路径能力矩阵、取消未确认时 owner 丢弃连接的故障注入，以及外部数据库正向取消及服务端终态证据仍未完成。因此 tasks 4.2–4.7 保持未勾选；本记录不关闭取消批，也不代表 JDBC 全面对齐或生产就绪。
+**边界与未完成项：**SQLite 用例证明真实 SQLite VM 执行路径中断及连接清理；PostgreSQL 18.6 和 MySQL 8.0.36 实库只验证当前明确不支持/`0A000`。普通/Prepared SQLx 代理及 Callable 合同夹具现已覆盖真实 DruidPool 借还路径，迟到/重复请求与共享连接隔离也有测试，故 4.2 已完成。仍缺取消未确认时 owner 丢弃连接的故障注入与回收计数断言、完整后端/执行路径能力矩阵审查及清晰的执行终态记录；因此任务 4.3–4.7 保持未勾选。本记录不关闭取消批，也不代表 JDBC 全面对齐或生产就绪。

@@ -9,7 +9,7 @@ use druid_rdbc::error::RdbcError;
 use druid_rdbc::statement::{
     CallableInputParameter, CallableParameter, CallableStatement, ParameterIndex,
     PreparedStatement, ResultSetConcurrency, ResultSetHoldability, ResultSetType, Statement,
-    StatementOptions,
+    StatementCancellation, StatementOptions,
 };
 use druid_rdbc::types::{RdbcObject, Value};
 use std::collections::HashMap;
@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 struct DriverState {
     prepares: Vec<(String, bool, StatementOptions)>,
     closes: Vec<usize>,
+    cancellations: Vec<Arc<AtomicUsize>>,
 }
 
 struct DriverStatement {
@@ -29,6 +30,17 @@ struct DriverStatement {
     timeout: i32,
     closed: bool,
     fatal: bool,
+    cancellation_count: Arc<AtomicUsize>,
+}
+
+struct CountingCancellation(Arc<AtomicUsize>);
+
+#[async_trait::async_trait]
+impl StatementCancellation for CountingCancellation {
+    async fn cancel(&self) -> Result<(), RdbcError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
 }
 
 impl DriverStatement {
@@ -50,6 +62,12 @@ druid_rdbc::impl_standard_wrapper!(DriverStatement => CallableStatement);
 
 #[async_trait::async_trait]
 impl Statement for DriverStatement {
+    fn cancellation_control(&self) -> Result<Arc<dyn StatementCancellation>, RdbcError> {
+        Ok(Arc::new(CountingCancellation(Arc::clone(
+            &self.cancellation_count,
+        ))))
+    }
+
     async fn execute_query(
         &mut self,
         _sql: &str,
@@ -154,6 +172,8 @@ impl DriverConnection {
     fn prepare(&self, sql: &str, callable: bool, options: StatementOptions) -> DriverStatement {
         let mut state = self.state.lock().unwrap();
         state.prepares.push((sql.to_owned(), callable, options));
+        let cancellation_count = Arc::new(AtomicUsize::new(0));
+        state.cancellations.push(Arc::clone(&cancellation_count));
         DriverStatement {
             state: Arc::clone(&self.state),
             id: state.prepares.len(),
@@ -161,6 +181,7 @@ impl DriverConnection {
             timeout: 0,
             closed: false,
             fatal: sql == "fatal",
+            cancellation_count,
         }
     }
 }
@@ -485,6 +506,9 @@ async fn callable_lease_return_recycles_raw_but_rejects_previous_logical_handle(
         .prepare_call("same", StatementOptions::default())
         .await
         .unwrap();
+    let old_control = old
+        .cancellation_control()
+        .expect("callable proxy should expose the underlying control");
     connection.close().await.unwrap();
     assert_eq!(old.is_closed(), Ok(true));
     assert!(old
@@ -496,6 +520,25 @@ async fn callable_lease_return_recycles_raw_but_rejects_previous_logical_handle(
         .await
         .unwrap();
     assert_eq!(id(next.as_ref()), 1);
+    let next_control = next
+        .cancellation_control()
+        .expect("new callable cache owner should expose its control");
+    assert!(matches!(
+        old_control.cancel().await,
+        Err(RdbcError::ConnectionDiscarded)
+    ));
+    assert_eq!(
+        driver.lock().unwrap().cancellations[0].load(Ordering::SeqCst),
+        0
+    );
+    next_control
+        .cancel()
+        .await
+        .expect("current callable cache owner should retain cancellation access");
+    assert_eq!(
+        driver.lock().unwrap().cancellations[0].load(Ordering::SeqCst),
+        1
+    );
     drop(old);
     assert_eq!(id(next.as_ref()), 1);
     next.close().await.unwrap();

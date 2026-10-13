@@ -1,10 +1,158 @@
+use druid::pool::DruidPool;
 use druid_rdbc::connection::Connection;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::result_set::ColumnIndex;
 use druid_rdbc::statement::{GeneratedKeys, ParameterIndex, PreparedParameter, StatementOptions};
 use druid_rdbc::types::Value;
-use druid_wrapper::sqlx::SqlxConnectionAdapter;
+use druid_wrapper::sqlx::{SqlxConnectionAdapter, SqlxConnectionFactory};
+use std::sync::Arc;
 use std::time::Duration;
+
+/// 通过真实 DruidPool 借还连接，验证普通 Statement 的旧取消句柄在租约结束后失效。
+#[tokio::test]
+async fn pooled_statement_cancellation_handle_expires_after_real_pool_lease_return() {
+    let pool = DruidPool::builder()
+        .factory(Arc::new(SqlxConnectionFactory::new("sqlite::memory:")))
+        .max_open(1)
+        .max_idle(1)
+        .build()
+        .await
+        .unwrap();
+
+    let mut first_lease = pool.get_connection().await.unwrap();
+    let old_statement = first_lease
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    let old_control = old_statement
+        .cancellation_control()
+        .expect("SQLite ordinary statement exposes cancellation");
+    first_lease.close().await.unwrap();
+
+    let mut second_lease = pool.get_connection().await.unwrap();
+    let mut current_statement = second_lease
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    assert!(matches!(
+        old_control.cancel().await,
+        Err(RdbcError::ConnectionDiscarded)
+    ));
+
+    let current_control = current_statement
+        .cancellation_control()
+        .expect("current ordinary statement exposes cancellation");
+    let cancel_task = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        current_control.cancel().await
+    });
+    let execution = tokio::time::timeout(
+        Duration::from_secs(5),
+        current_statement.execute_query(
+            "WITH RECURSIVE counter(value) AS (VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000) SELECT sum(value) FROM counter",
+        ),
+    )
+    .await
+    .expect("ordinary SQLite VM cancellation must finish within the bounded test deadline");
+    let error = match execution {
+        Ok(_) => panic!("current ordinary statement cancellation must interrupt the query"),
+        Err(error) => error,
+    };
+    assert!(
+        matches!(error, RdbcError::SqlException(ref error) if error.sql_state() == Some("HY008"))
+    );
+    cancel_task
+        .await
+        .expect("cancel task must finish")
+        .expect("current ordinary statement cancellation is accepted");
+
+    let mut rows = current_statement.execute_query("SELECT 17").await.unwrap();
+    assert!(rows.next().await.unwrap());
+    assert_eq!(
+        rows.value(ColumnIndex::new(1).unwrap()).unwrap(),
+        Value::Int(17)
+    );
+    current_statement.close().await.unwrap();
+    second_lease.close().await.unwrap();
+    pool.close().await;
+}
+
+/// 通过真实语句缓存和 DruidPool 租约复用，旧 PreparedStatement 控制句柄不能触及新 owner。
+#[tokio::test]
+async fn pooled_prepared_cancellation_handle_cannot_cross_cached_checkout() {
+    let pool = DruidPool::builder()
+        .factory(Arc::new(SqlxConnectionFactory::new("sqlite::memory:")))
+        .max_open(1)
+        .max_idle(1)
+        .pool_prepared_statements(true)
+        .max_pool_prepared_statements_per_connection(1)
+        .build()
+        .await
+        .unwrap();
+    let sql = "WITH RECURSIVE counter(value) AS (VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000) SELECT sum(value) FROM counter";
+
+    let mut first_lease = pool.get_connection().await.unwrap();
+    let old_statement = first_lease
+        .prepare_statement(sql, StatementOptions::default())
+        .await
+        .unwrap();
+    let old_control = old_statement
+        .cancellation_control()
+        .expect("SQLite prepared statement exposes cancellation");
+    first_lease.close().await.unwrap();
+    assert_eq!(pool.state().idle_count, 1);
+
+    let mut second_lease = pool.get_connection().await.unwrap();
+    let mut current_statement = second_lease
+        .prepare_statement(sql, StatementOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(pool.state().cached_prepared_statement_hit_count, 1);
+    assert!(matches!(
+        old_control.cancel().await,
+        Err(RdbcError::ConnectionDiscarded)
+    ));
+
+    let current_control = current_statement
+        .cancellation_control()
+        .expect("new cache owner must retain its own control handle");
+    let cancel_task = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        current_control.cancel().await
+    });
+    let execution = tokio::time::timeout(
+        Duration::from_secs(5),
+        current_statement.execute_prepared_query(),
+    )
+    .await
+    .expect("SQLite VM cancellation must finish within the bounded test deadline");
+    let error = match execution {
+        Ok(_) => panic!("current owner cancellation must interrupt the recursive query"),
+        Err(error) => error,
+    };
+    assert!(
+        matches!(error, RdbcError::SqlException(ref error) if error.sql_state() == Some("HY008"))
+    );
+    cancel_task
+        .await
+        .expect("cancel task must finish")
+        .expect("current owner cancellation is accepted");
+
+    let mut probe = second_lease
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    let mut rows = probe.execute_query("SELECT 23").await.unwrap();
+    assert!(rows.next().await.unwrap());
+    assert_eq!(
+        rows.value(ColumnIndex::new(1).unwrap()).unwrap(),
+        Value::Int(23)
+    );
+    probe.close().await.unwrap();
+    current_statement.close().await.unwrap();
+    second_lease.close().await.unwrap();
+    pool.close().await;
+}
 
 /// 原实库合同要求取消请求先于执行；只拒绝该次 admission，保留语句和连接复用。
 #[tokio::test]
