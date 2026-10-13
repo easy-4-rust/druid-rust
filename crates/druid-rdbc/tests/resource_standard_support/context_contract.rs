@@ -1,6 +1,6 @@
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::resource::{Blob, BlobPattern, RdbcInputStream, RdbcOutputStream, Ref};
-use druid_rdbc::resource::{ResourceHandleFactory, ResourceOperations};
+use druid_rdbc::resource::{Resource, ResourceHandleFactory, ResourceOperations};
 use druid_rdbc::types::{RdbcObject, RdbcTypeMap, Value};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -78,6 +78,33 @@ impl Blob for CountingAccess {
 
 #[derive(Debug)]
 struct ReadOnlyRefAccess;
+
+#[tokio::test]
+async fn common_resource_contract_preserves_identity_capability_and_release() {
+    let free_count = Arc::new(AtomicUsize::new(0));
+    let blob = ResourceHandleFactory::blob(Box::new(CountingAccess {
+        free_count: Arc::clone(&free_count),
+    }));
+    let alias = blob.clone();
+    let resource: &dyn Resource = &blob;
+    assert_eq!(resource.resource_id(), alias.resource_id());
+    assert_eq!(resource.capabilities(), ResourceOperations::FREE);
+    resource.free().await.expect("standard resource release");
+    alias
+        .free()
+        .await
+        .expect("shared release remains idempotent");
+    assert_eq!(free_count.load(Ordering::SeqCst), 1);
+
+    let reference = ResourceHandleFactory::reference(Box::new(ReadOnlyRefAccess));
+    let resource: &dyn Resource = &reference;
+    assert_eq!(resource.capabilities(), ResourceOperations::READ);
+    resource
+        .free()
+        .await
+        .expect("Java Ref has no release operation");
+    assert_eq!(reference.base_type_name().await.unwrap(), "schema.kind");
+}
 
 #[async_trait::async_trait]
 impl Ref for ReadOnlyRefAccess {

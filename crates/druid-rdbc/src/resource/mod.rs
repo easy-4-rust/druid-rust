@@ -22,6 +22,7 @@ mod rdbc_xml_result;
 mod rdbc_xml_source;
 mod ref_value;
 mod sql_xml;
+mod standard_resource;
 
 pub use array::Array;
 pub use blob::Blob;
@@ -47,6 +48,7 @@ pub use rdbc_xml_result::RdbcXmlResult;
 pub use rdbc_xml_source::RdbcXmlSource;
 pub use ref_value::Ref;
 pub use sql_xml::SqlXml;
+pub use standard_resource::Resource;
 
 mod struct_value;
 pub use struct_value::Struct;
