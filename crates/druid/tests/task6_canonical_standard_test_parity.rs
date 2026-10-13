@@ -64,7 +64,7 @@ async fn task6_canonical_standard_test_driver_manager_uses_accepts_url_and_suppo
     assert!(DriverManager::deregister_driver(&driver));
     assert!(matches!(
         DriverManager::get_connection("rdbc-probe:test").await,
-        Err(RdbcError::DriverError(message)) if message.starts_with("No suitable driver")
+        Err(RdbcError::SqlException(error)) if error.sql_state() == Some("08001")
     ));
 }
 
