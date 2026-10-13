@@ -1,7 +1,7 @@
 //! 验证 Admin 最新指标在实例重启和容量压力下的隔离与回收行为。
 
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use druid_admin::model::dto::{DataSourceContent, WallResult};
 use druid_admin::repository::{
@@ -194,4 +194,49 @@ fn full_repository_accepts_existing_identity_updates_without_exceeding_either_li
     assert!(!repository.upsert_datasource(extra_id, extra));
     assert_eq!(repository.len(), 256);
     assert_eq!(repository.limit_counters(), (2, 0, 0));
+}
+
+#[test]
+fn expired_session_churn_reclaims_capacity_without_mixing_boot_identities() {
+    let config = MetricsRepositoryConfig::try_new(32, 2, 1, Duration::from_secs(1), 1 << 20)
+        .expect("valid churn budget");
+    let repository = MetricsRepository::with_config(config);
+    let mut first_generation = Vec::new();
+    let mut insert_micros = Vec::new();
+
+    for generation in 0..2 {
+        if generation == 1 {
+            std::thread::sleep(Duration::from_millis(1_100));
+        }
+        for service in 0..32 {
+            let boot_id = format!("boot-{}", generation * 32 + service);
+            for datasource in 0..2 {
+                let (mut id, mut value) = entry(&boot_id, 1, i64::from(generation + 1));
+                id.identity = datasource;
+                value.datasource.identity = datasource;
+                let started = Instant::now();
+                assert!(repository.upsert_datasource(id.clone(), value));
+                insert_micros.push(started.elapsed().as_micros());
+                if generation == 0 {
+                    first_generation.push(id);
+                }
+            }
+        }
+        assert_eq!(repository.len(), 64);
+    }
+
+    assert!(first_generation
+        .iter()
+        .all(|id| repository.get_datasource(id).is_none()));
+    assert_eq!(repository.all_datasources().len(), 64);
+    assert_eq!(repository.limit_counters(), (0, 64, 0));
+    insert_micros.sort_unstable();
+    let percentile =
+        |percent: usize| insert_micros[(insert_micros.len() * percent).div_ceil(100) - 1];
+    println!(
+        "admin_session_churn insert_p50_us={} insert_p95_us={} insert_p99_us={} ttl_evicted=64 retained=64",
+        percentile(50),
+        percentile(95),
+        percentile(99)
+    );
 }

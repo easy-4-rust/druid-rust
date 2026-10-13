@@ -2,6 +2,8 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
+2026-10-13 Admin TTL/session churn：新增 `expired_session_churn_reclaims_capacity_without_mixing_boot_identities`，以 32 个 service、每 service 2 个 datasource、TTL 1 秒填满仓库，等待 1.1 秒后注入新一代 boot identity。旧代 64 个条目均不可见，新代仍为 64 个，TTL 淘汰计数为 64，容量拒绝计数为 0；本机首次两轮写入 p50/p95/p99 分别为 79/240/333 µs 与 71/140/155 µs，同一测试可执行文件随后重复 10/10 通过，10 轮 p99 为 141–217 µs。`repository_capacity_test` 5/5、`ingest_test` 11/11、`prometheus_test` 8/8 通过。这是短周期内存仓库基线，尚未测得进程峰值 RSS、长期 churn 与 gRPC 端到端延迟，不能据此关闭 Admin 数值预算。
+
 2026-10-13 Metrics 饱和关闭组合验证：当前 Windows/Rust 1.97.1 的真实 runtime 以队列容量 1、20 个保持注册的数据源、1 ms 采样周期运行至少 100 ms，新增 `saturated_runtime_shutdown_drains_and_joins_every_owned_task` 测试要求先发生合并，再检查关闭后受监管任务、未刷新工作和注册数均为 0。完整 `queue_semantics_test` 5/5 PASS；直接运行同一测试可执行文件 20/20 PASS，合并次数每次 159–239，关闭耗时 123–333 µs（20 样本最近秩 p99=333 µs），轮询所得进程峰值工作集最高 5,420 KiB。这是本机参考基线，尚未给出跨平台验收阈值；Admin 数值预算、SIGTERM 待 ACK 及完整故障矩阵继续开放。
 
 2026-10-13 [CI run 38331373881](https://github.com/easy-4-rust/druid-rust/actions/runs/38331373881) 的 PostgreSQL/MySQL 均在重启 hook 与建池后借用连接超时；[CI run 38332281893](https://github.com/easy-4-rust/druid-rust/actions/runs/38332281893) 的原生直连探针进一步确认，容器内部报告 healthy 后，旧随机映射宿主机端口立即返回 `Connection refused (os error 111)`。改为固定映射端口并同时检查宿主机连通性后，[CI run 38332794498](https://github.com/easy-4-rust/druid-rust/actions/runs/38332794498) 的 PostgreSQL 16.15 与 MySQL 8.4.11 真实产品合同均成功，上传的证据 JSON 各含 `database-restart` 等 13 项合同、对应源码 SHA `a656764fbb04603accedb3a28836f1b824386b34`。这只关闭两项实库重启故障的当前验证缺口；P06 数值故障预算及整轮发布门禁仍未关闭。
