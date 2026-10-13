@@ -46,6 +46,24 @@ impl CommonDataSource for crate::pool::DruidDataSource {
 }
 
 impl druid_rdbc::data_source::CommonDataSource for crate::pool::DruidDataSource {
+    fn set_login_timeout(&mut self, _timeout: std::time::Duration) -> Result<(), RdbcError> {
+        let error = RdbcError::UnsupportedOperation {
+            operation: "set_login_timeout_after_build",
+        };
+        if let Err(log_error) = druid_rdbc::data_source::CommonDataSource::write_diagnostic(
+            self,
+            "set_login_timeout",
+            &error,
+        ) {
+            tracing::warn!(
+                operation = "set_login_timeout",
+                error_kind = ?log_error.kind(),
+                "data-source diagnostic writer failed; preserving the configuration error"
+            );
+        }
+        Err(error)
+    }
+
     fn get_log_writer(&self) -> Option<druid_rdbc::data_source::RdbcLogWriter> {
         self.log_writer.read().clone()
     }

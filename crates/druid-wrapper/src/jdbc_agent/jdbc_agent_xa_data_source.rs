@@ -64,6 +64,27 @@ impl JdbcAgentXaDataSource {
         &self,
         properties: Map<String, JsonValue>,
     ) -> Result<Box<dyn druid_rdbc::data_source::XaConnection>, RdbcError> {
+        let result = self.connect_with_properties_inner(properties).await;
+        if let Err(error) = &result {
+            if let Err(log_error) = druid_rdbc::data_source::CommonDataSource::write_diagnostic(
+                self,
+                "xa_connection",
+                error,
+            ) {
+                tracing::warn!(
+                    operation = "xa_connection",
+                    error_kind = ?log_error.kind(),
+                    "XA data-source diagnostic writer failed; preserving the primary error"
+                );
+            }
+        }
+        result
+    }
+
+    async fn connect_with_properties_inner(
+        &self,
+        properties: Map<String, JsonValue>,
+    ) -> Result<Box<dyn druid_rdbc::data_source::XaConnection>, RdbcError> {
         let (mut transport, session) = self
             .connector
             .connect(
@@ -177,6 +198,7 @@ mod tests {
     use druid_rdbc::data_source::{XaFlags, Xid};
     use serde_json::Value as JsonValue;
     use std::collections::VecDeque;
+    use std::io::Write;
     use std::sync::{Arc as StdArc, Mutex as StdMutex};
 
     #[test]
@@ -205,6 +227,7 @@ mod tests {
         payloads: StdArc<StdMutex<Vec<JsonValue>>>,
         supports_xa: bool,
         close_fails: bool,
+        connect_error: Option<RdbcError>,
     }
 
     #[async_trait::async_trait]
@@ -215,6 +238,9 @@ mod tests {
             payload: JsonValue,
         ) -> Result<(Box<dyn JdbcAgentTransport>, JsonValue), RdbcError> {
             self.payloads.lock().expect("payloads lock").push(payload);
+            if let Some(error) = self.connect_error.clone() {
+                return Err(error);
+            }
             Ok((
                 Box::new(TestTransport {
                     calls: StdArc::clone(&self.calls),
@@ -298,6 +324,7 @@ mod tests {
             payloads: StdArc::clone(&payloads),
             supports_xa,
             close_fails: false,
+            connect_error: None,
         });
         let source = JdbcAgentXaDataSource::with_connector(
             "org.postgresql.xa.PGXADataSource",
@@ -315,6 +342,7 @@ mod tests {
             payloads: StdArc::new(StdMutex::new(Vec::new())),
             supports_xa: false,
             close_fails: true,
+            connect_error: None,
         });
 
         let error = match source.xa_connection().await {
@@ -341,6 +369,130 @@ mod tests {
                 .map(|(op, _)| op.as_str()),
             Some("close_session")
         );
+    }
+
+    #[tokio::test]
+    async fn xa_connection_failure_logs_only_safe_context_and_preserves_sql_error() {
+        let (mut source, calls, payloads) = setup(true);
+        source.connector = Arc::new(TestConnector {
+            calls,
+            payloads,
+            supports_xa: true,
+            close_fails: false,
+            connect_error: Some(RdbcError::SqlException(Box::new(SqlException::new(
+                31,
+                Some("08001".to_owned()),
+                Some(
+                    "jdbc:postgresql://alice:pw123@db/app?token=tok456&api_key=api789&sslpassword=ssl123"
+                        .to_owned(),
+                ),
+            )))),
+        });
+        let output = StdArc::new(StdMutex::new(Vec::new()));
+        source
+            .set_log_writer(Some(Arc::new(parking_lot::Mutex::new(Box::new(
+                CaptureWriter(StdArc::clone(&output)),
+            )))))
+            .expect("configure log writer");
+
+        let error = match source
+            .xa_connection_with_credentials("alice", "pw123")
+            .await
+        {
+            Ok(_) => panic!("XA connection must fail"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error
+                .sql_exception()
+                .and_then(|exception| exception.sql_state()),
+            Some("08001")
+        );
+        let diagnostic = String::from_utf8(output.lock().expect("output lock").clone())
+            .expect("diagnostic is UTF-8");
+        assert!(diagnostic.contains("operation=xa_connection"));
+        assert!(diagnostic.contains("sql_state=08001"));
+        for secret in ["alice", "pw123", "db/app", "tok456", "api789", "ssl123"] {
+            assert!(!diagnostic.contains(secret), "diagnostic leaked {secret}");
+        }
+    }
+
+    struct CaptureWriter(StdArc<StdMutex<Vec<u8>>>);
+
+    impl Write for CaptureWriter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().expect("output lock").extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct FailingWriter;
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _bytes: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("writer-private-detail"))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn xa_log_io_failure_keeps_connection_error_and_configured_properties() {
+        let (mut source, calls, payloads) = setup(true);
+        source
+            .properties
+            .insert("loginTimeout".to_owned(), json!(30));
+        let primary = RdbcError::SqlException(Box::new(
+            SqlException::driver(31, "database unavailable").with_sql_state("08001"),
+        ));
+        source.connector = Arc::new(TestConnector {
+            calls,
+            payloads,
+            supports_xa: true,
+            close_fails: false,
+            connect_error: Some(primary.clone()),
+        });
+        source
+            .set_log_writer(Some(Arc::new(parking_lot::Mutex::new(Box::new(
+                FailingWriter,
+            )))))
+            .expect("configure failing writer");
+
+        let error = match source.xa_connection().await {
+            Ok(_) => panic!("XA connection must fail"),
+            Err(error) => error,
+        };
+        assert_eq!(error, primary);
+        assert_eq!(
+            error
+                .sql_exception()
+                .and_then(|exception| exception.sql_state()),
+            Some("08001")
+        );
+        assert_eq!(source.properties["loginTimeout"], json!(30));
+        assert!(source.get_log_writer().is_some());
+    }
+
+    #[tokio::test]
+    async fn xa_log_io_failure_does_not_change_a_successful_connection() {
+        let (source, _, _) = setup(true);
+        source
+            .set_log_writer(Some(Arc::new(parking_lot::Mutex::new(Box::new(
+                FailingWriter,
+            )))))
+            .expect("configure failing writer");
+
+        let mut connection = source
+            .xa_connection()
+            .await
+            .expect("diagnostic writer must not affect connection success");
+        connection.close().await.expect("close XA connection");
     }
 
     #[tokio::test]

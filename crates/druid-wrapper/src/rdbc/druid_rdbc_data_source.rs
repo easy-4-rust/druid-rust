@@ -89,6 +89,10 @@ impl CommonDataSource for DruidRdbcDataSource {
 }
 
 impl druid_rdbc::data_source::CommonDataSource for DruidRdbcDataSource {
+    fn set_login_timeout(&mut self, timeout: std::time::Duration) -> Result<(), RdbcError> {
+        druid_rdbc::data_source::CommonDataSource::set_login_timeout(&mut self.inner, timeout)
+    }
+
     fn get_log_writer(&self) -> Option<druid_rdbc::data_source::RdbcLogWriter> {
         druid::sql::CommonDataSource::get_log_writer(&self.inner)
     }
@@ -139,7 +143,21 @@ impl DataSource for DruidRdbcDataSource {
             {
                 self.get_connection().await
             }
-            _ => Err(Self::authorization_error()),
+            _ => {
+                let error = Self::authorization_error();
+                if let Err(log_error) = druid_rdbc::data_source::CommonDataSource::write_diagnostic(
+                    self,
+                    "connection_credentials",
+                    &error,
+                ) {
+                    tracing::warn!(
+                        operation = "connection_credentials",
+                        error_kind = ?log_error.kind(),
+                        "ordinary data-source diagnostic writer failed; preserving the authorization error"
+                    );
+                }
+                Err(error)
+            }
         }
     }
 }

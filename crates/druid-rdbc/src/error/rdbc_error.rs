@@ -202,7 +202,11 @@ impl RdbcError {
     pub fn sql_exception(&self) -> Option<&SqlException> {
         match self {
             Self::SqlException(exception) => Some(exception),
-            Self::BatchUpdateException { cause, .. } => cause.sql_exception(),
+            Self::BatchUpdateException { cause, .. }
+            | Self::GetConnectionTimeout {
+                cause: Some(cause), ..
+            }
+            | Self::DataSourceNotAvailable { cause: Some(cause) } => cause.sql_exception(),
             Self::ProductBoundary(boundary) => {
                 boundary.source_error().and_then(Self::sql_exception)
             }

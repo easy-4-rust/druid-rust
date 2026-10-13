@@ -51,7 +51,9 @@ impl DruidDataSource {
     ///
     /// 对应 Java：`DruidDataSource#getConnection()`。
     pub async fn get_connection(&self) -> Result<DruidPooledConnection, DruidError> {
-        self.pool.get_connection().await
+        let result = self.pool.get_connection().await;
+        self.record_connection_failure("get_connection", &result);
+        result
     }
 
     /// 使用本次 maxWait 获取池化连接。
@@ -61,7 +63,9 @@ impl DruidDataSource {
         &self,
         max_wait: Duration,
     ) -> Result<DruidPooledConnection, DruidError> {
-        self.pool.get_connection_with_max_wait(max_wait).await
+        let result = self.pool.get_connection_with_max_wait(max_wait).await;
+        self.record_connection_failure("get_connection_with_max_wait", &result);
+        result
     }
 
     /// 绕过数据源获取 Filter，直接进入 native pool 状态机。
@@ -71,7 +75,31 @@ impl DruidDataSource {
         &self,
         max_wait: Duration,
     ) -> Result<DruidPooledConnection, DruidError> {
-        self.pool.get_connection_direct(max_wait).await
+        let result = self.pool.get_connection_direct(max_wait).await;
+        self.record_connection_failure("get_connection_direct", &result);
+        result
+    }
+
+    fn record_connection_failure(
+        &self,
+        operation: &'static str,
+        result: &Result<DruidPooledConnection, DruidError>,
+    ) {
+        let Err(error) = result else {
+            return;
+        };
+        let standard_error = RdbcError::from(error.clone());
+        if let Err(log_error) = druid_rdbc::data_source::write_data_source_diagnostic(
+            self.log_writer.read().clone(),
+            operation,
+            &standard_error,
+        ) {
+            tracing::warn!(
+                operation,
+                error_kind = ?log_error.kind(),
+                "data-source diagnostic writer failed; preserving the connection error"
+            );
+        }
     }
 
     /// 幂等初始化数据源并预建 `initialSize` 个连接。

@@ -144,3 +144,61 @@ fn unsupported_parent_logger_uses_feature_not_supported_sql_state() {
         Some("0A000")
     );
 }
+
+#[test]
+fn data_source_diagnostic_redacts_credentials_and_preserves_safe_error_context() {
+    let source = OrdinaryDataSource(Settings::default());
+    let (writer, output) = writer();
+    source
+        .set_log_writer(Some(writer))
+        .expect("configure writer");
+    let error = RdbcError::SqlException(Box::new(
+        druid_rdbc::error::SqlException::new(
+            7,
+            Some("08001".to_owned()),
+            Some("failed for alice:super-secret token=private-token".to_owned()),
+        )
+        .with_class_name("java.sql.SQLNonTransientConnectionException"),
+    ));
+
+    source
+        .write_diagnostic("connection", &error)
+        .expect("write sanitized diagnostic");
+
+    let output = String::from_utf8(output.lock().expect("output lock").clone())
+        .expect("diagnostic is UTF-8");
+    assert!(output.contains("operation=connection"));
+    assert!(output.contains("sql_state=08001"));
+    assert!(!output.contains("alice"));
+    assert!(!output.contains("super-secret"));
+    assert!(!output.contains("private-token"));
+}
+
+#[test]
+fn data_source_diagnostic_sink_failure_is_observable_without_echoing_sink_text() {
+    let source = OrdinaryDataSource(Settings::default());
+    let writer: RdbcLogWriter = Arc::new(parking_lot::Mutex::new(Box::new(FailingWriter)));
+    source
+        .set_log_writer(Some(writer))
+        .expect("configure writer");
+    let error = RdbcError::AcquireTimeout;
+
+    let write_error = source
+        .write_diagnostic("connection", &error)
+        .expect_err("sink failure must be observable");
+
+    assert!(write_error.to_string().contains("diagnostic sink failed"));
+    assert!(!write_error.to_string().contains("sink-private-detail"));
+}
+
+struct FailingWriter;
+
+impl Write for FailingWriter {
+    fn write(&mut self, _bytes: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::other("sink-private-detail"))
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
