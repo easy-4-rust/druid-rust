@@ -1833,7 +1833,12 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
 
 #[cfg(test)]
 mod tests {
-    use super::read_only_session_sql;
+    use super::{read_only_session_sql, SqlxConnectionAdapter, SqlxConnectionBackend};
+    use druid_rdbc::connection::Connection;
+    use druid_rdbc::error::RdbcError;
+    use druid_rdbc::statement::StatementOptions;
+    use sqlx::any::AnyConnectOptions;
+    use sqlx::ConnectOptions;
 
     #[test]
     fn read_only_session_sql_is_backend_specific() {
@@ -1847,5 +1852,42 @@ mod tests {
         );
         assert_eq!(read_only_session_sql("sqlite", true), None);
         assert_eq!(read_only_session_sql("any", true), None);
+    }
+
+    #[tokio::test]
+    async fn any_backend_cancellation_is_exactly_not_supported() {
+        sqlx::any::install_default_drivers();
+        let options = "sqlite::memory:"
+            .parse::<AnyConnectOptions>()
+            .expect("Any connection URL should parse");
+        let connection = options
+            .connect()
+            .await
+            .expect("SQLx Any SQLite driver should open for fallback capability testing");
+        let mut adapter = SqlxConnectionAdapter {
+            connection: Some(SqlxConnectionBackend::Any(connection)),
+            url: "sqlite::memory:".to_owned(),
+            savepoint_sequence: 0,
+            auto_commit: true,
+            read_only: false,
+            discarded: false,
+            actor_discarded: None,
+            standard_actor: None,
+            runtime_trace: None,
+        };
+        let mut statement = adapter
+            .create_statement(StatementOptions::default())
+            .await
+            .expect("Any-backed statement should be created");
+        let error = match statement.cancellation_control() {
+            Ok(_) => panic!("Any fallback must not advertise SQLite-native cancellation"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            RdbcError::SqlException(ref sql_error) if sql_error.sql_state() == Some("0A000")
+        ));
+        statement.close().await.unwrap();
+        adapter.close().await.unwrap();
     }
 }

@@ -53,7 +53,27 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 | `crates/druid/tests/callable_cache_lifecycle_test.rs` | `E4DC411EBB942229EF8F5CA39122B61D27CE30AB35265EC30798AD66CE137B59` |
 | `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `22A365018F18C8858F975A94CD968CE7D44CB265C27B1E25994FCF8E5D385326` |
 
-**边界与未完成项：**SQLite 用例证明真实 SQLite VM 执行路径中断及连接清理；PostgreSQL 18.6 和 MySQL 8.0.36 实库只验证当前明确不支持/`0A000`。普通/Prepared SQLx 代理及 Callable 合同夹具现已覆盖真实 DruidPool 借还路径，迟到/重复请求与共享连接隔离也有测试，故 4.2 已完成。4.3 的清理失败、超时、Future drop、自然完成竞态和 owner 关闭处理现均有实现与测试并已关闭；仍缺完整后端/执行路径能力矩阵、SQLite 正向实库终态证据和文档同步，因此 4.4–4.7 保持未勾选。本记录不关闭取消批，也不代表 JDBC 全面对齐或生产就绪。
+**边界与未完成项：**SQLite 用例证明真实 SQLite VM 执行路径中断及连接清理；PostgreSQL 18.6 和 MySQL 8.0.36 实库只验证当前明确不支持/`0A000`。普通/Prepared SQLx 代理及 Callable 合同夹具现已覆盖真实 DruidPool 借还路径，迟到/重复请求与共享连接隔离也有测试，故 4.2 已完成。4.3 的清理失败、超时、Future drop、自然完成竞态和 owner 关闭处理现均有实现与测试并已关闭。
+
+## 4.4：SQLx 后端 × 执行入口取消能力矩阵
+
+矩阵见 [sqlx-cancellation-capability-matrix.md](sqlx-cancellation-capability-matrix.md)。能力按具体后端和执行入口声明，不从共享 trait、adapter 类型或 SQLx crate 名称推断。SQLite 原生路径覆盖缓冲/流式查询、异步结果集、通用 execute、普通与 prepared 更新/批处理及 ReturnGeneratedKeys 查询/更新；列名/列索引生成键选择仍精确返回 `0A000`。PostgreSQL 18.6、MySQL 8.0.36 真实连接和 Any 包装 SQLite 的 fallback 分别验证明确不支持，不会误报 SQLite 原生能力。
+
+新增普通 batch 与 prepared batch 的活动取消合同：取消原因保留为 `HY008`，失败 entry 不报告完成计数且没有部分写入。当前定向验证结果：
+
+- `cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test --locked --offline`：21 passed、2 ignored（需真实 PostgreSQL/MySQL 环境的负向用例；既有真实版本结果如上记录）。
+- `cargo test -p druid-wrapper --features sqlx --lib cancellation_cleanup_tests --locked --offline`：5 passed。
+- `cargo test -p druid-wrapper --features sqlx --lib any_backend_cancellation_is_exactly_not_supported --locked --offline`：1 passed。
+- `cargo fmt -p druid-wrapper -- --check`、`git diff --check`：通过。
+
+4.4 已关闭。4.5 仍需记录真实 SQLite runtime 版本、VM 执行终态及取消后的连接处置；4.6 仍需完成矩阵中逐路径正/负向回归与代理回归；4.7 仍需同步用户用法文档和最终证据。该矩阵不宣称 PostgreSQL/MySQL 支持执行中取消，也不代表取消批、JDBC 全面对齐或项目生产就绪。
+
+4.4 源码 SHA-256：
+
+| 文件 | SHA-256 |
+|---|---|
+| `crates/druid-wrapper/src/sqlx/sqlx_connection_adapter.rs` | `8D3F7984C55484499AD61E8C8F6811D15B88617429A3F5E3C23C3EC21798E62D` |
+| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `7B8AE8DA0D41A639A6D46461F715AFA48C49935B250BDA230E7E9B20C2985DBD` |
 
 ## 4.3 进展：未确认执行清理时丢弃 owner
 

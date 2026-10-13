@@ -961,6 +961,126 @@ async fn sqlite_statement_deadline_cleans_up_before_connection_reuse() {
     connection.close().await.unwrap();
 }
 
+/// SQLite ordinary batch 的当前 entry 必须接收取消，且不伪报已完成计数。
+#[tokio::test]
+async fn cancellation_interrupts_running_sqlite_statement_batch_entry() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    connection
+        .exec(
+            "CREATE TABLE statement_batch_cancelled (value INTEGER)",
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    let mut statement = connection
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    statement
+        .add_batch(
+            "WITH RECURSIVE counter(value) AS (VALUES(1) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000) INSERT INTO statement_batch_cancelled SELECT value FROM counter".to_owned(),
+        )
+        .unwrap();
+    let cancellation = statement
+        .cancellation_control()
+        .expect("SQLite batch statement exposes cancellation");
+    let cancel_task = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        cancellation.cancel().await
+    });
+
+    let result = tokio::time::timeout(Duration::from_secs(5), statement.execute_batch())
+        .await
+        .expect("cancelled batch must finish within the test budget");
+    assert_batch_cancelled_without_completed_entries(result.unwrap_err());
+    cancel_task
+        .await
+        .expect("cancel task must finish")
+        .expect("cancellation request must be accepted");
+    assert_eq!(
+        connection
+            .fetch("SELECT COUNT(*) FROM statement_batch_cancelled", Vec::new())
+            .await
+            .unwrap()[0]
+            .values,
+        vec![Value::Int(0)]
+    );
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// SQLite prepared batch 每个参数集都使用同一执行取消代次并保留精确失败计数。
+#[tokio::test]
+async fn cancellation_interrupts_running_sqlite_prepared_batch_entry() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    connection
+        .exec(
+            "CREATE TABLE prepared_batch_cancelled (value INTEGER)",
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    let mut statement = connection
+        .prepare_statement(
+            "WITH RECURSIVE counter(value) AS (VALUES(1) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000) INSERT INTO prepared_batch_cancelled SELECT ? FROM counter",
+            StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    statement
+        .set_parameter(PreparedParameter {
+            index: ParameterIndex::new(1).unwrap(),
+            value: Value::Int(7),
+        })
+        .unwrap();
+    statement.add_prepared_batch().unwrap();
+    let cancellation = statement
+        .cancellation_control()
+        .expect("SQLite prepared batch exposes cancellation");
+    let cancel_task = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        cancellation.cancel().await
+    });
+
+    let result = tokio::time::timeout(Duration::from_secs(5), statement.execute_prepared_batch())
+        .await
+        .expect("cancelled prepared batch must finish within the test budget");
+    assert_batch_cancelled_without_completed_entries(result.unwrap_err());
+    cancel_task
+        .await
+        .expect("cancel task must finish")
+        .expect("cancellation request must be accepted");
+    assert_eq!(
+        connection
+            .fetch("SELECT COUNT(*) FROM prepared_batch_cancelled", Vec::new())
+            .await
+            .unwrap()[0]
+            .values,
+        vec![Value::Int(0)]
+    );
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+fn assert_batch_cancelled_without_completed_entries(error: RdbcError) {
+    let RdbcError::BatchUpdateException {
+        update_counts,
+        cause,
+    } = error
+    else {
+        panic!("expected a batch exception that preserves the cancellation cause");
+    };
+    assert!(update_counts.large().is_empty());
+    assert!(matches!(
+        cause.as_ref(),
+        RdbcError::SqlException(sql_error) if sql_error.sql_state() == Some("HY008")
+    ));
+}
+
 /// PostgreSQL 当前没有接入独立取消通道；真实后端必须精确拒绝，而不能返回空操作句柄。
 #[tokio::test]
 #[ignore = "requires DRUID_DATABASE_URL pointing to a live PostgreSQL service"]
