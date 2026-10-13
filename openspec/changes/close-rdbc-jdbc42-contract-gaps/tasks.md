@@ -6,7 +6,7 @@
 
 - 进度：25/46 项完成（1.1–1.5、2.1–2.4、3.1–3.5、4.1–4.7、5.1、6.1–6.3）；其余 21 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
 - 取消批证据见 [取消合同证据](evidence/cancellation-contract.md) 和 [SQLx 取消能力矩阵](evidence/sqlx-cancellation-capability-matrix.md)：SQLite runtime 3.46.0 VM 执行中断及同物理连接复用、批处理与结果集入口、清理屏障、Future drop/owner 关闭竞态及连接池精确丢弃计数、PostgreSQL/MySQL/Any/生成键选择精确 `0A000`、三类池化代理的真实租约/缓存隔离及取消代次测试均有记录；取消批 4.1–4.7 已关闭。
-- SQLx 后端×执行入口矩阵、真实 SQLite 执行终态与连接处置、逐路径支持/不支持测试、三类池化代理生命周期回归和用户文档已完成；XA 中立标准 API、JDK 8 常量/分支状态机及 6.3 扫描、身份、超时和示例 owner 失效均有独立证据。真实 JDBC Agent/数据库 XA 恢复仍由 6.4 验收，当前缺少 XA 后端实现，不能以示例代替。取消范围保持关闭。
+- SQLx 后端×执行入口矩阵、真实 SQLite 执行终态与连接处置、逐路径支持/不支持测试、三类池化代理生命周期回归和用户文档已完成；XA 中立标准 API、JDK 8 常量/分支状态机及 6.3 扫描、身份、超时和示例 owner 失效均有独立证据。6.4 探测已证实 H2 2.3.232 不满足断开后恢复，并以 PostgreSQL 18.6 Testcontainers + pgjdbc 42.7.14 通过独立 JDBC 恢复试验；Agent 协议接入及端到端重建会话恢复仍未实现。探测记录见 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md)。取消范围保持关闭。
 - 每批只运行该批目标测试和直接受影响的回归；达到表格中的停止点即停并报告。最终综合门禁只在第 9 批运行一次，不循环重跑已通过的全量命令。
 - 真实后端、Java 8 或 XA 环境不可用时，相关任务记为 `NOT_RUN` 并说明阻断，不用 mock、编译成功或其他版本的 oracle 替代实际证据，也不自动安装依赖或扩大时间预算。
 - 范围仅限本变更列出的七项能力、MC-06 的资源/结果集方法级验收及证据门禁。MC-06 只要求把现有后端能力和缺口准确分级，不要求所有后端实现所有 JDBC 扩展。额外发现登记到后续清单，不自动加任务；关闭本变更不代表 P04–P07、全 JDBC/TCK 合规或整个项目生产就绪。
@@ -96,11 +96,11 @@
   - `isSameRM` 使用稳定 RM 身份凭证：共享凭证的不同连接句柄为 true；相同显示名称/连接属性但身份不同或未知为 false。身份 API 由外部最小消费者编译验证，默认实现保持既有外部 `XaResource` 实现的源兼容。
   - 所有资源操作在 owner 关闭后明确失败，不能触达已释放连接或改变分支；驱动拒绝超时设置时返回 false，读取值不得伪称新超时生效，并覆盖零值语义。
   - 本项只证明标准合同/示例资源的协议语义；示例、mock 和外部编译测试不能证明 JDBC Agent 或真实数据库恢复，后者只由 6.4 验收。（XA-03、XA-04）
-- [ ] 6.4 建立并验证真实 JDBC Agent XA 后端闭环：
+- [ ] 6.4 建立并验证真实 JDBC Agent XA 后端闭环（PostgreSQL 18.6 Testcontainers + pgjdbc 42.7.14 已通过独立 JDBC 能力探测；6.4 仍未完成）：
   - Agent 必须通过明确配置的 `XADataSource` 创建 session，session 同时拥有 JDBC `XAConnection`、逻辑 `Connection` 和驱动 `XAResource`；普通 `DriverManager` 连接不得被包装成 XA。
   - Agent 协议无损传递完整 Xid 字节、flags、prepare 投票、recover 分页和 XA 错误码；XA 操作与逻辑连接 SQL 共用同一 session/资源管理器，关闭逻辑连接不能提前关闭 XA owner，关闭 owner 必须使所有句柄失效。
-  - 先添加 Java Agent 协议回归和真实 H2 XA 集成测试：start→SQL 写入→end→prepare，关闭原 XA session，再创建新 session 执行 recover→commit 或 rollback；最后使用普通 JDBC 会话读取最终数据库状态，并验证完整 Xid 与事务结果。
-  - 记录 H2/驱动/Java 版本、XADataSource 类、数据库 URL 模式、协议请求、命令、退出码及源码哈希。若 H2 不支持该恢复语义，保留失败证据并选用已经具备 XA 支持的实际 Testcontainers 数据源；不得用内存 ledger、mock 或同一连接中的非恢复事务替代。（XA-01–04、MC-02）
+  - 增加 Java Agent 协议回归和真实 PostgreSQL XA 集成：start→SQL 写入→end→prepare，关闭原 XA session，再创建新 session 执行 recover→commit 或 rollback；最后使用普通 JDBC 会话读取最终数据库状态，并验证完整 Xid 与事务结果。
+  - Agent 接入实现前的独立 JDBC 探测命令、H2 不支持结果、PostgreSQL 实际结果和源码哈希见 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md)。Agent 协议请求及源码身份尚待补充；不得用内存 ledger、mock 或同一连接中的非恢复事务替代端到端证据。（XA-01–04、MC-02）
 - [ ] 6.5 更新 XA 资源接入、错误和恢复示例，迁移 Druid 原有消费者；运行标准协议、实际后端与不支持后端合同，核验资源名称未代替操作能力后结束本批。（XA-01–04、MC-03）
 
 ## 7. 补齐公共数据源配置
