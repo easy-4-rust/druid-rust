@@ -28,6 +28,34 @@ def report(item: str, line: int = 4) -> str:
 
 
 class BreakingApiAllowlistTest(unittest.TestCase):
+    def test_method_arity_map_requires_exact_owner_and_shift_counts(self) -> None:
+        arity_report = (
+            "--- failure method_parameter_count_changed: pub method parameter count changed ---\n"
+            "Failed in:\n"
+            "  druid::core::Owner::read takes 1 parameters in old.rs:1, "
+            "but now takes 0 parameters in new.rs:2\n"
+            "  druid::core::alias::Owner::write takes 2 parameters in old.rs:3, "
+            "but now takes 1 parameters in new.rs:4\n"
+            "Summary semver requires new major version: 1 major and 0 minor checks failed\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "contract_test.rs").write_text("// contract\n", encoding="utf-8")
+            mapping = root / "arity.tsv"
+            header = "owner\tfindings\tshifts\ttest_files\n"
+            row = "Owner\t2\t1>0:1;2>1:1\tcontract_test.rs\n"
+            mapping.write_text(header + row, encoding="utf-8")
+            verifier.verify_method_arity_migration_map(arity_report, mapping, root)
+            for invalid in (
+                header,
+                header + row.replace("Owner", "Other"),
+                header + row.replace("2>1:1", "2>1:2"),
+                header + row.replace("contract_test.rs", "missing.rs"),
+            ):
+                mapping.write_text(invalid, encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    verifier.verify_method_arity_migration_map(arity_report, mapping, root)
+
     def test_struct_migration_map_binds_each_removed_type_to_a_real_target(self) -> None:
         struct_report = (
             "--- failure struct_missing: pub struct removed or renamed ---\n"

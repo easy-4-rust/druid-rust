@@ -8,6 +8,7 @@ import csv
 import hashlib
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
@@ -31,6 +32,11 @@ STRUCT_FINDING = re.compile(
     r"(?m)^  struct (druid::[A-Za-z0-9_:]+), previously in file ([^\n]+)$"
 )
 STRUCT_TRANSITIONS = {"STANDARD_PORT", "PRIVATE_OWNER", "RENAMED"}
+ARITY_MAP_HEADER = ("owner", "findings", "shifts", "test_files")
+ARITY_FINDING = re.compile(
+    r"(?m)^  (druid::[A-Za-z0-9_:]+)::([A-Za-z0-9_]+) takes ([0-9]+) "
+    r"parameters in [^\n]+, but now takes ([0-9]+) parameters in [^\n]+$"
+)
 
 
 def findings_by_lint(report: str, exit_code: int) -> dict[str, tuple[int, str]]:
@@ -190,11 +196,71 @@ def verify_struct_migration_map(report: str, path: Path, root: Path) -> None:
         )
 
 
+def verify_method_arity_migration_map(report: str, path: Path, root: Path) -> None:
+    """Bind changed call arities to exact owner and old/new arity counts."""
+    report = ANSI_ESCAPE.sub("", report)
+    sections = list(SECTION.finditer(report))
+    matching = [
+        index for index, match in enumerate(sections)
+        if match.group(1) == "method_parameter_count_changed"
+    ]
+    if len(matching) != 1:
+        raise ValueError("expected one druid/method_parameter_count_changed report section")
+    index = matching[0]
+    end = sections[index + 1].start() if index + 1 < len(sections) else len(report)
+    body = report[sections[index].end() : end]
+    findings = ARITY_FINDING.findall(body)
+    finding_lines = [line for line in body.splitlines() if line.startswith("  druid::")]
+    if not findings or len(findings) != len(finding_lines):
+        raise ValueError("method arity findings are empty or unrecognized")
+    observed: dict[str, Counter[str]] = {}
+    for owner_path, _, old, new in findings:
+        owner = owner_path.rsplit("::", 1)[-1]
+        observed.setdefault(owner, Counter())[f"{old}>{new}"] += 1
+
+    with path.open(encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        if tuple(reader.fieldnames or ()) != ARITY_MAP_HEADER:
+            raise ValueError("method arity map has an unexpected TSV header")
+        rows = list(reader)
+    mapped: set[str] = set()
+    for row in rows:
+        owner = row["owner"]
+        if owner in mapped:
+            raise ValueError(f"duplicate method arity owner: {owner}")
+        mapped.add(owner)
+        test_paths = row["test_files"].split(";")
+        if not test_paths or len(test_paths) != len(set(test_paths)):
+            raise ValueError(f"duplicate or empty method arity test_files: {owner}")
+        for test_path in test_paths:
+            relative = Path(test_path)
+            if relative.is_absolute() or ".." in relative.parts or relative.suffix != ".rs":
+                raise ValueError(f"invalid method arity test_file: {owner}")
+            if not (root / relative).is_file():
+                raise ValueError(f"missing method arity test_file: {owner}:{relative}")
+        shifts: Counter[str] = Counter()
+        for entry in row["shifts"].split(";"):
+            if not re.fullmatch(r"[0-9]+>[0-9]+:[1-9][0-9]*", entry):
+                raise ValueError(f"invalid method arity shift: {owner}:{entry}")
+            shift, count = entry.split(":", 1)
+            if shift in shifts:
+                raise ValueError(f"duplicate method arity shift: {owner}:{shift}")
+            shifts[shift] = int(count)
+        if int(row["findings"]) != sum(shifts.values()) or shifts != observed.get(owner):
+            raise ValueError(f"method arity profile mismatch: {owner}")
+    if mapped != set(observed):
+        raise ValueError(
+            f"method arity owners mismatch: missing={sorted(set(observed) - mapped)} "
+            f"extra={sorted(mapped - set(observed))}"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--allowlist", type=Path, required=True)
     parser.add_argument("--module-migration-map", type=Path)
     parser.add_argument("--struct-migration-map", type=Path)
+    parser.add_argument("--arity-migration-map", type=Path)
     for short, crate in (("rdbc", "druid-rdbc"), ("druid", "druid"), ("wrapper", "druid-wrapper")):
         parser.add_argument(f"--{short}-report", type=Path, required=True)
         parser.add_argument(f"--{short}-exit-code", type=int, required=True)
@@ -236,6 +302,14 @@ def main() -> int:
         verify_struct_migration_map(
             args.druid_report.read_text(encoding="utf-8"),
             args.struct_migration_map,
+            Path(__file__).resolve().parent.parent,
+        )
+    if ("druid", "method_parameter_count_changed") in actual:
+        if args.arity_migration_map is None:
+            raise ValueError("druid/method_parameter_count_changed requires an exact arity migration map")
+        verify_method_arity_migration_map(
+            args.druid_report.read_text(encoding="utf-8"),
+            args.arity_migration_map,
             Path(__file__).resolve().parent.parent,
         )
     missing = sorted(actual.keys() - allowlist.keys())

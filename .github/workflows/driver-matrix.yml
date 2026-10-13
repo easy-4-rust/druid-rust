@@ -498,6 +498,7 @@ jobs:
             --allowlist api/rdbc-single-standard-breaking.allowlist.tsv \
             --module-migration-map api/druid-module-migration.tsv \
             --struct-migration-map api/druid-struct-migration.tsv \
+            --arity-migration-map api/druid-method-arity-migration.tsv \
             --rdbc-report api/observed/druid-rdbc.semver-checks.txt --rdbc-exit-code "$rdbc_status" \
             --druid-report api/observed/druid.semver-checks.txt --druid-exit-code "$druid_status" \
             --wrapper-report api/observed/druid-wrapper.semver-checks.txt --wrapper-exit-code "$wrapper_status"
