@@ -317,7 +317,7 @@ jobs:
           POSTGRES_PASSWORD: druid_contract
           POSTGRES_DB: druid
         ports:
-          - 5432/tcp
+          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U druid -d druid"
           --health-interval 2s
@@ -336,7 +336,7 @@ jobs:
           DRUID_DATABASE_BAD_URL: postgres://druid:wrong_password@127.0.0.1:${{ job.services.database.ports['5432'] }}/druid
           DRUID_CONTRACT_LONG_QUERY: SELECT pg_sleep(30)
           DRUID_CONTRACT_RESTART_PROGRAM: bash
-          DRUID_CONTRACT_RESTART_ARGS_JSON: '["${{ github.workspace }}/scripts/restart_contract_service.sh","${{ job.services.database.id }}"]'
+          DRUID_CONTRACT_RESTART_ARGS_JSON: '["${{ github.workspace }}/scripts/restart_contract_service.sh","${{ job.services.database.id }}","5432"]'
           DRUID_CONTRACT_TARGET: x86_64-unknown-linux-gnu
           DRUID_CONTRACT_RUST_VERSION: "1.97.1"
           DRUID_CONTRACT_EVIDENCE_PATH: ${{ github.workspace }}/target/contract-evidence/postgresql.json
@@ -371,7 +371,7 @@ jobs:
           MYSQL_USER: druid
           MYSQL_PASSWORD: druid_contract
         ports:
-          - 3306/tcp
+          - 3306:3306
         options: >-
           --health-cmd "mysqladmin ping -h 127.0.0.1 --silent"
           --health-interval 2s
@@ -390,7 +390,7 @@ jobs:
           DRUID_DATABASE_BAD_URL: mysql://druid:wrong_password@127.0.0.1:${{ job.services.database.ports['3306'] }}/druid
           DRUID_CONTRACT_LONG_QUERY: SELECT SLEEP(30)
           DRUID_CONTRACT_RESTART_PROGRAM: bash
-          DRUID_CONTRACT_RESTART_ARGS_JSON: '["${{ github.workspace }}/scripts/restart_contract_service.sh","${{ job.services.database.id }}"]'
+          DRUID_CONTRACT_RESTART_ARGS_JSON: '["${{ github.workspace }}/scripts/restart_contract_service.sh","${{ job.services.database.id }}","3306"]'
           DRUID_CONTRACT_TARGET: x86_64-unknown-linux-gnu
           DRUID_CONTRACT_RUST_VERSION: "1.97.1"
           DRUID_CONTRACT_EVIDENCE_PATH: ${{ github.workspace }}/target/contract-evidence/mysql.json

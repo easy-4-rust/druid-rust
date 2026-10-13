@@ -306,7 +306,16 @@ async fn verify_database_restart_if_configured(
         tokio::time::timeout(Duration::from_secs(10), resolved.factory().create())
             .await
             .expect("数据库重启后原生建连必须在截止时间内完成")
-            .expect("数据库重启后原生建连必须成功");
+            .unwrap_or_else(|error| {
+                eprintln!(
+                    "contract-stage: restart-direct-connect-error class={} sql-state={:?}",
+                    error.class_name(),
+                    error
+                        .sql_exception()
+                        .and_then(|exception| exception.sql_state())
+                );
+                panic!("数据库重启后原生建连必须成功");
+            });
     tokio::time::timeout(Duration::from_secs(10), direct_connection.ping())
         .await
         .expect("数据库重启后原生 ping 必须在截止时间内完成")
@@ -343,12 +352,14 @@ async fn verify_database_restart_if_configured(
     let mut connection = match acquisition {
         Ok(connection) => connection,
         Err(error) => {
+            let last_create_class = pool
+                .last_create_error()
+                .as_ref()
+                .map(|last_error| last_error.class_name().to_owned());
             eprintln!(
-                "contract-stage: restart-pool-get-error kind={:?} last-create-kind={:?} state={:?}",
-                std::mem::discriminant(&error),
-                pool.last_create_error()
-                    .as_ref()
-                    .map(std::mem::discriminant),
+                "contract-stage: restart-pool-get-error class={} last-create-class={:?} state={:?}",
+                error.class_name(),
+                last_create_class,
                 pool.state()
             );
             panic!("数据库重启后必须能重新建连");
