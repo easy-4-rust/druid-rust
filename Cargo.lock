@@ -1781,6 +1781,7 @@ version = "0.0.0-design"
 dependencies = [
  "criterion",
  "druid",
+ "druid-rdbc",
  "druid-wrapper",
  "futures",
  "tokio",

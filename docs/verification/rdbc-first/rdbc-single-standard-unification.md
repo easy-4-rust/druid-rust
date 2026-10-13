@@ -55,7 +55,7 @@
 | 6. 六项error waiver | NOT_VERIFIED | Task1既有接受记录保留；最终phase门禁与当前全部错误传播证据需在完整验收链确认，不由文档认定PASS |
 | 7. index/null/default/error/metadata/resource共享conformance | INCOMPLETE | C1/C2固定方法/原测试迁移通过；Task7资源1-based、SQLXML、capability、取消及真实streaming仍有八项义务 |
 | 8. public API/SemVer/external implementor/迁移与allowlist一致 | NOT_VERIFIED | external consumer既有运行证据保留；精确breaking allowlist、最终API与真实SemVer报告未交付，工具授权仍待处理 |
-| 9. Java差分与真实DB支持每项true capability | INCOMPLETE | SQLite历史限定合同不等于全adapter认证；正式Java/Rust差分目标及各数据库真实凭据/服务/行为证据未齐备 |
+| 9. Java差分与真实DB支持每项true capability | INCOMPLETE | `druid-bench` 已新增 Java 8 `JDBCType` 39 项名称、供应方、编号及 Rust 反向查找的同输入差分，本地目标测试 1/1 PASS；Java Druid 1.2.28 的输出/错误/状态/副作用/清理差分及各数据库真实凭据/服务/行为证据仍未齐备 |
 | 10. fmt/check/clippy/test/doc/features/MSRV/DAG全部通过 | CONTRADICTED | 最近完整全features回归3869/43、全部后续目标及doctest已执行，该1099冻结早于当前1104输入；当前全workspace runtime未验收。当前fmt与严格Clippy实际exit0；文档生成历史1092冻结exit0，当前输入未复验；MSRV1.95、feature矩阵、DAG及其余最终质量门禁仍未齐备 |
 
 上述PROVED只用于第2节的具体命令范围，不自动升级第3节的复合要求。尚无整个ADR-RDBC-006完成证明。
@@ -83,7 +83,7 @@
 | README及status/架构文档一致性 | README已有实际拓扑；架构长文已按当前标准Connection、实际external lease及manifest依赖更新，并区分当前依赖与批准目标。局部链接、闭合代码块及manifest事实检查通过，Mermaid未渲染；最终跨文档一致性与Task8整体仍未验收。见[文档检查证据](../../../.superpowers/sdd/2026-08-24-rdbc-single-standard-unification/task6-e-space-architecture-doc-standard-refresh.summary.json) |
 | breaking allowlist与两份SemVer报告 | 未完成，不能生成空报告或手写PASS替代工具输出 |
 | breaking API验证脚本 | 未完成，需要精确extra/missing finding合同与真实工具输入 |
-| Java/Rust JDBC42 differential目标 | 未完成，需要真实Java oracle与Rust同输入比较 |
+| Java/Rust JDBC42 differential目标 | 已新增真实 Java 8 oracle 与 Rust 39 项 SQL 类型差分，`cargo test -p druid-bench --locked --test java_rust_jdbc42_differential` 本地 1/1 PASS；其余 Java Druid 1.2.28 行为差分仍未完成 |
 | adapter benchmark | 源文件存在，尚无最终真实性能认证 |
 
 ## 6. 后续关闭顺序

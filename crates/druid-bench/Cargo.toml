@@ -18,6 +18,7 @@ tokio         = { workspace = true }
 futures       = { workspace = true }
 
 [dev-dependencies]
+druid-rdbc = { version = "0.0.0-design", path = "../druid-rdbc" }
 druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false, features = ["sqlite"] }
 
 [features]
@@ -27,6 +28,7 @@ wrapper = ["dep:druid-wrapper"]
 [[bench]]
 name = "pool"
 harness = false
+required-features = ["wrapper"]
 
 [[bench]]
 name = "filter_chain"

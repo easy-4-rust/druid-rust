@@ -2,11 +2,15 @@
 
 #![allow(clippy::all)]
 
+#[cfg(feature = "wrapper")]
 use std::time::Duration;
 
-use druid::pool::{DruidDataSource, DruidPool};
+#[cfg(feature = "wrapper")]
+use druid::pool::DruidDataSource;
+use druid::pool::DruidPool;
 
-/// Build a minimal SQLite-backed Druid pool for benchmarking.
+/// 按 `name` 构建 SQLite 基准连接池，返回可用于借还连接测试的数据源。
+#[cfg(feature = "wrapper")]
 pub fn build_sqlite_pool(name: &'static str) -> DruidDataSource {
     let mut props = std::collections::HashMap::new();
     props.insert("name".to_owned(), name.to_owned());
@@ -38,7 +42,7 @@ pub fn build_sqlite_pool(name: &'static str) -> DruidDataSource {
         .expect("bench pool must build")
 }
 
-/// Borrow a connection (Drop returns it to pool).
+/// 从 `pool` 借出连接；作用域结束时归还连接。
 pub async fn bench_borrow_return(pool: &DruidPool) {
     let _conn = pool.get_connection().await.expect("borrow");
 }
