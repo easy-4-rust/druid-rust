@@ -190,7 +190,10 @@ mod tests {
     use druid_rdbc::types::Value;
     use serde_json::{json, Value as JsonValue};
 
-    struct DeterministicJdbcAgentConnector;
+    #[derive(Default)]
+    struct DeterministicJdbcAgentConnector {
+        capabilities: JsonValue,
+    }
 
     #[async_trait::async_trait]
     impl JdbcAgentConnector for DeterministicJdbcAgentConnector {
@@ -206,7 +209,7 @@ mod tests {
                     "driverName": "deterministic-jdbc",
                     "databaseProductName": "Deterministic JDBC",
                     "autoCommit": true,
-                    "capabilities": {}
+                    "capabilities": self.capabilities
                 }),
             ))
         }
@@ -263,7 +266,7 @@ mod tests {
         let mut factory = JdbcAgentConnectionFactory::with_connector(
             "jdbc:deterministic:test",
             JdbcAgentOptions::new("deterministic-agent"),
-            Arc::new(DeterministicJdbcAgentConnector),
+            Arc::new(DeterministicJdbcAgentConnector::default()),
         );
         let (trace_probe, trace_expectation) = factory.enable_task4_runtime_trace();
         let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
@@ -333,5 +336,24 @@ mod tests {
         Connection::close(connection.as_mut()).await.unwrap();
         assert_eq!(snapshot.column_count(), 1);
         crate::task4_runtime_trace::verify_and_emit(trace_probe, trace_expectation).unwrap();
+    }
+
+    #[tokio::test]
+    async fn jdbc_agent_never_advertises_savepoints_without_transactions() {
+        let factory = JdbcAgentConnectionFactory::with_connector(
+            "jdbc:deterministic:test",
+            JdbcAgentOptions::new("deterministic-agent"),
+            Arc::new(DeterministicJdbcAgentConnector {
+                capabilities: json!({"transactions": false, "savepoints": true}),
+            }),
+        );
+        let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+            .await
+            .expect("create synthetic agent connection");
+        assert!(!connection.capabilities().transactions);
+        assert!(!connection.capabilities().savepoints);
+        Connection::close(connection.as_mut())
+            .await
+            .expect("close synthetic agent connection");
     }
 }

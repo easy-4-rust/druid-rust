@@ -148,7 +148,8 @@ impl JdbcAgentConnection {
             client: Some(client),
             capabilities: druid_rdbc::extensions::ConnectionCapabilities {
                 transactions: supports_transactions,
-                savepoints: capability("savepoints"),
+                // 保存点只能存在于事务中；协议返回矛盾能力时按可执行的交集声明。
+                savepoints: supports_transactions && capability("savepoints"),
                 catalogs: capability("catalog"),
                 schemas: capability("schema"),
                 // Agent 协议尚未提供 prepare_call；不能把 JDBC 驱动本身的能力
