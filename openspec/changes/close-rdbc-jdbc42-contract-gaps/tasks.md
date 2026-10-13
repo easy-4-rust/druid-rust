@@ -4,7 +4,7 @@
 
 ## 当前状态与执行边界
 
-- 进度：28/50 项完成（1.1–1.5、2.1–2.4、3.1–3.5、4.1–4.7、5.1–5.4、6.1–6.3）；其余 22 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
+- 进度：30/50 项完成；6.5.1 已由 Rust XA RPC 合同与普通载荷兼容测试关闭，阶段证据见 [Rust XA 客户端证据](evidence/xa-rust-client.md)。其余 20 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
 - 取消批证据见 [取消合同证据](evidence/cancellation-contract.md) 和 [SQLx 取消能力矩阵](evidence/sqlx-cancellation-capability-matrix.md)：SQLite runtime 3.46.0 VM 执行中断及同物理连接复用、批处理与结果集入口、清理屏障、Future drop/owner 关闭竞态及连接池精确丢弃计数、PostgreSQL/MySQL/Any/生成键选择精确 `0A000`、三类池化代理的真实租约/缓存隔离及取消代次测试均有记录；取消批 4.1–4.7 已关闭。
 - SQLx 后端×执行入口矩阵、真实 SQLite 执行终态与连接处置、逐路径支持/不支持测试、三类池化代理生命周期回归和用户文档已完成；XA 中立标准 API、JDK 8 常量/分支状态机及 6.3 扫描、身份、超时和示例 owner 失效均有独立证据。6.4 探测已证实 H2 2.3.232 不满足断开后恢复，并以 PostgreSQL 18.6 Testcontainers + pgjdbc 42.7.14 通过独立 JDBC 恢复试验；Agent 协议接入及端到端重建会话恢复仍未实现。探测记录见 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md)。取消范围保持关闭。
 - 每批只运行该批目标测试和直接受影响的回归；达到表格中的停止点即停并报告。最终综合门禁只在第 9 批运行一次，不循环重跑已通过的全量命令。
@@ -115,7 +115,7 @@
   - Agent 协议无损传递完整 Xid 字节、flags、prepare 投票、recover 分页和 XA 错误码；XA 操作与逻辑连接 SQL 共用同一 session/资源管理器，关闭逻辑连接不能提前关闭 XA owner，关闭 owner 必须使所有句柄失效。
   - 增加 Java Agent 协议回归和真实 PostgreSQL XA 集成：start→SQL 写入→end→prepare，关闭原 XA session，再创建新 session 执行 recover→commit 或 rollback；最后使用普通 JDBC 会话读取最终数据库状态，并验证完整 Xid 与事务结果。
   - Agent 接入实现前的独立 JDBC 探测命令、H2 不支持结果、PostgreSQL 实际结果和源码哈希见 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md)。本任务只关闭 JDBC Agent 与 PostgreSQL 的协议闭环，不代表 RDBC `XaDataSource` 的 PostgreSQL 客户端适配器、Druid 事务管理器端到端集成或 6.5 消费者/文档验收已经完成。（XA-01–04、MC-02）
-- [ ] 6.5.1 先为 Rust Agent 客户端添加 XA RPC 的失败合同测试，覆盖 start/end/prepare/commit/rollback/forget/recover、超时、资源身份和结构化错误；确认普通 session 的 fail-closed 行为，并核对不改变现有普通连接握手载荷。（XA-05、MC-03）
+- [x] 6.5.1 为 Rust Agent 客户端增加 XA RPC 合同测试，覆盖 start/end/prepare/commit/rollback/forget/recover、超时、资源身份和结构化错误；普通 session 在发送 RPC 前精确 fail closed 为 `0A000`。捕获并断言既有普通 `open_session` 载荷，运行时握手实现未改动；测试命令、结果和源码身份见 [Rust XA 客户端证据](evidence/xa-rust-client.md)。假传输证据不关闭 6.5.2–6.5.5。（XA-05、MC-03）
 - [ ] 6.5.2 实现显式 XA 数据源配置与标准 `XaResource` 获取入口，将 XA 操作路由到对应 Agent session；验证 Xid 字节、flags、投票和错误码往返不变，未声明或未协商能力返回精确 `0A000`。（XA-01、XA-02、XA-05）
 - [ ] 6.5.3 验证逻辑连接、XA owner、底层传输和池化租约的关闭顺序；关闭逻辑连接后 XA owner 按合同继续有效，关闭 owner 后所有句柄失效；覆盖连接池归还、失败处置及重复关闭，不允许资源跨租约复用。（XA-04、XA-05、PE-02、MC-06）
 - [ ] 6.5.4 使用已通过 6.4 的 PostgreSQL Testcontainers 配置，从 Rust RDBC 消费入口完成 start→SQL 写入→end→prepare→关闭 session→新 session recover→commit/rollback，并以独立 JDBC 连接核对数据库最终状态；同时运行普通模式和明确不支持 XA 的负向测试。记录精确命令、版本、退出码和源码哈希；环境缺失记 `NOT_RUN`，本任务不得用 Agent Java 协议测试代替 Rust 端到端证据。（XA-03、XA-05、MC-02）

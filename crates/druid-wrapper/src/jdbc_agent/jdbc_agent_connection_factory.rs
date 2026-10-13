@@ -193,6 +193,7 @@ mod tests {
     #[derive(Default)]
     struct DeterministicJdbcAgentConnector {
         capabilities: JsonValue,
+        open_session_payloads: Option<Arc<std::sync::Mutex<Vec<JsonValue>>>>,
     }
 
     #[async_trait::async_trait]
@@ -200,8 +201,11 @@ mod tests {
         async fn connect(
             &self,
             _options: JdbcAgentOptions,
-            _payload: JsonValue,
+            payload: JsonValue,
         ) -> Result<(Box<dyn JdbcAgentTransport>, JsonValue), RdbcError> {
+            if let Some(payloads) = &self.open_session_payloads {
+                payloads.lock().expect("payloads lock").push(payload);
+            }
             Ok((
                 Box::new(DeterministicJdbcAgentTransport { closed: false }),
                 json!({
@@ -345,6 +349,7 @@ mod tests {
             JdbcAgentOptions::new("deterministic-agent"),
             Arc::new(DeterministicJdbcAgentConnector {
                 capabilities: json!({"transactions": false, "savepoints": true}),
+                open_session_payloads: None,
             }),
         );
         let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
@@ -355,5 +360,45 @@ mod tests {
         Connection::close(connection.as_mut())
             .await
             .expect("close synthetic agent connection");
+    }
+
+    #[tokio::test]
+    async fn ordinary_open_session_payload_keeps_the_existing_contract() {
+        let payloads = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let factory = JdbcAgentConnectionFactory::new(
+            "jdbc:deterministic:test",
+            Some("SELECT 1".to_owned()),
+            JdbcAgentOptions::new("deterministic-agent"),
+        )
+        .user_name("ordinary-user")
+        .password("ordinary-password")
+        .property("applicationName", "ordinary-client");
+        let factory = JdbcAgentConnectionFactory {
+            connector: Arc::new(DeterministicJdbcAgentConnector {
+                open_session_payloads: Some(Arc::clone(&payloads)),
+                ..DeterministicJdbcAgentConnector::default()
+            }),
+            ..factory
+        };
+
+        let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+            .await
+            .expect("create ordinary connection");
+        druid_rdbc::connection::Connection::close(connection.as_mut())
+            .await
+            .expect("close ordinary connection");
+
+        assert_eq!(
+            payloads.lock().expect("payloads lock").as_slice(),
+            [json!({
+                "url": "jdbc:deterministic:test",
+                "properties": {
+                    "applicationName": "ordinary-client",
+                    "user": "ordinary-user",
+                    "password": "ordinary-password"
+                },
+                "validationQuery": "SELECT 1"
+            })]
+        );
     }
 }

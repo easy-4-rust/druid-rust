@@ -13,6 +13,7 @@ mod jdbc_agent_options;
 mod jdbc_agent_options_error;
 mod jdbc_agent_runtime_metrics;
 mod jdbc_agent_runtime_metrics_snapshot;
+mod jdbc_agent_xa_resource;
 
 pub use agent_error::AgentError;
 pub use agent_request::AgentRequest;
