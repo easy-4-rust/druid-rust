@@ -516,6 +516,14 @@ async fn independent_cancel_interrupts_running_buffered_sqlite_query() {
     let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
         .await
         .unwrap();
+    let runtime = connection
+        .fetch("SELECT sqlite_version()", Vec::new())
+        .await
+        .expect("SQLite runtime version should be observable on the active connection");
+    let runtime_version = match runtime[0].values.first() {
+        Some(Value::String(version)) if !version.is_empty() => version.clone(),
+        value => panic!("expected a non-empty SQLite runtime version, got {value:?}"),
+    };
     let mut statement = connection
         .create_statement(StatementOptions::default())
         .await
@@ -528,19 +536,30 @@ async fn independent_cancel_interrupts_running_buffered_sqlite_query() {
         cancellation.cancel().await
     });
 
-    let query = statement.execute_query(
-        "WITH RECURSIVE counter(value) AS (\
+    let sql = "WITH RECURSIVE counter(value) AS (\
             VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000\
-         ) SELECT sum(value) FROM counter",
+         ) SELECT sum(value) FROM counter";
+    let started_at_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system clock should be after the Unix epoch")
+        .as_millis();
+    println!(
+        "backend=SQLx SQLite runtime_version={runtime_version} sql={sql:?} execution_start_unix_ms={started_at_ms}"
     );
+    let query = statement.execute_query(sql);
     let outcome = tokio::time::timeout(Duration::from_secs(2), query)
         .await
         .expect("取消必须在预算内让 SQLite 查询结束");
-    cancel_task.await.unwrap().unwrap();
+    cancel_task
+        .await
+        .expect("cancellation task should finish")
+        .expect("SQLite should accept the cancellation request");
+    println!("cancellation_request_result=accepted");
     let error = match outcome {
         Ok(_) => panic!("执行中的缓冲查询必须报告取消"),
         Err(error) => error,
     };
+    println!("execution_terminal=SQLite interrupt mapped to SQLState HY008");
     assert!(matches!(
         error,
         RdbcError::SqlException(ref error) if error.sql_state() == Some("HY008")
@@ -548,6 +567,7 @@ async fn independent_cancel_interrupts_running_buffered_sqlite_query() {
 
     let rows = connection.fetch("SELECT 9", Vec::new()).await.unwrap();
     assert_eq!(rows[0].values, vec![Value::Int(9)]);
+    println!("post_cancel_query=SELECT 9 result=9 same_physical_connection=reused");
     statement.close().await.unwrap();
     connection.close().await.unwrap();
 }

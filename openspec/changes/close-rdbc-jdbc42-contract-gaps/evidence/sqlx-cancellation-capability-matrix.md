@@ -33,7 +33,7 @@ SQLite 的以上能力共享 Statement 执行代次和原子中断信号；每�
 
 ## 未覆盖边界
 
-- 当前正向测试使用 SQLx SQLite 本地数据库；具体 SQLite runtime 版本、数据库执行终态采集和服务端/连接处置记录由 4.5 的专门证据补充，本矩阵不把本地通过提升为实库版本证明。
+- 正向测试使用实际 SQLx SQLite VM，当前本机 runtime 版本与执行终态记录见 [取消合同证据](cancellation-contract.md) 的 4.5 小节；SQLite `:memory:` 是真实嵌入式数据库执行，不代表独立数据库服务端。
 - PostgreSQL/MySQL 只验证真实连接上的 `0A000` 负向能力，不声明其执行入口具备取消能力。
 - `Any` 以 SQLite Any 驱动验证 capability gate；其他 Any backend 的连接建立与取消均为 `NOT_RUN`，仍按 `0A000` 分支处理。
 - 除表内列出的入口外，不从共享 trait、SQLx crate 名称或 adapter 类型推断取消支持。

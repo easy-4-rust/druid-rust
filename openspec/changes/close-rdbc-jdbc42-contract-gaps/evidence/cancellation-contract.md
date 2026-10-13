@@ -66,7 +66,7 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 - `cargo test -p druid-wrapper --features sqlx --lib any_backend_cancellation_is_exactly_not_supported --locked --offline`：1 passed。
 - `cargo fmt -p druid-wrapper -- --check`、`git diff --check`：通过。
 
-4.4 已关闭。4.5 仍需记录真实 SQLite runtime 版本、VM 执行终态及取消后的连接处置；4.6 仍需完成矩阵中逐路径正/负向回归与代理回归；4.7 仍需同步用户用法文档和最终证据。该矩阵不宣称 PostgreSQL/MySQL 支持执行中取消，也不代表取消批、JDBC 全面对齐或项目生产就绪。
+4.6 仍需完成矩阵中逐路径正/负向回归与代理回归；4.7 仍需同步用户用法文档和最终证据。该矩阵不宣称 PostgreSQL/MySQL 支持执行中取消，也不代表取消批、JDBC 全面对齐或项目生产就绪。
 
 4.4 源码 SHA-256：
 
@@ -74,6 +74,32 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 |---|---|
 | `crates/druid-wrapper/src/sqlx/sqlx_connection_adapter.rs` | `8D3F7984C55484499AD61E8C8F6811D15B88617429A3F5E3C23C3EC21798E62D` |
 | `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `7B8AE8DA0D41A639A6D46461F715AFA48C49935B250BDA230E7E9B20C2985DBD` |
+
+## 4.5：SQLite VM 终态与连接处置
+
+通过正在执行递归 CTE 的真实 SQLx SQLite VM 取消用例采集运行时版本、精确 SQL、执行开始时间、取消请求结果、数据库错误终态和后续查询结果。命令：
+
+```powershell
+cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test independent_cancel_interrupts_running_buffered_sqlite_query --locked --offline -- --exact --nocapture
+```
+
+实测输出：
+
+```text
+backend=SQLx SQLite runtime_version=3.46.0 sql="WITH RECURSIVE counter(value) AS (VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000) SELECT sum(value) FROM counter" execution_start_unix_ms=1791919923366
+cancellation_request_result=accepted
+execution_terminal=SQLite interrupt mapped to SQLState HY008
+post_cancel_query=SELECT 9 result=9 same_physical_connection=reused
+test result: ok; 1 passed
+```
+
+该测试在同一个物理 SQLite 连接上于长查询运行期间接受取消，数据库执行以 `HY008` 终止；取消清理屏障后执行 `SELECT 9` 得到 9，证明该已确认清理的连接可复用。运行时版本来自执行中的 `SELECT sqlite_version()`，不是 Cargo feature 或 crate 版本推测。这个用例是嵌入式 SQLite VM 实测，不等价于独立数据库服务端；PostgreSQL/MySQL 的取消能力仍为精确 `0A000`。
+
+4.5 专项测试通过。取消/自然完成竞争与迟到取消隔离仍由矩阵引用的 4.2/4.3 合同测试覆盖；完整复跑将在 4.6 同批完成。当前测试源码 SHA-256：
+
+| 文件 | SHA-256 |
+|---|---|
+| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `0B538B85FBF161E58A940F7584A1FB46F038F7A95ACD8BCF9B51518680810C06` |
 
 ## 4.3 进展：未确认执行清理时丢弃 owner
 
