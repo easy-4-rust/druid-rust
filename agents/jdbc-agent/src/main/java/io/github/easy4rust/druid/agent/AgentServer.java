@@ -43,6 +43,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.sql.XAConnection;
+import javax.sql.XADataSource;
+import javax.transaction.xa.XAResource;
 
 /** JSON-RPC 2.0 NDJSON 服务端；一个共享进程可隔离承载多个 JDBC session。 */
 @Slf4j
@@ -62,7 +65,8 @@ public final class AgentServer implements Closeable {
             "cursor-paging",
             "cancel",
             "remote-prepare",
-            "native-prepared-batch");
+            "native-prepared-batch",
+            "xa-resource");
 
     private final InputStream input;
     private final BufferedWriter output;
@@ -178,7 +182,7 @@ public final class AgentServer implements Closeable {
         }
     }
 
-    private JsonNode dispatch(AgentRequest request) throws SQLException, IOException {
+    private JsonNode dispatch(AgentRequest request) throws Exception {
         String method = request.method();
         JsonNode params = request.params();
         return switch (method) {
@@ -210,7 +214,7 @@ public final class AgentServer implements Closeable {
             String method,
             long requestId,
             AgentSession session,
-            JsonNode params) throws SQLException, IOException {
+            JsonNode params) throws Exception {
         return switch (method) {
             case "validate_connection" -> validateConnection(session, params);
             case "execute_update" -> executeUpdate(requestId, session, params);
@@ -241,6 +245,18 @@ public final class AgentServer implements Closeable {
             case "list_catalogs" -> listCatalogs(session);
             case "list_schemas" -> listSchemas(session);
             case "database_metadata" -> databaseMetadata(session);
+            case "close_logical_connection" -> closeLogicalConnection(session);
+            case "reopen_logical_connection" -> reopenLogicalConnection(session);
+            case "xa_start" -> xaStart(session, params);
+            case "xa_end" -> xaEnd(session, params);
+            case "xa_prepare" -> xaPrepare(session, params);
+            case "xa_commit" -> xaCommit(session, params);
+            case "xa_rollback" -> xaRollback(session, params);
+            case "xa_forget" -> xaForget(session, params);
+            case "xa_recover" -> xaRecover(session, params);
+            case "xa_set_timeout" -> xaSetTimeout(session, params);
+            case "xa_get_timeout" -> value(session.xaResource().getTransactionTimeout());
+            case "xa_is_same_rm" -> xaIsSameRm(session, params);
             default -> throw new UnsupportedOperationException("unsupported method " + method);
         };
     }
@@ -298,7 +314,6 @@ public final class AgentServer implements Closeable {
 
     private JsonNode openSession(JsonNode payload) throws SQLException {
         Objects.requireNonNull(payload, "connect payload");
-        String url = requiredText(payload, "url");
         Properties properties = new Properties();
         JsonNode propertyNode = payload.get("properties");
         if (Objects.nonNull(propertyNode) && propertyNode.isObject()) {
@@ -309,11 +324,24 @@ public final class AgentServer implements Closeable {
             }
         }
         String validationQuery = nullableText(payload, "validationQuery");
-        Connection connection = DriverManager.getConnection(url, properties);
+        String xaClassName = nullableText(payload, "xaDataSourceClassName");
+        Connection connection = null;
+        XAConnection xaConnection = null;
         try {
+            AgentSession session;
+            if (Objects.nonNull(xaClassName)) {
+                XADataSource dataSource = XaDataSourceFactory.create(
+                        xaClassName, payload.get("xaDataSourceProperties"));
+                xaConnection = dataSource.getXAConnection();
+                session = new AgentSession(xaConnection, validationQuery);
+                connection = session.connection();
+            } else {
+                connection = DriverManager.getConnection(requiredText(payload, "url"), properties);
+                session = new AgentSession(connection, validationQuery);
+            }
             DatabaseMetaData metadata = connection.getMetaData();
             String sessionId = UUID.randomUUID().toString();
-            sessions.put(sessionId, new AgentSession(connection, validationQuery));
+            sessions.put(sessionId, session);
             ObjectNode result = JsonNodeFactory.instance.objectNode();
             result.put("sessionId", sessionId);
             result.put("agentVersion", "0.0.0-design");
@@ -334,9 +362,14 @@ public final class AgentServer implements Closeable {
             capabilities.put("transactionIsolation", true);
             capabilities.put("catalog", supportsCatalog(metadata));
             capabilities.put("schema", supportsSchema(metadata));
+            capabilities.put("xa", session.supportsXa());
             return result;
         } catch (SQLException | RuntimeException exception) {
-            connection.close();
+            if (Objects.nonNull(xaConnection)) {
+                xaConnection.close();
+            } else if (Objects.nonNull(connection)) {
+                connection.close();
+            }
             throw exception;
         }
     }
@@ -344,16 +377,21 @@ public final class AgentServer implements Closeable {
     private JsonNode closeSession(JsonNode payload) throws IOException {
         AgentSession session = sessions.remove(requiredText(payload, "sessionId"));
         if (Objects.nonNull(session)) {
-            session.close();
+            session.operationLock().lock();
+            try {
+                session.close();
+            } finally {
+                session.operationLock().unlock();
+            }
         }
         return JsonNodeFactory.instance.objectNode();
     }
 
     private JsonNode withSession(JsonNode payload, SessionOperation operation)
-            throws SQLException, IOException {
+            throws Exception {
         String sessionId = requiredText(payload, "sessionId");
         AgentSession session = sessions.get(sessionId);
-        if (Objects.isNull(session) || session.connection().isClosed()) {
+        if (Objects.isNull(session)) {
             throw new SQLException("JDBC Agent session is not open: " + sessionId);
         }
         session.operationLock().lock();
@@ -366,7 +404,81 @@ public final class AgentServer implements Closeable {
 
     @FunctionalInterface
     private interface SessionOperation {
-        JsonNode execute(AgentSession session) throws SQLException, IOException;
+        JsonNode execute(AgentSession session) throws Exception;
+    }
+
+    private JsonNode closeLogicalConnection(AgentSession session) throws SQLException {
+        session.closeLogicalConnection();
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode reopenLogicalConnection(AgentSession session) throws SQLException {
+        session.reopenLogicalConnection();
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode xaStart(AgentSession session, JsonNode params) throws Exception {
+        session.xaResource().start(AgentXid.fromJson(params.get("xid")), requiredInt(params, "flags"));
+        return JsonNodeFactory.instance.objectNode().put("started", 1);
+    }
+
+    private JsonNode xaEnd(AgentSession session, JsonNode params) throws Exception {
+        session.xaResource().end(AgentXid.fromJson(params.get("xid")), requiredInt(params, "flags"));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode xaPrepare(AgentSession session, JsonNode params) throws Exception {
+        return JsonNodeFactory.instance.objectNode().put(
+                "vote", session.xaResource().prepare(AgentXid.fromJson(params.get("xid"))));
+    }
+
+    private JsonNode xaCommit(AgentSession session, JsonNode params) throws Exception {
+        session.xaResource().commit(
+                AgentXid.fromJson(params.get("xid")), params.path("onePhase").asBoolean());
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode xaRollback(AgentSession session, JsonNode params) throws Exception {
+        session.xaResource().rollback(AgentXid.fromJson(params.get("xid")));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode xaForget(AgentSession session, JsonNode params) throws Exception {
+        session.xaResource().forget(AgentXid.fromJson(params.get("xid")));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode xaRecover(AgentSession session, JsonNode params) throws Exception {
+        ArrayNode xids = JsonNodeFactory.instance.arrayNode();
+        for (javax.transaction.xa.Xid xid : session.xaResource().recover(requiredInt(params, "flags"))) {
+            xids.add(new AgentXid(
+                    xid.getFormatId(), xid.getGlobalTransactionId(), xid.getBranchQualifier()).toJson());
+        }
+        ObjectNode result = JsonNodeFactory.instance.objectNode();
+        result.set("xids", xids);
+        return result;
+    }
+
+    private JsonNode xaSetTimeout(AgentSession session, JsonNode params) throws Exception {
+        return JsonNodeFactory.instance.objectNode().put(
+                "applied", session.xaResource().setTransactionTimeout(requiredInt(params, "seconds")));
+    }
+
+    private JsonNode xaIsSameRm(AgentSession session, JsonNode params) throws Exception {
+        AgentSession other = sessions.get(requiredText(params, "otherSessionId"));
+        if (Objects.isNull(other)) {
+            throw new SQLException("JDBC Agent comparison session is not open");
+        }
+        return JsonNodeFactory.instance.objectNode().put(
+                "sameResourceManager", session.xaResource().isSameRM(other.xaResource()));
+    }
+
+    private int requiredInt(JsonNode payload, String field) {
+        JsonNode value = Objects.requireNonNull(payload.get(field), field);
+        if (!value.canConvertToInt()) {
+            throw new IllegalArgumentException(field + " must be an integer");
+        }
+        return value.intValue();
     }
 
     private JsonNode executeUpdate(long requestId, AgentSession session, JsonNode payload)

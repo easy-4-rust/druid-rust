@@ -6,6 +6,7 @@ import java.sql.SQLNonTransientConnectionException;
 import java.sql.SQLRecoverableException;
 import java.sql.SQLTransientException;
 import java.sql.SQLTransientConnectionException;
+import javax.transaction.xa.XAException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -55,6 +56,22 @@ public record AgentError(
         }
         if (cursor instanceof SQLException sqlException) {
             return fromSqlException(requestId, sessionId, sqlException, true);
+        }
+        if (throwable instanceof XAException xaException) {
+            return new AgentError(
+                    throwable.getClass().getName(),
+                    Objects.toString(throwable.getMessage(), throwable.getClass().getName()),
+                    null,
+                    xaException.errorCode,
+                    false,
+                    false,
+                    false,
+                    sessionId,
+                    requestId,
+                    assignableTypes(throwable.getClass()),
+                    causes(throwable),
+                    List.of(),
+                    null);
         }
         return new AgentError(
                 throwable.getClass().getName(),

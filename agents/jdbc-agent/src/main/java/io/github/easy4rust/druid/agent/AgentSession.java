@@ -7,6 +7,8 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Savepoint;
 import java.sql.Statement;
+import javax.sql.XAConnection;
+import javax.transaction.xa.XAResource;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
@@ -17,7 +19,9 @@ import java.util.concurrent.locks.ReentrantLock;
 /** 共享 Agent 进程中的单个 JDBC 连接会话及其语句、游标资源域。 */
 public final class AgentSession implements Closeable {
 
-    private final Connection connection;
+    private Connection connection;
+    private final XAConnection xaConnection;
+    private final XAResource xaResource;
     private final String validationQuery;
     private final ReentrantLock operationLock = new ReentrantLock();
     private final Map<String, PreparedStatement> preparedStatements = new ConcurrentHashMap<>();
@@ -28,12 +32,74 @@ public final class AgentSession implements Closeable {
     /** 创建拥有独占物理 JDBC 连接的会话。 */
     public AgentSession(Connection connection, String validationQuery) {
         this.connection = Objects.requireNonNull(connection, "connection");
+        this.xaConnection = null;
+        this.xaResource = null;
+        this.validationQuery = validationQuery;
+    }
+
+    /** 创建由 XAConnection owner 管理的会话及其当前逻辑 Connection。 */
+    public AgentSession(XAConnection xaConnection, String validationQuery) throws SQLException {
+        this.xaConnection = Objects.requireNonNull(xaConnection, "xaConnection");
+        this.connection = xaConnection.getConnection();
+        this.xaResource = xaConnection.getXAResource();
         this.validationQuery = validationQuery;
     }
 
     /** 返回会话独占的物理 JDBC 连接。 */
-    public Connection connection() {
+    public Connection connection() throws SQLException {
+        if (Objects.isNull(connection)) {
+            throw new SQLException("JDBC Agent logical connection is closed");
+        }
         return connection;
+    }
+
+    /** 判断该会话是否由真正的 XADataSource 创建。 */
+    public boolean supportsXa() {
+        return Objects.nonNull(xaConnection) && Objects.nonNull(xaResource);
+    }
+
+    /** 返回 owner 管理的 XAResource；普通 JDBC 会话 fail closed。 */
+    public XAResource xaResource() throws SQLException {
+        if (!supportsXa()) {
+            throw new java.sql.SQLFeatureNotSupportedException(
+                    "JDBC Agent session was not created from XADataSource", "0A000");
+        }
+        return xaResource;
+    }
+
+    /** 关闭逻辑 JDBC 句柄但保留 XAConnection owner。 */
+    public void closeLogicalConnection() throws SQLException {
+        if (Objects.isNull(connection)) {
+            return;
+        }
+        Connection current = connection;
+        connection = null;
+        SQLException failure = closeLogicalResources();
+        try {
+            current.close();
+        } catch (SQLException exception) {
+            failure = appendFailure(failure, exception);
+        }
+        if (Objects.nonNull(failure)) {
+            throw failure;
+        }
+    }
+
+    /** 在同一 XAConnection owner 上重新取得逻辑 JDBC 句柄。 */
+    public void reopenLogicalConnection() throws SQLException {
+        if (Objects.isNull(xaConnection) || Objects.isNull(xaResource)) {
+            throw new java.sql.SQLFeatureNotSupportedException(
+                    "logical connection reopen requires XAConnection owner", "0A000");
+        }
+        if (Objects.nonNull(connection) && !connection.isClosed()) {
+            throw new SQLException("JDBC Agent logical connection is already open");
+        }
+        connection = xaConnection.getConnection();
+    }
+
+    /** 判断逻辑连接当前是否开放。 */
+    public boolean hasOpenLogicalConnection() throws SQLException {
+        return Objects.nonNull(connection) && !connection.isClosed();
     }
 
     /** 返回可选的连接校验 SQL。 */
@@ -173,29 +239,21 @@ public final class AgentSession implements Closeable {
     public void close() throws IOException {
         operationLock.lock();
         try {
-            SQLException failure = null;
-            for (AgentCursor cursor : cursors.values()) {
+            SQLException failure = closeLogicalResources();
+            if (Objects.nonNull(connection)) {
                 try {
-                    cursor.close();
+                    connection.close();
                 } catch (SQLException exception) {
-                    failure = exception;
+                    failure = appendFailure(failure, exception);
                 }
+                connection = null;
             }
-            cursors.clear();
-            for (PreparedStatement statement : preparedStatements.values()) {
+            if (Objects.nonNull(xaConnection)) {
                 try {
-                    statement.close();
+                    xaConnection.close();
                 } catch (SQLException exception) {
-                    failure = exception;
+                    failure = appendFailure(failure, exception);
                 }
-            }
-            preparedStatements.clear();
-            activeStatements.clear();
-            savepoints.clear();
-            try {
-                connection.close();
-            } catch (SQLException exception) {
-                failure = exception;
             }
             if (Objects.nonNull(failure)) {
                 throw new IOException("failed to close JDBC Agent session", failure);
@@ -203,5 +261,34 @@ public final class AgentSession implements Closeable {
         } finally {
             operationLock.unlock();
         }
+    }
+
+    private SQLException closeLogicalResources() {
+        SQLException failure = null;
+        for (String cursorId : new ArrayList<>(cursors.keySet())) {
+            try {
+                closeCursor(cursorId);
+            } catch (SQLException exception) {
+                failure = appendFailure(failure, exception);
+            }
+        }
+        for (String statementId : new ArrayList<>(preparedStatements.keySet())) {
+            try {
+                closePreparedStatement(statementId);
+            } catch (SQLException exception) {
+                failure = appendFailure(failure, exception);
+            }
+        }
+        activeStatements.clear();
+        savepoints.clear();
+        return failure;
+    }
+
+    private SQLException appendFailure(SQLException previous, SQLException next) {
+        if (Objects.isNull(previous)) {
+            return next;
+        }
+        previous.addSuppressed(next);
+        return previous;
     }
 }

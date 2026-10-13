@@ -96,11 +96,11 @@
   - `isSameRM` 使用稳定 RM 身份凭证：共享凭证的不同连接句柄为 true；相同显示名称/连接属性但身份不同或未知为 false。身份 API 由外部最小消费者编译验证，默认实现保持既有外部 `XaResource` 实现的源兼容。
   - 所有资源操作在 owner 关闭后明确失败，不能触达已释放连接或改变分支；驱动拒绝超时设置时返回 false，读取值不得伪称新超时生效，并覆盖零值语义。
   - 本项只证明标准合同/示例资源的协议语义；示例、mock 和外部编译测试不能证明 JDBC Agent 或真实数据库恢复，后者只由 6.4 验收。（XA-03、XA-04）
-- [ ] 6.4 建立并验证真实 JDBC Agent XA 后端闭环（PostgreSQL 18.6 Testcontainers + pgjdbc 42.7.14 已通过独立 JDBC 能力探测；6.4 仍未完成）：
+- [x] 6.4 建立并验证真实 JDBC Agent XA 后端闭环：显式 XADataSource 配置、完整 XA RPC、逻辑句柄与 XA owner 分离，以及 PostgreSQL 跨 session prepare/recover/commit 已由真实协议集成测试验证；记录见 [XA Agent 协议证据](evidence/xa-agent-protocol.md) 和 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md)。（XA-01–04、MC-02）
   - Agent 必须通过明确配置的 `XADataSource` 创建 session，session 同时拥有 JDBC `XAConnection`、逻辑 `Connection` 和驱动 `XAResource`；普通 `DriverManager` 连接不得被包装成 XA。
   - Agent 协议无损传递完整 Xid 字节、flags、prepare 投票、recover 分页和 XA 错误码；XA 操作与逻辑连接 SQL 共用同一 session/资源管理器，关闭逻辑连接不能提前关闭 XA owner，关闭 owner 必须使所有句柄失效。
   - 增加 Java Agent 协议回归和真实 PostgreSQL XA 集成：start→SQL 写入→end→prepare，关闭原 XA session，再创建新 session 执行 recover→commit 或 rollback；最后使用普通 JDBC 会话读取最终数据库状态，并验证完整 Xid 与事务结果。
-  - Agent 接入实现前的独立 JDBC 探测命令、H2 不支持结果、PostgreSQL 实际结果和源码哈希见 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md)。Agent 协议请求及源码身份尚待补充；不得用内存 ledger、mock 或同一连接中的非恢复事务替代端到端证据。（XA-01–04、MC-02）
+  - Agent 接入实现前的独立 JDBC 探测命令、H2 不支持结果、PostgreSQL 实际结果和源码哈希见 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md)。本任务只关闭 JDBC Agent 与 PostgreSQL 的协议闭环，不代表 RDBC `XaDataSource` 的 PostgreSQL 客户端适配器、Druid 事务管理器端到端集成或 6.5 消费者/文档验收已经完成。（XA-01–04、MC-02）
 - [ ] 6.5 更新 XA 资源接入、错误和恢复示例，迁移 Druid 原有消费者；运行标准协议、实际后端与不支持后端合同，核验资源名称未代替操作能力后结束本批。（XA-01–04、MC-03）
 
 ## 7. 补齐公共数据源配置
