@@ -105,9 +105,11 @@ sequenceDiagram
 
 对应 [XA-01–04](specs/rdbc-xa-resource-contract/spec.md)。在 `druid-rdbc` 的数据源边界提供 `XaResource`、Xid、flags、prepare 结果和 XA 错误映射，一对象一文件；将 `druid` 现有中立类型迁移或重导出到唯一标准来源，产品协调和状态管理仍留在 `druid`。
 
-资源通过 owner 管理的共享句柄获取，关闭 owner 后失效。方法映射补充冻结 Java 8 的 `javax.transaction.xa` 来源，覆盖 `isSameRM`、扫描 flags、事务超时和错误码；协议 flag 的数值必须逐项与 Java 8 常量一致，防止“名称相同、位值不同”导致事务管理器误判。禁止只比较资源显示名。驱动原始错误与 XA 协议错误分层保留。
+资源通过 owner 管理的共享句柄获取，关闭 owner 后失效。方法映射补充冻结 Java 8 的 `javax.transaction.xa` 来源，覆盖 `isSameRM`、扫描 flags、事务超时和错误码；协议 flag 的数值必须逐项与 Java 8 常量一致，防止“名称相同、位值不同”导致事务管理器误判。禁止只比较资源显示名、URL 或连接配置；稳定 RM 身份以独立凭证表达，未知身份不得乐观地判定相同。若通过 trait 默认方法扩展标准 API，须验证既有外部实现保持源兼容。驱动原始错误与 XA 协议错误分层保留。
 
-协议实现按两个有界里程碑验收：6.2 验证分支关联状态机、JDK 8 常量、prepare 投票、一阶段提交、未知分支及非法输入无副作用；6.3 再验证 recover 扫描边界、资源管理器身份、超时及 owner 失效。6.2 通过后停止并交付证据，不自动进入 6.3；真实 JDBC Agent 数据源恢复闭环单独留在 6.4，不能由示例状态机或 mock 替代。
+`recover` 遵守冻结 Java 8 扫描协议：开始扫描时固定结果快照；`TMNOFLAGS` 只继续活动扫描；`TMENDRSCAN` 释放扫描状态；`TMSTARTRSCAN | TMENDRSCAN` 表示一次性扫描。非法 flags 或阶段错误必须在修改扫描/分支状态前拒绝。结果只含 prepared 或启发式完成的完整 Xid；分页不得重漏，空页和扫描终止语义必须一致且可测试。示例状态机只能证明标准协议语义，实际持久恢复能力另由 JDBC Agent 数据源验收。
+
+协议实现按两个有界里程碑验收：6.2 验证分支关联状态机、JDK 8 常量、prepare 投票、一阶段提交、未知分支及非法输入无副作用；6.3 再验证 recover 扫描边界、资源管理器身份、超时及 owner 失效。6.3 的测试按“失败用例 → 最小实现 → 外部消费者兼容性 → 直接受影响回归”推进。6.2 通过后停止并交付证据，不自动进入 6.3；真实 JDBC Agent 数据源恢复闭环单独留在 6.4，不能由示例状态机或 mock 替代。
 
 优先复用 JDBC Agent 接入真正的 JDBC XAResource，验收需选定支持恢复的实际数据源，执行 prepare 后重建连接、recover、commit/rollback 的闭环。具体已有数据库环境在准备批固定；不能用 mock 或普通本地事务代替实库恢复证据。未配置该环境时标准合同测试仍可完成，实库任务保持 NOT_RUN。
 

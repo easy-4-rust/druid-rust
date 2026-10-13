@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use druid_rdbc::connection::Connection;
 use druid_rdbc::data_source::{
     CommonDataSource, XaConnection, XaDataSource, XaError, XaErrorCode, XaFlags, XaPrepareResult,
-    XaResource, Xid,
+    XaResource, XaResourceManagerIdentity, Xid,
 };
 use druid_rdbc::error::RdbcError;
 
@@ -113,6 +113,16 @@ async fn external_transaction_manager_uses_only_the_rdbc_xa_contract() {
         XaError::new(XaErrorCode::XAER_PROTO, "invalid XA protocol transition").code(),
         XaErrorCode::XAER_PROTO
     );
+}
+
+#[test]
+fn external_consumer_can_share_a_real_resource_manager_identity() {
+    let identity = XaResourceManagerIdentity::new();
+    let same_manager = identity.clone();
+    let different_manager = XaResourceManagerIdentity::new();
+
+    assert_eq!(identity, same_manager);
+    assert_ne!(identity, different_manager);
 }
 
 #[tokio::test]

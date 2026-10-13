@@ -12,8 +12,8 @@ use std::time::{Duration, Instant};
 
 use crate::core::DruidError;
 pub use druid_rdbc::data_source::{
-    flags, XaError, XaErrorCode, XaFlags, XaPrepareResult, XaResource, Xid, XID_MAX_BQUAL_LENGTH,
-    XID_MAX_GTRID_LENGTH,
+    flags, XaError, XaErrorCode, XaFlags, XaPrepareResult, XaResource, XaResourceManagerIdentity,
+    Xid, XID_MAX_BQUAL_LENGTH, XID_MAX_GTRID_LENGTH,
 };
 
 // ─── XA State Machine ───────────────────────────────────────────────────────

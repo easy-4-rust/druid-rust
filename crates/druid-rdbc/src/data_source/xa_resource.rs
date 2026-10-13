@@ -1,4 +1,4 @@
-use super::{XaError, XaPrepareResult, Xid};
+use super::{XaError, XaPrepareResult, XaResourceManagerIdentity, Xid};
 
 /// 可由事务管理器调用的 XA 资源管理器协议。
 /// 对应 Java: `javax.transaction.xa.XAResource`。
@@ -32,6 +32,12 @@ pub trait XaResource: Send + Sync {
     ///
     /// 参数为恢复扫描控制 flags；返回本次扫描得到的 XID 列表或结构化 XA 错误。
     async fn recover(&self, flags: i32) -> Result<Vec<Xid>, XaError>;
+    /// 返回真实资源管理器的共享身份；未知身份返回 `None`，不使用诊断名称猜测。
+    ///
+    /// 同一 RM 的多个资源应返回共享令牌的克隆。默认未知，保留既有外部实现的源兼容性。
+    fn resource_manager_identity(&self) -> Option<XaResourceManagerIdentity> {
+        None
+    }
     /// 比较真实资源管理器身份，不能只比较诊断名称。
     ///
     /// 参数为待比较的资源；返回身份是否相同或比较过程中的 XA 错误。

@@ -20,6 +20,7 @@ mod xa_error_code;
 mod xa_flags;
 mod xa_prepare_result;
 mod xa_resource;
+mod xa_resource_manager_identity;
 mod xid;
 
 pub use common_data_source::CommonDataSource;
@@ -38,4 +39,5 @@ pub use xa_error_code::XaErrorCode;
 pub use xa_flags::{flags, XaFlags};
 pub use xa_prepare_result::XaPrepareResult;
 pub use xa_resource::XaResource;
+pub use xa_resource_manager_identity::XaResourceManagerIdentity;
 pub use xid::{Xid, XID_MAX_BQUAL_LENGTH, XID_MAX_GTRID_LENGTH};

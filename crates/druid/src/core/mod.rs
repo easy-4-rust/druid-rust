@@ -294,7 +294,8 @@ pub use valid_connection_checker::ValidConnectionChecker;
 pub use valid_connection_checker_adapter::ValidConnectionCheckerAdapter;
 pub use xa::{
     flags as xa_flags, XaError, XaErrorCode, XaFlags, XaOperation, XaPrepareResult, XaResource,
-    XaState, XaStateTransitionError, XaStateTransitionRecord, XaTransactionState, Xid,
+    XaResourceManagerIdentity, XaState, XaStateTransitionError, XaStateTransitionRecord,
+    XaTransactionState, Xid,
 };
 mod prepared_statement_property_snapshot;
 

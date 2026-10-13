@@ -67,3 +67,36 @@ crates/druid/src/core/xa.rs d63418481ad1be8b733f5d83e81a50570b01db9583075e07ad92
 crates/druid/examples/xa_demo.rs c68dc80179fcd794762877bacea6d0706936bb472225063683a6c9a302018f26
 crates/druid/tests/xa_state_machine_test.rs 89b3fafa448aed3b1b6d96af53a78c952640d0c06805bd383d140c7b2ec5323f
 ```
+
+## XA 恢复扫描、RM 身份与 owner 失效（6.3）
+
+### 实施与边界
+
+- 恢复扫描在 `TMSTARTRSCAN` 时固定 prepared Xid 快照，按页继续；非法 flags、无活动扫描时继续/结束、活动扫描重复开始均返回 XA 错误，不破坏有效扫描。`TMSTARTRSCAN | TMENDRSCAN` 一次性模式返回全部可恢复 Xid。
+- 测试验证活动分支不进入恢复结果、分页时新增的 prepared 分支不混入旧快照、完整 Xid 无重复/遗漏，以及非法 flags 后有效扫描仍能继续。
+- 新增 `XaResourceManagerIdentity` 作为不透明共享令牌；外部消费者可克隆令牌识别同 RM，不同令牌不相同。兼容既有 `XaResource` 外部实现的默认身份方法返回 `None`；示例仅对同一资源对象按数据指针识别，不根据同名或 URL 推断不同对象同 RM。
+- 内存示例拒绝超时设置并保持读取值 `0`；`InMemoryXaConnection` 实现标准 `PooledConnection`/`XaConnection`，其 close 会使所持 ledger 资源失效。owner 关闭后 start/end/prepare/commit/rollback/forget/recover/isSameRM/timeout 均返回 `XAER_RMFAIL`，资源入口拒绝再次借出，分支不被改写。
+- **范围限制：**该证据验证 RDBC 标准身份类型和示例协议行为。CodeGraph 未发现 JDBC Agent 或其他真实 XA 后端实现；本项不证明物理 XA owner 绑定、数据库恢复或崩溃恢复。JDBC Agent prepare→重建连接→recover→commit/rollback 仍是 6.4，当前记为 `NOT_RUN`，不能据本节宣称 XA 生产就绪。
+
+### TDD 与验证
+
+- `unknown_rm_identity_is_never_inferred_from_object_identity` 的首轮断言失败，暴露同一资源对象的 fat-pointer 比较不稳定；改为比较 trait object 数据地址后通过。不同对象即使名称相同仍返回 false。
+- `cargo test -p druid --example xa_demo --locked --offline`：16 passed。
+- `cargo test -p druid-rdbc --test xa_standard_external_consumer --locked --offline`：4 passed；覆盖不重写默认 identity 方法的旧外部实现和公开身份令牌。
+- `cargo test -p druid-rdbc --locked --offline`：通过（包括外部实现、公共 surface、方法证据测试及 doctests）。
+- `cargo test -p druid --test xa_state_machine_test --locked --offline`：54 passed。
+- `cargo fmt -p druid-rdbc -p druid -- --check`：通过。
+- `python scripts/verify_rdbc_single_standard_purity.py --phase final`：通过，`STANDARD_FILES=128`。
+- `openspec validate close-rdbc-jdbc42-contract-gaps --type change --strict --no-interactive`：通过。
+
+### SHA-256
+
+```text
+crates/druid-rdbc/src/data_source/mod.rs b7c17f70af86a419b6049dbab1c4a1ec1a5f62c20ff47c979c2a45df61ab1761
+crates/druid-rdbc/src/data_source/xa_resource.rs 355ed9581e184f3039b625cd969650d9160f98a5b30cb27bf06a706dbd7fa81a
+crates/druid-rdbc/src/data_source/xa_resource_manager_identity.rs 1c16589355861367a0c3876079175d99b2a2d9c0b7b4814a02ebde8176408642
+crates/druid/src/core/mod.rs 3538ae156a62e868301b7c264970332b7540e214f034e47729f58218e8231cf7
+crates/druid/src/core/xa.rs bbc506bcfb40371152724a6e60acc8ef540d53a0864147ceb68bd2eb2401760d
+crates/druid/examples/xa_demo.rs f2d37043a1c0781204f5664286ab9b7c587be42584d3d578226a88dc2f2d5e83
+crates/druid-rdbc/tests/xa_standard_external_consumer.rs fbc8d78c156925f21452f8b149b6adadc3067517e0821fe85c3189ff36b46e6f
+```
