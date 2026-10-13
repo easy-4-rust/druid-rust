@@ -1,4 +1,5 @@
 use super::jdbc_agent_connection::JdbcAgentTransport;
+use super::jdbc_agent_xa_connection::JdbcAgentXaOwnerState;
 use super::jdbc_agent_xa_session::JdbcAgentXaSession;
 use druid_rdbc::error::RdbcError;
 use serde_json::Value as JsonValue;
@@ -9,15 +10,21 @@ use std::sync::Arc;
 pub(super) struct JdbcAgentXaSessionTransport {
     session: Arc<JdbcAgentXaSession>,
     logical_generation: Option<u64>,
+    owner_state: Option<Arc<JdbcAgentXaOwnerState>>,
     closed: bool,
 }
 
 impl JdbcAgentXaSessionTransport {
     /// 创建指定逻辑代次的 SQL 传输；None 表示只路由 XA RPC 的资源视图。
-    pub(super) fn new(session: Arc<JdbcAgentXaSession>, logical_generation: Option<u64>) -> Self {
+    pub(super) fn new(
+        session: Arc<JdbcAgentXaSession>,
+        logical_generation: Option<u64>,
+        owner_state: Option<Arc<JdbcAgentXaOwnerState>>,
+    ) -> Self {
         Self {
             session,
             logical_generation,
+            owner_state,
             closed: false,
         }
     }
@@ -33,9 +40,18 @@ impl JdbcAgentTransport for JdbcAgentXaSessionTransport {
         if self.closed {
             return Err(RdbcError::ConnectionDiscarded);
         }
-        self.session
+        let result = self
+            .session
             .request(operation, payload, self.logical_generation)
-            .await
+            .await;
+        if let Err(error) = &result {
+            if self.session.is_unusable() {
+                if let Some(owner_state) = &self.owner_state {
+                    owner_state.notify_connection_error(error);
+                }
+            }
+        }
+        result
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
@@ -44,7 +60,23 @@ impl JdbcAgentTransport for JdbcAgentXaSessionTransport {
         }
         self.closed = true;
         if let Some(generation) = self.logical_generation {
-            self.session.close_logical_connection(generation).await
+            match self.session.close_logical_connection(generation).await {
+                Ok(true) => {
+                    if let Some(owner_state) = &self.owner_state {
+                        owner_state.notify_connection_closed();
+                    }
+                    Ok(())
+                }
+                Ok(false) => Ok(()),
+                Err(error) => {
+                    if self.session.is_unusable() {
+                        if let Some(owner_state) = &self.owner_state {
+                            owner_state.notify_connection_error(&error);
+                        }
+                    }
+                    Err(error)
+                }
+            }
         } else {
             Ok(())
         }

@@ -1,5 +1,6 @@
 use super::jdbc_agent_connection::JdbcAgentTransport;
 use druid_rdbc::error::RdbcError;
+use druid_rdbc::error::SqlExceptionKind;
 use serde_json::Value as JsonValue;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tokio::sync::Mutex;
@@ -40,25 +41,36 @@ impl JdbcAgentXaSession {
     ) -> Result<JsonValue, RdbcError> {
         let mut transport = self.transport.lock().await;
         self.ensure_owner_usable()?;
+        self.ensure_transport_usable(&**transport)?;
         if let Some(generation) = logical_generation {
             self.ensure_logical_generation(generation)?;
         }
-        transport.request(operation, payload).await
+        let result = transport.request(operation, payload).await;
+        if let Err(error) = &result {
+            if transport.is_unusable() || Self::is_fatal_connection_error(error) {
+                self.poisoned.store(true, Ordering::Release);
+            }
+        }
+        result
     }
 
     /// 关闭仍属于当前代次的逻辑连接；关闭失败后隔离整个 session。
-    pub(super) async fn close_logical_connection(&self, generation: u64) -> Result<(), RdbcError> {
+    pub(super) async fn close_logical_connection(
+        &self,
+        generation: u64,
+    ) -> Result<bool, RdbcError> {
         let mut transport = self.transport.lock().await;
         self.ensure_owner_usable()?;
         if self.logical_generation.load(Ordering::Acquire) != generation
             || !self.logical_active.load(Ordering::Acquire)
         {
-            return Ok(());
+            return Ok(false);
         }
+        self.ensure_transport_usable(&**transport)?;
         let result = transport
             .request("close_logical_connection", JsonValue::Null)
             .await
-            .map(|_| ());
+            .map(|_| true);
         self.logical_active.store(false, Ordering::Release);
         self.logical_generation.fetch_add(1, Ordering::AcqRel);
         if result.is_err() {
@@ -68,10 +80,11 @@ impl JdbcAgentXaSession {
     }
 
     /// 使旧逻辑句柄失效并在相同 XA owner 上重开句柄。
-    pub(super) async fn reopen_logical_connection(&self) -> Result<u64, RdbcError> {
+    pub(super) async fn reopen_logical_connection(&self) -> Result<(u64, bool), RdbcError> {
         let mut transport = self.transport.lock().await;
         self.ensure_owner_usable()?;
-        if self.logical_active.load(Ordering::Acquire) {
+        self.ensure_transport_usable(&**transport)?;
+        let closed_previous = if self.logical_active.load(Ordering::Acquire) {
             let close_result = transport
                 .request("close_logical_connection", JsonValue::Null)
                 .await;
@@ -81,7 +94,10 @@ impl JdbcAgentXaSession {
                 self.poisoned.store(true, Ordering::Release);
                 return Err(error);
             }
-        }
+            true
+        } else {
+            false
+        };
         if let Err(error) = transport
             .request("reopen_logical_connection", JsonValue::Null)
             .await
@@ -90,7 +106,10 @@ impl JdbcAgentXaSession {
             return Err(error);
         }
         self.logical_active.store(true, Ordering::Release);
-        Ok(self.logical_generation.load(Ordering::Acquire))
+        Ok((
+            self.logical_generation.load(Ordering::Acquire),
+            closed_previous,
+        ))
     }
 
     /// 关闭 XA owner 及底层 Agent session，重复调用保持幂等。
@@ -124,6 +143,28 @@ impl JdbcAgentXaSession {
         }
     }
 
+    /// 将底层 Agent 报告的传输失效提升为 session 级 sticky 隔离状态。
+    fn ensure_transport_usable(&self, transport: &dyn JdbcAgentTransport) -> Result<(), RdbcError> {
+        if transport.is_unusable() {
+            self.poisoned.store(true, Ordering::Release);
+            Err(RdbcError::ConnectionDiscarded)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// 按 JDBC 异常分类识别必须丢弃的物理连接，保留原始异常载荷。
+    fn is_fatal_connection_error(error: &RdbcError) -> bool {
+        error.sql_exception().is_some_and(|exception| {
+            matches!(
+                exception.kind(),
+                SqlExceptionKind::TransientConnection
+                    | SqlExceptionKind::NonTransientConnection
+                    | SqlExceptionKind::Recoverable
+            )
+        })
+    }
+
     /// 验证逻辑句柄仍是当前活动租约。
     fn ensure_logical_generation(&self, generation: u64) -> Result<(), RdbcError> {
         if !self.logical_active.load(Ordering::Acquire)
@@ -133,5 +174,65 @@ impl JdbcAgentXaSession {
         } else {
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::JdbcAgentXaSession;
+    use crate::jdbc_agent::jdbc_agent_connection::JdbcAgentTransport;
+    use druid_rdbc::error::RdbcError;
+    use serde_json::Value as JsonValue;
+    use std::sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
+    };
+
+    struct TransportThatDiesAfterOneRequest {
+        unusable: Arc<AtomicBool>,
+        attempts: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl JdbcAgentTransport for TransportThatDiesAfterOneRequest {
+        async fn request(
+            &mut self,
+            _operation: &str,
+            _payload: JsonValue,
+        ) -> Result<JsonValue, RdbcError> {
+            self.attempts.fetch_add(1, Ordering::AcqRel);
+            self.unusable.store(true, Ordering::Release);
+            Err(RdbcError::DriverError("Agent response was lost".to_owned()))
+        }
+
+        async fn close(&mut self) -> Result<(), RdbcError> {
+            self.unusable.store(true, Ordering::Release);
+            Ok(())
+        }
+
+        fn is_unusable(&self) -> bool {
+            self.unusable.load(Ordering::Acquire)
+        }
+    }
+
+    #[tokio::test]
+    async fn uncertain_transport_failure_is_sticky_and_blocks_later_rpc() {
+        let unusable = Arc::new(AtomicBool::new(false));
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let session = JdbcAgentXaSession::new(Box::new(TransportThatDiesAfterOneRequest {
+            unusable: Arc::clone(&unusable),
+            attempts: Arc::clone(&attempts),
+        }));
+
+        assert!(matches!(
+            session.request("xa_commit", JsonValue::Null, None).await,
+            Err(RdbcError::DriverError(_))
+        ));
+        assert!(session.is_unusable());
+        assert!(matches!(
+            session.request("xa_recover", JsonValue::Null, None).await,
+            Err(RdbcError::ConnectionDiscarded)
+        ));
+        assert_eq!(attempts.load(Ordering::Acquire), 1);
     }
 }

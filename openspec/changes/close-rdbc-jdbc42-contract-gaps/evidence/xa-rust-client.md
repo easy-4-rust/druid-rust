@@ -71,3 +71,33 @@ crates/druid-wrapper/src/standard_adapter_executor.rs 5CC69A7088A170BFC8F07E40EB
 crates/druid-wrapper/tests/jdbc_agent_xa_external_consumer.rs DB1BAF5B4674BB867750708CC6A051B4B69CA12B429DC428AD467966EA9A7C7D
 ```
 
+## 6.5.3 进行中：XA owner 事件与 sticky 故障隔离
+
+### 已完成的适配器层证据
+
+- `JdbcAgentXaConnection` 实现标准连接事件监听器注册/移除，并为 `ConnectionEvent` 保留稳定的 `PooledConnectionSource`。该来源是与 XA owner 共用状态的标准池化代理，持有方可通过它继续获取逻辑租约或关闭 owner；不会形成自引用强环。
+- 逻辑连接关闭成功后仅通知一次；XA owner 和资源保持可用。再次借出时旧代次失效；被动关闭旧代次也产生一次关闭通知。回调执行前释放 session 与租约锁。
+- SQL/XA 请求导致底层 transport 不可用时，session 进入 sticky 隔离状态，之后请求快速失败；保留原始 SQL 异常的 SQLState， owner 错误事件最多通知一次。owner 关闭失败原样返回并发送连接错误事件；重复关闭仍幂等。
+- 为避免错误宣称语句事件支持，JDBC Agent XA `PooledConnection` 的 statement listener 操作继续使用标准默认 `0A000`，直到 PreparedStatement 事件路径也被实现和验证。
+
+### 已运行验证
+
+- `cargo test -p druid-wrapper --features jdbc-agent --lib --locked --offline`：37 passed。
+- `cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_xa_external_consumer --locked --offline`：2 passed。
+- `cargo test -p druid-wrapper --features jdbc-agent jdbc_agent_xa_connection::tests --lib --locked --offline`：3 passed，覆盖逻辑关闭事件、致命 SQL 错误通知及 owner 关闭失败。
+- `cargo fmt -p druid-wrapper -- --check`、`git diff --check`、`openspec validate close-rdbc-jdbc42-contract-gaps --strict --no-interactive`：均通过。
+
+### 尚未关闭的验收
+
+- 外部标准 XA 池消费者的借出/归还行为尚未实现；当前 `jdbc_agent_xa_external_consumer` 只证明公共接口兼容。
+- CodeGraph 核验到 Druid 原生池由普通 `ConnectionFactory` 创建 `Connection`，暴露 `DruidPooledConnection`；当前没有 XA owner 的池化入口。因此本项要求先验证并记录此产品边界，不将普通 Druid 代理测试冒充 XA 池正向证据。若实际验收要求 XA owner 由 Druid 原生池管理，需要单独设计 XA 池代理 API 与生命周期，不在此处假设已存在。
+- 适配器层 fake transport 测试不替代 Java Agent/PostgreSQL 实库恢复；6.5.4 仍需从 Rust RDBC 消费入口验证跨 session `recover` 与数据库读回。
+
+### 本阶段源码 SHA-256
+
+```text
+crates/druid-wrapper/src/jdbc_agent/jdbc_agent_xa_connection.rs BA2CBDA4075D4AE532859291725FC8642746679521DA388BA46CD991A20C259D
+crates/druid-wrapper/src/jdbc_agent/jdbc_agent_xa_session.rs 40D677BED2879CBF5B5CDFB0545532401706817DCEC9E9C727F52A7BA48A16FB
+crates/druid-wrapper/src/jdbc_agent/jdbc_agent_xa_session_transport.rs 2E163C78560341C04A87872840CC6BC5917858310AE9AFD830E3BC0F7789502B
+```
+
