@@ -341,15 +341,26 @@ impl MetricsRepository {
         {
             return true;
         }
-        let mut identities = inner
+        let mut final_sql_counts = inner
             .entries
-            .keys()
-            .filter(|id| replaced_service != Some(&id.service_identity))
-            .collect::<HashSet<_>>();
-        identities.extend(incoming.iter().map(|(id, _)| id));
+            .iter()
+            .filter(|(id, _)| replaced_service != Some(&id.service_identity))
+            .map(|(id, stored)| (id, stored.entry.sql_stats.len()))
+            .collect::<HashMap<_, _>>();
+        for (id, entry) in incoming {
+            final_sql_counts.insert(id, entry.sql_stats.len());
+        }
+        if final_sql_counts.len() > self.config.max_total_datasources()
+            || final_sql_counts
+                .values()
+                .fold(0_usize, |sum, count| sum.saturating_add(*count))
+                > self.config.max_total_sql_entries()
+        {
+            return true;
+        }
         // 每个身份只计数一次，避免在最大容量下按 service 反复扫描整个集合。
         let mut service_counts = HashMap::<&ServiceIdentity, usize>::new();
-        for id in identities {
+        for id in final_sql_counts.keys() {
             let count = service_counts.entry(&id.service_identity).or_default();
             *count = count.saturating_add(1);
             if *count > self.config.max_datasources_per_service()

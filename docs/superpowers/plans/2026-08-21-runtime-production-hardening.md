@@ -182,8 +182,10 @@ git commit -m "fix(metrics): supervise every task and flush shutdown"
 pub(crate) struct RepositoryConfig {
     entry_ttl: Duration,
     max_services: usize,
-    max_datasources: usize,
+    max_datasources_per_service: usize,
     max_sql_per_datasource: usize,
+    max_total_datasources: usize,
+    max_total_sql_entries: usize,
 }
 ```
 
@@ -206,6 +208,10 @@ Expected: FAIL because current HashMap has no TTL/capacity eviction.
 Key entries by complete stream/session identity plus datasource ID. Apply SQL cap before insertion,
 evict expired entries before capacity eviction, and record reasons `ttl/service_cap/datasource_cap/
 sql_cap`. Prometheus remains long-term history; repository stores latest state only.
+The global datasource/SQL caps apply to the resulting state after each incremental batch or
+authoritative stream replacement; replacing an existing identity does not consume a second slot.
+Reject a batch atomically if either global cap would be exceeded. Keep the existing five-argument
+constructor compatible, with explicit tighter global caps available for deployments and tests.
 
 - [ ] **Step 4: Run GREEN**
 

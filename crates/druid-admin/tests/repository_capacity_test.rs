@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use druid_admin::model::dto::{DataSourceContent, WallResult};
+use druid_admin::model::dto::{DataSourceContent, SqlListContent, WallResult};
 use druid_admin::repository::{
     DataSourceEntry, DataSourceId, MetricsRepository, MetricsRepositoryConfig,
 };
@@ -239,4 +239,81 @@ fn expired_session_churn_reclaims_capacity_without_mixing_boot_identities() {
         percentile(95),
         percentile(99)
     );
+}
+
+#[test]
+fn global_datasource_and_sql_caps_reject_whole_batches_without_losing_existing_state() {
+    let config = MetricsRepositoryConfig::try_new(4, 3, 2, Duration::from_secs(60), 1 << 20)
+        .expect("valid repository")
+        .with_global_limits(2, 2)
+        .expect("valid global caps");
+    let repository = MetricsRepository::with_config(config);
+    let (first_id, mut first) = entry("boot-first", 1, 10);
+    first.sql_stats.insert(1, SqlListContent::default());
+    let (second_id, mut second) = entry("boot-second", 1, 20);
+    second.sql_stats.insert(2, SqlListContent::default());
+    assert!(repository.apply_batch(vec![(first_id.clone(), first), (second_id.clone(), second)]));
+
+    let (third_id, third) = entry("boot-third", 1, 30);
+    assert!(!repository.apply_batch(vec![(third_id.clone(), third)]));
+    assert!(repository.get_datasource(&third_id).is_none());
+
+    let (same_id, mut expanded) = entry("boot-first", 2, 99);
+    expanded.sql_stats.insert(1, SqlListContent::default());
+    expanded.sql_stats.insert(3, SqlListContent::default());
+    assert!(!repository.apply_batch(vec![(same_id, expanded)]));
+    assert_eq!(
+        repository
+            .get_datasource(&first_id)
+            .unwrap()
+            .datasource
+            .active_count,
+        10
+    );
+    assert_eq!(repository.len(), 2);
+    assert_eq!(repository.limit_counters(), (2, 0, 0));
+
+    let (snapshot_id, snapshot_entry) = entry("boot-first", 2, 80);
+    let (mut extra_id, mut extra_entry) = entry("boot-first", 2, 81);
+    extra_id.identity = 8;
+    extra_entry.datasource.identity = 8;
+    assert!(!repository.replace_stream(
+        &first_id.service_identity,
+        vec![(snapshot_id, snapshot_entry), (extra_id, extra_entry)]
+    ));
+    assert_eq!(
+        repository
+            .get_datasource(&first_id)
+            .unwrap()
+            .datasource
+            .active_count,
+        10
+    );
+    assert_eq!(repository.len(), 2);
+    assert_eq!(repository.limit_counters(), (3, 0, 0));
+
+    let (replacement_id, mut replacement) = entry("boot-first", 2, 40);
+    replacement.sql_stats.insert(4, SqlListContent::default());
+    assert!(repository.replace_stream(
+        &replacement_id.service_identity,
+        vec![(replacement_id.clone(), replacement)]
+    ));
+    assert_eq!(
+        repository
+            .get_datasource(&replacement_id)
+            .unwrap()
+            .datasource
+            .active_count,
+        40
+    );
+    assert_eq!(repository.len(), 2);
+}
+
+#[test]
+fn global_caps_must_be_nonzero() {
+    let config = MetricsRepositoryConfig::default();
+    assert_eq!(config.max_total_datasources(), 4_096);
+    assert_eq!(config.max_total_sql_entries(), 16_384);
+    assert!(config.clone().with_global_limits(0, 1).is_err());
+    assert!(config.with_global_limits(1, 0).is_err());
 }
