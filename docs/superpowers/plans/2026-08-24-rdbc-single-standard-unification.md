@@ -649,6 +649,8 @@ the seven `IMPLEMENTED_TESTED` Task 7 rows do not count as remaining implementat
 itself stays open until all eight obligations and the full GREEN matrix are verified. The
 completed-early rows remain part of Task 6 behavior-preservation evidence.
 
+2026-10-13 公开路径复核：迁移权威表的 25 个 `TASK7_PENDING` 目标中，15 个 `extensions` 资源名称此前不可导入；现已通过外部 crate 编译合同接到现有标准资源句柄，且 `resource_standard_contract_test` 31/31 通过。`resource::Resource` 仍无实现，旧 `resource::Rdbc*` 公开路径仍存在；上述组件级分母不代表 25 条迁移路径已关闭。
+
 - [ ] **Step 1: Write RED shared tests**
 
 Cover 1-based resource position、free-after-use、SQLXML state、capability=true behavior、caller
