@@ -951,4 +951,42 @@ mod cancellation_cleanup_tests {
         );
         actor.close().await.expect("poisoned connection must close");
     }
+
+    #[tokio::test]
+    async fn owner_close_waits_for_naturally_completed_cleanup_barrier() {
+        let adapter = SqlxConnectionAdapter::connect("sqlite::memory:")
+            .await
+            .expect("in-memory SQLite connection should open");
+        let actor = SqlxConnectionActor::new(adapter);
+        let mut connection = actor.connection.lock().await;
+        connection
+            .install_sqlite_progress_control(None, Arc::new(AtomicBool::new(false)))
+            .await
+            .expect("progress control should install");
+        let mut cleanup = SqliteExecutionCleanupGuard::new(&mut connection);
+
+        let close_actor = Arc::clone(&actor);
+        let close = tokio::spawn(async move { close_actor.close().await });
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            while !actor.is_closed() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("owner close must publish shutdown before waiting for the active connection");
+        assert!(
+            !close.is_finished(),
+            "owner cannot physically close while execution cleanup still owns the connection"
+        );
+
+        assert_eq!(cleanup.finish(Ok(())), Ok(()));
+        drop(cleanup);
+        drop(connection);
+        close.await.expect("close task must finish").unwrap();
+        assert_eq!(
+            actor.execute_control_statement("SELECT 1").await,
+            Err(RdbcError::ConnectionDiscarded),
+            "completed execution must have one terminal owner-close result"
+        );
+    }
 }

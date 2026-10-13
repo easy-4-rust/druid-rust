@@ -882,6 +882,85 @@ async fn dropping_running_sqlite_execution_future_discards_uncertain_connection(
     connection.close().await.unwrap();
 }
 
+/// 自然完成与取消请求并发时只接受一个 SQL 终态，且确认清理后连接可继续使用。
+#[tokio::test]
+async fn natural_completion_racing_cancel_has_one_terminal_result() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut statement = connection
+        .prepare_statement("SELECT 42", StatementOptions::default())
+        .await
+        .unwrap();
+    let cancellation = statement
+        .cancellation_control()
+        .expect("SQLite exposes an independent cancellation control");
+
+    let (execution, cancellation) =
+        tokio::join!(statement.execute_prepared_query(), cancellation.cancel());
+    cancellation.expect("concurrent cancellation request must be accepted");
+    match execution {
+        Ok(mut rows) => {
+            assert!(rows.next().await.unwrap());
+            assert_eq!(
+                rows.value(ColumnIndex::new(1).unwrap()).unwrap(),
+                Value::Int(42)
+            );
+            rows.close().await.unwrap();
+        }
+        Err(RdbcError::SqlException(error)) => {
+            assert_eq!(error.sql_state(), Some("HY008"));
+        }
+        Err(error) => panic!("unexpected race terminal result: {error:?}"),
+    }
+
+    let mut next = statement
+        .execute_prepared_query()
+        .await
+        .expect("the completed race must not leave a stale cancellation for the next generation");
+    assert!(next.next().await.unwrap());
+    assert_eq!(
+        next.value(ColumnIndex::new(1).unwrap()).unwrap(),
+        Value::Int(42)
+    );
+    next.close().await.unwrap();
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// 查询期限会中断 SQLite VM，清理屏障确认后返回 SQLTimeoutException 并允许复用连接。
+#[tokio::test]
+async fn sqlite_statement_deadline_cleans_up_before_connection_reuse() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut statement = connection
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    statement.set_query_timeout(1).unwrap();
+    let result = statement
+        .execute_query(
+            "WITH RECURSIVE counter(value) AS (VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 100000000) SELECT sum(value) FROM counter",
+        )
+        .await;
+    let error = match result {
+        Ok(_) => panic!("SQLite VM query must exceed the configured one-second deadline"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        RdbcError::SqlException(ref sql_error)
+            if sql_error.sql_state() == Some("HYT00")
+                && sql_error.message().is_some_and(|message| message.contains("timed out"))
+    ));
+
+    let rows = connection.fetch("SELECT 19", Vec::new()).await.unwrap();
+    assert_eq!(rows[0].values, vec![Value::Int(19)]);
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
 /// PostgreSQL 当前没有接入独立取消通道；真实后端必须精确拒绝，而不能返回空操作句柄。
 #[tokio::test]
 #[ignore = "requires DRUID_DATABASE_URL pointing to a live PostgreSQL service"]

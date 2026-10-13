@@ -53,7 +53,7 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 | `crates/druid/tests/callable_cache_lifecycle_test.rs` | `E4DC411EBB942229EF8F5CA39122B61D27CE30AB35265EC30798AD66CE137B59` |
 | `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `22A365018F18C8858F975A94CD968CE7D44CB265C27B1E25994FCF8E5D385326` |
 
-**边界与未完成项：**SQLite 用例证明真实 SQLite VM 执行路径中断及连接清理；PostgreSQL 18.6 和 MySQL 8.0.36 实库只验证当前明确不支持/`0A000`。普通/Prepared SQLx 代理及 Callable 合同夹具现已覆盖真实 DruidPool 借还路径，迟到/重复请求与共享连接隔离也有测试，故 4.2 已完成。仍缺取消未确认时 owner 丢弃连接的故障注入与回收计数断言、完整后端/执行路径能力矩阵审查及清晰的执行终态记录；因此任务 4.3–4.7 保持未勾选。本记录不关闭取消批，也不代表 JDBC 全面对齐或生产就绪。
+**边界与未完成项：**SQLite 用例证明真实 SQLite VM 执行路径中断及连接清理；PostgreSQL 18.6 和 MySQL 8.0.36 实库只验证当前明确不支持/`0A000`。普通/Prepared SQLx 代理及 Callable 合同夹具现已覆盖真实 DruidPool 借还路径，迟到/重复请求与共享连接隔离也有测试，故 4.2 已完成。4.3 的清理失败、超时、Future drop、自然完成竞态和 owner 关闭处理现均有实现与测试并已关闭；仍缺完整后端/执行路径能力矩阵、SQLite 正向实库终态证据和文档同步，因此 4.4–4.7 保持未勾选。本记录不关闭取消批，也不代表 JDBC 全面对齐或生产就绪。
 
 ## 4.3 进展：未确认执行清理时丢弃 owner
 
@@ -62,14 +62,16 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 - 更新旧 Future-drop 测试：查询 Future drop 不返回“已取消”结果；若 SQLite 执行/清理状态未确认，连接返回 `ConnectionDiscarded`，然后物理连接关闭。
 - 新增真实 `DruidPool` 故障场景：在递归 SQLite VM 查询期间 abort 执行任务，断言池 `active_count=0`、`idle_count=0`、`discard_count` 精确增加一次、`destroy_count` 精确增加一次；下一次获取会新建替代物理连接。
 - actor 单测以注入的清理错误与超时结果验证错误载荷保留或映射为 `ConnectionDiscarded`，两种情况下 owner 均被 poison；另验证 drop guard poison、显式 close 幂等，以及成功清理后原始 SQL 异常消息与 SQLState 保留。
-- 已运行：`cargo test -p druid-wrapper --features sqlx --lib cancellation_cleanup_tests --locked --offline`：4 passed；`cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test --locked --offline`：17 passed、2 ignored（实库 PostgreSQL/MySQL 负向用例）；`cargo test -p druid --test callable_cache_lifecycle_test --locked --offline`：6 passed；`cargo fmt -p druid-wrapper -- --check` 与 `git diff --check` 通过。最后新增的 `destroy_count` 精确断言另以其单项测试复验通过。
-- 当前仅关闭 Future drop 后错误复用这一已证实缺陷；自然完成与取消的并发竞态矩阵以及 owner 关闭期间的竞态仍需补验证，因此 OpenSpec 任务 4.3 不勾选，4.3–4.7 仍未关闭。
+- 自然完成与取消并发测试并行执行 `SELECT 42` 和取消请求，只接受一个成功或 `HY008` 终态，并确认下一执行代次正常；owner 关闭测试在清理 guard 持有连接期间启动关闭，证明 owner 等待清理屏障后再关闭物理连接。
+- 真实查询期限测试设置 1 秒 statement timeout，执行 SQLite VM 长查询，验证精确 `HYT00`/超时消息、handler 清理后连接可继续查询。
+- 最新验证：`cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test --locked --offline`：19 passed、2 ignored（实库 PostgreSQL/MySQL 负向用例）；`cargo test -p druid-wrapper --features sqlx --lib cancellation_cleanup_tests --locked --offline`：5 passed；`cargo test -p druid --test callable_cache_lifecycle_test --locked --offline`：6 passed；`cargo fmt -p druid-wrapper -- --check` 与 `git diff --check` 通过。
+- 4.3 的验收现已完整满足，OpenSpec 任务 4.3 已勾选；4.4–4.7 仍未关闭。
 
 4.3 本轮源码 SHA-256：
 
 | 文件 | SHA-256 |
 |---|---|
-| `crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs` | `B538E3BD60D4719B04F2A9E4250631F7FAEEB74AAF92B127BBA48F7228D35E8A` |
+| `crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs` | `32CDE95195C2177EB3191EE06B0DD207151F7B40F62F6FB88D774C0C727A2F4A` |
 | `crates/druid-wrapper/src/sqlx/sqlx_connection_adapter.rs` | `8A9A3DBA222238AAD856A3D3212D8A2B694FE49AEC55447A5CAF7795A1E9DF04` |
 | `crates/druid-wrapper/src/sqlx/sqlx_cursor_request_test.rs` | `1FF4EF24C889C1C0DBD7FE958A3E035068C9AD703DA9ED4445B00868A53EB7B2` |
-| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `C0ADE909187A866AC603DB4E102DCEA3E740B80FF197865036A4AB2514854ACA` |
+| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `F67C2706F574ADA4430CE5475D09696BFD552E36C2FA344123FBD9542FC56A69` |
