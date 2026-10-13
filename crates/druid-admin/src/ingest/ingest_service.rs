@@ -57,6 +57,7 @@ impl IngestService {
     /// 注入 Admin server supervisor 的连接级关闭令牌。
     #[must_use]
     pub fn with_shutdown_token(mut self, shutdown: CancellationToken) -> Self {
+        self.command_broker.bind_shutdown(shutdown.clone());
         self.shutdown = shutdown;
         self
     }
@@ -64,6 +65,7 @@ impl IngestService {
     /// 注入与 authenticated HTTP command entry 共用的生产 broker。
     #[must_use]
     pub fn with_command_broker(mut self, command_broker: CommandBroker) -> Self {
+        command_broker.bind_shutdown(self.shutdown.clone());
         self.command_broker = command_broker;
         self
     }

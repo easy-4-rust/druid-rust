@@ -20,6 +20,7 @@ use super::command_broker_inner::{CommandBrokerInner, CommandKey};
 #[derive(Clone)]
 pub struct CommandBroker {
     inner: Arc<Mutex<CommandBrokerInner>>,
+    shutdown: Arc<Mutex<CancellationToken>>,
     capacity: usize,
     result_timeout: Duration,
 }
@@ -30,9 +31,18 @@ impl CommandBroker {
     pub fn new(capacity: usize, result_timeout: Duration) -> Self {
         Self {
             inner: Arc::new(Mutex::new(CommandBrokerInner::new())),
+            shutdown: Arc::new(Mutex::new(CancellationToken::new())),
             capacity: capacity.max(1),
             result_timeout: result_timeout.max(Duration::from_millis(1)),
         }
+    }
+
+    /// 将全部 broker 克隆绑定到同一个 Admin 进程关闭令牌。
+    pub(crate) fn bind_shutdown(&self, shutdown: CancellationToken) {
+        *self
+            .shutdown
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = shutdown;
     }
 
     /// 返回当前已附着的 live stream 数量。
@@ -251,6 +261,14 @@ impl CommandBroker {
         command_id: &str,
         payload: command::Payload,
     ) -> Result<CommandAck, String> {
+        let shutdown = self
+            .shutdown
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if shutdown.is_cancelled() {
+            return Err("admin command broker is shutting down".to_owned());
+        }
         if command_id.trim().is_empty() {
             return Err("command ID must be non-empty".to_owned());
         }
@@ -320,7 +338,7 @@ impl CommandBroker {
         // response channel 在连接轮换时关闭，客户端无法观察 EOF 并重连。
         drop(sender);
 
-        tokio::time::timeout(self.result_timeout, async {
+        let result = tokio::time::timeout(self.result_timeout, async {
             loop {
                 if let Some(result) = result_rx.borrow().clone() {
                     return Ok(result);
@@ -330,9 +348,12 @@ impl CommandBroker {
                     .await
                     .map_err(|_| "command result channel closed".to_owned())?;
             }
-        })
-        .await
-        .map_err(|_| "command result deadline exceeded".to_owned())?
+        });
+        tokio::select! {
+            biased;
+            () = shutdown.cancelled() => Err("admin command broker is shutting down".to_owned()),
+            result = result => result.map_err(|_| "command result deadline exceeded".to_owned())?,
+        }
     }
 }
 
@@ -348,7 +369,7 @@ impl fmt::Debug for CommandBroker {
             .field("result_timeout", &self.result_timeout)
             .field("live_streams", &inner.streams.len())
             .field("journal_entries", &inner.commands.len())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

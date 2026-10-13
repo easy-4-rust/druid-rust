@@ -3998,6 +3998,79 @@ async fn admin_shutdown_cancels_and_joins_every_owned_ingest_stream() {
 }
 
 #[tokio::test]
+async fn admin_shutdown_releases_command_waiter_without_an_ack() {
+    let broker = CommandBroker::new(8, Duration::from_secs(10));
+    let service = IngestService::new(MetricsRepository::new()).with_command_broker(broker.clone());
+    let observer = service.clone();
+    let address = reserve_loopback_addr().await;
+    let (shutdown, server_handle) = start_production_server_at(address, service).await;
+    let identity = StreamIdentity::new("pending-ack-shutdown", 91_011);
+    let mut stream = open_generated_stream(&format!("http://{address}"), &identity).await;
+    assert_eq!(broker.live_stream_count(), 1);
+
+    let issue_broker = broker.clone();
+    let service_name = identity.service_name.clone();
+    let instance_id = identity.instance_id.clone();
+    let boot_id = identity.boot_id.clone();
+    let mut pending = tokio::spawn(async move {
+        issue_broker
+            .issue_full_snapshot(&service_name, &instance_id, &boot_id, "pending-shutdown")
+            .await
+    });
+    let delivered = next_server_frame(&mut stream.inbound).await;
+    let Some(server_frame::Payload::Command(command)) = delivered.payload else {
+        panic!("expected unacknowledged command, got {delivered:?}");
+    };
+    assert_eq!(command.command_id, "pending-shutdown");
+    assert!(!pending.is_finished(), "the client has not sent an ACK");
+
+    shutdown.cancel();
+    let result =
+        if let Ok(result) = tokio::time::timeout(Duration::from_secs(1), &mut pending).await {
+            result.expect("command waiter task joins")
+        } else {
+            pending.abort();
+            panic!("shutdown must release an unacknowledged command waiter within one second");
+        };
+    let pending_error = result.expect_err("shutdown cannot report a successful command ACK");
+    assert!(pending_error.contains("shutting down"), "{pending_error}");
+    let after_shutdown = broker
+        .issue_full_snapshot(
+            &identity.service_name,
+            &identity.instance_id,
+            &identity.boot_id,
+            "after-shutdown",
+        )
+        .await
+        .expect_err("shutdown rejects new command admission");
+    assert!(after_shutdown.contains("shutting down"), "{after_shutdown}");
+    tokio::time::timeout(TEST_TIMEOUT, server_handle)
+        .await
+        .expect("server joins after pending ACK shutdown")
+        .expect("server task joins")
+        .expect("server stops cleanly");
+    assert_eq!(observer.active_streams(), 0);
+    assert_eq!(broker.live_stream_count(), 0);
+    drop(stream);
+}
+
+#[tokio::test]
+async fn production_builder_order_binds_shared_command_broker_shutdown() {
+    let shutdown = CancellationToken::new();
+    let broker = CommandBroker::new(1, Duration::from_secs(10));
+    let _service = IngestService::new(MetricsRepository::new())
+        .with_shutdown_token(shutdown.clone())
+        .with_command_broker(broker.clone());
+    shutdown.cancel();
+
+    let error = broker
+        .issue_full_snapshot("orders-runtime", "instance-one", "boot-one", "after-stop")
+        .await
+        .expect_err("production broker must reject commands after server shutdown");
+    assert!(error.contains("shutting down"), "{error}");
+}
+
+#[tokio::test]
 async fn dropping_tonic_response_detaches_exact_broker_sender_and_reuses_capacity() {
     let broker = CommandBroker::new(1, Duration::from_millis(100));
     let service = IngestService::new(MetricsRepository::new()).with_command_broker(broker.clone());
