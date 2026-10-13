@@ -437,6 +437,8 @@ pub const fn druid_wrapper::jdbc_agent::JdbcAgentOptions::max_frame_bytes(self, 
 pub fn druid_wrapper::jdbc_agent::JdbcAgentOptions::new(impl core::convert::Into<std::ffi::os_str::OsString>) -> Self
 pub const fn druid_wrapper::jdbc_agent::JdbcAgentOptions::request_timeout(self, core::time::Duration) -> Self
 pub fn druid_wrapper::jdbc_agent::JdbcAgentOptions::runtime_identity(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::fmt::Debug for druid_wrapper::jdbc_agent::JdbcAgentOptions
+pub fn druid_wrapper::jdbc_agent::JdbcAgentOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetrics
 impl druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetrics
 pub fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetrics::snapshot() -> druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot
