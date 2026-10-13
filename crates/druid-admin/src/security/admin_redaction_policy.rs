@@ -45,7 +45,7 @@ impl AdminRedactionPolicy {
                     }
                     let normalized = key
                         .bytes()
-                        .filter(|byte| byte.is_ascii_alphanumeric())
+                        .filter(u8::is_ascii_alphanumeric)
                         .map(|byte| byte.to_ascii_lowercase() as char)
                         .collect::<String>();
                     // 属性映射可嵌套任意深度；凭据键不能依赖固定 DTO 字段名。
