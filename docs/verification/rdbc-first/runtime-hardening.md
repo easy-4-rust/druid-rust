@@ -2,6 +2,8 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
+2026-10-13 对 [CI run 38232002006](https://github.com/easy-4-rust/druid-rust/actions/runs/38232002006) 的终态审计：38 个作业成功、SemVer 失败；PostgreSQL、MySQL 和 x86_64 macOS/Windows 默认工具链 DuckDB 契约在约 6 小时后取消，均不计为实库通过。DuckDB 两个平台最后停在超时语句关闭后、同租约 `ping` 前；本机相同契约在旧实现第 11/25 次复现 20 秒卡死，延长后台中断至 10 秒仍卡死。改为取消回调立即调用原生 interrupt、保留后台重试后，当前 Windows `1.97.1` 同一实库契约连续 100/100 次在单次 20 秒期限内退出 0。PostgreSQL/MySQL 最后停在重启阶段；重启 hook 现输出阶段、限制 `docker restart` 为 90 秒，三个实库 CI 作业设 45 分钟硬期限。此修改尚待新 CI 跨平台与真实服务复验，Task5 仍开放。
+
 2026-10-12 当前本地 `main`（`a312854`）整 crate 复测：`cargo test -p druid-admin --locked --quiet` 退出 0，共 139/139 通过，其中网络测试结果块为 48/48。此结果确认当前 Windows 测试进程中的 Admin 行为回归；Metrics/Admin 的独立数值运行预算和跨平台故障验收仍未完成。
 
 2026-10-12 `9ad07a4` Windows 当前源码复测：`cargo bench -p druid-bench --locked --bench runtime -- --noplot` 退出 0；直接对同一可执行文件运行 `--bench --noplot` 并监测峰值工作集，100 样本的 p50/p95/p99 为 123.599/124.751/125.755 ms，峰值工作集 20.92 MiB，等待队列峰值 56、活动连接峰值 8、关闭 7 ms，均在下方本机参考预算内。此测量只覆盖 Pool burst，不扩大为 Metrics/Admin 故障预算。

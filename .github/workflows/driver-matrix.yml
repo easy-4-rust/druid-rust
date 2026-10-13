@@ -254,6 +254,7 @@ jobs:
   duckdb-product-contract:
     name: DuckDB contract (${{ matrix.platform.target }}, Rust ${{ matrix.rust.label }})
     runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -303,6 +304,7 @@ jobs:
   postgresql-product-contract:
     name: PostgreSQL real product contract
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_PROFILE_DEV_DEBUG: "0"
@@ -355,6 +357,7 @@ jobs:
   mysql-product-contract:
     name: MySQL real product contract
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_PROFILE_DEV_DEBUG: "0"

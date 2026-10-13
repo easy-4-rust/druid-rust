@@ -125,6 +125,8 @@ impl DuckDbConnectionAdapter {
                     let cancelled_epoch = operation_epoch.load(Ordering::Acquire);
                     cancellation_requested.store(cancelled_epoch, Ordering::Release);
                     let interrupt_handle = Arc::clone(&interrupt_handle);
+                    // 先在调用方线程立即中断，避免后台通知线程调度迟到；后续通知兜底执行边界竞态。
+                    interrupt_handle.interrupt();
                     let operation_active = Arc::clone(&operation_active);
                     let operation_epoch = Arc::clone(&operation_epoch);
                     let _ = std::thread::spawn(move || {
