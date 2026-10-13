@@ -22,6 +22,8 @@
 
 XA 操作 SHALL 保留 Xid 的格式标识、全局事务标识和分支标识，以及协议 flags、一阶段提交标志、prepare 只读结果和标准 XA 错误码；非法输入 SHALL 在副作用前拒绝。
 
+协议 flag 和 prepare 返回值 SHALL 与冻结的 JDK 8 `javax.transaction.xa` 常量数值一致：`TMNOFLAGS=0x00000000`、`TMJOIN=0x00200000`、`TMRESUME=0x08000000`、`TMSTARTRSCAN=0x01000000`、`TMENDRSCAN=0x00800000`、`TMSUCCESS=0x04000000`、`TMFAIL=0x20000000`、`TMSUSPEND=0x02000000`、`TMONEPHASE=0x40000000`、`XA_OK=0`、`XA_RDONLY=3`。实现不得暴露非标准的同名替代值；来源及校验结果记录在 XA 证据中。
+
 #### Scenario: 两阶段与只读投票
 - **WHEN** 分支分别投票 prepared 和 read-only
 - **THEN** prepared 分支可执行第二阶段提交，read-only 结果被显式识别且不被错误转换为普通 prepared
@@ -29,6 +31,14 @@ XA 操作 SHALL 保留 Xid 的格式标识、全局事务标识和分支标识�
 #### Scenario: 无效分支或 flags
 - **WHEN** 提交未知分支或传入不合法的协议组合
 - **THEN** 返回对应 XA 错误，不丢失底层原因且不执行无关分支操作
+
+#### Scenario: JDK 8 协议常量兼容
+- **WHEN** 外部事务管理器使用冻结 JDK 8 XA 常量调用 start、end、commit 或 recover
+- **THEN** 每个常量的数值与 JDK 8 来源一致，协议操作解释其标准含义，并由常量单测和外部消费者测试共同验证
+
+#### Scenario: 非法操作不改变分支
+- **WHEN** 分支状态不允许某操作、Xid 未知或 flag 组合非法
+- **THEN** 操作返回对应协议错误，分支状态、关联关系及其他 Xid 均保持原样
 
 ### Requirement: XA-03 恢复扫描与资源管理器身份
 

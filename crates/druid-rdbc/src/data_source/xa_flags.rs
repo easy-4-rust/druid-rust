@@ -5,19 +5,23 @@ impl XaFlags {
     /// 无特殊标志。
     pub const TMNOFLAGS: i32 = 0;
     /// 加入已有事务分支。
-    pub const TMJOIN: i32 = 0x0000_0020;
+    pub const TMJOIN: i32 = 0x0020_0000;
     /// 恢复挂起的事务分支。
-    pub const TMRESUME: i32 = 0x0000_0800;
+    pub const TMRESUME: i32 = 0x0800_0000;
     /// 事务分支操作成功。
-    pub const TMSUCCESS: i32 = 0x0000_0004;
+    pub const TMSUCCESS: i32 = 0x0400_0000;
     /// 事务分支操作失败。
-    pub const TMFAIL: i32 = 0x0000_0008;
+    pub const TMFAIL: i32 = 0x2000_0000;
     /// 挂起事务分支。
-    pub const TMSUSPEND: i32 = 0x0000_0002;
+    pub const TMSUSPEND: i32 = 0x0200_0000;
     /// 一阶段提交标志。
     pub const TMONEPHASE: i32 = 0x4000_0000;
-    /// 异步操作标志。
-    pub const TMASYNC: i32 = 0x0200_0000;
+    /// 开始 XA 恢复扫描。
+    pub const TMSTARTRSCAN: i32 = 0x0100_0000;
+    /// 结束 XA 恢复扫描。
+    pub const TMENDRSCAN: i32 = 0x0080_0000;
+    /// 正常 prepare 投票结果。
+    pub const XA_OK: i32 = 0;
     /// RM 的只读投票结果。
     pub const XA_RDONLY: i32 = 3;
 }
@@ -38,8 +42,12 @@ pub mod flags {
     pub const TMSUSPEND: i32 = super::XaFlags::TMSUSPEND;
     /// 一阶段提交标志。
     pub const TMONEPHASE: i32 = super::XaFlags::TMONEPHASE;
-    /// 异步操作标志。
-    pub const TMASYNC: i32 = super::XaFlags::TMASYNC;
+    /// 开始 XA 恢复扫描。
+    pub const TMSTARTRSCAN: i32 = super::XaFlags::TMSTARTRSCAN;
+    /// 结束 XA 恢复扫描。
+    pub const TMENDRSCAN: i32 = super::XaFlags::TMENDRSCAN;
+    /// 正常 prepare 投票结果。
+    pub const XA_OK: i32 = super::XaFlags::XA_OK;
     /// RM 的只读投票结果。
     pub const XA_RDONLY: i32 = super::XaFlags::XA_RDONLY;
 }

@@ -36,3 +36,34 @@ crates/druid/src/core/xa.rs c099402dc0545bd48af7d4fd72c1cb3a8ef1415e68a8e4760ab1
 crates/druid/src/core/mod.rs 0d142517128bac9302321e009718b06978244df1713874e3ee748b58cb830693
 crates/druid/examples/xa_demo.rs eec0631f2814aa3e226ccf60974d46fed334cf2225d3ddf66e3dbc6b7fba0a25
 ```
+
+## XA 协议状态机（6.2）
+
+### 实施与边界
+
+- `XaTransactionState` 增加 suspend、resume、join 转换；一阶段提交只允许在 end 之后、prepare 之前执行；非法转换先校验再改变状态，失败时保留状态和历史。
+- 示例 `InMemoryLedger` 按完整 XID（format ID、gtrid、bqual）隔离分支，实现 start/end/prepare/commit/rollback/forget 的标准协议路径。覆盖 join/resume、suspend、TMFAIL 回滚投票、read-only 投票移除分支以及未知/重复/非法操作的错误码。
+- XA 常量以冻结 JDK 8 `javax.transaction.xa.XAResource` 为基准：TMNOFLAGS=0、TMJOIN=0x00200000、TMRESUME=0x08000000、TMSTARTRSCAN=0x01000000、TMENDRSCAN=0x00800000、TMSUCCESS=0x04000000、TMFAIL=0x20000000、TMSUSPEND=0x02000000、TMONEPHASE=0x40000000、XA_OK=0、XA_RDONLY=3。JDK 8 XAResource 没有 TMASYNC；已删除此前非标准的同名常量/断言。
+- 该内存 ledger 只证明 XA 协议桥接与状态机，不执行数据库 I/O，也不证明 crash recovery。recover 扫描语义、owner 生命周期和真实 JDBC Agent/XA 数据库闭环仍由 6.3–6.4 验收。
+
+### 验证
+
+- `cargo fmt -p druid-rdbc -p druid -- --check`：通过。
+- `cargo test -p druid --example xa_demo --locked --offline`：8 passed。
+- `cargo test -p druid --test xa_state_machine_test --locked --offline`：54 passed。
+- `cargo test -p druid-rdbc --locked --offline`：通过，含外部 XA consumer 和 doctests。
+- `cargo run -p druid --example xa_demo --locked --offline`：退出码 0，四个示例场景完成。
+- `python scripts/verify_rdbc_single_standard_purity.py --phase final`：通过，`STANDARD_FILES=127`。
+- `openspec validate close-rdbc-jdbc42-contract-gaps --strict --no-interactive`：通过。
+
+数值来源：[OpenJDK 8 XAResource.java](https://code.googlesource.com/edge/openjdk/%2B/refs/heads/master/corba/src/share/classes/javax/transaction/xa/XAResource.java)。
+
+### SHA-256
+
+```text
+crates/druid-rdbc/src/data_source/xa_flags.rs ca5ea24dab46ee1bea393030bf0cced39b29a0a91d92263fb78fc55dcc8a18c0
+crates/druid-rdbc/src/data_source/xa_error_code.rs b07b0852bf4dbb324e5185f4b448ccc8d7d15012166273a04aa31004a594e1c2
+crates/druid/src/core/xa.rs d63418481ad1be8b733f5d83e81a50570b01db9583075e07ad920d3836604494
+crates/druid/examples/xa_demo.rs c68dc80179fcd794762877bacea6d0706936bb472225063683a6c9a302018f26
+crates/druid/tests/xa_state_machine_test.rs 89b3fafa448aed3b1b6d96af53a78c952640d0c06805bd383d140c7b2ec5323f
+```

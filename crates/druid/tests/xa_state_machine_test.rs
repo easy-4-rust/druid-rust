@@ -506,27 +506,27 @@ mod xa_flags_tests {
 
     #[test]
     fn tm_join_flag() {
-        assert_eq!(xa_flags::TMJOIN, 0x00000020);
+        assert_eq!(xa_flags::TMJOIN, 0x00200000);
     }
 
     #[test]
     fn tm_resume_flag() {
-        assert_eq!(xa_flags::TMRESUME, 0x00000800);
+        assert_eq!(xa_flags::TMRESUME, 0x08000000);
     }
 
     #[test]
     fn tm_success_flag() {
-        assert_eq!(xa_flags::TMSUCCESS, 0x00000004);
+        assert_eq!(xa_flags::TMSUCCESS, 0x04000000);
     }
 
     #[test]
     fn tm_fail_flag() {
-        assert_eq!(xa_flags::TMFAIL, 0x00000008);
+        assert_eq!(xa_flags::TMFAIL, 0x20000000);
     }
 
     #[test]
     fn tm_suspend_flag() {
-        assert_eq!(xa_flags::TMSUSPEND, 0x00000002);
+        assert_eq!(xa_flags::TMSUSPEND, 0x02000000);
     }
 
     #[test]
@@ -535,13 +535,15 @@ mod xa_flags_tests {
     }
 
     #[test]
-    fn tm_async_flag() {
-        assert_eq!(xa_flags::TMASYNC, 0x02000000);
+    fn tm_recovery_scan_flags() {
+        assert_eq!(xa_flags::TMSTARTRSCAN, 0x01000000);
+        assert_eq!(xa_flags::TMENDRSCAN, 0x00800000);
     }
 
     #[test]
     fn xa_rdonly_value() {
         assert_eq!(xa_flags::XA_RDONLY, 3);
+        assert_eq!(xa_flags::XA_OK, 0);
     }
 }
 

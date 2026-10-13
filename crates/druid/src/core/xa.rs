@@ -45,6 +45,8 @@ pub enum XaState {
     Idle,
     /// 事务分支已通过 `start` 加入，可执行本地操作。
     Active,
+    /// 事务分支已 suspend，等待 `TMRESUME` 重新关联。
+    Suspended,
     /// `prepare` 已调用，等待 RM 决议。
     Preparing,
     /// RM 已投票提交，等待 `commit`。
@@ -66,6 +68,7 @@ impl fmt::Display for XaState {
         match self {
             Self::Idle => write!(f, "IDLE"),
             Self::Active => write!(f, "ACTIVE"),
+            Self::Suspended => write!(f, "SUSPENDED"),
             Self::Preparing => write!(f, "PREPARING"),
             Self::Prepared => write!(f, "PREPARED"),
             Self::Committing => write!(f, "COMMITTING"),
@@ -87,6 +90,12 @@ pub enum XaOperation {
     Start,
     /// 对应 `XAResource#end(Xid, int)`
     End,
+    /// 对应 `XAResource#start(Xid, TMJOIN)`
+    Join,
+    /// 对应 `XAResource#start(Xid, TMRESUME)`
+    Resume,
+    /// 对应 `XAResource#end(Xid, TMSUSPEND)`
+    Suspend,
     /// 对应 `XAResource#prepare(Xid)`
     Prepare,
     /// 对应 `XAResource#commit(Xid, boolean)`
@@ -102,6 +111,9 @@ impl fmt::Display for XaOperation {
         match self {
             Self::Start => write!(f, "start"),
             Self::End => write!(f, "end"),
+            Self::Join => write!(f, "join"),
+            Self::Resume => write!(f, "resume"),
+            Self::Suspend => write!(f, "suspend"),
             Self::Prepare => write!(f, "prepare"),
             Self::Commit => write!(f, "commit"),
             Self::Rollback => write!(f, "rollback"),
@@ -278,6 +290,27 @@ impl XaTransactionState {
         self.transition(XaOperation::End, XaState::Preparing, &[XaState::Active])
     }
 
+    /// 将已结束的分支重新关联到当前资源。
+    ///
+    /// 对应 Java: `XAResource#start(Xid, TMJOIN)`；只允许从已结束且尚未 prepare 的状态 join。
+    pub fn join(&mut self) -> Result<(), XaStateTransitionError> {
+        self.transition(XaOperation::Join, XaState::Active, &[XaState::Preparing])
+    }
+
+    /// 恢复此前 suspend 的事务分支。
+    ///
+    /// 对应 Java: `XAResource#start(Xid, TMRESUME)`。
+    pub fn resume(&mut self) -> Result<(), XaStateTransitionError> {
+        self.transition(XaOperation::Resume, XaState::Active, &[XaState::Suspended])
+    }
+
+    /// 暂停当前事务分支的关联，但保留其未完成状态。
+    ///
+    /// 对应 Java: `XAResource#end(Xid, TMSUSPEND)`。
+    pub fn suspend(&mut self) -> Result<(), XaStateTransitionError> {
+        self.transition(XaOperation::Suspend, XaState::Suspended, &[XaState::Active])
+    }
+
     /// 执行 `prepare`：将事务分支从 `Preparing` 转入 `Prepared`。
     ///
     /// 对应 Java: `XAResource#prepare(Xid)`
@@ -304,8 +337,8 @@ impl XaTransactionState {
     /// 返回 `XaStateTransitionError` 如果当前状态不允许提交。
     pub fn commit(&mut self, one_phase: bool) -> Result<(), XaStateTransitionError> {
         let allowed = if one_phase {
-            // 一阶段提交：从 Preparing 直接到 Committing
-            &[XaState::Prepared, XaState::Preparing][..]
+            // 一阶段提交只能发生在 end 之后、prepare 之前。
+            &[XaState::Preparing][..]
         } else {
             &[XaState::Prepared][..]
         };
@@ -336,6 +369,7 @@ impl XaTransactionState {
             &[
                 XaState::Idle,
                 XaState::Active,
+                XaState::Suspended,
                 XaState::Preparing,
                 XaState::Prepared,
             ],
@@ -511,6 +545,22 @@ mod tests {
         tx.end().unwrap();
         tx.commit(true).unwrap();
         assert_eq!(tx.state(), XaState::Committed);
+    }
+
+    #[test]
+    fn one_phase_commit_after_prepare_is_rejected_without_state_change() {
+        let xid = Xid::new(1, vec![1], vec![2]).unwrap();
+        let mut tx = XaTransactionState::new(xid);
+        tx.start().unwrap();
+        tx.end().unwrap();
+        tx.prepare().unwrap();
+        let history_before = tx.history().to_vec();
+
+        let error = tx.commit(true).unwrap_err();
+
+        assert_eq!(error.operation(), XaOperation::Commit);
+        assert_eq!(tx.state(), XaState::Prepared);
+        assert_eq!(tx.history(), history_before);
     }
 
     #[test]
