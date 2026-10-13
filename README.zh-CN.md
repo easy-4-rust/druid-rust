@@ -160,6 +160,26 @@ flowchart TD
     ADMIN -. "optional driver bootstrap" .-> WRAPPER
 ```
 
+### 4.2.1 统一标准合同与接口组成
+
+下图展示应用、Druid 治理层、数据库适配器与统一标准合同的关系，以及合同内部的接口族。
+`druid` 的池化代理与 `druid-wrapper` 的数据库适配器实现同一套 `druid-rdbc` 接口。
+合同内部的箭头用于组织接口族，具体继承、所有权和调用关系以各接口定义为准。
+
+```mermaid
+flowchart TB
+    A["应用 / ORM"] --> P["druid：连接池、过滤器、池化代理"]
+    P --> C["druid-rdbc：统一标准合同"]
+    W["druid-wrapper：数据库适配器"] --> C
+    W --> D["SQLx / Toasty / RBDC / JDBC Agent 等"]
+
+    C --> S["Connection → Statement → ResultSet"]
+    S --> PS["PreparedStatement → CallableStatement"]
+    C --> M["Metadata / SQL 类型 / 异常"]
+    C --> R["LOB / Array / SQLXML / SQLData"]
+    C --> DS["DataSource / Driver / RowSet"]
+```
+
 ### 4.3 连接所有权与调用链
 
 ```text

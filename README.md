@@ -174,6 +174,27 @@ own statistics callback. It can add wrapper metrics through
 `StatViewServlet::new` and `druid-admin` driver feature forwarding are removed;
 enable driver features on `druid-wrapper` in the embedding application instead.
 
+### 4.2.1 Unified standard contract and interface families
+
+The diagram shows how applications, Druid governance, and database adapters relate to the
+unified contract and its interface families. Druid pooled proxies and `druid-wrapper` database
+adapters implement the same `druid-rdbc` interfaces. Arrows within the contract group interface
+families; individual interface definitions specify inheritance, ownership, and dispatch.
+
+```mermaid
+flowchart TB
+    A["Application / ORM"] --> P["druid: pool, filters, pooled proxies"]
+    P --> C["druid-rdbc: unified standard contract"]
+    W["druid-wrapper: database adapters"] --> C
+    W --> D["SQLx / Toasty / RBDC / JDBC Agent, etc."]
+
+    C --> S["Connection → Statement → ResultSet"]
+    S --> PS["PreparedStatement → CallableStatement"]
+    C --> M["Metadata / SQL types / exceptions"]
+    C --> R["LOB / Array / SQLXML / SQLData"]
+    C --> DS["DataSource / Driver / RowSet"]
+```
+
 ### 4.3 Connection ownership and dispatch
 
 ```text

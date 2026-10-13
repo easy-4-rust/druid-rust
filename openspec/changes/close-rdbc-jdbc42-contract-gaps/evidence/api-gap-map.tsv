@@ -1,0 +1,29 @@
+Capability	Frozen Java 8 public API signature (JDK 8u321 javap baseline)	Current Rust/product entry	Gap to close
+DN	java.sql.DriverManager.getDriver(String)	DriverRegistry::first_accepted_driver; Druid DriverManager facade	Confirm lookup accepts URL and never connects
+DN	java.sql.DriverManager.getConnection(String)	DriverRegistry::connect; Druid DriverManager facade	Do not prefilter acceptsURL; continue SQLExceptions
+DN	java.sql.DriverManager.getConnection(String, Properties)	ConnectionProperties + DriverRegistry::connect	Preserve ordered properties and original first SQLException
+DN	java.sql.DriverManager.getConnection(String, String, String)	ConnectionProperties + DriverRegistry::connect	Preserve credentials and original first SQLException
+DN	java.sql.Driver.acceptsURL(String)	Driver::accepts_url	Lookup-only selector; do not gate connect negotiation
+DN	java.sql.Driver.connect(String, Properties)	Driver::connect(String, &ConnectionProperties)	None => next; SQLException => remember and continue
+TV	java.sql.Timestamp(long); Timestamp(int,int,int,int,int,int,int)	Timestamp::from_millis; Timestamp::value_of	Local timezone and legacy constructor field semantics
+TV	Timestamp.setTime(long); Timestamp.getTime()	Timestamp::from_millis; Timestamp::millis	Use local timezone to map fields and epoch
+TV	Timestamp.valueOf(String); valueOf(LocalDateTime); toLocalDateTime()	Timestamp::value_of; Timestamp::local_datetime	Validate Java parsing/normalization and timezone behavior
+TV	Timestamp.getNanos(); setNanos(int); toString()	Timestamp::nanos; set_nanos; Display	Validate range and Java decimal formatting including .0
+TV	java.sql.Time(int,int,int); Time(long); setTime(long)	Time::from_local_time; Time::local_time	Verify constructor/epoch default-zone semantics
+TV	Time.valueOf(String); valueOf(LocalTime); toLocalTime(); toString()	Time::parse; from_local_time; local_time; Display	LocalTime conversion drops fractional seconds
+SC	java.sql.Statement.cancel()	Statement::cancel(&mut self); DruidPooledStatement::cancel	Add separately held execution cancellation capability
+PE	javax.sql.PooledConnection.getConnection()	PooledConnection::get_connection	Existing logical handle lifecycle to retain
+PE	PooledConnection.addConnectionEventListener(ConnectionEventListener)	PooledConnection standard trait	Missing standard entry; implement owner-scoped registration
+PE	PooledConnection.removeConnectionEventListener(ConnectionEventListener)	PooledConnection standard trait	Missing standard entry; identity/removal parity
+PE	PooledConnection.addStatementEventListener(StatementEventListener)	PooledConnection standard trait	Missing standard entry; prepared and callable events
+PE	PooledConnection.removeStatementEventListener(StatementEventListener)	PooledConnection standard trait	Missing standard entry; identity/removal parity
+XA	javax.sql.XAConnection.getXAResource()	XaConnection::xa_resource_name	Replace/extend name-only seam with an operable resource handle
+XA	XAResource.start(Xid,int); end(Xid,int)	No standard Rust resource interface	Map flags, owner identity, and protocol errors
+XA	XAResource.prepare(Xid); commit(Xid,boolean); rollback(Xid)	No standard Rust resource interface	Preserve prepared/read-only/one-phase outcomes
+XA	XAResource.forget(Xid); recover(int); isSameRM(XAResource)	No standard Rust resource interface	Implement real recovery scan and resource manager identity
+XA	XAResource.setTransactionTimeout(int); getTransactionTimeout()	No standard Rust resource interface	Preserve rejected/unsupported timeout semantics
+XA	Xid.getFormatId(); getGlobalTransactionId(); getBranchQualifier()	No standard Rust Xid type	Preserve all branch identity bytes and format id
+XA	XAResource/XAException public flags and error constants	No standard Rust flags/error mapping	Map constants losslessly; test invalid protocol input
+CD	javax.sql.CommonDataSource.getLogWriter(); setLogWriter(PrintWriter)	Druid CommonDataSource product facade only	Add isolated, fallible, language-neutral standard sink
+CD	CommonDataSource.setLoginTimeout(int); getLoginTimeout()	Druid CommonDataSource product facade	Expose getter errors; preserve 0 default/no-limit semantics
+CD	CommonDataSource.getParentLogger()	Druid CommonDataSource product facade only	Add stable namespace or precise unsupported result
