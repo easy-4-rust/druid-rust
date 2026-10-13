@@ -970,7 +970,7 @@ fn command_error_status(error: &str) -> StatusCode {
         StatusCode::TOO_MANY_REQUESTS
     } else if error.contains("deadline exceeded") {
         StatusCode::GATEWAY_TIMEOUT
-    } else if error.contains("no live stream") {
+    } else if error.contains("no live stream") || error.contains("shutting down") {
         StatusCode::SERVICE_UNAVAILABLE
     } else {
         StatusCode::BAD_REQUEST
@@ -1396,6 +1396,10 @@ mod command_error_security_tests {
             ),
             (
                 format!("no live stream matches the requested identity: {secret}"),
+                StatusCode::SERVICE_UNAVAILABLE,
+            ),
+            (
+                format!("admin command broker is shutting down: {secret}"),
                 StatusCode::SERVICE_UNAVAILABLE,
             ),
             (

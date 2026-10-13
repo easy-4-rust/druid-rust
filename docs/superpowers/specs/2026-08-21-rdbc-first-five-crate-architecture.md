@@ -217,7 +217,7 @@ powerset、故障注入和性能/NFR 证据。
 - 每个 spawned task 必须由 supervisor/JoinSet/JoinHandle 所有。
 - shutdown 顺序固定为：停止 admission → 关闭 producer → drain/flush → cancel → join。
 - shutdown 超时必须报告未完成数量，不得静默丢失。
-- Admin 进程关闭时，尚未收到 ACK 的运维命令等待者必须在关闭期限内收到明确失败；普通连接中断时仍须保留命令日志供重连重放。
+- Admin 进程关闭时，尚未收到 ACK 的运维命令等待者必须在关闭期限内收到明确失败；HTTP 运维命令入口应返回脱敏的 503 Service Unavailable，普通连接中断时仍须保留命令日志供重连重放。
 - Admin repository 必须有 TTL、最大 service/datasource/SQL 数量和淘汰指标。
 
 ## 9. 兼容与发布策略

@@ -8,12 +8,22 @@ use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::Request;
+#[cfg(unix)]
+use base64::Engine as _;
 use druid_admin::config::{AdminAuthMode, AdminServerConfig, AdminTlsFiles};
 use druid_metrics::aggregator::AggregatedBatch;
 use druid_metrics::grpc_client::{GrpcAuthorization, GrpcClientConfig, GrpcMetricsClient};
+#[cfg(unix)]
+use druid_metrics::protocol::metrics_ingest_client::MetricsIngestClient;
+#[cfg(unix)]
+use druid_metrics::protocol::{client_frame, server_frame, ClientFrame, ClientHello, FrameHeader};
 use druid_metrics::protocol::{PoolSnapshotMsg, SnapshotEntry};
 #[cfg(unix)]
 use tokio::io::AsyncWriteExt as _;
+#[cfg(unix)]
+use tokio::sync::mpsc;
+#[cfg(unix)]
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::{Certificate, ClientTlsConfig, Endpoint};
 use tower::ServiceExt as _;
 use tracing::instrument::WithSubscriber as _;
@@ -787,6 +797,167 @@ async fn sigterm_forces_held_connection_exit_before_shutdown_deadline() {
     tokio::net::TcpListener::bind(grpc_addr)
         .await
         .expect("gRPC listener is released after forced shutdown");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sigterm_releases_pending_command_http_waiter_before_deadline() {
+    let http_addr = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve HTTP address")
+        .local_addr()
+        .expect("HTTP address");
+    let grpc_addr = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve gRPC address")
+        .local_addr()
+        .expect("gRPC address");
+    let mut child = admin_command()
+        .env("DRUID_ADMIN_HTTP_ADDR", http_addr.to_string())
+        .env("DRUID_ADMIN_GRPC_ADDR", grpc_addr.to_string())
+        .env("DRUID_ADMIN_AUTH_MODE", "basic")
+        .env("DRUID_ADMIN_LOGIN_USERNAME", "operator")
+        .env("DRUID_ADMIN_LOGIN_PASSWORD", "operator-secret")
+        .env("DRUID_ADMIN_INGEST_USERNAME", "ingest")
+        .env("DRUID_ADMIN_INGEST_PASSWORD", "ingest-secret")
+        .env("DRUID_ADMIN_SHUTDOWN_TIMEOUT_MS", "5000")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("spawn admin with shared command broker");
+
+    let http = reqwest::Client::new();
+    let startup_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Ok(Ok(response)) = tokio::time::timeout(
+            Duration::from_millis(300),
+            http.get(format!("http://{http_addr}/health")).send(),
+        )
+        .await
+        {
+            if response.status() == reqwest::StatusCode::OK {
+                break;
+            }
+        }
+        assert!(
+            tokio::time::Instant::now() < startup_deadline,
+            "HTTP admin did not start"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let endpoint = Endpoint::from_shared(format!("http://{grpc_addr}"))
+        .expect("valid gRPC endpoint")
+        .connect_timeout(Duration::from_millis(300));
+    let channel = loop {
+        if let Ok(channel) = endpoint.connect().await {
+            break channel;
+        }
+        assert!(
+            tokio::time::Instant::now() < startup_deadline,
+            "gRPC admin did not start"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    let mut client = MetricsIngestClient::new(channel);
+    let (sender, receiver) = mpsc::channel(8);
+    let mut request = tonic::Request::new(ReceiverStream::new(receiver));
+    let credentials = base64::engine::general_purpose::STANDARD.encode("ingest:ingest-secret");
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Basic {credentials}")
+            .parse()
+            .expect("valid gRPC authorization metadata"),
+    );
+    let mut inbound = client
+        .connect(request)
+        .await
+        .expect("open authenticated gRPC command stream")
+        .into_inner();
+    sender
+        .send(ClientFrame {
+            payload: Some(client_frame::Payload::Hello(ClientHello {
+                header: Some(FrameHeader {
+                    protocol_version: 1,
+                    service_name: "orders-runtime".to_owned(),
+                    instance_id: "instance-sigterm".to_owned(),
+                    boot_id: "boot-sigterm".to_owned(),
+                    stream_epoch: 91_012,
+                    sequence: 0,
+                    emitted_at_unix_ms: 1_755_734_400_000,
+                }),
+                supported_protocol_version: 1,
+                full_snapshot_requested: false,
+            })),
+        })
+        .await
+        .expect("send ClientHello");
+    let hello = tokio::time::timeout(Duration::from_secs(2), inbound.message())
+        .await
+        .expect("hello response before deadline")
+        .expect("valid hello response")
+        .expect("hello response remains open");
+    assert!(matches!(
+        hello.payload,
+        Some(server_frame::Payload::HelloAck(_))
+    ));
+
+    let mut pending_http = tokio::spawn(async move {
+        http.post(format!("http://{http_addr}/druid/api/commands"))
+            .basic_auth("operator", Some("operator-secret"))
+            .json(&serde_json::json!({
+                "serviceName": "orders-runtime",
+                "instanceId": "instance-sigterm",
+                "bootId": "boot-sigterm",
+                "commandId": "pending-sigterm",
+                "type": "requestFullSnapshot"
+            }))
+            .send()
+            .await
+    });
+    let command = tokio::time::timeout(Duration::from_secs(2), inbound.message())
+        .await
+        .expect("command delivered before shutdown")
+        .expect("valid command response")
+        .expect("command stream remains open");
+    let Some(server_frame::Payload::Command(command)) = command.payload else {
+        panic!("expected unacknowledged command, got {command:?}");
+    };
+    assert_eq!(command.command_id, "pending-sigterm");
+    assert!(
+        !pending_http.is_finished(),
+        "client intentionally sent no ACK"
+    );
+
+    let pid = child.id().expect("child process ID");
+    let kill_status = tokio::process::Command::new("kill")
+        .args(["-TERM", &pid.to_string()])
+        .status()
+        .await
+        .expect("send SIGTERM");
+    assert!(kill_status.success(), "SIGTERM command succeeds");
+    let response =
+        if let Ok(result) = tokio::time::timeout(Duration::from_secs(2), &mut pending_http).await {
+            result
+                .expect("HTTP command task joins")
+                .expect("HTTP command response")
+        } else {
+            pending_http.abort();
+            panic!("SIGTERM must release the pending HTTP command before its 5 second deadline");
+        };
+    assert_eq!(response.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
+    let body = response.text().await.expect("read shutdown response");
+    assert!(body.contains("target service is unavailable"), "{body}");
+    assert!(!body.contains("operator-secret"));
+    assert!(!body.contains("ingest-secret"));
+
+    let status = tokio::time::timeout(Duration::from_secs(4), child.wait())
+        .await
+        .expect("admin exits after SIGTERM")
+        .expect("wait for admin child");
+    assert!(status.success(), "Admin shutdown should join both servers");
+    drop(sender);
+    drop(inbound);
 }
 
 /// The standalone admin binary must expose a /health endpoint on the HTTP port
