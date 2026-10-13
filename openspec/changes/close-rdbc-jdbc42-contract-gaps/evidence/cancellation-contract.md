@@ -101,6 +101,51 @@ test result: ok; 1 passed
 |---|---|
 | `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `0B538B85FBF161E58A940F7584A1FB46F038F7A95ACD8BCF9B51518680810C06` |
 
+## 4.6：执行入口与池化代理回归
+
+4.4 的矩阵现有每条声明支持的 SQLite 执行入口都对应执行中取消测试；本次重跑完整矩阵套件：
+
+```powershell
+cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test --locked --offline
+```
+
+结果：**22 passed、2 ignored**。忽略项是需要外部服务 URL 的 PostgreSQL/MySQL 测试；两项真实服务上的 `0A000` 结果已在 4.2 前序记录中分别核验。矩阵还通过 wrapper 单测 `any_backend_cancellation_is_exactly_not_supported`（1 passed）验证 Any fallback，并通过 `cancellation_cleanup_tests`（5 passed）覆盖清理屏障失败/超时、owner close 竞态和错误保真。
+
+新增 `unsupported_sqlite_generated_key_selectors_return_0a000` 先验证了此前缺陷：列索引/列名选择返回 `UnsupportedOperation`，与矩阵要求不符；修复后用同一测试确认两种模式在 PreparedStatement 创建前都返回 SQLState `0A000`。SQLite `ReturnGeneratedKeys` 查询和更新的执行中取消正向入口继续由矩阵对应测试覆盖。
+
+Druid 池化代理回归：`cargo test -p druid --lib cancellation_control --locked --offline`：4 passed，覆盖普通/Prepared/Callable 代理转发、缓存 checkout 和旧租约句柄失效；`cargo test -p druid --test callable_cache_lifecycle_test --locked --offline`：6 passed，覆盖 Callable 关闭、复用、参数和错误状态。直接 SQLx adapter 的批处理、缓冲/流式执行、生成键路径、同连接后续使用及不确定清理时物理连接丢弃由上述 22 个通过用例覆盖。
+
+格式检查与 `git diff --check` 通过；本变更严格 OpenSpec 校验通过。4.6 已关闭。4.7 只剩用户文档、矩阵与最终证据同步。
+
+4.6 源码 SHA-256：
+
+| 文件 | SHA-256 |
+|---|---|
+| `crates/druid-wrapper/src/sqlx/sqlx_connection_adapter.rs` | `4C20A7164136853848502FBB25EBB7E92C7F2407010EF6148C24B1EE7B4A2389` |
+| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `94CB49839C93C0ECFE575DCBDCB3CBCF9E3236A81EF4A76EC3A7E4C57604FBEC` |
+
+## 4.7：取消文档与证据一致性
+
+中文主架构文档新增 Statement 执行取消与池化租约说明，包含执行前获取独立句柄的时序图、取消请求结果与数据库执行终态的区别、旧句柄不得跨租约影响缓存 checkout、清理未确认时丢弃物理 owner，以及按后端和版本限定的能力表。能力矩阵已列出所有正向入口及不支持路径的精确错误；列索引/列名生成键选择现有显式 `0A000` 测试，不与取消能力混为一谈。
+
+验证结果：
+
+- `cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test --locked --offline`：22 passed、2 ignored。
+- `cargo test -p druid-wrapper --features sqlx --lib cancellation_cleanup_tests --locked --offline`：5 passed。
+- `cargo test -p druid-wrapper --features sqlx --lib any_backend_cancellation_is_exactly_not_supported --locked --offline`：1 passed。
+- `cargo test -p druid --lib cancellation_control --locked --offline`：4 passed。
+- `cargo test -p druid --test callable_cache_lifecycle_test --locked --offline`：6 passed。
+- `cargo fmt -p druid-wrapper -- --check`、`git diff --check`、`openspec validate close-rdbc-jdbc42-contract-gaps --strict --no-interactive`：通过。
+
+4.7 已关闭；取消批 4.1–4.7 完成。关闭只表示该 OpenSpec 变更中的取消合同已验收，不表示其他六项能力、P04–P07 或整个项目达到生产就绪。
+
+4.7 文档和矩阵 SHA-256：
+
+| 文件 | SHA-256 |
+|---|---|
+| `docs/druid-rust-Architecture.zh_CN.md` | `B57D2E655F364DA073A118A34B100D1EBF33E3F8E90E52057056D5917975AE1B` |
+| `openspec/changes/close-rdbc-jdbc42-contract-gaps/evidence/sqlx-cancellation-capability-matrix.md` | `04E12B2087EFAD53BE148B4CA94D3C6E16BDF329A37D8D122F0EFDF8CC8E125D` |
+
 ## 4.3 进展：未确认执行清理时丢弃 owner
 
 - `SqliteExecutionCleanupGuard` 覆盖 SQLx SQLite 的缓冲查询、生成键查询、更新、生成键更新、结果类型预检和流式游标。只有成功清除 progress handler 后 guard 才标记确认；清理返回错误、超过 3 秒，或执行 Future 在清理确认前被 drop，均将适配器和 actor 的共享不可用状态置位。

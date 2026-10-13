@@ -1651,9 +1651,9 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
             druid_rdbc::statement::GeneratedKeys::ReturnGeneratedKeys
                 if self.standard_backend_key_core() == "sqlite" => {}
             _ => {
-                return Err(RdbcError::UnsupportedOperation {
-                    operation: "connection_prepare_statement_generated_keys",
-                })
+                return Err(RdbcError::feature_not_supported(
+                    "connection_prepare_statement_generated_keys",
+                ));
             }
         }
         let actor = self.standard_actor_core()?;

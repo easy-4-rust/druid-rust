@@ -1101,6 +1101,39 @@ fn assert_batch_cancelled_without_completed_entries(error: RdbcError) {
     ));
 }
 
+/// SQLite adapter 必须将不支持的生成键选择方式映射为 JDBC feature 错误。
+#[tokio::test]
+async fn unsupported_sqlite_generated_key_selectors_return_0a000() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let selectors = [
+        druid_rdbc::statement::GeneratedKeys::ColumnIndexes(vec![
+            druid_rdbc::result_set::ColumnIndex::new(1).unwrap(),
+        ]),
+        druid_rdbc::statement::GeneratedKeys::ColumnNames(vec!["id".to_owned()]),
+    ];
+
+    for selector in selectors {
+        let result = connection
+            .prepare_statement_with_generated_keys(
+                "INSERT INTO generated_keys(id) VALUES (1)",
+                StatementOptions::default(),
+                selector,
+            )
+            .await;
+        let error = match result {
+            Ok(_) => panic!("unsupported generated-key selectors must be rejected"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            RdbcError::SqlException(ref sql_error) if sql_error.sql_state() == Some("0A000")
+        ));
+    }
+    connection.close().await.unwrap();
+}
+
 /// PostgreSQL 当前没有接入独立取消通道；真实后端必须精确拒绝，而不能返回空操作句柄。
 #[tokio::test]
 #[ignore = "requires DRUID_DATABASE_URL pointing to a live PostgreSQL service"]

@@ -219,6 +219,40 @@ canonical factory是 `druid-rdbc::driver::ConnectionFactory`，返回未池化�
 `Physical*` 是P03/Task6固定迁移分母中的历史名称，不能重新作为当前公共接口；
 删除与纯净性整体完成仍需最终compiler/public API/SemVer证据。
 
+### 5.4 Statement 执行取消与池化租约
+
+标准 Statement 需要跨任务取消时，应在开始执行前取得独立的 `StatementCancellation` 控制句柄。该句柄绑定当前物理 owner、逻辑租约、语句和执行代次；取消请求可与独占借用 Statement 的执行 Future 并行，不要求 Statement 实现 `Sync`：
+
+```mermaid
+sequenceDiagram
+    participant A as 应用任务
+    participant S as 标准 Statement
+    participant C as 独立取消句柄
+    participant O as owner / adapter
+    A->>S: cancellation_control（执行前）
+    A->>S: execute_query（独占借用）
+    A->>C: 收到取消信号后调用 cancel
+    C->>O: 校验 owner、租约、语句和执行代次
+    O-->>C: 请求已接受或明确不支持
+    O-->>S: 执行终态和清理屏障
+    S-->>A: 正常结果或 SQL 错误
+```
+
+应用应在执行前取得控制句柄，再由任务信号或超时触发 `cancel()`。取消调用的成功只表示请求已被控制面接受；数据库执行的终态仍以执行 Future 的结果为准。常见 SQLState `HY008` 表示执行确实被取消；如果执行先自然完成，则保留正常结果。调用方应在执行结束后关闭结果集和 Statement。
+
+`druid` 的池化代理只将控制请求转发给创建它的逻辑句柄。连接归还、Statement 关闭或缓存语句重新 checkout 后，旧取消句柄不能跨越租约触及新执行。适配器完成取消清理屏障后才允许复用物理连接；清理错误、超时或执行 Future 在确认前被 drop 时，owner 标为不可用并由池丢弃，不能把 Future 结束误报为数据库已取消。
+
+当前 SQLx 的后端能力按实际实现和已运行版本限定：
+
+| 后端/场景 | 当前合同 | 证据边界 |
+|---|---|---|
+| 原生 SQLx SQLite | 缓冲/流式查询、execute、更新、批处理及默认生成键请求支持执行中取消；确认清理后可复用，同连接上的 VM 取消终态为 `HY008` | 本地嵌入式 runtime 3.46.0 的执行证据见 [取消合同证据](../openspec/changes/close-rdbc-jdbc42-contract-gaps/evidence/cancellation-contract.md)；不是独立服务端认证 |
+| SQLx PostgreSQL 18.6、MySQL 8.0.36 | 当前取消入口返回 SQLState `0A000` | 真实连接的负向能力测试；不表示其驱动不能在其他集成中支持取消 |
+| SQLx `Any` fallback | 返回 SQLState `0A000` | 以 Any 包装 SQLite 的测试确认不错误继承原生 SQLite 的取消能力 |
+| SQLx SQLite generated keys 列名/列索引请求 | 当前返回 `0A000` | 只有 `ReturnGeneratedKeys` 模式在矩阵所列路径中支持；能力与取消能力分开判断 |
+
+完整后端 × 执行入口及测试名称见 [SQLx 取消能力矩阵](../openspec/changes/close-rdbc-jdbc42-contract-gaps/evidence/sqlx-cancellation-capability-matrix.md)。这些状态仅对应表中实际验证的 feature 和版本，不能推广到未测驱动或宣称 JDBC TCK/全项目生产就绪。
+
 ## 6. 两种池化模式
 
 ### 6.1 Native Pool

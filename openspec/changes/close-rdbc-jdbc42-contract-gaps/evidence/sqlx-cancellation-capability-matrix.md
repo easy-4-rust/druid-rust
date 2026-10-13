@@ -27,7 +27,7 @@
 | prepared batch | `SUPPORTED` | `cancellation_interrupts_running_sqlite_prepared_batch_entry`；断言参数集失败计数为空、无部分写入，原 SQLState 为 `HY008`。 |
 | 生成键查询 `ReturnGeneratedKeys` | `SUPPORTED` | `independent_cancel_interrupts_running_sqlite_generated_key_query` |
 | 生成键更新 `ReturnGeneratedKeys` | `SUPPORTED` | `independent_cancel_interrupts_running_sqlite_generated_key_update`；取消不得提交行或发布部分/旧键。 |
-| 生成键列索引/列名选择 | `UNSUPPORTED` | SQLx adapter 在执行前精确返回 `0A000`（`sqlx_generated_keys_column_selection`）；不随 SQLite `ReturnGeneratedKeys` 的支持而推断。 |
+| 生成键列索引/列名选择 | `UNSUPPORTED` | `unsupported_sqlite_generated_key_selectors_return_0a000` 验证 SQLx adapter 在创建 PreparedStatement 前精确返回 `0A000`；不随 SQLite `ReturnGeneratedKeys` 的支持而推断。 |
 
 SQLite 的以上能力共享 Statement 执行代次和原子中断信号；每个 SQL 执行路径安装 progress handler，只有清除 handler 的屏障确认后才允许复用物理连接。SQLState `HY008` 表示数据库执行被中断；取消请求的接受本身不作为执行终态。Future 被 drop 或清理结果不确定时不宣称数据库已取消，而是把 actor 标记为不可用，让 DruidPool 丢弃物理 owner。
 
