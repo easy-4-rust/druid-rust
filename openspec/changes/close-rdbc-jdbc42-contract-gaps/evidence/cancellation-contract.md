@@ -21,6 +21,7 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 本次验证：
 
 - `cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test --locked --offline`：9 passed。
+- 使用运行中的 PostgreSQL 18.6 容器并注入临时进程级 `DRUID_DATABASE_URL`，执行 `cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test live_postgres_cancellation_control_reports_feature_not_supported --locked --offline -- --ignored --nocapture`：1 passed；验证真实 PostgreSQL 连接上的取消控制明确返回 `0A000`。
 - `cargo test -p druid --lib --locked --offline`：155 passed。
 - `cargo fmt -p druid-wrapper`：通过。
 - `git diff --check`：通过。
@@ -31,6 +32,6 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 |---|---|
 | `crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs` | `385E4FA7D3194AD245C9361A6F79E0672EB7C4B5ECA0AE392544CC43FE83D2CD` |
 | `crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs` | `E7698DADB9DF2F0858925519241787331F39D85DAA5FFF9CD7665E99D6387610` |
-| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `60CD0ACD629BEE47DD3C015F209C82D0A7689D58E1097C4177F5B94C19629A86` |
+| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `AC007F251BB5B131392D69AE9FB27FA4B790D7340BF75D479E1B2E422529FF6F` |
 
 **边界与未完成项：**这些测试运行在 SQLite 数据库引擎上，证明 SQLite VM 执行路径中断及本地连接清理，不是外部数据库服务器日志/会话终态证据。PostgreSQL、MySQL 等后端的逐项 `0A000` 证据、PreparedStatement/CallableStatement 的实时取消端到端覆盖、旧池租约缓存复用覆盖、生成键长执行覆盖，以及取消未确认时 owner 丢弃连接的故障注入仍未完成。因此 tasks 4.2–4.7 保持未勾选；本记录不关闭取消批，也不代表 JDBC 全面对齐或生产就绪。

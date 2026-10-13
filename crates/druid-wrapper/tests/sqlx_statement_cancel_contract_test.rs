@@ -436,3 +436,28 @@ async fn independent_cancel_interrupts_running_sqlite_execute() {
     statement.close().await.unwrap();
     connection.close().await.unwrap();
 }
+
+/// PostgreSQL 当前没有接入独立取消通道；真实后端必须精确拒绝，而不能返回空操作句柄。
+#[tokio::test]
+#[ignore = "requires DRUID_DATABASE_URL pointing to a live PostgreSQL service"]
+async fn live_postgres_cancellation_control_reports_feature_not_supported() {
+    let url = std::env::var("DRUID_DATABASE_URL")
+        .expect("live PostgreSQL cancellation test requires DRUID_DATABASE_URL");
+    let mut connection = SqlxConnectionAdapter::connect(&url).await.unwrap();
+    let mut statement = connection
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    let error = match statement.cancellation_control() {
+        Ok(_) => {
+            panic!("PostgreSQL cancellation must not be advertised before it reaches the server")
+        }
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        RdbcError::SqlException(ref error) if error.sql_state() == Some("0A000")
+    ));
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
