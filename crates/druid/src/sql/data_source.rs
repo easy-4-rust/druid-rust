@@ -34,6 +34,33 @@ impl CommonDataSource for crate::pool::DruidDataSource {
     fn login_timeout(&self) -> u64 {
         u64::try_from(crate::pool::DruidDataSource::login_timeout(self)).unwrap_or(0)
     }
+
+    fn get_log_writer(&self) -> Option<super::RdbcLogWriter> {
+        self.log_writer.read().clone()
+    }
+
+    fn set_log_writer(&self, writer: Option<super::RdbcLogWriter>) -> Result<(), RdbcError> {
+        *self.log_writer.write() = writer;
+        Ok(())
+    }
+}
+
+impl druid_rdbc::data_source::CommonDataSource for crate::pool::DruidDataSource {
+    fn get_log_writer(&self) -> Option<druid_rdbc::data_source::RdbcLogWriter> {
+        self.log_writer.read().clone()
+    }
+
+    fn set_log_writer(
+        &self,
+        writer: Option<druid_rdbc::data_source::RdbcLogWriter>,
+    ) -> Result<(), RdbcError> {
+        *self.log_writer.write() = writer;
+        Ok(())
+    }
+
+    fn get_parent_logger(&self) -> Result<&'static str, RdbcError> {
+        Ok("druid.pool")
+    }
 }
 
 #[async_trait::async_trait]

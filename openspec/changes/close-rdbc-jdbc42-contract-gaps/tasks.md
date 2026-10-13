@@ -4,12 +4,12 @@
 
 ## 当前状态与执行边界
 
-- 进度：40/55 项完成；6.5.1–6.5.5 已分别由 Rust XA RPC 合同/兼容性、显式数据源与标准入口、owner/外部池真实生命周期、Rust 客户端经 Agent 在 PostgreSQL 的跨 session 恢复，以及 XA 对外交付证据关闭；7.1/CD-01 的可失败登录超时合同也已关闭，证据见 [XA 客户端证据](evidence/xa-rust-client.md) 与 [CD-01 超时证据](evidence/common-data-source-timeout.md)。其余 15 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
+- 进度：41/55 项完成；6.5.1–6.5.5 已分别由 Rust XA RPC 合同/兼容性、显式数据源与标准入口、owner/外部池真实生命周期、Rust 客户端经 Agent 在 PostgreSQL 的跨 session 恢复，以及 XA 对外交付证据关闭；7.1/CD-01 的可失败登录超时合同和 7.2/CD-02–03 的三类数据源日志入口也已关闭，证据见 [XA 客户端证据](evidence/xa-rust-client.md)、[CD-01 超时证据](evidence/common-data-source-timeout.md) 与 [CD-02/03 日志入口证据](evidence/common-data-source-logging.md)。其余 14 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
 - 取消批证据见 [取消合同证据](evidence/cancellation-contract.md) 和 [SQLx 取消能力矩阵](evidence/sqlx-cancellation-capability-matrix.md)：SQLite runtime 3.46.0 VM 执行中断及同物理连接复用、批处理与结果集入口、清理屏障、Future drop/owner 关闭竞态及连接池精确丢弃计数、PostgreSQL/MySQL/Any/生成键选择精确 `0A000`、三类池化代理的真实租约/缓存隔离及取消代次测试均有记录；取消批 4.1–4.7 已关闭。
 - SQLx 后端×执行入口矩阵、真实 SQLite 执行终态与连接处置、逐路径支持/不支持测试、三类池化代理生命周期回归和用户文档已完成；XA 中立标准 API、JDK 8 常量/分支状态机及 6.3 扫描、身份、超时和示例 owner 失效均有独立证据。6.4 探测已证实 H2 2.3.232 不满足断开后恢复，并以 PostgreSQL 18.6 Testcontainers + pgjdbc 42.7.14 通过独立 JDBC 恢复试验；现已补齐真实 Agent 协议和 Rust RDBC 跨 session 恢复，细节见 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md) 与 [Rust XA 客户端证据](evidence/xa-rust-client.md)。取消范围保持关闭。
 - 每批只运行该批目标测试和直接受影响的回归；达到表格中的停止点即停并报告。最终综合门禁只在第 9 批运行一次，不循环重跑已通过的全量命令。
 - 真实后端、Java 8 或 XA 环境不可用时，相关任务记为 `NOT_RUN` 并说明阻断，不用 mock、编译成功或其他版本的 oracle 替代实际证据，也不自动安装依赖或扩大时间预算。
-- 执行顺序固定为：池事件批次 5 已完成；XA Rust 客户端实库恢复 6.5.4 与 XA 对外交付 6.5.5 已完成；公共数据源 7.1/CD-01 已完成，当前下一项为 7.2/CD-02–03。随后按顺序处理公共数据源 7.2–7.4、方法级证据 8.x 和综合验收 9.x；每项独立验收、提交和推送，不循环重跑已通过的全量门禁。
+- 执行顺序固定为：池事件批次 5 已完成；XA Rust 客户端实库恢复 6.5.4 与 XA 对外交付 6.5.5 已完成；公共数据源 7.1/CD-01 和 7.2/CD-02–03 已完成，当前下一项为 7.3/CD-02、CD-04。随后按顺序处理公共数据源 7.3–7.4、方法级证据 8.x 和综合验收 9.x；每项独立验收、提交和推送，不循环重跑已通过的全量门禁。
 - 范围仅限本变更列出的七项能力、MC-06 的资源/结果集方法级验收及证据门禁。MC-06 只要求把现有后端能力和缺口准确分级，不要求所有后端实现所有 JDBC 扩展。额外发现登记到后续清单，不自动加任务；关闭本变更不代表 P04–P07、全 JDBC/TCK 合规或整个项目生产就绪。
 
 ### 架构视角的补充路线
@@ -146,7 +146,7 @@
 ## 7. 补齐公共数据源配置
 
 - [x] 7.1 在 `druid-rdbc::CommonDataSource` 增加 `try_login_timeout() -> Result<Option<Duration>, RdbcError>`，保留并弃用旧 getter，默认适配须让只实现旧接口的外部实现保持源码兼容；明确 `None`/零值语义。用外部最小实现验证读/写错误载荷与时长最大值/精度，不允许错误落为默认值。当前标准层没有 Java 秒数转换调用点，已将此范围事实和后续适配约束记录；完整 RDBC 合同及 wrapper 消费者编译通过。证据见 [CD-01 登录超时合同](evidence/common-data-source-timeout.md)。（CD-01、MC-03）
-- [ ] 7.2 实现不绑定具体日志框架的接收对象与父命名空间入口，并接入普通、池化、XA 三类数据源。先以外部消费者测试锁定公共用法，再验证：三类入口初始均无接收对象；按实例设置后可读取并接收该实例诊断；设置为空后停止写入；A、B 与全局 `DriverManager` 的接收对象和事件互不串流；有父命名空间时返回稳定值，无能力时精确返回 SQLState `0A000`。（CD-02、CD-03）
+- [x] 7.2 实现不绑定具体日志框架的 `RdbcLogWriter` 与父命名空间入口，并接入普通 `DruidRdbcDataSource`、池化 `DruidDataSource` 和 XA `JdbcAgentXaDataSource`；保留 `druid::sql::RdbcLogWriter` 兼容重导出。以外部消费者验证普通/ConnectionPoolDataSource/XA 三个标准合同均可访问同一 API；验证生产数据源实例初始为空、设置后可读取并写出、设置为空后禁用，以及不支持的父命名空间精确返回 SQLState `0A000`。隔离和凭据脱敏属于 7.3，不在本项提前关闭。证据见 [CD-02/03 日志入口证据](evidence/common-data-source-logging.md)。（CD-02、CD-03）
 - [ ] 7.3 注入连接/配置 SQL 故障、日志接收器 I/O 故障及两者同时发生；覆盖用户名、密码、token、URL user-info 和敏感查询属性。断言输出不含秘密值且保留安全诊断上下文；同时发生时原 SQLState/主错误载荷不被日志错误覆盖；日志写入失败不伪造连接成功、不回滚已应用配置。测试同时覆盖普通、池化及 XA owner 的诊断边界。（CD-02、CD-04）
 - [ ] 7.4 更新普通、池化、XA 三类数据源配置示例与可失败 getter 迁移说明；示例应能由公开接口消费者编译/运行验证。运行公共配置目标测试及直接受影响的消费者回归，逐项登记旧 API、弃用入口和迁移行为；严格 OpenSpec 校验通过后结束本批，不顺延到方法覆盖批。（CD-01–04、MC-03）
 

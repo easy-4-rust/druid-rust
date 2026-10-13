@@ -26,6 +26,7 @@ use super::{DataSourceProxy, DruidPool};
 pub struct DruidDataSource {
     pool: DruidPool,
     object_name: RwLock<Option<String>>,
+    pub(crate) log_writer: RwLock<Option<druid_rdbc::data_source::RdbcLogWriter>>,
     data_source_id: OnceLock<u64>,
 }
 
@@ -36,6 +37,7 @@ impl DruidDataSource {
         Self {
             pool,
             object_name: RwLock::new(None),
+            log_writer: RwLock::new(None),
             data_source_id: OnceLock::new(),
         }
     }

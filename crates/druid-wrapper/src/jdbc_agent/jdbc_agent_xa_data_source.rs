@@ -1,8 +1,11 @@
 use super::jdbc_agent_connection::{JdbcAgentConnector, NativeJdbcAgentConnector};
 use super::jdbc_agent_xa_connection::JdbcAgentXaConnection;
 use super::JdbcAgentOptions;
-use druid_rdbc::data_source::{CommonDataSource, XaDataSource, XaResourceManagerIdentity};
+use druid_rdbc::data_source::{
+    CommonDataSource, RdbcLogWriter, XaDataSource, XaResourceManagerIdentity,
+};
 use druid_rdbc::error::{RdbcError, SqlException};
+use parking_lot::RwLock;
 use serde_json::{json, Map, Value as JsonValue};
 use std::sync::Arc;
 
@@ -16,6 +19,7 @@ pub struct JdbcAgentXaDataSource {
     options: JdbcAgentOptions,
     connector: Arc<dyn JdbcAgentConnector>,
     manager_identity: XaResourceManagerIdentity,
+    log_writer: Arc<RwLock<Option<RdbcLogWriter>>>,
 }
 
 impl JdbcAgentXaDataSource {
@@ -38,6 +42,7 @@ impl JdbcAgentXaDataSource {
             options,
             connector: Arc::new(NativeJdbcAgentConnector),
             manager_identity: XaResourceManagerIdentity::new(),
+            log_writer: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -110,6 +115,7 @@ impl JdbcAgentXaDataSource {
             options,
             connector,
             manager_identity: XaResourceManagerIdentity::new(),
+            log_writer: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -126,7 +132,20 @@ impl std::fmt::Debug for JdbcAgentXaDataSource {
     }
 }
 
-impl CommonDataSource for JdbcAgentXaDataSource {}
+impl CommonDataSource for JdbcAgentXaDataSource {
+    fn get_log_writer(&self) -> Option<RdbcLogWriter> {
+        self.log_writer.read().clone()
+    }
+
+    fn set_log_writer(&self, writer: Option<RdbcLogWriter>) -> Result<(), RdbcError> {
+        *self.log_writer.write() = writer;
+        Ok(())
+    }
+
+    fn get_parent_logger(&self) -> Result<&'static str, RdbcError> {
+        Ok("druid.jdbc_agent.xa")
+    }
+}
 
 #[async_trait::async_trait]
 impl XaDataSource for JdbcAgentXaDataSource {
@@ -159,6 +178,26 @@ mod tests {
     use serde_json::Value as JsonValue;
     use std::collections::VecDeque;
     use std::sync::{Arc as StdArc, Mutex as StdMutex};
+
+    #[test]
+    fn xa_data_source_log_writer_configuration_is_shared_across_clones() {
+        let (source, _, _) = setup(true);
+        let clone = source.clone();
+        assert!(source.get_log_writer().is_none());
+
+        let writer: RdbcLogWriter = Arc::new(parking_lot::Mutex::new(Box::new(std::io::sink())));
+        source
+            .set_log_writer(Some(Arc::clone(&writer)))
+            .expect("set XA log writer");
+        assert!(Arc::ptr_eq(
+            &clone.get_log_writer().expect("clone sees logger"),
+            &writer
+        ));
+        assert_eq!(source.get_parent_logger(), Ok("druid.jdbc_agent.xa"));
+
+        clone.set_log_writer(None).expect("disable XA log writer");
+        assert!(source.get_log_writer().is_none());
+    }
 
     #[derive(Clone)]
     struct TestConnector {

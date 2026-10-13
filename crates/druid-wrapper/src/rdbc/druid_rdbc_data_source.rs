@@ -88,6 +88,40 @@ impl CommonDataSource for DruidRdbcDataSource {
     }
 }
 
+impl druid_rdbc::data_source::CommonDataSource for DruidRdbcDataSource {
+    fn get_log_writer(&self) -> Option<druid_rdbc::data_source::RdbcLogWriter> {
+        druid::sql::CommonDataSource::get_log_writer(&self.inner)
+    }
+
+    fn set_log_writer(
+        &self,
+        writer: Option<druid_rdbc::data_source::RdbcLogWriter>,
+    ) -> Result<(), RdbcError> {
+        druid::sql::CommonDataSource::set_log_writer(&self.inner, writer)
+    }
+
+    fn get_parent_logger(&self) -> Result<&'static str, RdbcError> {
+        druid_rdbc::data_source::CommonDataSource::get_parent_logger(&self.inner)
+    }
+}
+
+#[async_trait]
+impl druid_rdbc::data_source::DataSource for DruidRdbcDataSource {
+    async fn connection(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        let connection = self.inner.get_connection().await.map_err(RdbcError::from)?;
+        Ok(Box::new(connection))
+    }
+
+    async fn connection_with_credentials(
+        &self,
+        user: &str,
+        password: &str,
+    ) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        let connection = self.get_connection_with_credentials(user, password).await?;
+        Ok(Box::new(connection))
+    }
+}
+
 #[async_trait]
 impl DataSource for DruidRdbcDataSource {
     async fn get_connection(&self) -> Result<DruidPooledConnection, RdbcError> {

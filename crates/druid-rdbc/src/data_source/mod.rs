@@ -23,7 +23,7 @@ mod xa_resource;
 mod xa_resource_manager_identity;
 mod xid;
 
-pub use common_data_source::CommonDataSource;
+pub use common_data_source::{CommonDataSource, RdbcLogWriter};
 pub use connection_event::{ConnectionEvent, PooledConnectionSource};
 pub use connection_event_listener::ConnectionEventListener;
 pub use connection_pool_data_source::ConnectionPoolDataSource;

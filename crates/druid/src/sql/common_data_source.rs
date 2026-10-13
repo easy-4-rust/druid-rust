@@ -1,12 +1,5 @@
 use crate::core::RdbcError;
-use std::io::Write;
-use std::sync::Arc;
-
-/// Thread-safe Rust mapping of an RDBC diagnostic writer.
-///
-/// Driver and data-source diagnostics may contain SQL, table names, or values. Callers must
-/// protect and redact this output with the same care as credentials.
-pub type RdbcLogWriter = Arc<parking_lot::Mutex<Box<dyn Write + Send>>>;
+pub use druid_rdbc::data_source::RdbcLogWriter;
 
 /// Configuration shared by data sources, pooled data sources, and XA data sources.
 ///

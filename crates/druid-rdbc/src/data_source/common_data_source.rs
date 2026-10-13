@@ -1,5 +1,10 @@
 use crate::error::RdbcError;
+use std::io::Write;
+use std::sync::Arc;
 use std::time::Duration;
+
+/// 可跨线程共享的 RDBC 诊断接收器；不绑定具体日志框架。
+pub type RdbcLogWriter = Arc<parking_lot::Mutex<Box<dyn Write + Send>>>;
 
 /// `javax.sql.CommonDataSource` 的共享配置标准。
 pub trait CommonDataSource: Send + Sync {
@@ -30,5 +35,26 @@ pub trait CommonDataSource: Send + Sync {
         Err(RdbcError::UnsupportedOperation {
             operation: "common_data_source_set_login_timeout",
         })
+    }
+
+    /// 返回该数据源的日志接收器；未配置或已禁用时返回 `None`。
+    fn get_log_writer(&self) -> Option<RdbcLogWriter> {
+        None
+    }
+
+    /// 设置该数据源的日志接收器；传入 `None` 禁用日志。
+    ///
+    /// 默认实现明确报告不支持，避免旧实现静默丢弃调用方配置。
+    fn set_log_writer(&self, _writer: Option<RdbcLogWriter>) -> Result<(), RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "common_data_source_set_log_writer",
+        ))
+    }
+
+    /// 返回父日志命名空间；不支持时精确返回 SQLState `0A000`。
+    fn get_parent_logger(&self) -> Result<&'static str, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "common_data_source_get_parent_logger",
+        ))
     }
 }
