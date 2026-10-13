@@ -1,7 +1,7 @@
 #![allow(clippy::match_same_arms)]
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use druid::stats::{
     DataSourceIdentity, DataSourceMonitorable, DruidTelemetrySnapshot, PoolSnapshot,
@@ -281,5 +281,58 @@ async fn queue_saturation_coalesces_live_sources_without_panicking() {
         .all(|source| source.snapshot_count.load(Ordering::Relaxed) > 0));
 
     runtime.shutdown(Duration::from_secs(2)).await.unwrap();
+    drop(guards);
+}
+
+#[tokio::test]
+async fn saturated_runtime_shutdown_drains_and_joins_every_owned_task() {
+    let config = DruidMetricsConfig::builder()
+        .queue_capacity(1)
+        .sample_interval(Duration::from_millis(1))
+        .shutdown_timeout(Duration::from_secs(2))
+        .build()
+        .expect("valid bounded metrics configuration");
+    let runtime = DruidMetricsRuntime::start(config)
+        .await
+        .expect("metrics runtime starts");
+    let metrics = Arc::clone(runtime.self_metrics());
+    let mut sources = Vec::new();
+    let mut guards = Vec::new();
+    for id in 0..20 {
+        let source = Arc::new(MockDataSource::new(id, &format!("budget_ds_{id}")));
+        guards.push(runtime.register(Arc::clone(&source) as Arc<dyn DataSourceMonitorable>));
+        sources.push(source);
+    }
+
+    // 必须先观察到真实采样器的合并，避免测量空闲 runtime 的关闭时间。
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while metrics.coalesced_total() == 0 {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+    })
+    .await
+    .expect("capacity-one queue must saturate");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(metrics.registered_datasources(), 20);
+    assert!(sources
+        .iter()
+        .any(|source| source.snapshot_count.load(Ordering::Relaxed) > 0));
+
+    let started = Instant::now();
+    runtime
+        .shutdown(Duration::from_secs(2))
+        .await
+        .expect("saturated runtime drains within its configured deadline");
+    let shutdown_us = started.elapsed().as_micros();
+    assert_eq!(metrics.active_tasks(), 0);
+    assert_eq!(metrics.unflushed_work(), 0);
+    assert_eq!(metrics.registered_datasources(), 0);
+    eprintln!(
+        "metrics_saturation_shutdown coalesced={} shutdown_us={} active_tasks={} unflushed={}",
+        metrics.coalesced_total(),
+        shutdown_us,
+        metrics.active_tasks(),
+        metrics.unflushed_work()
+    );
     drop(guards);
 }

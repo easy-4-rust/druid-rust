@@ -2,6 +2,8 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
+2026-10-13 Metrics 饱和关闭组合验证：当前 Windows/Rust 1.97.1 的真实 runtime 以队列容量 1、20 个保持注册的数据源、1 ms 采样周期运行至少 100 ms，新增 `saturated_runtime_shutdown_drains_and_joins_every_owned_task` 测试要求先发生合并，再检查关闭后受监管任务、未刷新工作和注册数均为 0。完整 `queue_semantics_test` 5/5 PASS；直接运行同一测试可执行文件 20/20 PASS，合并次数每次 159–239，关闭耗时 123–333 µs（20 样本最近秩 p99=333 µs），轮询所得进程峰值工作集最高 5,420 KiB。这是本机参考基线，尚未给出跨平台验收阈值；Admin 数值预算、SIGTERM 待 ACK 及完整故障矩阵继续开放。
+
 2026-10-13 [CI run 38331373881](https://github.com/easy-4-rust/druid-rust/actions/runs/38331373881) 的 PostgreSQL/MySQL 均在重启 hook 与建池后借用连接超时；[CI run 38332281893](https://github.com/easy-4-rust/druid-rust/actions/runs/38332281893) 的原生直连探针进一步确认，容器内部报告 healthy 后，旧随机映射宿主机端口立即返回 `Connection refused (os error 111)`。改为固定映射端口并同时检查宿主机连通性后，[CI run 38332794498](https://github.com/easy-4-rust/druid-rust/actions/runs/38332794498) 的 PostgreSQL 16.15 与 MySQL 8.4.11 真实产品合同均成功，上传的证据 JSON 各含 `database-restart` 等 13 项合同、对应源码 SHA `a656764fbb04603accedb3a28836f1b824386b34`。这只关闭两项实库重启故障的当前验证缺口；P06 数值故障预算及整轮发布门禁仍未关闭。
 
 2026-10-13 对 [CI run 38232002006](https://github.com/easy-4-rust/druid-rust/actions/runs/38232002006) 的终态审计：38 个作业成功、SemVer 失败；PostgreSQL、MySQL 和 x86_64 macOS/Windows 默认工具链 DuckDB 契约在约 6 小时后取消，均不计为实库通过。DuckDB 两个平台最后停在超时语句关闭后、同租约 `ping` 前；本机相同契约在旧实现第 11/25 次复现 20 秒卡死，延长后台中断至 10 秒仍卡死。改为取消回调立即调用原生 interrupt、保留后台重试后，当前 Windows `1.97.1` 同一实库契约连续 100/100 次在单次 20 秒期限内退出 0。[新 CI run 38327320344](https://github.com/easy-4-rust/druid-rust/actions/runs/38327320344) 的 DuckDB 五目标双工具链契约 10/10 通过且证据聚合成功。PostgreSQL/MySQL 原运行停在重启阶段；重启 hook 现输出阶段、限制 `docker restart` 为 90 秒，实库 CI 作业设 45 分钟硬期限；该新运行的两项均在服务恢复 healthy 后、重建连接段挂起并被作业上限取消，没有生成认证证据。下一轮已为 hook 完成、建池、借用和 ping 增加阶段标记与 30 秒局部截止时间，整条测试限 10 分钟。Task5 保持开放。
