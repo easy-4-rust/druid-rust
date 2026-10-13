@@ -131,3 +131,25 @@ XA 配置 SHALL 提供明确的 XADataSource 类名和属性映射；配置解�
 #### Scenario: 客户端跨 session 恢复
 - **WHEN** 客户端通过 Agent prepare 一个事务分支、关闭原 session，再建立新的 XA session 并恢复
 - **THEN** recover 返回完整 Xid，后续 commit/rollback 对真实数据库产生可查询的终态，协议错误码和投票保持原值
+
+### Requirement: XA-06 对外集成文档和兼容性审查
+
+仓库 SHALL 提供面向外部应用和事务管理器维护者的 XA 集成说明，描述 feature 启用、明确的 XADataSource 类名与属性配置、`XaDataSource → XaConnection → XaResource` 获取路径、逻辑连接租约与物理 XA owner 的关闭边界、跨 session 恢复步骤、错误处置和凭据脱敏。示例 SHALL 区分普通 JDBC Agent 连接与 XA session；普通连接不得被暗示可升级为 XA。文档中的 Rust 调用示例 SHALL 由只依赖公开 RDBC API 的最小消费者编译验证；关键 XA 生命周期与恢复示例 SHALL 有已运行的合同或实库证据支持。
+
+XA API 变更 SHALL 逐项记录公开类型、方法、feature gate、源兼容性及 SemVer 影响。不能以类型存在、旧 API 快照或编译成功替代对本次真实 API 差异的审查；若无已发布稳定版本，记录该事实和发布前的版本策略建议，不得伪称已作版本发布。
+
+#### Scenario: 外部事务管理器使用显式 XA 数据源
+- **WHEN** 外部消费者启用 `jdbc-agent` 并显式配置 XADataSource 类名和属性
+- **THEN** 消费者仅通过公开 `druid-rdbc` 合同取得 XA owner/resource，并能按接口执行 start、SQL、end、prepare 与第二阶段操作，不依赖 wrapper 私有类型
+
+#### Scenario: 逻辑租约关闭与 XA owner 关闭
+- **WHEN** 事务管理器关闭逻辑 SQL 连接而保留 XA owner
+- **THEN** 文档明确该操作只归还/失效逻辑租约，owner 上的 XAResource 仍有效；关闭物理 XA owner 后所有关联句柄失效
+
+#### Scenario: 恢复与不确定故障处置
+- **WHEN** 事务管理器在新 XA session 恢复 prepared Xid，或遇到 XA/传输错误
+- **THEN** 文档给出 recover→核验完整 Xid→commit/rollback 的操作顺序、支持恢复的后端前提、错误码/SQLState 处理及 owner 隔离规则；证据明确标注实际验证的后端和版本
+
+#### Scenario: 普通模式迁移与公开 API/SemVer
+- **WHEN** 普通 Agent 用户阅读迁移说明或维护者评审 XA API
+- **THEN** 普通连接配置和握手保持原样，XA 能力必须通过显式配置创建；新增、弃用、破坏性 API 与 feature gate 均列入差异记录，并由外部消费者编译结果佐证

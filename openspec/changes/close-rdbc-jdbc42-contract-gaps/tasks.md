@@ -136,7 +136,12 @@
   - **外部标准池与 Druid 边界层**：用一个只依赖 RDBC `XaDataSource`/`XaConnection`/`PooledConnection` 的最小外部池消费者验证借出、逻辑归还、再次借出、owner discard/close 的事件顺序与租约隔离；确认归还逻辑连接时 XA owner 未被提前关闭，致命/不确定状态 owner 不会重新入池。另检查 Druid 原生池入口的真实类型边界：若它只接收普通 `ConnectionFactory`/`Connection`，记录 XA owner 不经普通池代理的限制与示例用法，不伪称已由 Druid `DruidPooledConnection` 管理 XA；只有实际存在 XA 池代理时才要求该代理的正向生命周期回归。
   - 汇总三层命令、退出码、源码哈希和未运行项；环境可用，本项无 `NOT_RUN`。真实 PostgreSQL 跨 session 恢复仍由 6.5.4 独立验收，不能由本项 H2 生命周期证据替代。（XA-04、XA-05、PE-02、MC-02、MC-06）
 - [x] 6.5.4 使用已通过 6.4 的 PostgreSQL Testcontainers 配置，从 Rust RDBC 消费入口完成 start→SQL 写入→end→prepare→关闭 session→新 session recover→commit/rollback，并以独立 JDBC 连接核对数据库最终状态；同时运行普通模式和明确不支持 XA 的负向测试。记录精确命令、版本、退出码和源码哈希；环境缺失记 `NOT_RUN`，本任务不得用 Agent Java 协议测试代替 Rust 端到端证据。（XA-03、XA-05、MC-02；证据见 [Rust XA 客户端证据](evidence/xa-rust-client.md#654-rust-rdbc-postgresql-跨-session-xa-恢复)）
-- [ ] 6.5.5 更新显式 XADataSource 配置、owner/逻辑租约生命周期、恢复步骤、错误处置和普通模式迁移示例；完成事务管理器最小外部消费者编译/行为验证及 API/SemVer 差异审查。将 6.5.2–6.5.5 的命令、真实后端版本、退出码、源码哈希和 `NOT_RUN` 阻断写入 `evidence/xa-rust-client.md`；运行 XA 定向测试与直接受影响回归，逐条核对 XA-01–05 场景后结束本批，不自动开始第 7 批。（XA-01–05、MC-02–04）
+- [ ] 6.5.5（有限交付 C：XA 对外交付；完成即停止，不顺延 7.1）
+  - [ ] 6.5.5a 编写/更新中文集成指南：`jdbc-agent` feature 与 Agent/JDBC 驱动准备、XADataSource 显式类名和属性、标准入口获取、敏感配置脱敏，以及普通连接维持原配置的迁移说明；不得把 JDBC URL 或普通 Connection 描述为 XA 能力来源。（XA-05、XA-06）
+  - [ ] 6.5.5b 用 Mermaid 时序图展示事务管理器取得 owner/resource、逻辑连接执行 SQL、逻辑租约归还、prepare、关闭原 owner、新 session recover、核验完整 Xid 后 commit/rollback；标清逻辑 Connection 关闭不关闭 XA owner，owner 关闭后所有句柄失效。（XA-04–06）
+  - [ ] 6.5.5c 将文档调用片段落实为只依赖 `druid-rdbc` 公开接口的最小外部消费者编译/行为验证；若代码示例不适合在普通模式真实运行，区分 compile-only、合同测试和已完成的 PostgreSQL 实库证据，不将它们混称。（XA-01、XA-05–06、MC-03）
+  - [ ] 6.5.5d 审查当前分支的真实 API 差异：类型/方法、feature gate、外部实现源兼容性、行为变化、迁移要求和 SemVer 结论；标明 API 快照是否与当前源码同步。若本地没有已发布稳定版本，记录“预发布”依据和发布前版本策略，不虚构版本承诺。（XA-06、MC-03）
+  - [ ] 6.5.5e 运行 XA 目标测试及直接受影响回归；将 6.5.2–6.5.5 精确命令、feature、Agent/后端/驱动版本、退出码、源码哈希、消费者验证类型、API/SemVer 结论及 `NOT_RUN` 阻断写入 `evidence/xa-rust-client.md`。逐条验收 XA-01–06；严格 OpenSpec 校验通过后提交并停止本批，不自动开始 7.1。（XA-01–06、MC-02–04）
 
 ## 7. 补齐公共数据源配置
 
