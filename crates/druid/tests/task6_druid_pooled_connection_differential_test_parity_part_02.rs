@@ -20,8 +20,9 @@ use druid_rdbc::statement::{
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::any::TypeId;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::Mutex;
 
 // ── helpers ────────────────────────────────────────────────────────
 
@@ -161,6 +162,97 @@ struct TestStatementEventListener;
 
 impl StatementEventListener for TestStatementEventListener {
     fn statement_closed(&self, _connection_id: u64, _statement_id: usize) {}
+    fn statement_error_occurred(
+        &self,
+        _connection_id: u64,
+        _statement_id: usize,
+        _error: &DruidError,
+    ) {
+    }
+}
+
+#[derive(Default)]
+struct RecordingStatementEventListener {
+    closed: AtomicUsize,
+    errors: AtomicUsize,
+    connection_id: AtomicU64,
+    statement_id: AtomicU64,
+    error_has_sql_exception: AtomicBool,
+}
+
+impl StatementEventListener for RecordingStatementEventListener {
+    fn statement_closed(&self, connection_id: u64, statement_id: usize) {
+        self.connection_id.store(connection_id, Ordering::SeqCst);
+        self.statement_id
+            .store(statement_id as u64, Ordering::SeqCst);
+        self.closed.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn statement_error_occurred(
+        &self,
+        connection_id: u64,
+        statement_id: usize,
+        error: &DruidError,
+    ) {
+        self.connection_id.store(connection_id, Ordering::SeqCst);
+        self.statement_id
+            .store(statement_id as u64, Ordering::SeqCst);
+        self.error_has_sql_exception
+            .store(error.sql_exception().is_some(), Ordering::SeqCst);
+        self.errors.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+struct PanickingStatementEventListener;
+
+impl StatementEventListener for PanickingStatementEventListener {
+    fn statement_closed(&self, _connection_id: u64, _statement_id: usize) {
+        panic!("statement-closed listener panic");
+    }
+
+    fn statement_error_occurred(
+        &self,
+        _connection_id: u64,
+        _statement_id: usize,
+        _error: &DruidError,
+    ) {
+        panic!("statement-error listener panic");
+    }
+}
+
+struct ReentrantStatementEventListener {
+    owner: Mutex<Option<std::sync::Weak<Mutex<DruidPooledConnection>>>>,
+    self_reference: Mutex<Option<std::sync::Weak<Self>>>,
+    closed: AtomicUsize,
+    removed_self: AtomicBool,
+}
+
+impl StatementEventListener for ReentrantStatementEventListener {
+    fn statement_closed(&self, _connection_id: u64, _statement_id: usize) {
+        self.closed.fetch_add(1, Ordering::SeqCst);
+        let owner = self
+            .owner
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade);
+        let listener = self
+            .self_reference
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade);
+        if let (Some(owner), Some(listener)) = (owner, listener) {
+            let listener: Arc<dyn StatementEventListener> = listener;
+            let removed = owner
+                .lock()
+                .unwrap()
+                .remove_statement_event_listener(&listener)
+                .unwrap();
+            self.removed_self.store(removed, Ordering::SeqCst);
+        }
+    }
+
     fn statement_error_occurred(
         &self,
         _connection_id: u64,
@@ -366,6 +458,126 @@ async fn task6_druid_pooled_connection_differential_test_add_and_remove_statemen
         .unwrap();
     let removed = p.remove_statement_event_listener(&listener).unwrap();
     assert!(removed);
+}
+
+#[tokio::test]
+async fn prepared_statement_close_notifies_registered_listener_once_with_original_identity() {
+    let mut pooled = make_pooled(make_physical().await).await;
+    let listener = Arc::new(RecordingStatementEventListener::default());
+    let listener_trait: Arc<dyn StatementEventListener> = listener.clone();
+    pooled.add_statement_event_listener(listener_trait).unwrap();
+    let mut statement = pooled
+        .prepare_statement("SELECT 1", StatementOptions::default())
+        .await
+        .unwrap();
+
+    statement.close().await.unwrap();
+    statement.close().await.unwrap();
+
+    assert_eq!(listener.closed.load(Ordering::SeqCst), 1);
+    assert_eq!(listener.errors.load(Ordering::SeqCst), 0);
+    assert_eq!(listener.connection_id.load(Ordering::SeqCst), 1);
+    assert!(listener.statement_id.load(Ordering::SeqCst) > 0);
+}
+
+#[tokio::test]
+async fn prepared_statement_sql_error_notifies_listener_and_preserves_error() {
+    let mut pooled = make_pooled(make_physical().await).await;
+    let listener = Arc::new(RecordingStatementEventListener::default());
+    let listener_trait: Arc<dyn StatementEventListener> = listener.clone();
+    pooled.add_statement_event_listener(listener_trait).unwrap();
+    let mut statement = pooled
+        .prepare_statement("SELECT * FROM missing_table", StatementOptions::default())
+        .await
+        .unwrap();
+
+    let error = match statement.execute_prepared().await {
+        Ok(_) => panic!("query against a missing table must fail"),
+        Err(error) => error,
+    };
+
+    assert!(error.sql_exception().is_some());
+    assert_eq!(listener.errors.load(Ordering::SeqCst), 1);
+    assert!(listener.error_has_sql_exception.load(Ordering::SeqCst));
+    assert_eq!(listener.connection_id.load(Ordering::SeqCst), 1);
+    assert!(listener.statement_id.load(Ordering::SeqCst) > 0);
+}
+
+#[tokio::test]
+async fn removing_listener_after_prepare_suppresses_close_notification() {
+    let mut pooled = make_pooled(make_physical().await).await;
+    let listener = Arc::new(RecordingStatementEventListener::default());
+    let listener_trait: Arc<dyn StatementEventListener> = listener.clone();
+    pooled
+        .add_statement_event_listener(Arc::clone(&listener_trait))
+        .unwrap();
+    let mut statement = pooled
+        .prepare_statement("SELECT 1", StatementOptions::default())
+        .await
+        .unwrap();
+    assert!(pooled
+        .remove_statement_event_listener(&listener_trait)
+        .unwrap());
+
+    statement.close().await.unwrap();
+
+    assert_eq!(listener.closed.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn statement_listener_panic_does_not_skip_close_or_sql_error_delivery() {
+    let mut pooled = make_pooled(make_physical().await).await;
+    pooled
+        .add_statement_event_listener(Arc::new(PanickingStatementEventListener))
+        .unwrap();
+    let listener = Arc::new(RecordingStatementEventListener::default());
+    let listener_trait: Arc<dyn StatementEventListener> = listener.clone();
+    pooled.add_statement_event_listener(listener_trait).unwrap();
+    let mut statement = pooled
+        .prepare_statement("SELECT * FROM missing_table", StatementOptions::default())
+        .await
+        .unwrap();
+
+    let error = match statement.execute_prepared().await {
+        Ok(_) => panic!("query against a missing table must fail"),
+        Err(error) => error,
+    };
+    assert!(error.sql_exception().is_some());
+    assert_eq!(listener.errors.load(Ordering::SeqCst), 1);
+
+    statement.close().await.unwrap();
+
+    assert_eq!(listener.closed.load(Ordering::SeqCst), 1);
+    assert!(statement.is_closed().unwrap());
+}
+
+#[tokio::test]
+async fn statement_closed_listener_can_remove_itself_without_deadlock() {
+    let pooled = Arc::new(Mutex::new(make_pooled(make_physical().await).await));
+    let listener = Arc::new(ReentrantStatementEventListener {
+        owner: Mutex::new(Some(Arc::downgrade(&pooled))),
+        self_reference: Mutex::new(None),
+        closed: AtomicUsize::new(0),
+        removed_self: AtomicBool::new(false),
+    });
+    *listener.self_reference.lock().unwrap() = Some(Arc::downgrade(&listener));
+    let listener_trait: Arc<dyn StatementEventListener> = listener.clone();
+    pooled
+        .lock()
+        .unwrap()
+        .add_statement_event_listener(listener_trait)
+        .unwrap();
+
+    let mut statement = pooled
+        .lock()
+        .unwrap()
+        .prepare_statement("SELECT 1", StatementOptions::default())
+        .await
+        .unwrap();
+    statement.close().await.unwrap();
+
+    assert_eq!(listener.closed.load(Ordering::SeqCst), 1);
+    assert!(listener.removed_self.load(Ordering::SeqCst));
 }
 
 #[tokio::test]

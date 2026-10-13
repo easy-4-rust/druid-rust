@@ -35,6 +35,8 @@ pub(crate) struct DruidPooledStatementInner {
     pub(crate) lease_active: Arc<AtomicBool>,
     pub(crate) filter_chain: Option<Arc<FilterChain>>,
     pub(crate) stats_collector: Option<Arc<StatsCollector>>,
+    statement_events_enabled: AtomicBool,
+    statement_closed_notified: AtomicBool,
     state: Mutex<DruidPooledStatementState>,
     result_sets: Mutex<Vec<std::sync::Weak<StandardResultSetResource>>>,
     result_sequence: Mutex<Option<StatementResultSequence>>,
@@ -185,6 +187,8 @@ impl DruidPooledStatement {
                 lease_active,
                 filter_chain,
                 stats_collector,
+                statement_events_enabled: AtomicBool::new(false),
+                statement_closed_notified: AtomicBool::new(false),
                 state: Mutex::new(DruidPooledStatementState {
                     options,
                     max_field_size: 0,
@@ -434,6 +438,18 @@ impl DruidPooledStatement {
 }
 
 impl DruidPooledStatementInner {
+    pub(crate) fn enable_statement_events(&self) {
+        self.statement_events_enabled.store(true, Ordering::Release);
+    }
+
+    fn notify_statement_closed(&self) {
+        if self.statement_events_enabled.load(Ordering::Acquire)
+            && !self.statement_closed_notified.swap(true, Ordering::AcqRel)
+        {
+            self.policy.notify_statement_closed(self.id as usize);
+        }
+    }
+
     pub(crate) fn track_result_set(&self, result_set: &Arc<StandardResultSetResource>) {
         let mut result_sets = self
             .result_sets
@@ -552,10 +568,11 @@ impl DruidPooledStatementInner {
         if let Some(stats) = self.stats_collector.as_ref() {
             stats.statement_stat().increment_statement_close_counter();
         }
+        self.notify_statement_closed();
+        self.unregister_resource();
         if let Some(filter_chain) = &self.filter_chain {
             filter_chain.after_statement_close_with_identity(self.connection_id, self.id)?;
         }
-        self.unregister_resource();
         Ok(())
     }
 
@@ -574,12 +591,13 @@ impl DruidPooledStatementInner {
         if let Some(stats) = self.stats_collector.as_ref() {
             stats.statement_stat().increment_statement_close_counter();
         }
+        self.notify_statement_closed();
+        self.unregister_resource();
         if let Some(filter_chain) = &self.filter_chain {
             filter_chain
                 .after_statement_close_with_identity(self.connection_id, self.id)
                 .map_err(RdbcError::from)?;
         }
-        self.unregister_resource();
         Ok(())
     }
 }

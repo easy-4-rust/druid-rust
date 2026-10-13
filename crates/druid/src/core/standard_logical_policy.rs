@@ -7,7 +7,7 @@ use super::filter::{ExecContext, ExecOperation};
 use super::owner_disposition_control::OwnerDispositionControl;
 use super::{
     BatchExecContext, BatchExecKind, DruidError, ExecResult, FilterChain, PreparedInputParameter,
-    RdbcError, Value,
+    RdbcError, StatementEventListener, Value,
 };
 use crate::stats::{RdbcStatementStat, StatsCollector};
 use parking_lot::{Mutex, RwLock};
@@ -31,6 +31,7 @@ pub(crate) struct StandardLogicalPolicy {
     resource_generation: u64,
     discarded: AtomicBool,
     owner_disposition: Arc<OwnerDispositionControl>,
+    statement_event_listeners: RwLock<Option<Arc<RwLock<Vec<Arc<dyn StatementEventListener>>>>>>,
 }
 
 impl StandardLogicalPolicy {
@@ -58,7 +59,68 @@ impl StandardLogicalPolicy {
             resource_generation,
             discarded: AtomicBool::new(false),
             owner_disposition,
+            statement_event_listeners: RwLock::new(None),
         })
+    }
+
+    pub(crate) fn set_statement_event_listeners(
+        &self,
+        listeners: Arc<RwLock<Vec<Arc<dyn StatementEventListener>>>>,
+    ) {
+        *self.statement_event_listeners.write() = Some(listeners);
+    }
+
+    pub(crate) fn notify_statement_closed(&self, statement_id: usize) {
+        let Some(registry) = self.statement_event_listeners.read().clone() else {
+            return;
+        };
+        // 先复制监听器快照，再释放锁；回调可重入并修改注册表。
+        let listeners = registry.read().clone();
+        for listener in listeners {
+            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                listener.statement_closed(self.connection_id, statement_id)
+            }))
+            .is_err()
+            {
+                tracing::error!(
+                    connection_id = self.connection_id,
+                    statement_id,
+                    "statement-closed listener panicked; continuing resource cleanup"
+                );
+            }
+        }
+    }
+
+    fn notify_statement_error(&self, statement_id: u64, error: &RdbcError) {
+        if error.sql_exception().is_none() {
+            return;
+        }
+        let Some(registry) = self.statement_event_listeners.read().clone() else {
+            return;
+        };
+        // 回调在注册表锁外运行；监听器可在回调期间注销自身。
+        let listeners = registry.read().clone();
+        if listeners.is_empty() {
+            return;
+        }
+        let product_error = DruidError::from(error.clone());
+        for listener in listeners {
+            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                listener.statement_error_occurred(
+                    self.connection_id,
+                    statement_id as usize,
+                    &product_error,
+                )
+            }))
+            .is_err()
+            {
+                tracing::error!(
+                    connection_id = self.connection_id,
+                    statement_id,
+                    "statement-error listener panicked; preserving database error handling"
+                );
+            }
+        }
     }
 
     pub(crate) fn set_stats_collector(&self, collector: Arc<StatsCollector>) {
@@ -215,11 +277,21 @@ impl StandardLogicalPolicy {
             Err(error) => {
                 let result = self.classify(Err(RdbcError::from(error)), Some(&context.sql));
                 self.record_execution(&context.sql, &result);
+                if prepared_parameters.is_some() {
+                    if let Err(error) = &result {
+                        self.notify_statement_error(statement_id, error);
+                    }
+                }
                 return result;
             }
         };
         let result = self.classify(result, Some(&effective_sql));
         self.record_execution(&effective_sql, &result);
+        if prepared_parameters.is_some() {
+            if let Err(error) = &result {
+                self.notify_statement_error(statement_id, error);
+            }
+        }
         self.classify(after.map_err(RdbcError::from), Some(&effective_sql))?;
         result
     }
@@ -343,10 +415,23 @@ impl StandardLogicalPolicy {
         .await;
         let (result, after) = match around {
             Ok(outcome) => outcome,
-            Err(error) => return self.classify(Err(error.into()), Some(sql)),
+            Err(error) => {
+                let result = self.classify(Err(error.into()), Some(sql));
+                if kind == BatchExecKind::PreparedStatement {
+                    if let Err(error) = &result {
+                        self.notify_statement_error(statement_id, error);
+                    }
+                }
+                return result;
+            }
         };
         let result = self.classify(result, Some(sql));
         self.record_execution(sql, &result);
+        if kind == BatchExecKind::PreparedStatement {
+            if let Err(error) = &result {
+                self.notify_statement_error(statement_id, error);
+            }
+        }
         self.classify(after.map_err(RdbcError::from), Some(sql))?;
         result
     }

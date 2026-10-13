@@ -378,6 +378,7 @@ impl DruidPooledCallableStatement {
             filter_chain,
             stats_collector,
         );
+        statement_base.inner.enable_statement_events();
         resources
             .register(admission, Arc::clone(&statement_base.inner))
             .await?;

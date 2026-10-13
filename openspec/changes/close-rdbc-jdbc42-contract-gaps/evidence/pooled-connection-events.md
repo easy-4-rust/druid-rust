@@ -58,3 +58,37 @@ cargo test -p druid-wrapper --features sqlx-deadpool --test sqlx_deadpool_pool_t
 | `crates/druid/tests/task6_druid_pooled_connection_differential_test_parity_part_02.rs` | `C2975BA1F2D9E17265A462CF62C664921198CE42D37E46D1E189DBC1740E0120` |
 
 本节关闭 5.2 的 Druid 产品连接关闭/fatal 错误处置场景。标准 RDBC `PooledConnection` 具体消费者接入及 PreparedStatement/CallableStatement 事件分发仍由 5.3–5.4 验收。
+
+## PE-03：PreparedStatement/CallableStatement 事件
+
+PreparedStatement 与 CallableStatement 现通过 holder 共享的监听器注册表发送语句关闭和 SQL 执行异常事件。事件保留原语句对象身份；监听器列表在回调前快照，锁外逐个调用。移除操作即时影响既有语句；单个回调 panic 被隔离，不吞掉原 SQL 错误或中断关闭清理。逻辑关闭及物理 close 成功路径共用一次性门闩，因此同一语句不会重复发送关闭事件。普通 Statement 不被误标为此项新增的 Prepared/Callable 执行事件能力。
+
+先添加 PreparedStatement 关闭事件回归，基线断言失败（收到 0 次，预期 1 次）；实现后定向套件通过。验证命令及结果：
+
+| 命令 | 结果 |
+|---|---|
+| `cargo test -p druid --test task6_druid_pooled_connection_differential_test_parity_part_02 -- --nocapture` | 32 passed |
+| `cargo test -p druid --test callable_cache_lifecycle_test` | 7 passed |
+| `cargo test -p druid --test task6_connection_holder_coverage_test_parity` | 22 passed |
+| `cargo test -p druid-rdbc --test standard_event_contract_test` | 8 passed |
+| `cargo fmt -p druid -- --check` | exit 0 |
+| `openspec validate close-rdbc-jdbc42-contract-gaps --strict` | exit 0 |
+| `git diff --check` | exit 0 |
+
+新增/扩展回归覆盖 PreparedStatement/CallableStatement 关闭事件恰好一次、错误事件 SQLState 与错误对象保留、事件携带原语句身份、prepare 后移除监听器立即生效、监听器自移除的回调重入，以及 panic 后仍发送后续通知和执行清理。以上验证仅关闭 PE-03/PE-04 的实现合同；PE-05/任务 5.4 外部消费者文档、示例和全批验收仍未完成。
+
+### 本次源码身份
+
+以下 SHA-256 对应上述实现与测试文件的当前工作区内容：
+
+| 文件 | SHA-256 |
+|---|---|
+| `crates/druid/src/core/druid_connection_holder.rs` | `63A1930A460CD7AB8EECE77C2E97353CCBEFB6A17BBA097CA6E2135E65BF3918` |
+| `crates/druid/src/core/druid_pooled_statement.rs` | `7D7D89FE2512DB49292F46339A80CAEFBACF35ABEF01088A1372D877BA26D314` |
+| `crates/druid/src/core/standard_logical_policy.rs` | `A3E14777E4C124B4F54D1CEA014C1231446D1816CB255BDE93C2D7B2EFBC0741` |
+| `crates/druid/src/core/druid_pooled_connection.rs` | `D3A809ED53E1641A6C34C825FBBA32F8B78AED5ABEE27A64FF7D4B01ADC9A67B` |
+| `crates/druid/src/core/druid_pooled_prepared_statement.rs` | `9DC7043933ADE1B30D1EA63A9046D61C609D4EB24FE392E0785CEC76F0D3EE84` |
+| `crates/druid/src/core/druid_pooled_callable_statement.rs` | `7DFA8EC99C74976D58B89C9CB7D661547D83CBDEA1132686A359AB62B41C3F02` |
+| `crates/druid/src/core/statement_event_listener.rs` | `6B4DC1B9E3B3A780EE28060D653187316CCC0D3E78826AB0202A20CC18023CD7` |
+| `crates/druid/tests/task6_druid_pooled_connection_differential_test_parity_part_02.rs` | `8E1F20BA2057EE78ED5C381F94C8C5809361CDAA6078C3D9C49DAC124AA75BC2` |
+| `crates/druid/tests/callable_cache_lifecycle_test.rs` | `944EFFC4319C344BABBA90A1752FB3EADD4CD00ECEC13CAD0103BB2B5DFDD3F6` |

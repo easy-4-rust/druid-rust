@@ -200,6 +200,9 @@ impl DruidPooledConnection {
             resource_generation,
             Arc::clone(&owner_disposition),
         ));
+        if let Some(policy) = standard_policy.as_ref() {
+            policy.set_statement_event_listeners(holder.statement_event_listeners_handle());
+        }
         let connected_time_millis = now_millis().saturating_sub(
             holder
                 .created_at

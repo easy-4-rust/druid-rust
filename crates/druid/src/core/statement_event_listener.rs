@@ -7,9 +7,9 @@ use super::DruidError;
 /// `PreparedStatement` 关闭与错误事件监听器。
 ///
 /// Rust 标准库没有 RDBC `PooledConnection`/`StatementEvent` 标准，因此在
-/// `Connection` 平台边界定义最小 SPI。Java Druid core 当前只保存、
-/// 移除并在 holder reset 时清空此监听器，没有主动发布两个回调；Rust 保留同样
-/// 的生产行为，方法用于外部驱动或后续 XA Adapter 按平台合同发布事件。
+/// `Connection` 平台边界定义最小 SPI。Druid 在 prepared/callable 语句成功关闭、
+/// 或执行产生 SQL 异常时发布事件；回调使用创建语句时的连接与逻辑语句身份，
+/// 在注册表锁外调用，且单个监听器 panic 不阻断其他回调或资源清理。
 pub trait StatementEventListener: Send + Sync {
     /// `PreparedStatement` 已经关闭。
     ///

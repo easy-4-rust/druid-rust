@@ -72,7 +72,7 @@ pub struct DruidConnectionHolder {
     pool_prepared_statements: bool,
     prepared_statement_stats: Arc<PreparedStatementCacheStats>,
     connection_event_listeners: RwLock<Vec<Arc<dyn ConnectionEventListener>>>,
-    statement_event_listeners: RwLock<Vec<Arc<dyn StatementEventListener>>>,
+    statement_event_listeners: Arc<RwLock<Vec<Arc<dyn StatementEventListener>>>>,
     /// Most recent SQL fingerprint.
     pub last_fingerprint: Mutex<Option<u64>>,
 }
@@ -229,7 +229,7 @@ impl DruidConnectionHolder {
             pool_prepared_statements: false,
             prepared_statement_stats: Arc::new(PreparedStatementCacheStats::default()),
             connection_event_listeners: RwLock::new(Vec::new()),
-            statement_event_listeners: RwLock::new(Vec::new()),
+            statement_event_listeners: Arc::new(RwLock::new(Vec::new())),
             last_fingerprint: Mutex::new(None),
         }
     }
@@ -485,6 +485,12 @@ impl DruidConnectionHolder {
 
     pub fn clear_statement_event_listeners(&self) {
         self.statement_event_listeners.write().clear();
+    }
+
+    pub(crate) fn statement_event_listeners_handle(
+        &self,
+    ) -> Arc<RwLock<Vec<Arc<dyn StatementEventListener>>>> {
+        Arc::clone(&self.statement_event_listeners)
     }
 
     #[must_use]

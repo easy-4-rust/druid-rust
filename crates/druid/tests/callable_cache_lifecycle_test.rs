@@ -2,6 +2,7 @@
 
 mod standard_test_support;
 
+use druid::core::{DruidError, StatementEventListener};
 use druid::pool::DruidPool;
 use druid_rdbc::connection::Connection;
 use druid_rdbc::driver::ConnectionFactory;
@@ -344,6 +345,63 @@ async fn pool(capacity: usize) -> (DruidPool, Arc<Mutex<DriverState>>) {
         .await
         .unwrap();
     (pool, state)
+}
+
+#[derive(Default)]
+struct CallableStatementEvents {
+    closed: AtomicUsize,
+    errors: AtomicUsize,
+    statement_id: AtomicUsize,
+    error_has_sql_exception: AtomicUsize,
+}
+
+impl StatementEventListener for CallableStatementEvents {
+    fn statement_closed(&self, _connection_id: u64, statement_id: usize) {
+        self.statement_id.store(statement_id, Ordering::SeqCst);
+        self.closed.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn statement_error_occurred(
+        &self,
+        _connection_id: u64,
+        statement_id: usize,
+        error: &DruidError,
+    ) {
+        self.statement_id.store(statement_id, Ordering::SeqCst);
+        self.error_has_sql_exception.store(
+            usize::from(error.sql_exception().is_some()),
+            Ordering::SeqCst,
+        );
+        self.errors.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+#[tokio::test]
+async fn callable_statement_emits_error_and_close_events_with_its_identity() {
+    let (pool, _) = pool(2).await;
+    let mut connection = pool.get().await.unwrap();
+    let events = Arc::new(CallableStatementEvents::default());
+    let listener: Arc<dyn StatementEventListener> = events.clone();
+    connection.add_statement_event_listener(listener).unwrap();
+    let mut statement = connection
+        .prepare_call("fatal", StatementOptions::default())
+        .await
+        .unwrap();
+
+    let error = match statement.execute_prepared().await {
+        Ok(_) => panic!("fatal callable execution must fail"),
+        Err(error) => error,
+    };
+    assert!(error.sql_exception().is_some());
+    assert_eq!(events.errors.load(Ordering::SeqCst), 1);
+    assert_eq!(events.error_has_sql_exception.load(Ordering::SeqCst), 1);
+    assert!(events.statement_id.load(Ordering::SeqCst) > 0);
+
+    statement.close().await.unwrap();
+    assert_eq!(events.closed.load(Ordering::SeqCst), 1);
+    drop(statement);
+    drop(connection);
+    pool.close().await;
 }
 
 fn id(statement: &dyn CallableStatement) -> i64 {
