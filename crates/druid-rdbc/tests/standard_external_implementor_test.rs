@@ -35,14 +35,29 @@ use druid_rdbc::error::RdbcError;
 use druid_rdbc::result_set::ResultSet;
 use druid_rdbc::statement::{Statement, StatementOptions};
 use druid_rdbc::statement::{CallableStatement, PreparedStatement};
-use druid_rdbc::data_source::PooledConnection;
+use druid_rdbc::data_source::{
+    ConnectionEvent, ConnectionEventListener, PooledConnection, StatementEvent,
+    StatementEventListener,
+};
 use druid_rdbc::wrapper::{StandardUnwrapped, Wrapper, WrapperExt};
 use std::any::TypeId;
 
 struct ExternalConnection;
 struct ExternalStatement;
 struct ExternalResultSet;
-struct ExternalPooledConnection;
+struct ExternalPooledConnection {
+    connection_listeners: Vec<std::sync::Arc<dyn ConnectionEventListener>>,
+    statement_listeners: Vec<std::sync::Arc<dyn StatementEventListener>>,
+}
+struct ExternalListener;
+impl ConnectionEventListener for ExternalListener {
+    fn connection_closed(&self, _event: &ConnectionEvent) {}
+    fn connection_error_occurred(&self, _event: &ConnectionEvent) {}
+}
+impl StatementEventListener for ExternalListener {
+    fn statement_closed(&self, _event: &StatementEvent) {}
+    fn statement_error_occurred(&self, _event: &StatementEvent) {}
+}
 struct ExternalCallable;
 struct ExternalGeneric<T>(std::marker::PhantomData<T>);
 trait ExternalMarker: Send + 'static {}
@@ -97,6 +112,48 @@ impl PooledConnection for ExternalPooledConnection {
     async fn connection(&mut self) -> Result<Box<dyn Connection>, RdbcError> {
         Err(RdbcError::feature_not_supported("external_pooled_connection"))
     }
+
+    fn add_connection_event_listener(
+        &mut self,
+        listener: std::sync::Arc<dyn ConnectionEventListener>,
+    ) -> Result<(), RdbcError> {
+        self.connection_listeners.push(listener);
+        Ok(())
+    }
+
+    fn remove_connection_event_listener(
+        &mut self,
+        listener: &std::sync::Arc<dyn ConnectionEventListener>,
+    ) -> Result<bool, RdbcError> {
+        let Some(index) = self.connection_listeners.iter().position(|candidate| {
+            std::sync::Arc::ptr_eq(candidate, listener)
+        }) else {
+            return Ok(false);
+        };
+        self.connection_listeners.remove(index);
+        Ok(true)
+    }
+
+    fn add_statement_event_listener(
+        &mut self,
+        listener: std::sync::Arc<dyn StatementEventListener>,
+    ) -> Result<(), RdbcError> {
+        self.statement_listeners.push(listener);
+        Ok(())
+    }
+
+    fn remove_statement_event_listener(
+        &mut self,
+        listener: &std::sync::Arc<dyn StatementEventListener>,
+    ) -> Result<bool, RdbcError> {
+        let Some(index) = self.statement_listeners.iter().position(|candidate| {
+            std::sync::Arc::ptr_eq(candidate, listener)
+        }) else {
+            return Ok(false);
+        };
+        self.statement_listeners.remove(index);
+        Ok(true)
+    }
 }
 
 fn assert_send_static<T: Send + 'static + ?Sized>() {}
@@ -134,7 +191,27 @@ async fn main() -> Result<(), RdbcError> {
     let mut result_set = ExternalResultSet;
     assert!(matches!(result_set.close().await, Err(RdbcError::SqlException(_))));
     assert!(matches!(result_set.is_closed(), Err(RdbcError::SqlException(_))));
-    let mut pooled = ExternalPooledConnection;
+    let mut pooled = ExternalPooledConnection {
+        connection_listeners: Vec::new(),
+        statement_listeners: Vec::new(),
+    };
+    let connection_listener: std::sync::Arc<dyn ConnectionEventListener> =
+        std::sync::Arc::new(ExternalListener);
+    pooled.add_connection_event_listener(std::sync::Arc::clone(&connection_listener))?;
+    pooled.add_connection_event_listener(std::sync::Arc::clone(&connection_listener))?;
+    assert!(pooled.remove_connection_event_listener(&connection_listener)?);
+    assert_eq!(pooled.connection_listeners.len(), 1);
+    assert!(pooled.remove_connection_event_listener(&connection_listener)?);
+    assert!(!pooled.remove_connection_event_listener(&connection_listener)?);
+
+    let statement_listener: std::sync::Arc<dyn StatementEventListener> =
+        std::sync::Arc::new(ExternalListener);
+    pooled.add_statement_event_listener(std::sync::Arc::clone(&statement_listener))?;
+    pooled.add_statement_event_listener(std::sync::Arc::clone(&statement_listener))?;
+    assert!(pooled.remove_statement_event_listener(&statement_listener)?);
+    assert_eq!(pooled.statement_listeners.len(), 1);
+    assert!(pooled.remove_statement_event_listener(&statement_listener)?);
+    assert!(!pooled.remove_statement_event_listener(&statement_listener)?);
     assert!(matches!(pooled.close().await, Err(RdbcError::SqlException(_))));
     let callable = ExternalCallable;
     assert!(callable.is_wrapper_for(Some(TypeId::of::<dyn CallableStatement>()))?);
