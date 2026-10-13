@@ -13,7 +13,11 @@ mod jdbc_agent_options;
 mod jdbc_agent_options_error;
 mod jdbc_agent_runtime_metrics;
 mod jdbc_agent_runtime_metrics_snapshot;
+mod jdbc_agent_xa_connection;
+mod jdbc_agent_xa_data_source;
 mod jdbc_agent_xa_resource;
+mod jdbc_agent_xa_session;
+mod jdbc_agent_xa_session_transport;
 
 pub use agent_error::AgentError;
 pub use agent_request::AgentRequest;
@@ -30,3 +34,5 @@ pub use jdbc_agent_options::JdbcAgentOptions;
 pub use jdbc_agent_options_error::JdbcAgentOptionsError;
 pub use jdbc_agent_runtime_metrics::JdbcAgentRuntimeMetrics;
 pub use jdbc_agent_runtime_metrics_snapshot::JdbcAgentRuntimeMetricsSnapshot;
+pub use jdbc_agent_xa_connection::JdbcAgentXaConnection;
+pub use jdbc_agent_xa_data_source::JdbcAgentXaDataSource;

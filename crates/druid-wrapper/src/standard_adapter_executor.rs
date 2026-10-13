@@ -21,6 +21,11 @@ pub(crate) struct AdapterUpdateResult {
 /// Concrete adapters expose one private driver core to canonical callers.
 #[async_trait::async_trait]
 pub(crate) trait AdapterExecutionCore: Send + 'static {
+    /// 返回底层物理或逻辑句柄是否已失效；未提供此状态的适配器保留本地关闭状态。
+    fn is_unusable_core(&self) -> bool {
+        false
+    }
+
     #[cfg(feature = "jdbc-agent")]
     async fn standard_connection_control_core(
         &mut self,
@@ -264,7 +269,17 @@ where
     }
 
     fn is_closed(&self) -> bool {
-        self.closed.load(Ordering::Acquire)
+        if self.closed.load(Ordering::Acquire) {
+            return true;
+        }
+        self.connection
+            .try_lock()
+            .map(|connection| {
+                connection
+                    .as_ref()
+                    .map_or(true, AdapterExecutionCore::is_unusable_core)
+            })
+            .unwrap_or(false)
     }
 
     fn cancel_running(&self) -> Result<(), RdbcError> {

@@ -126,6 +126,10 @@ impl JdbcAgentConnection {
                 }),
             )
             .await?;
+        Ok(Self::from_session(client, session))
+    }
+
+    pub(super) fn from_session(client: Box<dyn JdbcAgentTransport>, session: JsonValue) -> Self {
         let capability = |name: &str| {
             session
                 .pointer(&format!("/capabilities/{name}"))
@@ -144,7 +148,7 @@ impl JdbcAgentConnection {
                 .and_then(JsonValue::as_str)
                 .map(str::to_owned),
         );
-        Ok(Self {
+        Self {
             client: Some(client),
             capabilities: druid_rdbc::extensions::ConnectionCapabilities {
                 transactions: supports_transactions,
@@ -185,7 +189,7 @@ impl JdbcAgentConnection {
             driver_name,
             standard_executor: None,
             runtime_trace: None,
-        })
+        }
     }
 
     pub(crate) fn install_runtime_trace(&mut self, runtime_trace: RuntimeTraceEmitter) {
@@ -524,6 +528,15 @@ impl std::fmt::Debug for JdbcAgentConnection {
 
 #[async_trait::async_trait]
 impl AdapterExecutionCore for JdbcAgentConnection {
+    fn is_unusable_core(&self) -> bool {
+        self.closed
+            || self.discarded
+            || self
+                .client
+                .as_ref()
+                .map_or(true, |client| client.is_unusable())
+    }
+
     async fn standard_connection_control_core(
         &mut self,
         operation: &str,
@@ -769,10 +782,17 @@ impl druid_rdbc::connection::Connection for JdbcAgentConnection {
     }
 
     fn is_closed(&self) -> Result<bool, RdbcError> {
-        Ok(self
-            .standard_executor
-            .as_ref()
-            .map_or(self.closed, |executor| executor.is_closed()))
+        Ok(self.standard_executor.as_ref().map_or_else(
+            || {
+                self.closed
+                    || self.discarded
+                    || self
+                        .client
+                        .as_ref()
+                        .map_or(true, |client| client.is_unusable())
+            },
+            |executor| executor.is_closed(),
+        ))
     }
 
     fn capabilities(&self) -> druid_rdbc::extensions::ConnectionCapabilities {

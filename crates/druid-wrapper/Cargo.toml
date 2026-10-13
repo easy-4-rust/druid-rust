@@ -55,6 +55,10 @@ name = "driver_resolution_path_test"
 required-features = ["driver-catalog", "sqlx"]
 
 [[test]]
+name = "jdbc_agent_xa_external_consumer"
+required-features = ["jdbc-agent"]
+
+[[test]]
 name = "druid_standard_pool_admission_test"
 required-features = ["sqlx", "toasty-sqlite", "rbdc"]
 
