@@ -702,3 +702,28 @@ async fn live_postgres_cancellation_control_reports_feature_not_supported() {
     statement.close().await.unwrap();
     connection.close().await.unwrap();
 }
+
+/// MySQL 当前没有接入独立取消通道；真实后端必须精确拒绝，而不能返回空操作句柄。
+#[tokio::test]
+#[ignore = "requires DRUID_MYSQL_URL pointing to a live MySQL service"]
+async fn live_mysql_cancellation_control_reports_feature_not_supported() {
+    let url = std::env::var("DRUID_MYSQL_URL")
+        .expect("live MySQL cancellation test requires DRUID_MYSQL_URL");
+    let mut connection = SqlxConnectionAdapter::connect(&url).await.unwrap();
+    let mut statement = connection
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    let error = match statement.cancellation_control() {
+        Ok(_) => panic!(
+            "MySQL cancellation must not be advertised before server interruption is verified"
+        ),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        RdbcError::SqlException(ref error) if error.sql_state() == Some("0A000")
+    ));
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}

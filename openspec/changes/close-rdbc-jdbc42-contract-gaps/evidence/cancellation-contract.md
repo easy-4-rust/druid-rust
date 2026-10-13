@@ -20,8 +20,9 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 
 本次验证：
 
-- `cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test --locked --offline`：14 passed，1 项真实 PostgreSQL 用例默认忽略。
+- `cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test --locked --offline`：14 passed，真实 PostgreSQL/MySQL 负向能力用例默认忽略。
 - 使用运行中的 PostgreSQL 18.6 容器并注入临时进程级 `DRUID_DATABASE_URL`，执行 `cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test live_postgres_cancellation_control_reports_feature_not_supported --locked --offline -- --ignored --nocapture`：1 passed；验证真实 PostgreSQL 连接上的取消控制明确返回 `0A000`。
+- 使用临时 MySQL 8.0.36 容器并注入临时进程级 `DRUID_MYSQL_URL`，执行 `cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test live_mysql_cancellation_control_reports_feature_not_supported --locked --offline -- --ignored --exact --nocapture`：1 passed；验证真实 MySQL 连接上的取消控制明确返回 `0A000`。测试后容器已停止并移除，未保留数据库卷。
 - `cargo test -p druid --lib --locked --offline`：155 passed。
 - `cargo fmt -p druid-wrapper`：通过。
 - `git diff --check`：通过。
@@ -32,6 +33,6 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 |---|---|
 | `crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs` | `385E4FA7D3194AD245C9361A6F79E0672EB7C4B5ECA0AE392544CC43FE83D2CD` |
 | `crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs` | `E7698DADB9DF2F0858925519241787331F39D85DAA5FFF9CD7665E99D6387610` |
-| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `C9BE1234149C54E4944BF944AAC45443C79C3B0CAC8580BE43D02578720D668C` |
+| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `4313F14DA3BF564C4DB298CBAF22F59A8EB49E4E6858A33F1F528A9B199A9636` |
 
 **边界与未完成项：**SQLite 用例证明真实 SQLite VM 执行路径中断及连接清理，但不是外部数据库服务器日志/会话终态证据。PostgreSQL 实库仅验证明确不支持/`0A000`；MySQL 等后端的逐项不支持证据、旧池租约缓存复用覆盖、生成键更新长执行覆盖，以及取消未确认时 owner 丢弃连接的故障注入仍未完成。因此 tasks 4.2–4.7 保持未勾选；本记录不关闭取消批，也不代表 JDBC 全面对齐或生产就绪。
