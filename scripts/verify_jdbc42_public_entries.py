@@ -34,6 +34,12 @@ def probe_source(shape: str, target: str) -> tuple[str, str]:
         return prefix + f"pub fn probe<T: {target} + ?Sized>() {{}}\n", "public trait bound resolves"
     if shape == "DTO":
         return prefix + f"pub fn probe(_value: {target}) {{}}\n", "public type resolves; DTO structure not certified"
+    if shape == "ENUM_KIND" and len(target.split("::")) >= 4:
+        # use 语句无法导入关联常量；类型成员路径（枚举变体与关联常量）用值位置证明可解析。
+        return (
+            prefix + f"pub fn probe() {{ let _ = {target}; }}\n",
+            "public member value resolves; variants and associated consts",
+        )
     return prefix + f"pub use {target} as Probe;\n", "public import resolution only"
 
 

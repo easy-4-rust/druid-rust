@@ -35,7 +35,11 @@ class PublicEntryCliTest(unittest.TestCase):
             "pub trait ActualTrait {}\n"
             "pub struct Concrete;\n"
             "pub type Alias = Concrete;\n"
-            "pub mod constants {pub const VALUE: i32 = 7;}\n",
+            "pub mod constants {pub const VALUE: i32 = 7;}\n"
+            "pub mod kinds {\n"
+            "    pub enum Kind { General }\n"
+            "    impl Kind { pub const CanonicalAlias: Self = Self::General; }\n"
+            "}\n",
             encoding="utf-8", newline="\n",
         )
         cls.artifact = cls.root / "libdruid_rdbc.rlib"
@@ -100,6 +104,32 @@ class PublicEntryCliTest(unittest.TestCase):
         result, summary, _, _ = self.invoke([("MODULE", "druid_rdbc::constants")])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(summary["results"][0]["scope"], "public import resolution only")
+
+    def test_enum_type_level_kind_keeps_import_probe(self):
+        result, summary, _, _ = self.invoke([("ENUM_KIND", "druid_rdbc::Concrete")])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(summary["results"][0]["scope"], "public import resolution only")
+
+    def test_enum_member_variant_resolves_in_value_position(self):
+        result, summary, _, _ = self.invoke([("ENUM_KIND", "druid_rdbc::kinds::Kind::General")])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((summary["passed"], summary["failed"]), (1, 0))
+        self.assertEqual(
+            summary["results"][0]["scope"],
+            "public member value resolves; variants and associated consts",
+        )
+
+    def test_enum_associated_const_member_resolves_in_value_position(self):
+        result, summary, _, _ = self.invoke([("ENUM_KIND", "druid_rdbc::kinds::Kind::CanonicalAlias")])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((summary["passed"], summary["failed"]), (1, 0))
+
+    def test_enum_missing_member_value_is_rejected(self):
+        result, summary, output, _ = self.invoke([("ENUM_KIND", "druid_rdbc::kinds::Kind::Missing")])
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(summary["failed"], 1)
+        # 类型可解析而成员缺失时，rustc 对枚举成员报 E0599。
+        self.assertIn("E0599", (output / summary["results"][0]["log"]).read_text())
 
     def test_host_exclusion_is_not_rust_certification(self):
         result, summary, _, _ = self.invoke([("EXCLUDED_RUNTIME", "host::process_security_policy")])
