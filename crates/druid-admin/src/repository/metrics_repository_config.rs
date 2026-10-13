@@ -10,6 +10,8 @@ pub const DEFAULT_MAX_SQL_ENTRIES_PER_DATASOURCE: usize = 1_024;
 pub const DEFAULT_MAX_TOTAL_DATASOURCES: usize = 4_096;
 /// 仓库默认最多保留的 SQL identity 总数。
 pub const DEFAULT_MAX_TOTAL_SQL_ENTRIES: usize = 16_384;
+/// 仓库所有最新状态投影默认最多保留的序列化字节数（64 MiB）。
+pub const DEFAULT_MAX_TOTAL_STATE_BYTES: usize = 64 << 20;
 /// repository 最新状态默认 TTL（15 分钟）。
 pub const DEFAULT_ENTRY_TTL: Duration = Duration::from_secs(15 * 60);
 /// `/metrics` 默认最大渲染字节数（1 MiB）。
@@ -25,6 +27,7 @@ pub struct MetricsRepositoryConfig {
     max_sql_entries_per_datasource: usize,
     max_total_datasources: usize,
     max_total_sql_entries: usize,
+    max_total_state_bytes: usize,
     entry_ttl: Duration,
     max_metrics_output_bytes: usize,
 }
@@ -52,6 +55,7 @@ impl MetricsRepositoryConfig {
             max_sql_entries_per_datasource,
             max_total_datasources: DEFAULT_MAX_TOTAL_DATASOURCES,
             max_total_sql_entries: DEFAULT_MAX_TOTAL_SQL_ENTRIES,
+            max_total_state_bytes: DEFAULT_MAX_TOTAL_STATE_BYTES,
             entry_ttl,
             max_metrics_output_bytes,
         })
@@ -104,6 +108,26 @@ impl MetricsRepositoryConfig {
         self.max_total_sql_entries
     }
 
+    /// 设置整个仓库保留的 datasource、SQL 和 wall 投影总字节预算。
+    ///
+    /// 参数必须大于零；返回验证后的配置或错误。
+    pub fn with_total_state_bytes(
+        mut self,
+        max_total_state_bytes: usize,
+    ) -> Result<Self, &'static str> {
+        if max_total_state_bytes == 0 {
+            return Err("total state byte capacity must be non-zero");
+        }
+        self.max_total_state_bytes = max_total_state_bytes;
+        Ok(self)
+    }
+
+    /// 返回所有最新状态投影的序列化字节预算。
+    #[must_use]
+    pub const fn max_total_state_bytes(&self) -> usize {
+        self.max_total_state_bytes
+    }
+
     /// 返回最新状态 TTL。
     #[must_use]
     pub const fn entry_ttl(&self) -> Duration {
@@ -125,6 +149,7 @@ impl Default for MetricsRepositoryConfig {
             max_sql_entries_per_datasource: DEFAULT_MAX_SQL_ENTRIES_PER_DATASOURCE,
             max_total_datasources: DEFAULT_MAX_TOTAL_DATASOURCES,
             max_total_sql_entries: DEFAULT_MAX_TOTAL_SQL_ENTRIES,
+            max_total_state_bytes: DEFAULT_MAX_TOTAL_STATE_BYTES,
             entry_ttl: DEFAULT_ENTRY_TTL,
             max_metrics_output_bytes: DEFAULT_MAX_METRICS_OUTPUT_BYTES,
         }

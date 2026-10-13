@@ -186,6 +186,7 @@ pub(crate) struct RepositoryConfig {
     max_sql_per_datasource: usize,
     max_total_datasources: usize,
     max_total_sql_entries: usize,
+    max_total_state_bytes: usize,
 }
 ```
 
@@ -212,6 +213,10 @@ The global datasource/SQL caps apply to the resulting state after each increment
 authoritative stream replacement; replacing an existing identity does not consume a second slot.
 Reject a batch atomically if either global cap would be exceeded. Keep the existing five-argument
 constructor compatible, with explicit tighter global caps available for deployments and tests.
+Bound the serialized size of all retained datasource, SQL and wall projections as one repository
+budget. Measure an incoming entry outside the repository write lock with a bounded counting writer before admission, account for
+overwritten or replaced identities only once, and reject oversized batches atomically without
+building an unbounded temporary JSON buffer. RSS remains a separate measured release budget.
 
 - [ ] **Step 4: Run GREEN**
 

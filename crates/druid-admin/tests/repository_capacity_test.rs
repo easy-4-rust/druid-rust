@@ -315,5 +315,69 @@ fn global_caps_must_be_nonzero() {
     assert_eq!(config.max_total_datasources(), 4_096);
     assert_eq!(config.max_total_sql_entries(), 16_384);
     assert!(config.clone().with_global_limits(0, 1).is_err());
-    assert!(config.with_global_limits(1, 0).is_err());
+    assert!(config.clone().with_global_limits(1, 0).is_err());
+    assert!(config.with_total_state_bytes(0).is_err());
+}
+
+#[test]
+fn total_state_bytes_budget_rejects_large_sql_batches_and_reclaims_replaced_bytes() {
+    let (first_id, mut first) = entry("boot-aa", 1, 10);
+    let (second_id, mut second) = entry("boot-bb", 1, 10);
+    first.sql_stats.insert(
+        1,
+        SqlListContent {
+            sql: Some("x".repeat(4_096)),
+            ..Default::default()
+        },
+    );
+    second.sql_stats.insert(
+        1,
+        SqlListContent {
+            sql: Some("x".repeat(4_096)),
+            ..Default::default()
+        },
+    );
+    let (mut compact_id, compact) = entry("boot-aa", 2, 10);
+    compact_id.identity = first_id.identity;
+    let projection_bytes = |entry: &DataSourceEntry| {
+        serde_json::to_vec(&(&entry.datasource, &entry.sql_stats, &entry.wall))
+            .unwrap()
+            .len()
+    };
+    let budget = projection_bytes(&first) + projection_bytes(&compact);
+    let single_entry_budget = MetricsRepositoryConfig::default()
+        .with_total_state_bytes(projection_bytes(&first) - 1)
+        .unwrap();
+    let single_entry_repository = MetricsRepository::with_config(single_entry_budget);
+    assert!(!single_entry_repository.upsert_datasource(first_id.clone(), first.clone()));
+    assert_eq!(single_entry_repository.len(), 0);
+    let config = MetricsRepositoryConfig::try_new(2, 2, 1, Duration::from_secs(60), 1 << 20)
+        .unwrap()
+        .with_total_state_bytes(budget)
+        .unwrap();
+    let repository = MetricsRepository::with_config(config);
+
+    assert!(repository.upsert_datasource(first_id.clone(), first.clone()));
+    assert!(!repository.apply_batch(vec![(second_id.clone(), second.clone())]));
+    assert_eq!(repository.len(), 1);
+    assert_eq!(repository.get_datasource(&first_id).unwrap().sequence, 1);
+
+    let (mut snapshot_extra_id, mut snapshot_extra) = entry("boot-aa", 2, 10);
+    snapshot_extra_id.identity = 8;
+    snapshot_extra.datasource.identity = 8;
+    snapshot_extra.sql_stats = first.sql_stats.clone();
+    snapshot_extra.sql_stats.get_mut(&1).unwrap().sql = Some("x".repeat(4_097));
+    assert!(!repository.replace_stream(
+        &first_id.service_identity,
+        vec![
+            (compact_id.clone(), compact.clone()),
+            (snapshot_extra_id, snapshot_extra)
+        ]
+    ));
+    assert_eq!(repository.get_datasource(&first_id).unwrap().sequence, 1);
+
+    assert!(repository.upsert_datasource(compact_id, compact));
+    assert!(repository.upsert_datasource(second_id, second));
+    assert_eq!(repository.len(), 2);
+    assert_eq!(repository.limit_counters(), (2, 0, 0));
 }

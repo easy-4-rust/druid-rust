@@ -9,7 +9,7 @@ use parking_lot::RwLock;
 
 use crate::model::dto::{DataSourceContent, SqlListContent, WallResult};
 
-use super::{MetricsRepositoryConfig, StoredDataSourceEntry};
+use super::{MetricsRepositoryConfig, SerializedSizeBudget, StoredDataSourceEntry};
 
 /// Admin repository 内 datasource 的复合标识。
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -98,6 +98,7 @@ impl MetricsRepository {
         stream_epoch: Option<u64>,
         entries: Vec<(DataSourceId, DataSourceEntry)>,
     ) -> bool {
+        let entry_sizes = self.measure_entries(&entries);
         let mut inner = self.inner.write();
         self.prune_expired(&mut inner);
         inner.ingest_count = inner.ingest_count.saturating_add(1);
@@ -113,15 +114,18 @@ impl MetricsRepository {
             inner.rejected_count = inner.rejected_count.saturating_add(1);
             return false;
         }
-        if self.exceeds_limits(&inner, &entries, None) {
+        let Some(entry_sizes) =
+            entry_sizes.filter(|sizes| self.within_limits(&inner, &entries, sizes, None))
+        else {
             inner.rejected_count = inner.rejected_count.saturating_add(1);
             inner.capacity_rejected_count = inner.capacity_rejected_count.saturating_add(1);
             return false;
-        }
-        for (id, entry) in entries {
-            inner
-                .entries
-                .insert(id, StoredDataSourceEntry::new(entry, stream_epoch));
+        };
+        for ((id, entry), serialized_bytes) in entries.into_iter().zip(entry_sizes) {
+            inner.entries.insert(
+                id,
+                StoredDataSourceEntry::new(entry, stream_epoch, serialized_bytes),
+            );
         }
         true
     }
@@ -151,6 +155,7 @@ impl MetricsRepository {
         stream_epoch: Option<u64>,
         entries: Vec<(DataSourceId, DataSourceEntry)>,
     ) -> bool {
+        let entry_sizes = self.measure_entries(&entries);
         let mut inner = self.inner.write();
         self.prune_expired(&mut inner);
         inner.ingest_count = inner.ingest_count.saturating_add(1);
@@ -167,18 +172,21 @@ impl MetricsRepository {
             inner.rejected_count = inner.rejected_count.saturating_add(1);
             return false;
         }
-        if self.exceeds_limits(&inner, &entries, Some(service_identity)) {
+        let Some(entry_sizes) = entry_sizes
+            .filter(|sizes| self.within_limits(&inner, &entries, sizes, Some(service_identity)))
+        else {
             inner.rejected_count = inner.rejected_count.saturating_add(1);
             inner.capacity_rejected_count = inner.capacity_rejected_count.saturating_add(1);
             return false;
-        }
+        };
         inner
             .entries
             .retain(|id, _| &id.service_identity != service_identity);
-        for (id, entry) in entries {
-            inner
-                .entries
-                .insert(id, StoredDataSourceEntry::new(entry, stream_epoch));
+        for ((id, entry), serialized_bytes) in entries.into_iter().zip(entry_sizes) {
+            inner.entries.insert(
+                id,
+                StoredDataSourceEntry::new(entry, stream_epoch, serialized_bytes),
+            );
         }
         true
     }
@@ -279,6 +287,21 @@ impl MetricsRepository {
         self.config.max_metrics_output_bytes()
     }
 
+    /// 返回未过期最新状态投影的序列化字节数；读取前执行 TTL 回收。
+    pub fn retained_state_bytes(&self) -> usize {
+        let mut inner = self.inner.write();
+        self.prune_expired(&mut inner);
+        inner.entries.values().fold(0_usize, |sum, stored| {
+            sum.saturating_add(stored.serialized_bytes)
+        })
+    }
+
+    /// 返回最新状态投影的全仓库序列化字节预算。
+    #[must_use]
+    pub const fn max_total_state_bytes(&self) -> usize {
+        self.config.max_total_state_bytes()
+    }
+
     /// 返回允许 IngestHandler 保存的最大 service stream 数。
     #[must_use]
     pub const fn max_services(&self) -> usize {
@@ -329,47 +352,62 @@ impl MetricsRepository {
             .saturating_add((before.saturating_sub(inner.entries.len())) as u64);
     }
 
-    fn exceeds_limits(
-        &self,
-        inner: &MetricsRepositoryInner,
-        incoming: &[(DataSourceId, DataSourceEntry)],
-        replaced_service: Option<&ServiceIdentity>,
-    ) -> bool {
+    fn measure_entries(&self, incoming: &[(DataSourceId, DataSourceEntry)]) -> Option<Vec<usize>> {
         if incoming
             .iter()
             .any(|(_, entry)| entry.sql_stats.len() > self.config.max_sql_entries_per_datasource())
         {
-            return true;
+            return None;
         }
-        let mut final_sql_counts = inner
+        // 先在仓库写锁外计量输入，避免大 SQL 的序列化阻塞读请求。
+        incoming
+            .iter()
+            .map(|(_, entry)| {
+                SerializedSizeBudget::measure(entry, self.config.max_total_state_bytes())
+            })
+            .collect()
+    }
+
+    fn within_limits(
+        &self,
+        inner: &MetricsRepositoryInner,
+        incoming: &[(DataSourceId, DataSourceEntry)],
+        entry_sizes: &[usize],
+        replaced_service: Option<&ServiceIdentity>,
+    ) -> bool {
+        let mut final_usage = inner
             .entries
             .iter()
             .filter(|(id, _)| replaced_service != Some(&id.service_identity))
-            .map(|(id, stored)| (id, stored.entry.sql_stats.len()))
+            .map(|(id, stored)| (id, (stored.entry.sql_stats.len(), stored.serialized_bytes)))
             .collect::<HashMap<_, _>>();
-        for (id, entry) in incoming {
-            final_sql_counts.insert(id, entry.sql_stats.len());
+        for ((id, entry), serialized_bytes) in incoming.iter().zip(entry_sizes) {
+            final_usage.insert(id, (entry.sql_stats.len(), *serialized_bytes));
         }
-        if final_sql_counts.len() > self.config.max_total_datasources()
-            || final_sql_counts
+        if final_usage.len() > self.config.max_total_datasources()
+            || final_usage
                 .values()
-                .fold(0_usize, |sum, count| sum.saturating_add(*count))
+                .fold(0_usize, |sum, (count, _)| sum.saturating_add(*count))
                 > self.config.max_total_sql_entries()
+            || final_usage
+                .values()
+                .fold(0_usize, |sum, (_, bytes)| sum.saturating_add(*bytes))
+                > self.config.max_total_state_bytes()
         {
-            return true;
+            return false;
         }
         // 每个身份只计数一次，避免在最大容量下按 service 反复扫描整个集合。
         let mut service_counts = HashMap::<&ServiceIdentity, usize>::new();
-        for id in final_sql_counts.keys() {
+        for id in final_usage.keys() {
             let count = service_counts.entry(&id.service_identity).or_default();
             *count = count.saturating_add(1);
             if *count > self.config.max_datasources_per_service()
                 || service_counts.len() > self.config.max_services()
             {
-                return true;
+                return false;
             }
         }
-        false
+        true
     }
 }
 

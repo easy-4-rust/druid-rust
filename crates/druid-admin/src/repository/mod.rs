@@ -7,8 +7,10 @@ mod metrics_repository;
 mod metrics_repository_config;
 #[cfg(test)]
 mod metrics_repository_test;
+mod serialized_size_budget;
 mod stored_data_source_entry;
 
 pub use metrics_repository::{DataSourceEntry, DataSourceId, MetricsRepository};
 pub use metrics_repository_config::MetricsRepositoryConfig;
+pub(crate) use serialized_size_budget::SerializedSizeBudget;
 pub(crate) use stored_data_source_entry::StoredDataSourceEntry;

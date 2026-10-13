@@ -1043,6 +1043,7 @@ fn write_repository_metrics(body: &mut String, repository: &MetricsRepository) {
     let (capacity_rejected_total, ttl_evicted_total, output_rejected_total) =
         repository.limit_counters();
     let datasource_count = repository.len();
+    let repository_state_bytes = repository.retained_state_bytes();
     let _ = writeln!(
         body,
         "# HELP druid_admin_ingest_total Total number of ingest batches received.\n# TYPE druid_admin_ingest_total counter\ndruid_admin_ingest_total {ingest_total}"
@@ -1071,6 +1072,15 @@ fn write_repository_metrics(body: &mut String, repository: &MetricsRepository) {
     let _ = writeln!(
         body,
         "# HELP druid_admin_datasource_count Number of tracked datasource instances.\n# TYPE druid_admin_datasource_count gauge\ndruid_admin_datasource_count {datasource_count}"
+    );
+    let _ = writeln!(
+        body,
+        "# HELP druid_admin_repository_state_bytes Serialized bytes of retained datasource, SQL and wall projections.\n# TYPE druid_admin_repository_state_bytes gauge\ndruid_admin_repository_state_bytes {repository_state_bytes}"
+    );
+    let _ = writeln!(
+        body,
+        "# HELP druid_admin_repository_state_limit_bytes Configured maximum serialized repository state bytes.\n# TYPE druid_admin_repository_state_limit_bytes gauge\ndruid_admin_repository_state_limit_bytes {}",
+        repository.max_total_state_bytes()
     );
     body.push_str(concat!(
         "# HELP druid_admin_datasource_active_count Active connection count.\n",

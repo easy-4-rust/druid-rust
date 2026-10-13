@@ -118,6 +118,10 @@ async fn expired_boot_session_disappears_from_rest_and_prometheus() {
         .await
         .unwrap();
     assert!(before_metrics.contains("druid_admin_datasource_count 1"));
+    assert!(before_metrics.lines().any(|line| {
+        line.strip_prefix("druid_admin_repository_state_bytes ")
+            .is_some_and(|value| value.parse::<usize>().is_ok_and(|bytes| bytes > 0))
+    }));
 
     tokio::time::sleep(Duration::from_millis(1_100)).await;
     let after: serde_json::Value = reqwest::get(&rest_url).await.unwrap().json().await.unwrap();
@@ -130,6 +134,7 @@ async fn expired_boot_session_disappears_from_rest_and_prometheus() {
         .await
         .unwrap();
     assert!(after_metrics.contains("druid_admin_datasource_count 0"));
+    assert!(after_metrics.contains("druid_admin_repository_state_bytes 0"));
     assert!(!after_metrics.contains("expired-boot"));
     handle.abort();
 }

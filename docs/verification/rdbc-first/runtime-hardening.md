@@ -4,9 +4,13 @@
 
 2026-10-13 Admin TTL/session churn：新增 `expired_session_churn_reclaims_capacity_without_mixing_boot_identities`，以 32 个 service、每 service 2 个 datasource、TTL 1 秒填满仓库，等待 1.1 秒后注入新一代 boot identity。旧代 64 个条目均不可见，新代仍为 64 个，TTL 淘汰计数为 64，容量拒绝计数为 0；本机首次两轮写入 p50/p95/p99 分别为 79/240/333 µs 与 71/140/155 µs，同一测试可执行文件随后重复 10/10 通过，10 轮 p99 为 141–217 µs。`repository_capacity_test` 5/5、`ingest_test` 11/11、`prometheus_test` 8/8 通过。这是短周期内存仓库基线，尚未测得进程峰值 RSS、长期 churn 与 gRPC 端到端延迟，不能据此关闭 Admin 数值预算。
 
-2026-10-13 Admin 全局计数预算：默认额外限制整个最新状态仓库为 4,096 个 datasource 和 16,384 条 SQL identity，保留原五参数配置构造函数并提供可收紧的 `with_global_limits`。新增测试验证全局 datasource/SQL 预算超限时 incremental batch 与权威快照均原子拒绝，既有 identity 覆盖不重复占位；本机 `repository_capacity_test` 7/7、`ingest_test` 11/11、`prometheus_test` 8/8 通过。计数限制不能替代字节/RSS 上限：SQL 文本及其他字符串大小仍需在入口和运行预算中测量、约束。
+2026-10-13 Admin 全局计数预算：默认额外限制整个最新状态仓库为 4,096 个 datasource 和 16,384 条 SQL identity，保留原五参数配置构造函数并提供可收紧的 `with_global_limits`。新增测试验证全局 datasource/SQL 预算超限时 incremental batch 与权威快照均原子拒绝，既有 identity 覆盖不重复占位；首次本机 `repository_capacity_test` 7/7、`ingest_test` 11/11、`prometheus_test` 8/8 通过。投影字节预算的后续验证见下文；计数上限本身不能替代 RSS 验收。
 
 2026-10-13 Admin TTL HTTP 可见性：`expired_boot_session_disappears_from_rest_and_prometheus` 经真实 Axum 路由验证，TTL 前 `/druid/api/datasources` 有 1 项、单项详情返回 200、`/metrics` 的 datasource gauge 为 1；过期后列表为空、详情 404、gauge 为 0，客户端时间戳故意设为最大值也无法延长服务端 TTL。本机 `prometheus_test` 9/9 通过，该单项随后重复 10/10 通过；这些短周期验证不代替长期 churn 或进程内存预算。
+
+2026-10-13 Admin 投影字节预算：新增默认 64 MiB 的全仓库 datasource/SQL/wall 序列化投影限额，在写锁外使用有界计数写入器计量输入，不建立完整 JSON 副本。`total_state_bytes_budget_rejects_large_sql_batches_and_reclaims_replaced_bytes` 验证单条及批次超限拒绝、权威快照原子性、覆盖旧值后预算释放；`/metrics` 暴露当前投影字节和配置上限，TTL 后当前值归零。锁外计量后的目标回归 `ingest_test` 11/11、`prometheus_test` 9/9、`repository_capacity_test` 8/8、`servlet_test` 29/29、库内测试 5/5 通过，严格 Clippy 通过。短周期 churn 再重复 10/10 通过，写入 p50 为 107–112 µs、p99 为 187–249 µs，较加入字节计量前的 70–72 µs p50 增加；尚未接受跨平台延迟阈值。该计量不包含 HashMap、对象头和服务身份键的内存开销，不能当成 RSS 上限；长时间 churn 与实际峰值 RSS 继续待验收。
+
+2026-10-13 本机 TLS 进程测试诊断：`admin_binary_test` 14/16 通过，两项 TLS 启动测试在本机 Windows 连接超时；失败时子进程仍存活且 `0.0.0.0` 端口处于 Listen，另一个本机进程的原生 TCP 连接在 500 ms 内仍无法建立。PowerShell 自建 loopback/Any 监听则能连接；同一源码的 [CI run 38378806395](https://github.com/easy-4-rust/druid-rust/actions/runs/38378806395) Windows Rust contracts 作业通过。以上只支持本机进程网络层异常的定位，不把本机两项失败记为通过，也不替代新提交的跨平台验证。
 
 2026-10-13 Metrics 饱和关闭组合验证：当前 Windows/Rust 1.97.1 的真实 runtime 以队列容量 1、20 个保持注册的数据源、1 ms 采样周期运行至少 100 ms，新增 `saturated_runtime_shutdown_drains_and_joins_every_owned_task` 测试要求先发生合并，再检查关闭后受监管任务、未刷新工作和注册数均为 0。完整 `queue_semantics_test` 5/5 PASS；直接运行同一测试可执行文件 20/20 PASS，合并次数每次 159–239，关闭耗时 123–333 µs（20 样本最近秩 p99=333 µs），轮询所得进程峰值工作集最高 5,420 KiB。这是本机参考基线，尚未给出跨平台验收阈值；Admin 数值预算、SIGTERM 待 ACK 及完整故障矩阵继续开放。
 
