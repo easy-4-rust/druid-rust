@@ -437,6 +437,180 @@ async fn independent_cancel_interrupts_running_sqlite_execute() {
     connection.close().await.unwrap();
 }
 
+/// PreparedStatement 缓冲查询在参数化执行入口也必须接入 SQLite VM 中断。
+#[tokio::test]
+async fn independent_cancel_interrupts_running_prepared_sqlite_query() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut statement = connection
+        .prepare_statement(
+            "WITH RECURSIVE counter(value) AS (\
+                VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000\
+             ) SELECT sum(value) FROM counter",
+            StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    let cancellation = statement.cancellation_control().unwrap();
+    let cancel_task = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        cancellation.cancel().await
+    });
+    let started = std::time::Instant::now();
+    let query = statement.execute_prepared_query();
+    let outcome = tokio::time::timeout(Duration::from_secs(2), query)
+        .await
+        .expect("取消必须在预算内让预编译查询结束");
+    assert!(started.elapsed() < Duration::from_millis(500));
+    cancel_task.await.unwrap().unwrap();
+    assert!(matches!(
+        outcome,
+        Err(RdbcError::SqlException(ref error)) if error.sql_state() == Some("HY008")
+    ));
+    assert_eq!(
+        connection.fetch("SELECT 12", Vec::new()).await.unwrap()[0].values,
+        vec![Value::Int(12)]
+    );
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// PreparedStatement 更新的参数执行路径也需要真实中断且不能提交部分更新。
+#[tokio::test]
+async fn independent_cancel_interrupts_running_prepared_sqlite_update() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    connection
+        .exec(
+            "CREATE TABLE prepared_cancel_update (value INTEGER)",
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    connection
+        .exec("INSERT INTO prepared_cancel_update VALUES (0)", Vec::new())
+        .await
+        .unwrap();
+    let mut statement = connection
+        .prepare_statement(
+            "UPDATE prepared_cancel_update SET value = (\
+                WITH RECURSIVE counter(value) AS (\
+                    VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000\
+                ) SELECT sum(value) FROM counter\
+             ) WHERE value = ?",
+            StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    statement
+        .set_parameter(PreparedParameter {
+            index: ParameterIndex::new(1).unwrap(),
+            value: Value::Int(0),
+        })
+        .unwrap();
+    let cancellation = statement.cancellation_control().unwrap();
+    let cancel_task = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        cancellation.cancel().await
+    });
+    let update = statement.execute_prepared_update();
+    let outcome = tokio::time::timeout(Duration::from_secs(2), update)
+        .await
+        .expect("取消必须在预算内让预编译更新结束");
+    cancel_task.await.unwrap().unwrap();
+    assert!(matches!(
+        outcome,
+        Err(RdbcError::SqlException(ref error)) if error.sql_state() == Some("HY008")
+    ));
+    assert_eq!(
+        connection
+            .fetch("SELECT value FROM prepared_cancel_update", Vec::new())
+            .await
+            .unwrap()[0]
+            .values,
+        vec![Value::Int(0)]
+    );
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// SQLite 请求 generated keys 的预编译查询仍必须把取消传到其专用 actor 路径。
+#[tokio::test]
+async fn independent_cancel_interrupts_running_sqlite_generated_key_query() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut statement = connection
+        .prepare_statement_with_generated_keys(
+            "WITH RECURSIVE counter(value) AS (\
+                VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000\
+             ) SELECT sum(value) FROM counter",
+            StatementOptions::default(),
+            GeneratedKeys::ReturnGeneratedKeys,
+        )
+        .await
+        .unwrap();
+    let cancellation = statement.cancellation_control().unwrap();
+    let cancel_task = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        cancellation.cancel().await
+    });
+    let started = std::time::Instant::now();
+    let query = statement.execute_prepared_query();
+    let outcome = tokio::time::timeout(Duration::from_secs(2), query)
+        .await
+        .expect("取消必须在预算内让生成键查询结束");
+    assert!(started.elapsed() < Duration::from_millis(500));
+    cancel_task.await.unwrap().unwrap();
+    assert!(matches!(
+        outcome,
+        Err(RdbcError::SqlException(ref error)) if error.sql_state() == Some("HY008")
+    ));
+    assert_eq!(
+        connection.fetch("SELECT 13", Vec::new()).await.unwrap()[0].values,
+        vec![Value::Int(13)]
+    );
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// 丢弃 Rust 执行 Future 不应伪装成 Statement 取消，之后连接仍须在有界时间内恢复可用。
+#[tokio::test]
+async fn dropping_running_sqlite_execution_future_keeps_connection_recoverable() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut statement = connection
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    {
+        let execution = statement.execute_query(
+            "WITH RECURSIVE counter(value) AS (\
+                VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000\
+             ) SELECT sum(value) FROM counter",
+        );
+        tokio::pin!(execution);
+        tokio::select! {
+            result = &mut execution => { let _ = result; panic!("long query unexpectedly completed early"); },
+            _ = tokio::time::sleep(Duration::from_millis(25)) => {}
+        }
+    }
+    let rows = tokio::time::timeout(
+        Duration::from_secs(5),
+        connection.fetch("SELECT 14", Vec::new()),
+    )
+    .await
+    .expect("dropping the caller future must not strand the physical connection")
+    .unwrap();
+    assert_eq!(rows[0].values, vec![Value::Int(14)]);
+    assert!(!statement.is_closed().unwrap());
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
 /// PostgreSQL 当前没有接入独立取消通道；真实后端必须精确拒绝，而不能返回空操作句柄。
 #[tokio::test]
 #[ignore = "requires DRUID_DATABASE_URL pointing to a live PostgreSQL service"]
