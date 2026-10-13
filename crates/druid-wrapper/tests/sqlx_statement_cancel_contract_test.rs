@@ -298,6 +298,65 @@ async fn cancel_releases_connection_while_old_cursor_is_retained() {
     connection.close().await.unwrap();
 }
 
+/// 执行 Future 被 drop 时不宣称数据库已取消，并确保物理 owner 不会重新入池。
+#[tokio::test]
+async fn dropped_execution_future_discards_the_native_pool_owner_once() {
+    let pool = Arc::new(
+        DruidPool::builder()
+            .factory(Arc::new(SqlxConnectionFactory::new("sqlite::memory:")))
+            .max_open(1)
+            .max_idle(1)
+            .build()
+            .await
+            .unwrap(),
+    );
+    let before = pool.state();
+    let task_pool = Arc::clone(&pool);
+    let execution = tokio::spawn(async move {
+        let mut connection = task_pool.get_connection().await.unwrap();
+        let mut statement = connection
+            .create_statement(StatementOptions::default())
+            .await
+            .unwrap();
+        statement
+            .execute_query(
+                "WITH RECURSIVE counter(value) AS (VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 100000000) SELECT sum(value) FROM counter",
+            )
+            .await
+    });
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    execution.abort();
+    let join_error = match execution.await {
+        Ok(_) => panic!("execution task must be cancelled"),
+        Err(error) => error,
+    };
+    assert!(
+        join_error.is_cancelled(),
+        "dropping the execution future must not be reported as a database cancellation result"
+    );
+
+    let discarded = pool.state();
+    assert_eq!(discarded.active_count, 0, "aborted lease must return once");
+    assert_eq!(
+        discarded.idle_count, 0,
+        "unconfirmed SQLite owner must not be reusable"
+    );
+    assert_eq!(discarded.discard_count, before.discard_count + 1);
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while pool.state().destroy_count < before.destroy_count + 1 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("discarded physical owner must be closed exactly once");
+    assert_eq!(pool.state().destroy_count, before.destroy_count + 1);
+
+    let _replacement = pool.get_connection().await.unwrap();
+    assert_eq!(pool.state().create_count, before.create_count + 2);
+    pool.close().await;
+}
+
 /// 普通语句取消的批次准入没有写入副作用，取消请求只消费一次，批次内容保留。
 #[tokio::test]
 async fn pending_cancel_preserves_ordinary_batch_for_a_single_retry() {
@@ -791,9 +850,9 @@ async fn independent_cancel_interrupts_running_sqlite_generated_key_update() {
     connection.close().await.unwrap();
 }
 
-/// 丢弃 Rust 执行 Future 不应伪装成 Statement 取消，之后连接仍须在有界时间内恢复可用。
+/// 丢弃 Rust 执行 Future 不应伪装成数据库取消；未确认清理的连接必须丢弃。
 #[tokio::test]
-async fn dropping_running_sqlite_execution_future_keeps_connection_recoverable() {
+async fn dropping_running_sqlite_execution_future_discards_uncertain_connection() {
     let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
         .await
         .unwrap();
@@ -813,15 +872,12 @@ async fn dropping_running_sqlite_execution_future_keeps_connection_recoverable()
             _ = tokio::time::sleep(Duration::from_millis(25)) => {}
         }
     }
-    let rows = tokio::time::timeout(
-        Duration::from_secs(5),
-        connection.fetch("SELECT 14", Vec::new()),
-    )
-    .await
-    .expect("dropping the caller future must not strand the physical connection")
-    .unwrap();
-    assert_eq!(rows[0].values, vec![Value::Int(14)]);
-    assert!(!statement.is_closed().unwrap());
+    assert_eq!(
+        connection.fetch("SELECT 14", Vec::new()).await,
+        Err(RdbcError::ConnectionDiscarded),
+        "unconfirmed execution cleanup must prevent reuse instead of claiming cancellation"
+    );
+    assert!(connection.is_closed().unwrap());
     statement.close().await.unwrap();
     connection.close().await.unwrap();
 }

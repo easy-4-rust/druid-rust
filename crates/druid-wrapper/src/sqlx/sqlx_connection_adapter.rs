@@ -17,6 +17,7 @@ use sqlx::{
     Any, AnyConnection, Column, Connection as SqlxConnection, Executor, MySql, Postgres,
     Row as SqlxRow, Sqlite, SqliteConnection, Statement, TransactionManager, TypeInfo, ValueRef,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -64,6 +65,7 @@ pub struct SqlxConnectionAdapter {
     auto_commit: bool,
     read_only: bool,
     discarded: bool,
+    actor_discarded: Option<Arc<AtomicBool>>,
     standard_actor: Option<Arc<SqlxConnectionActor>>,
     runtime_trace: Option<RuntimeTraceEmitter>,
 }
@@ -106,6 +108,7 @@ impl SqlxConnectionAdapter {
             auto_commit: true,
             read_only: false,
             discarded: false,
+            actor_discarded: None,
             standard_actor: None,
             runtime_trace: None,
         })
@@ -113,6 +116,10 @@ impl SqlxConnectionAdapter {
 
     pub(crate) fn install_runtime_trace(&mut self, runtime_trace: RuntimeTraceEmitter) {
         self.runtime_trace = Some(runtime_trace);
+    }
+
+    pub(super) fn attach_actor_discard_flag(&mut self, flag: Arc<AtomicBool>) {
+        self.actor_discarded = Some(flag);
     }
 
     pub(super) fn take_runtime_trace(&mut self) -> Option<RuntimeTraceEmitter> {
@@ -148,6 +155,7 @@ impl SqlxConnectionAdapter {
             auto_commit: self.auto_commit,
             read_only: self.read_only,
             discarded: self.discarded,
+            actor_discarded: None,
             standard_actor: None,
             runtime_trace: None,
         };
@@ -530,6 +538,9 @@ impl SqlxConnectionAdapter {
     /// 无法确认 worker 已释放时，禁止将物理连接重新借给池。
     pub(super) fn discard_after_unconfirmed_interrupt(&mut self) {
         self.discarded = true;
+        if let Some(flag) = &self.actor_discarded {
+            flag.store(true, Ordering::Release);
+        }
     }
 
     pub(super) fn backend_key(&self) -> &'static str {

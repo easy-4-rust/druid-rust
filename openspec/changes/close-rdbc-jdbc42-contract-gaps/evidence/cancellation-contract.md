@@ -16,7 +16,7 @@
 
 SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号传入缓冲查询、流式游标、通用 `Statement::execute`、PreparedStatement 查询/更新和生成键查询路径。SQLite progress handler 在数据库 VM 中检查中断/截止时间；执行收尾等待 worker 释放句柄并清理 handler，无法确认时将物理连接标记为不可复用。`execute` 的返回类型预检也在取消和超时控制下，避免描述阶段阻塞后才进入可取消执行。
 
-新增正向执行测试分别运行递归 CTE 缓冲查询、普通 `execute`、普通/预编译更新、PreparedStatement 查询、生成键查询和请求生成键的长时间更新；均在预算内以 SQLState `HY008` 结束，且随后同一连接可继续查询。生成键更新额外验证取消后不提交行，也不发布部分或上一轮生成键。另测了调用方丢弃执行 Future 后同一连接仍可恢复；此项只证明资源恢复，不将 Future drop 当成后端取消证据。既有合同测试还覆盖流式游标取消、重复请求、迟到请求不污染下一代、预取消只消费一次及新语句隔离。
+新增正向执行测试分别运行递归 CTE 缓冲查询、普通 `execute`、普通/预编译更新、PreparedStatement 查询、生成键查询和请求生成键的长时间更新；均在预算内以 SQLState `HY008` 结束，且随后同一连接可继续查询。生成键更新额外验证取消后不提交行，也不发布部分或上一轮生成键。Future drop 的资源处置现按“不确定执行不得复用”处理，详见下方 4.3 进展；不会把 Future drop 描述成后端取消。既有合同测试还覆盖流式游标取消、重复请求、迟到请求不污染下一代、预取消只消费一次及新语句隔离。
 
 本次验证：
 
@@ -54,3 +54,22 @@ SQLx SQLite 的取消句柄绑定执行代次，并将同一原子中断信号�
 | `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `22A365018F18C8858F975A94CD968CE7D44CB265C27B1E25994FCF8E5D385326` |
 
 **边界与未完成项：**SQLite 用例证明真实 SQLite VM 执行路径中断及连接清理；PostgreSQL 18.6 和 MySQL 8.0.36 实库只验证当前明确不支持/`0A000`。普通/Prepared SQLx 代理及 Callable 合同夹具现已覆盖真实 DruidPool 借还路径，迟到/重复请求与共享连接隔离也有测试，故 4.2 已完成。仍缺取消未确认时 owner 丢弃连接的故障注入与回收计数断言、完整后端/执行路径能力矩阵审查及清晰的执行终态记录；因此任务 4.3–4.7 保持未勾选。本记录不关闭取消批，也不代表 JDBC 全面对齐或生产就绪。
+
+## 4.3 进展：未确认执行清理时丢弃 owner
+
+- `SqliteExecutionCleanupGuard` 覆盖 SQLx SQLite 的缓冲查询、生成键查询、更新、生成键更新、结果类型预检和流式游标。只有成功清除 progress handler 后 guard 才标记确认；清理返回错误、超过 3 秒，或执行 Future 在清理确认前被 drop，均将适配器和 actor 的共享不可用状态置位。
+- actor 的 `Connection::is_closed()` 现在观察共享不可用状态。Druid 的 holder 回收逻辑据此选择 discard；不会因底层适配器私有 `discarded` 标记不可见而误入空闲池。
+- 更新旧 Future-drop 测试：查询 Future drop 不返回“已取消”结果；若 SQLite 执行/清理状态未确认，连接返回 `ConnectionDiscarded`，然后物理连接关闭。
+- 新增真实 `DruidPool` 故障场景：在递归 SQLite VM 查询期间 abort 执行任务，断言池 `active_count=0`、`idle_count=0`、`discard_count` 精确增加一次、`destroy_count` 精确增加一次；下一次获取会新建替代物理连接。
+- actor 单测以注入的清理错误与超时结果验证错误载荷保留或映射为 `ConnectionDiscarded`，两种情况下 owner 均被 poison；另验证 drop guard poison、显式 close 幂等，以及成功清理后原始 SQL 异常消息与 SQLState 保留。
+- 已运行：`cargo test -p druid-wrapper --features sqlx --lib cancellation_cleanup_tests --locked --offline`：4 passed；`cargo test -p druid-wrapper --features sqlx --test sqlx_statement_cancel_contract_test --locked --offline`：17 passed、2 ignored（实库 PostgreSQL/MySQL 负向用例）；`cargo test -p druid --test callable_cache_lifecycle_test --locked --offline`：6 passed；`cargo fmt -p druid-wrapper -- --check` 与 `git diff --check` 通过。最后新增的 `destroy_count` 精确断言另以其单项测试复验通过。
+- 当前仅关闭 Future drop 后错误复用这一已证实缺陷；自然完成与取消的并发竞态矩阵以及 owner 关闭期间的竞态仍需补验证，因此 OpenSpec 任务 4.3 不勾选，4.3–4.7 仍未关闭。
+
+4.3 本轮源码 SHA-256：
+
+| 文件 | SHA-256 |
+|---|---|
+| `crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs` | `B538E3BD60D4719B04F2A9E4250631F7FAEEB74AAF92B127BBA48F7228D35E8A` |
+| `crates/druid-wrapper/src/sqlx/sqlx_connection_adapter.rs` | `8A9A3DBA222238AAD856A3D3212D8A2B694FE49AEC55447A5CAF7795A1E9DF04` |
+| `crates/druid-wrapper/src/sqlx/sqlx_cursor_request_test.rs` | `1FF4EF24C889C1C0DBD7FE958A3E035068C9AD703DA9ED4445B00868A53EB7B2` |
+| `crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs` | `C0ADE909187A866AC603DB4E102DCEA3E740B80FF197865036A4AB2514854ACA` |

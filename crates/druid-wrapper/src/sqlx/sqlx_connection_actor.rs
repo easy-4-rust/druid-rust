@@ -25,6 +25,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 pub(crate) struct SqlxConnectionActor {
     connection: Mutex<SqlxConnectionAdapter>,
     closed: AtomicBool,
+    unusable: Arc<AtomicBool>,
     cursor_shutdown: watch::Sender<bool>,
     auto_commit: AtomicBool,
     read_only: AtomicBool,
@@ -35,28 +36,6 @@ pub(crate) struct SqlxConnectionActor {
 }
 
 impl SqlxConnectionActor {
-    async fn clear_sqlite_progress_control(
-        &self,
-        connection: &mut SqlxConnectionAdapter,
-    ) -> Result<(), RdbcError> {
-        match tokio::time::timeout(
-            Duration::from_secs(3),
-            connection.clear_sqlite_progress_deadline(),
-        )
-        .await
-        {
-            Ok(Ok(())) => Ok(()),
-            Ok(Err(error)) => {
-                connection.discard_after_unconfirmed_interrupt();
-                Err(error)
-            }
-            Err(_) => {
-                connection.discard_after_unconfirmed_interrupt();
-                Err(RdbcError::ConnectionDiscarded)
-            }
-        }
-    }
-
     fn ensure_open_core(&self) -> Result<(), RdbcError> {
         if self.is_closed() {
             Err(RdbcError::ConnectionDiscarded)
@@ -73,9 +52,12 @@ impl SqlxConnectionActor {
         let backend_key = connection.backend_key();
         let url = connection.standard_url_core().to_owned();
         let runtime_trace = connection.take_runtime_trace();
+        let unusable = Arc::new(AtomicBool::new(false));
+        connection.attach_actor_discard_flag(Arc::clone(&unusable));
         Arc::new(Self {
             connection: Mutex::new(connection),
             closed: AtomicBool::new(false),
+            unusable,
             cursor_shutdown: watch::channel(false).0,
             auto_commit: AtomicBool::new(auto_commit),
             read_only: AtomicBool::new(read_only),
@@ -157,11 +139,19 @@ impl SqlxConnectionActor {
         connection
             .install_sqlite_progress_control(deadline, Arc::clone(&interrupted))
             .await?;
+        let mut cleanup = SqliteExecutionCleanupGuard::new(&mut connection);
         let outcome = match duration {
             Some(duration) => {
-                tokio::time::timeout(duration, connection.fetch_rows_with_labels(sql, values)).await
+                tokio::time::timeout(
+                    duration,
+                    cleanup.connection().fetch_rows_with_labels(sql, values),
+                )
+                .await
             }
-            None => Ok(connection.fetch_rows_with_labels(sql, values).await),
+            None => Ok(cleanup
+                .connection()
+                .fetch_rows_with_labels(sql, values)
+                .await),
         };
         let timed_out = duration.is_some_and(|_| {
             outcome.is_err()
@@ -170,22 +160,7 @@ impl SqlxConnectionActor {
         });
         // SQLite worker 可能在等待 future 超时后仍持有数据库锁。先等待 VM 中断，
         // 再清除 handler；若三秒内无法确认释放，禁止复用此物理连接。
-        match tokio::time::timeout(
-            Duration::from_secs(3),
-            connection.clear_sqlite_progress_deadline(),
-        )
-        .await
-        {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => {
-                connection.discard_after_unconfirmed_interrupt();
-                return Err(error);
-            }
-            Err(_) => {
-                connection.discard_after_unconfirmed_interrupt();
-                return Err(RdbcError::ConnectionDiscarded);
-            }
-        }
+        cleanup.clear(Duration::from_secs(3)).await?;
         if timed_out {
             return Err(RdbcError::SqlException(Box::new(
                 SqlException::new(
@@ -260,7 +235,9 @@ impl SqlxConnectionActor {
                     connection
                         .install_sqlite_progress_control(None, Arc::clone(&interrupted))
                         .await?;
-                    let outcome = connection
+                    let mut cleanup = SqliteExecutionCleanupGuard::new(&mut connection);
+                    let outcome = cleanup
+                        .connection()
                         .serve_cursor_core(
                             &sql,
                             values,
@@ -272,22 +249,7 @@ impl SqlxConnectionActor {
                             Arc::clone(&interrupted),
                         )
                         .await;
-                    match tokio::time::timeout(
-                        Duration::from_secs(3),
-                        connection.clear_sqlite_progress_deadline(),
-                    )
-                    .await
-                    {
-                        Ok(Ok(())) => {}
-                        Ok(Err(error)) => {
-                            connection.discard_after_unconfirmed_interrupt();
-                            return Err(error);
-                        }
-                        Err(_) => {
-                            connection.discard_after_unconfirmed_interrupt();
-                            return Err(RdbcError::ConnectionDiscarded);
-                        }
-                    }
+                    cleanup.clear(Duration::from_secs(3)).await?;
                     match outcome {
                         Err(_) if interrupted.load(Ordering::Acquire) => {
                             Err(super::sqlx_prepared_statement::cancelled_exception())
@@ -328,7 +290,9 @@ impl SqlxConnectionActor {
         connection
             .install_sqlite_progress_control(deadline, Arc::clone(&interrupted))
             .await?;
+        let mut cleanup = SqliteExecutionCleanupGuard::new(&mut connection);
         let execution = async {
+            let connection = cleanup.connection();
             if let Some(plan) = plan {
                 let (properties, _) = connection
                     .fetch_rows_with_labels(&plan.table_properties_sql(), Vec::new())
@@ -365,7 +329,7 @@ impl SqlxConnectionActor {
                 || (matches!(&outcome, Ok(Err(_)))
                     && deadline.is_some_and(|deadline| Instant::now() >= deadline))
         });
-        self.clear_sqlite_progress_control(&mut connection).await?;
+        cleanup.clear(Duration::from_secs(3)).await?;
         if timed_out {
             Err(Self::statement_timeout_error())
         } else if interrupted.load(Ordering::Acquire) && matches!(&outcome, Ok(Err(_))) {
@@ -391,7 +355,9 @@ impl SqlxConnectionActor {
         connection
             .install_sqlite_progress_control(deadline, Arc::clone(&interrupted))
             .await?;
+        let mut cleanup = SqliteExecutionCleanupGuard::new(&mut connection);
         let execution = async {
+            let connection = cleanup.connection();
             if self.backend_key == "sqlite" {
                 if let Some(plan) =
                     crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::parse_update(sql)?
@@ -434,7 +400,7 @@ impl SqlxConnectionActor {
                 || (matches!(&outcome, Ok(Err(_)))
                     && deadline.is_some_and(|deadline| Instant::now() >= deadline))
         });
-        self.clear_sqlite_progress_control(&mut connection).await?;
+        cleanup.clear(Duration::from_secs(3)).await?;
         if timed_out {
             Err(Self::statement_timeout_error())
         } else if interrupted.load(Ordering::Acquire) && matches!(&outcome, Ok(Err(_))) {
@@ -459,7 +425,8 @@ impl SqlxConnectionActor {
         connection
             .install_sqlite_progress_control(deadline, Arc::clone(&interrupted))
             .await?;
-        let execution = connection.execute_update_core(sql, values);
+        let mut cleanup = SqliteExecutionCleanupGuard::new(&mut connection);
+        let execution = cleanup.connection().execute_update_core(sql, values);
         let outcome = match duration {
             Some(duration) => tokio::time::timeout(duration, execution).await,
             None => Ok(execution.await),
@@ -469,7 +436,7 @@ impl SqlxConnectionActor {
                 || (matches!(&outcome, Ok(Err(_)))
                     && deadline.is_some_and(|deadline| Instant::now() >= deadline))
         });
-        self.clear_sqlite_progress_control(&mut connection).await?;
+        cleanup.clear(Duration::from_secs(3)).await?;
         if timed_out {
             Err(Self::statement_timeout_error())
         } else if interrupted.load(Ordering::Acquire) && matches!(&outcome, Ok(Err(_))) {
@@ -574,7 +541,8 @@ impl SqlxConnectionActor {
         connection
             .install_sqlite_progress_control(deadline, Arc::clone(&interrupted))
             .await?;
-        let describe = connection.describe_columns_core(sql);
+        let mut cleanup = SqliteExecutionCleanupGuard::new(&mut connection);
+        let describe = cleanup.connection().describe_columns_core(sql);
         let outcome = match duration {
             Some(duration) => tokio::time::timeout(duration, describe).await,
             None => Ok(describe.await),
@@ -584,7 +552,7 @@ impl SqlxConnectionActor {
                 || (matches!(&outcome, Ok(Err(_)))
                     && deadline.is_some_and(|deadline| Instant::now() >= deadline))
         });
-        self.clear_sqlite_progress_control(&mut connection).await?;
+        cleanup.clear(Duration::from_secs(3)).await?;
         if timed_out {
             return Err(RdbcError::SqlException(Box::new(
                 SqlException::new(
@@ -804,6 +772,183 @@ impl SqlxConnectionActor {
 
     /// 返回 actor 是否已经关闭。
     pub(crate) fn is_closed(&self) -> bool {
-        self.closed.load(Ordering::Acquire) || *self.cursor_shutdown.borrow()
+        self.closed.load(Ordering::Acquire)
+            || self.unusable.load(Ordering::Acquire)
+            || *self.cursor_shutdown.borrow()
+    }
+}
+
+/// 清理屏障只在成功确认 handler 已释放后才允许连接重新进入池。
+struct SqliteExecutionCleanupGuard<'a> {
+    connection: &'a mut SqlxConnectionAdapter,
+    confirmed: bool,
+}
+
+enum CleanupFailure {
+    Error(RdbcError),
+    TimedOut,
+}
+
+impl<'a> SqliteExecutionCleanupGuard<'a> {
+    fn new(connection: &'a mut SqlxConnectionAdapter) -> Self {
+        Self {
+            connection,
+            confirmed: false,
+        }
+    }
+
+    fn connection(&mut self) -> &mut SqlxConnectionAdapter {
+        self.connection
+    }
+
+    async fn clear(&mut self, timeout: Duration) -> Result<(), RdbcError> {
+        let outcome =
+            match tokio::time::timeout(timeout, self.connection.clear_sqlite_progress_deadline())
+                .await
+            {
+                Ok(Ok(())) => Ok(()),
+                Ok(Err(error)) => Err(CleanupFailure::Error(error)),
+                Err(_) => Err(CleanupFailure::TimedOut),
+            };
+        self.finish(outcome)
+    }
+
+    fn finish(&mut self, outcome: Result<(), CleanupFailure>) -> Result<(), RdbcError> {
+        match outcome {
+            Ok(()) => {
+                self.confirmed = true;
+                Ok(())
+            }
+            Err(CleanupFailure::Error(error)) => {
+                self.connection.discard_after_unconfirmed_interrupt();
+                Err(error)
+            }
+            Err(CleanupFailure::TimedOut) => {
+                self.connection.discard_after_unconfirmed_interrupt();
+                Err(RdbcError::ConnectionDiscarded)
+            }
+        }
+    }
+}
+
+impl Drop for SqliteExecutionCleanupGuard<'_> {
+    fn drop(&mut self) {
+        if !self.confirmed {
+            self.connection.discard_after_unconfirmed_interrupt();
+        }
+    }
+}
+
+#[cfg(test)]
+mod cancellation_cleanup_tests {
+    use super::{CleanupFailure, SqliteExecutionCleanupGuard, SqlxConnectionActor};
+    use crate::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter;
+    use druid_rdbc::error::RdbcError;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn dropped_execution_cleanup_guard_marks_actor_unusable_and_close_is_idempotent() {
+        let adapter = SqlxConnectionAdapter::connect("sqlite::memory:")
+            .await
+            .expect("in-memory SQLite connection should open");
+        let actor = SqlxConnectionActor::new(adapter);
+        {
+            let mut connection = actor.connection.lock().await;
+            connection
+                .install_sqlite_progress_control(None, Arc::new(AtomicBool::new(false)))
+                .await
+                .expect("progress control should install");
+            drop(SqliteExecutionCleanupGuard::new(&mut connection));
+        }
+
+        assert!(
+            actor.is_closed(),
+            "unconfirmed cleanup must poison the owner"
+        );
+        assert_eq!(
+            actor.execute_control_statement("SELECT 1").await,
+            Err(RdbcError::ConnectionDiscarded),
+            "poisoned physical connection must not execute another statement"
+        );
+        actor.close().await.expect("poisoned connection must close");
+        actor
+            .close()
+            .await
+            .expect("physical close must be idempotent");
+        assert!(actor.is_closed());
+    }
+
+    #[tokio::test]
+    async fn sql_error_payload_survives_a_confirmed_cleanup_barrier() {
+        let adapter = SqlxConnectionAdapter::connect("sqlite::memory:")
+            .await
+            .expect("in-memory SQLite connection should open");
+        let actor = SqlxConnectionActor::new(adapter);
+        let outcome = actor
+            .execute_query_with_timeout(
+                "SELECT * FROM druid_missing_table",
+                Vec::new(),
+                0,
+                Arc::new(AtomicBool::new(false)),
+            )
+            .await;
+
+        let RdbcError::SqlException(exception) = outcome.err().expect("query should fail") else {
+            panic!("expected the original SQL exception");
+        };
+        assert!(exception
+            .message()
+            .is_some_and(|message| message.contains("druid_missing_table")));
+        assert!(
+            !actor.is_closed(),
+            "confirmed cleanup keeps a healthy owner reusable"
+        );
+        actor.close().await.expect("connection should close");
+    }
+
+    #[tokio::test]
+    async fn injected_cleanup_failure_preserves_error_and_poisons_actor() {
+        let adapter = SqlxConnectionAdapter::connect("sqlite::memory:")
+            .await
+            .expect("in-memory SQLite connection should open");
+        let actor = SqlxConnectionActor::new(adapter);
+        let mut connection = actor.connection.lock().await;
+        let mut cleanup = SqliteExecutionCleanupGuard::new(&mut connection);
+        let error = RdbcError::Other("injected cleanup failure".to_owned());
+
+        assert_eq!(
+            cleanup.finish(Err(CleanupFailure::Error(error.clone()))),
+            Err(error)
+        );
+        drop(cleanup);
+        drop(connection);
+        assert!(
+            actor.is_closed(),
+            "cleanup failure must poison the physical owner"
+        );
+        actor.close().await.expect("poisoned connection must close");
+    }
+
+    #[tokio::test]
+    async fn injected_cleanup_timeout_returns_discarded_and_poisons_actor() {
+        let adapter = SqlxConnectionAdapter::connect("sqlite::memory:")
+            .await
+            .expect("in-memory SQLite connection should open");
+        let actor = SqlxConnectionActor::new(adapter);
+        let mut connection = actor.connection.lock().await;
+        let mut cleanup = SqliteExecutionCleanupGuard::new(&mut connection);
+
+        assert_eq!(
+            cleanup.finish(Err(CleanupFailure::TimedOut)),
+            Err(RdbcError::ConnectionDiscarded)
+        );
+        drop(cleanup);
+        drop(connection);
+        assert!(
+            actor.is_closed(),
+            "cleanup timeout must poison the physical owner"
+        );
+        actor.close().await.expect("poisoned connection must close");
     }
 }

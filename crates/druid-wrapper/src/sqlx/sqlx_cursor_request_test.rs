@@ -2,7 +2,7 @@ use super::sqlx_cursor_request::SqlxCursorRequest;
 use druid_rdbc::types::{Row, Value};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, watch};
 
 #[tokio::test(flavor = "current_thread")]
 async fn driver_stream_is_polled_only_once_per_accepted_next_request() {
@@ -15,11 +15,25 @@ async fn driver_stream_is_polled_only_once_per_accepted_next_request() {
     });
     let (requests, mut receiver) = mpsc::channel(1);
     let (startup, ready) = oneshot::channel();
+    let (stop_tx, mut stop) = watch::channel(false);
+    let (parent_stop_tx, mut parent_stop) = watch::channel(false);
+    let (statement_stop_tx, mut statement_stop) = watch::channel(false);
+    let interrupted = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let worker = tokio::spawn(async move {
-        SqlxCursorRequest::serve(Vec::new(), &mut Some(startup), &mut receiver, rows)
-            .await
-            .unwrap();
+        SqlxCursorRequest::serve(
+            Vec::new(),
+            &mut Some(startup),
+            &mut receiver,
+            &mut stop,
+            &mut parent_stop,
+            &mut statement_stop,
+            interrupted,
+            rows,
+        )
+        .await
+        .unwrap();
     });
+    let _stop_senders = (stop_tx, parent_stop_tx, statement_stop_tx);
     ready.await.unwrap().unwrap();
     assert_eq!(
         polls.load(Ordering::SeqCst),
