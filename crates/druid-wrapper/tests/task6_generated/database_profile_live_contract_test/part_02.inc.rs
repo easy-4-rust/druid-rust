@@ -297,22 +297,63 @@ async fn verify_database_restart_if_configured(
         panic!("生成认证证据必须设置 DRUID_CONTRACT_RESTART_PROGRAM");
     }
 
+    // 重启后的原生建连探针把数据库/URL 故障与 DruidPool 借用故障区分开。
+    eprintln!("contract-stage: restart-direct-connect");
+    let registry = configured_registry(profile.runtime_mode());
+    let config = configured_connection_config(profile.id().as_str(), url);
+    let resolved = registry.resolve(&config).expect("重启后档案必须可解析");
+    let mut direct_connection =
+        tokio::time::timeout(Duration::from_secs(10), resolved.factory().create())
+            .await
+            .expect("数据库重启后原生建连必须在截止时间内完成")
+            .expect("数据库重启后原生建连必须成功");
+    tokio::time::timeout(Duration::from_secs(10), direct_connection.ping())
+        .await
+        .expect("数据库重启后原生 ping 必须在截止时间内完成")
+        .expect("数据库重启后原生 ping 必须成功");
+    tokio::time::timeout(Duration::from_secs(10), direct_connection.close())
+        .await
+        .expect("数据库重启后原生关闭必须在截止时间内完成")
+        .expect("数据库重启后原生连接必须关闭");
+
     eprintln!("contract-stage: restart-pool-build");
     let pool = tokio::time::timeout(
         Duration::from_secs(30),
         configured_pool_builder(profile.id().as_str(), url, profile.runtime_mode())
             .name(format!("contract-{}-restart", profile.id()))
-            .pool(|builder| builder.max_open(1).max_idle(1).test_on_borrow(true))
+            .pool(|builder| {
+                builder
+                    .max_open(1)
+                    .max_idle(1)
+                    .test_on_borrow(true)
+                    .login_timeout(5)
+            })
             .build(),
     )
     .await
     .expect("数据库重启后建池必须在截止时间内完成")
     .expect("数据库重启后必须能重新构建 DruidPool");
     eprintln!("contract-stage: restart-pool-get");
-    let mut connection = tokio::time::timeout(Duration::from_secs(30), pool.get())
-        .await
-        .expect("数据库重启后借用必须在截止时间内完成")
-        .expect("数据库重启后必须能重新建连");
+    let acquisition = tokio::time::timeout(
+        Duration::from_secs(30),
+        pool.get_timeout(Duration::from_secs(10)),
+    )
+    .await
+    .expect("数据库重启后借用必须在截止时间内完成");
+    let mut connection = match acquisition {
+        Ok(connection) => connection,
+        Err(error) => {
+            eprintln!(
+                "contract-stage: restart-pool-get-error kind={:?} last-create-kind={:?} state={:?}",
+                std::mem::discriminant(&error),
+                pool.last_create_error()
+                    .as_ref()
+                    .map(std::mem::discriminant),
+                pool.state()
+            );
+            panic!("数据库重启后必须能重新建连");
+        }
+    };
     eprintln!("contract-stage: restart-ping");
     tokio::time::timeout(Duration::from_secs(30), connection.ping())
         .await
