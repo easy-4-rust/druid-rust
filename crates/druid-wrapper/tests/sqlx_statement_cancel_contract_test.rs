@@ -1,9 +1,10 @@
 use druid_rdbc::connection::Connection;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::result_set::ColumnIndex;
-use druid_rdbc::statement::{ParameterIndex, PreparedParameter, StatementOptions};
+use druid_rdbc::statement::{GeneratedKeys, ParameterIndex, PreparedParameter, StatementOptions};
 use druid_rdbc::types::Value;
 use druid_wrapper::sqlx::SqlxConnectionAdapter;
+use std::time::Duration;
 
 /// 原实库合同要求取消请求先于执行；只拒绝该次 admission，保留语句和连接复用。
 #[tokio::test]
@@ -204,6 +205,234 @@ async fn pending_cancel_preserves_ordinary_batch_for_a_single_retry() {
         Value::Int(3)
     );
     result.close().await.unwrap();
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// 独立取消句柄绑定获取时的执行代次，旧句柄不得取消后续查询。
+#[tokio::test]
+async fn independent_cancel_control_is_generation_bound() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut statement = connection
+        .prepare_statement(
+            "SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3",
+            StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    statement.set_fetch_size(1).unwrap();
+
+    let cancellation = statement
+        .cancellation_control()
+        .expect("SQLx SQLite 应提供独立取消句柄");
+    let mut first = statement.execute_prepared_query().await.unwrap();
+    assert!(first.next().await.unwrap());
+    cancellation.cancel().await.unwrap();
+    let cancelled = tokio::time::timeout(Duration::from_secs(5), first.next())
+        .await
+        .expect("取消应在期限内停止旧游标")
+        .expect_err("旧执行应被取消");
+    assert!(
+        matches!(cancelled, RdbcError::ConnectionDiscarded)
+            || matches!(cancelled, RdbcError::SqlException(ref error) if error.sql_state() == Some("HY008"))
+    );
+    cancellation
+        .cancel()
+        .await
+        .expect("重复取消同一代次必须安全");
+    first.close().await.unwrap();
+
+    let mut other_statement = connection
+        .prepare_statement("SELECT 9", StatementOptions::default())
+        .await
+        .unwrap();
+    let mut unaffected = other_statement.execute_prepared_query().await.unwrap();
+    assert!(
+        unaffected.next().await.unwrap(),
+        "取消不能影响同连接的其他语句"
+    );
+    assert_eq!(
+        unaffected.value(ColumnIndex::new(1).unwrap()).unwrap(),
+        Value::Int(9)
+    );
+    unaffected.close().await.unwrap();
+    other_statement.close().await.unwrap();
+
+    let mut second = statement.execute_prepared_query().await.unwrap();
+    assert!(second.next().await.unwrap(), "旧句柄不能取消新代次");
+    assert_eq!(
+        second.value(ColumnIndex::new(1).unwrap()).unwrap(),
+        Value::Int(1)
+    );
+    second.close().await.unwrap();
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// 取得句柄后先完成一次查询，再调用旧句柄不能预取消下一次执行。
+#[tokio::test]
+async fn late_cancel_control_does_not_become_pending_for_next_generation() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut statement = connection
+        .prepare_statement("SELECT 7", StatementOptions::default())
+        .await
+        .unwrap();
+    let cancellation = statement
+        .cancellation_control()
+        .expect("SQLx SQLite 应提供独立取消句柄");
+    let mut first = statement.execute_prepared_query().await.unwrap();
+    assert!(first.next().await.unwrap());
+    first.close().await.unwrap();
+
+    cancellation.cancel().await.unwrap();
+    let mut second = statement
+        .execute_prepared_query()
+        .await
+        .expect("已完成代次上的迟到取消不得污染下一执行");
+    assert!(second.next().await.unwrap());
+    assert_eq!(
+        second.value(ColumnIndex::new(1).unwrap()).unwrap(),
+        Value::Int(7)
+    );
+    second.close().await.unwrap();
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// SQLite VM 正在执行的缓冲查询必须被独立取消句柄中断，而非仅终止流式游标任务。
+#[tokio::test]
+async fn independent_cancel_interrupts_running_buffered_sqlite_query() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut statement = connection
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    let cancellation = statement
+        .cancellation_control()
+        .expect("SQLite 应提供真正的执行中取消控制");
+    let cancel_task = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        cancellation.cancel().await
+    });
+
+    let query = statement.execute_query(
+        "WITH RECURSIVE counter(value) AS (\
+            VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000\
+         ) SELECT sum(value) FROM counter",
+    );
+    let outcome = tokio::time::timeout(Duration::from_secs(2), query)
+        .await
+        .expect("取消必须在预算内让 SQLite 查询结束");
+    cancel_task.await.unwrap().unwrap();
+    let error = match outcome {
+        Ok(_) => panic!("执行中的缓冲查询必须报告取消"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        RdbcError::SqlException(ref error) if error.sql_state() == Some("HY008")
+    ));
+
+    let rows = connection.fetch("SELECT 9", Vec::new()).await.unwrap();
+    assert_eq!(rows[0].values, vec![Value::Int(9)]);
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// SQLite 更新语句的 VM 运行时也必须中断，取消后连接应通过清理屏障恢复可用。
+#[tokio::test]
+async fn independent_cancel_interrupts_running_sqlite_update() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    connection
+        .exec("CREATE TABLE cancel_update (value INTEGER)", Vec::new())
+        .await
+        .unwrap();
+    connection
+        .exec("INSERT INTO cancel_update VALUES (0)", Vec::new())
+        .await
+        .unwrap();
+    let mut statement = connection
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    let cancellation = statement.cancellation_control().unwrap();
+    let cancel_task = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        cancellation.cancel().await
+    });
+
+    let update = statement.execute_update(
+        "UPDATE cancel_update SET value = (\
+            WITH RECURSIVE counter(value) AS (\
+                VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000\
+            ) SELECT sum(value) FROM counter\
+         )",
+        GeneratedKeys::None,
+    );
+    let outcome = tokio::time::timeout(Duration::from_secs(2), update)
+        .await
+        .expect("取消必须在预算内让 SQLite 更新结束");
+    cancel_task.await.unwrap().unwrap();
+    assert!(matches!(
+        outcome,
+        Err(RdbcError::SqlException(ref error)) if error.sql_state() == Some("HY008")
+    ));
+
+    let rows = connection
+        .fetch("SELECT value FROM cancel_update", Vec::new())
+        .await
+        .unwrap();
+    assert_eq!(rows[0].values, vec![Value::Int(0)]);
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// 普通 Statement#execute 的结果分支必须共享同一 SQLite VM 取消通道。
+#[tokio::test]
+async fn independent_cancel_interrupts_running_sqlite_execute() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut statement = connection
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    let cancellation = statement.cancellation_control().unwrap();
+    let cancel_task = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        cancellation.cancel().await
+    });
+    let started = std::time::Instant::now();
+    let execute = statement.execute(
+        "WITH RECURSIVE counter(value) AS (\
+            VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000\
+         ) SELECT sum(value) FROM counter",
+        GeneratedKeys::None,
+    );
+    let outcome = tokio::time::timeout(Duration::from_secs(2), execute)
+        .await
+        .expect("取消必须在预算内让 SQLite execute 结束");
+    assert!(
+        started.elapsed() < Duration::from_millis(500),
+        "取消应中断描述/执行阶段，不能等待 500ms 长查询自然结束"
+    );
+    cancel_task.await.unwrap().unwrap();
+    assert!(matches!(
+        outcome,
+        Err(RdbcError::SqlException(ref error)) if error.sql_state() == Some("HY008")
+    ));
+    assert_eq!(
+        connection.fetch("SELECT 11", Vec::new()).await.unwrap()[0].values,
+        vec![Value::Int(11)]
+    );
     statement.close().await.unwrap();
     connection.close().await.unwrap();
 }

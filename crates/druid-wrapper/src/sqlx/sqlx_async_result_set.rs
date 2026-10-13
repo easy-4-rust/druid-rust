@@ -42,12 +42,20 @@ impl SqlxAsyncResultSet {
         options: StatementOptions,
         fetch_size: i32,
         statement_stop: watch::Receiver<bool>,
+        interrupted: Arc<std::sync::atomic::AtomicBool>,
     ) -> Result<Box<dyn ResultSet>, RdbcError> {
         let (requests, receiver) = mpsc::channel(1);
         let (startup, ready) = oneshot::channel();
         let (shutdown, stop) = watch::channel(false);
-        let worker =
-            actor.spawn_cursor(sql, values, receiver, startup, stop, statement_stop.clone());
+        let worker = actor.spawn_cursor(
+            sql,
+            values,
+            receiver,
+            startup,
+            stop,
+            statement_stop.clone(),
+            interrupted,
+        );
         // 在第一个 await 之前建立拥有 worker 的守卫，避免创建被取消后泄漏连接锁。
         let mut cursor = Self {
             actor,

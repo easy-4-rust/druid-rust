@@ -23,6 +23,9 @@ impl DruidPooledCallableStatement {
         if self.statement_base.is_closed() {
             return Ok(());
         }
+        let resource = Arc::clone(&self.shared.resource);
+        let mut cancellation_gate = resource.cancellation_gate.lock().await;
+        *cancellation_gate = false;
         // cached raw 可继续存活，但本 logical statement 的子游标必须先全部结束。
         self.statement_base
             .inner
@@ -36,7 +39,6 @@ impl DruidPooledCallableStatement {
             self.shared.cacheable.store(false, Ordering::Release);
             return Err(error);
         }
-        let resource = Arc::clone(&self.shared.resource);
         let policy = Arc::clone(&self.statement_base.inner.policy);
         let mut statement = resource.statement.lock().await;
         let Some(raw) = statement.as_mut() else {

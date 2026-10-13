@@ -35,6 +35,28 @@ pub(crate) struct SqlxConnectionActor {
 }
 
 impl SqlxConnectionActor {
+    async fn clear_sqlite_progress_control(
+        &self,
+        connection: &mut SqlxConnectionAdapter,
+    ) -> Result<(), RdbcError> {
+        match tokio::time::timeout(
+            Duration::from_secs(3),
+            connection.clear_sqlite_progress_deadline(),
+        )
+        .await
+        {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(error)) => {
+                connection.discard_after_unconfirmed_interrupt();
+                Err(error)
+            }
+            Err(_) => {
+                connection.discard_after_unconfirmed_interrupt();
+                Err(RdbcError::ConnectionDiscarded)
+            }
+        }
+    }
+
     fn ensure_open_core(&self) -> Result<(), RdbcError> {
         if self.is_closed() {
             Err(RdbcError::ConnectionDiscarded)
@@ -120,39 +142,32 @@ impl SqlxConnectionActor {
         }
     }
 
-    /// 执行 query，并让 returned ResultSet 继续持有同一 actor lease。
-    pub(crate) async fn execute_query(
-        self: &Arc<SqlxConnectionActor>,
-        sql: &str,
-        values: Vec<Value>,
-    ) -> Result<Box<dyn ResultSet>, RdbcError> {
-        self.ensure_open_core()?;
-        let mut connection = self.connection.lock().await;
-        let (rows, columns) = connection.fetch_rows_with_labels(sql, values).await?;
-        Ok(self.result_set_core(rows, columns))
-    }
-
     /// 带物理 SQLite VM 中断的准备查询执行；超时后等待 worker 停止再释放连接锁。
     pub(crate) async fn execute_query_with_timeout(
         self: &Arc<SqlxConnectionActor>,
         sql: &str,
         values: Vec<Value>,
         seconds: i32,
+        interrupted: Arc<std::sync::atomic::AtomicBool>,
     ) -> Result<Box<dyn ResultSet>, RdbcError> {
-        if seconds <= 0 {
-            return self.execute_query(sql, values).await;
-        }
         self.ensure_open_core()?;
-        let duration = Duration::from_secs(seconds as u64);
-        let deadline = Instant::now() + duration;
+        let duration = (seconds > 0).then(|| Duration::from_secs(seconds as u64));
+        let deadline = duration.map(|duration| Instant::now() + duration);
         let mut connection = self.connection.lock().await;
         connection
-            .install_sqlite_progress_deadline(deadline)
+            .install_sqlite_progress_control(deadline, Arc::clone(&interrupted))
             .await?;
-        let outcome =
-            tokio::time::timeout(duration, connection.fetch_rows_with_labels(sql, values)).await;
-        let timed_out =
-            outcome.is_err() || (matches!(&outcome, Ok(Err(_))) && Instant::now() >= deadline);
+        let outcome = match duration {
+            Some(duration) => {
+                tokio::time::timeout(duration, connection.fetch_rows_with_labels(sql, values)).await
+            }
+            None => Ok(connection.fetch_rows_with_labels(sql, values).await),
+        };
+        let timed_out = duration.is_some_and(|_| {
+            outcome.is_err()
+                || (matches!(&outcome, Ok(Err(_)))
+                    && deadline.is_some_and(|deadline| Instant::now() >= deadline))
+        });
         // SQLite worker 可能在等待 future 超时后仍持有数据库锁。先等待 VM 中断，
         // 再清除 handler；若三秒内无法确认释放，禁止复用此物理连接。
         match tokio::time::timeout(
@@ -183,7 +198,11 @@ impl SqlxConnectionActor {
             )));
         }
         let (rows, columns) = match outcome {
-            Ok(result) => result?,
+            Ok(Ok(result)) => result,
+            Ok(Err(_error)) if interrupted.load(std::sync::atomic::Ordering::Acquire) => {
+                return Err(super::sqlx_prepared_statement::cancelled_exception());
+            }
+            Ok(Err(error)) => return Err(error),
             Err(_) => unreachable!("timeout was returned before extracting query rows"),
         };
         Ok(self.result_set_core(rows, columns))
@@ -197,6 +216,7 @@ impl SqlxConnectionActor {
         options: StatementOptions,
         fetch_size: i32,
         statement_stop: watch::Receiver<bool>,
+        interrupted: Arc<AtomicBool>,
     ) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.ensure_open_core()?;
         SqlxAsyncResultSet::open(
@@ -206,6 +226,7 @@ impl SqlxConnectionActor {
             options,
             fetch_size,
             statement_stop,
+            interrupted,
         )
         .await
     }
@@ -219,6 +240,7 @@ impl SqlxConnectionActor {
         startup: oneshot::Sender<Result<Vec<ColumnDescriptor>, RdbcError>>,
         mut stop: watch::Receiver<bool>,
         mut statement_stop: watch::Receiver<bool>,
+        interrupted: Arc<AtomicBool>,
     ) -> tokio::task::JoinHandle<()> {
         let actor = Arc::clone(self);
         let mut parent_stop = self.cursor_shutdown.subscribe();
@@ -236,16 +258,44 @@ impl SqlxConnectionActor {
                     let mut connection = actor.connection.lock().await;
                     actor.ensure_open_core()?;
                     connection
-                        .serve_cursor_core(&sql, values, &mut startup, &mut requests)
-                        .await
+                        .install_sqlite_progress_control(None, Arc::clone(&interrupted))
+                        .await?;
+                    let outcome = connection
+                        .serve_cursor_core(
+                            &sql,
+                            values,
+                            &mut startup,
+                            &mut requests,
+                            &mut stop,
+                            &mut parent_stop,
+                            &mut statement_stop,
+                            Arc::clone(&interrupted),
+                        )
+                        .await;
+                    match tokio::time::timeout(
+                        Duration::from_secs(3),
+                        connection.clear_sqlite_progress_deadline(),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => {}
+                        Ok(Err(error)) => {
+                            connection.discard_after_unconfirmed_interrupt();
+                            return Err(error);
+                        }
+                        Err(_) => {
+                            connection.discard_after_unconfirmed_interrupt();
+                            return Err(RdbcError::ConnectionDiscarded);
+                        }
+                    }
+                    match outcome {
+                        Err(_) if interrupted.load(Ordering::Acquire) => {
+                            Err(super::sqlx_prepared_statement::cancelled_exception())
+                        }
+                        outcome => outcome,
+                    }
                 };
-                tokio::select! {
-                    biased;
-                    _ = stop.changed() => Err(RdbcError::ConnectionDiscarded),
-                    _ = parent_stop.changed() => Err(RdbcError::ConnectionDiscarded),
-                    _ = statement_stop.changed() => Err(RdbcError::ConnectionDiscarded),
-                    result = work => result,
-                }
+                work.await
             };
             if let (Err(error), Some(sender)) = (outcome, startup) {
                 let _ = sender.send(Err(error));
@@ -267,34 +317,61 @@ impl SqlxConnectionActor {
         self: &Arc<SqlxConnectionActor>,
         sql: &str,
         values: Vec<Value>,
+        seconds: i32,
+        interrupted: Arc<AtomicBool>,
     ) -> Result<(Box<dyn ResultSet>, Vec<i64>), RdbcError> {
         self.ensure_open_core()?;
         let plan = crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::parse(sql)?;
         let mut connection = self.connection.lock().await;
-        if let Some(plan) = plan {
-            let (properties, _) = connection
-                .fetch_rows_with_labels(&plan.table_properties_sql(), Vec::new())
-                .await?;
-            if properties.is_empty() {
-                // 表已删除时执行原语句，让驱动保留真实 SQL 异常类别与消息。
+        let duration = (seconds > 0).then(|| Duration::from_secs(seconds as u64));
+        let deadline = duration.map(|duration| Instant::now() + duration);
+        connection
+            .install_sqlite_progress_control(deadline, Arc::clone(&interrupted))
+            .await?;
+        let execution = async {
+            if let Some(plan) = plan {
+                let (properties, _) = connection
+                    .fetch_rows_with_labels(&plan.table_properties_sql(), Vec::new())
+                    .await?;
+                if properties.is_empty() {
+                    // 表已删除时执行原语句，让驱动保留真实 SQL 异常类别与消息。
+                    let (rows, columns) = connection.fetch_rows_with_labels(sql, values).await?;
+                    return Ok((self.result_set_core(rows, columns), Vec::new()));
+                }
+                let (table_columns, _) = connection
+                    .fetch_rows_with_labels(&plan.columns_sql(&properties)?, Vec::new())
+                    .await?;
+                let (indexes, _) = connection
+                    .fetch_rows_with_labels(&plan.indexes_sql(&properties)?, Vec::new())
+                    .await?;
+                let sql = plan.sql(&properties, &table_columns, &indexes);
+                let (mut rows, mut columns) =
+                    connection.fetch_rows_with_labels(&sql, values).await?;
+                let keys =
+                    crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::extract(&mut rows)?;
+                columns.pop();
+                Ok((self.result_set_core(rows, columns), keys))
+            } else {
                 let (rows, columns) = connection.fetch_rows_with_labels(sql, values).await?;
-                return Ok((self.result_set_core(rows, columns), Vec::new()));
+                Ok((self.result_set_core(rows, columns), Vec::new()))
             }
-            let (table_columns, _) = connection
-                .fetch_rows_with_labels(&plan.columns_sql(&properties)?, Vec::new())
-                .await?;
-            let (indexes, _) = connection
-                .fetch_rows_with_labels(&plan.indexes_sql(&properties)?, Vec::new())
-                .await?;
-            let sql = plan.sql(&properties, &table_columns, &indexes);
-            let (mut rows, mut columns) = connection.fetch_rows_with_labels(&sql, values).await?;
-            let keys =
-                crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::extract(&mut rows)?;
-            columns.pop();
-            Ok((self.result_set_core(rows, columns), keys))
+        };
+        let outcome = match duration {
+            Some(duration) => tokio::time::timeout(duration, execution).await,
+            None => Ok(execution.await),
+        };
+        let timed_out = duration.is_some_and(|_| {
+            outcome.is_err()
+                || (matches!(&outcome, Ok(Err(_)))
+                    && deadline.is_some_and(|deadline| Instant::now() >= deadline))
+        });
+        self.clear_sqlite_progress_control(&mut connection).await?;
+        if timed_out {
+            Err(Self::statement_timeout_error())
+        } else if interrupted.load(Ordering::Acquire) && matches!(&outcome, Ok(Err(_))) {
+            Err(super::sqlx_prepared_statement::cancelled_exception())
         } else {
-            let (rows, columns) = connection.fetch_rows_with_labels(sql, values).await?;
-            Ok((self.result_set_core(rows, columns), Vec::new()))
+            outcome.unwrap_or_else(|_| unreachable!("timeout handled before result mapping"))
         }
     }
 
@@ -304,38 +381,67 @@ impl SqlxConnectionActor {
         &self,
         sql: &str,
         values: Vec<Value>,
+        seconds: i32,
+        interrupted: Arc<AtomicBool>,
     ) -> Result<(i64, Vec<i64>), RdbcError> {
         self.ensure_open_core()?;
         let mut connection = self.connection.lock().await;
-        if self.backend_key == "sqlite" {
-            if let Some(plan) =
-                crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::parse_update(sql)?
-            {
-                let (properties, _) = connection
-                    .fetch_rows_with_labels(&plan.table_properties_sql(), Vec::new())
-                    .await?;
-                if !properties.is_empty() {
-                    let (columns, _) = connection
-                        .fetch_rows_with_labels(&plan.columns_sql(&properties)?, Vec::new())
+        let duration = (seconds > 0).then(|| Duration::from_secs(seconds as u64));
+        let deadline = duration.map(|duration| Instant::now() + duration);
+        connection
+            .install_sqlite_progress_control(deadline, Arc::clone(&interrupted))
+            .await?;
+        let execution = async {
+            if self.backend_key == "sqlite" {
+                if let Some(plan) =
+                    crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::parse_update(sql)?
+                {
+                    let (properties, _) = connection
+                        .fetch_rows_with_labels(&plan.table_properties_sql(), Vec::new())
                         .await?;
-                    let (indexes, _) = connection
-                        .fetch_rows_with_labels(&plan.indexes_sql(&properties)?, Vec::new())
-                        .await?;
-                    let (rows, _) = connection
-                        .fetch_rows_with_labels(&plan.sql(&properties, &columns, &indexes), values)
-                        .await?;
-                    let (changes, _) = connection
-                        .fetch_rows_with_labels("SELECT changes()", Vec::new())
-                        .await?;
-                    return crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::update_outcome(rows, &changes);
+                    if !properties.is_empty() {
+                        let (columns, _) = connection
+                            .fetch_rows_with_labels(&plan.columns_sql(&properties)?, Vec::new())
+                            .await?;
+                        let (indexes, _) = connection
+                            .fetch_rows_with_labels(&plan.indexes_sql(&properties)?, Vec::new())
+                            .await?;
+                        let (rows, _) = connection
+                            .fetch_rows_with_labels(
+                                &plan.sql(&properties, &columns, &indexes),
+                                values,
+                            )
+                            .await?;
+                        let (changes, _) = connection
+                            .fetch_rows_with_labels("SELECT changes()", Vec::new())
+                            .await?;
+                        return crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::update_outcome(rows, &changes);
+                    }
                 }
             }
+            let result = connection.execute_update_core(sql, values).await?;
+            let count = i64::try_from(result.rows_affected).map_err(|_| {
+                RdbcError::InvalidArgument("rows affected exceeds canonical i64".into())
+            })?;
+            Ok((count, result.last_insert_id.into_iter().collect()))
+        };
+        let outcome = match duration {
+            Some(duration) => tokio::time::timeout(duration, execution).await,
+            None => Ok(execution.await),
+        };
+        let timed_out = duration.is_some_and(|_| {
+            outcome.is_err()
+                || (matches!(&outcome, Ok(Err(_)))
+                    && deadline.is_some_and(|deadline| Instant::now() >= deadline))
+        });
+        self.clear_sqlite_progress_control(&mut connection).await?;
+        if timed_out {
+            Err(Self::statement_timeout_error())
+        } else if interrupted.load(Ordering::Acquire) && matches!(&outcome, Ok(Err(_))) {
+            Err(super::sqlx_prepared_statement::cancelled_exception())
+        } else {
+            outcome.unwrap_or_else(|_| unreachable!("timeout handled before result mapping"))
         }
-        let result = connection.execute_update_core(sql, values).await?;
-        let count = i64::try_from(result.rows_affected).map_err(|_| {
-            RdbcError::InvalidArgument("rows affected exceeds canonical i64".into())
-        })?;
-        Ok((count, result.last_insert_id.into_iter().collect()))
     }
 
     /// 执行 update，并保留 generated-key/row-count driver outcome。
@@ -343,13 +449,46 @@ impl SqlxConnectionActor {
         &self,
         sql: &str,
         values: Vec<Value>,
+        seconds: i32,
+        interrupted: Arc<AtomicBool>,
     ) -> Result<AdapterUpdateResult, RdbcError> {
         self.ensure_open_core()?;
-        self.connection
-            .lock()
-            .await
-            .execute_update_core(sql, values)
-            .await
+        let mut connection = self.connection.lock().await;
+        let duration = (seconds > 0).then(|| Duration::from_secs(seconds as u64));
+        let deadline = duration.map(|duration| Instant::now() + duration);
+        connection
+            .install_sqlite_progress_control(deadline, Arc::clone(&interrupted))
+            .await?;
+        let execution = connection.execute_update_core(sql, values);
+        let outcome = match duration {
+            Some(duration) => tokio::time::timeout(duration, execution).await,
+            None => Ok(execution.await),
+        };
+        let timed_out = duration.is_some_and(|_| {
+            outcome.is_err()
+                || (matches!(&outcome, Ok(Err(_)))
+                    && deadline.is_some_and(|deadline| Instant::now() >= deadline))
+        });
+        self.clear_sqlite_progress_control(&mut connection).await?;
+        if timed_out {
+            Err(Self::statement_timeout_error())
+        } else if interrupted.load(Ordering::Acquire) && matches!(&outcome, Ok(Err(_))) {
+            Err(super::sqlx_prepared_statement::cancelled_exception())
+        } else {
+            outcome.unwrap_or_else(|_| unreachable!("timeout handled before result mapping"))
+        }
+    }
+
+    fn statement_timeout_error() -> RdbcError {
+        RdbcError::SqlException(Box::new(
+            SqlException::new(
+                0,
+                Some("HYT00".to_owned()),
+                Some("statement query timed out".to_owned()),
+            )
+            .with_class_name("java.sql.SQLTimeoutException")
+            .with_assignable_type("java.sql.SQLTransientException"),
+        ))
     }
 
     /// 执行 eager query，仅返回 canonical rows。
@@ -421,11 +560,51 @@ impl SqlxConnectionActor {
             .await
     }
 
-    /// 返回 SQLx describe 是否报告 result columns；不检查 SQL 文本前缀。
-    pub(crate) async fn statement_returns_rows(&self, sql: &str) -> Result<bool, RdbcError> {
-        self.describe_columns(sql)
-            .await
-            .map(|columns| !columns.is_empty())
+    /// 在判断 execute 结果种类时也使用同一取消代次与查询期限。
+    pub(crate) async fn statement_returns_rows_with_control(
+        &self,
+        sql: &str,
+        seconds: i32,
+        interrupted: Arc<AtomicBool>,
+    ) -> Result<bool, RdbcError> {
+        self.ensure_open_core()?;
+        let duration = (seconds > 0).then(|| Duration::from_secs(seconds as u64));
+        let deadline = duration.map(|duration| Instant::now() + duration);
+        let mut connection = self.connection.lock().await;
+        connection
+            .install_sqlite_progress_control(deadline, Arc::clone(&interrupted))
+            .await?;
+        let describe = connection.describe_columns_core(sql);
+        let outcome = match duration {
+            Some(duration) => tokio::time::timeout(duration, describe).await,
+            None => Ok(describe.await),
+        };
+        let timed_out = duration.is_some_and(|_| {
+            outcome.is_err()
+                || (matches!(&outcome, Ok(Err(_)))
+                    && deadline.is_some_and(|deadline| Instant::now() >= deadline))
+        });
+        self.clear_sqlite_progress_control(&mut connection).await?;
+        if timed_out {
+            return Err(RdbcError::SqlException(Box::new(
+                SqlException::new(
+                    0,
+                    Some("HYT00".to_owned()),
+                    Some("statement query timed out".to_owned()),
+                )
+                .with_class_name("java.sql.SQLTimeoutException")
+                .with_assignable_type("java.sql.SQLTransientException"),
+            )));
+        }
+        let columns = match outcome {
+            Ok(Ok(columns)) => columns,
+            Ok(Err(_)) if interrupted.load(Ordering::Acquire) => {
+                return Err(super::sqlx_prepared_statement::cancelled_exception());
+            }
+            Ok(Err(error)) => return Err(error),
+            Err(_) => unreachable!("timeout was returned before extracting describe result"),
+        };
+        Ok(!columns.is_empty())
     }
 
     /// 执行 SQLite live tables query，并返回继续持有 actor lease 的 ResultSet。

@@ -41,6 +41,31 @@ pub(crate) struct DruidPooledStatementInner {
     logical_owner: Mutex<Option<std::sync::Weak<dyn LogicalStatementOwner>>>,
 }
 
+struct PooledStatementCancellation {
+    inner: std::sync::Weak<DruidPooledStatementInner>,
+    control: Arc<dyn druid_rdbc::statement::StatementCancellation>,
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::StatementCancellation for PooledStatementCancellation {
+    async fn cancel(&self) -> Result<(), RdbcError> {
+        let inner = self.inner.upgrade().ok_or(RdbcError::ConnectionDiscarded)?;
+        if !inner.lease_active.load(Ordering::Acquire) {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        if inner
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .closed
+        {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        inner.policy.ensure_open()?;
+        self.control.cancel().await
+    }
+}
+
 struct DruidPooledStatementState {
     options: StatementOptions,
     max_field_size: i32,
@@ -661,6 +686,22 @@ impl Statement for DruidPooledStatement {
         self.apply_statement_state_mutation("statement_cancel", Statement::cancel, |_| {})
     }
 
+    fn cancellation_control(
+        &self,
+    ) -> Result<Arc<dyn druid_rdbc::statement::StatementCancellation>, RdbcError> {
+        self.ensure_open()?;
+        let control = self
+            .inner
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
+            .cancellation_control()?;
+        Ok(Arc::new(PooledStatementCancellation {
+            inner: Arc::downgrade(&self.inner),
+            control,
+        }))
+    }
+
     fn set_cursor_name(&mut self, name: &str) -> Result<(), RdbcError> {
         let cursor_name = name.to_owned();
         self.apply_statement_state_mutation(
@@ -1146,6 +1187,10 @@ impl Statement for DruidPooledStatement {
             .classify(result, self.last_sql().as_deref())
     }
 }
+
+#[cfg(test)]
+#[path = "druid_pooled_statement/cancellation_control_tests.rs"]
+mod cancellation_control_tests;
 
 impl std::fmt::Debug for DruidPooledStatement {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

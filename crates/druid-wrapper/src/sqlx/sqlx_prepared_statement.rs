@@ -8,20 +8,210 @@ use druid_rdbc::extensions::BufferedRowSet;
 use druid_rdbc::metadata::{ParameterMetaData, ResultSetMetaData, ResultSetMetaDataSnapshot};
 use druid_rdbc::statement::{
     ExecutionResult, FetchDirection, GeneratedKeys, PreparedParameter, ResultSetType,
-    StatementOptions,
+    StatementCancellation, StatementOptions,
 };
 use druid_rdbc::types::Value;
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
+struct CancellationState {
+    generation: u64,
+    sender: tokio::sync::watch::Sender<bool>,
+    interrupted: Arc<AtomicBool>,
+    pending_generation: Option<u64>,
+    active: bool,
+    closed: bool,
+}
+
+struct CancellationDomain {
+    state: Mutex<CancellationState>,
+}
+
+impl CancellationDomain {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(CancellationState {
+                generation: 0,
+                sender: tokio::sync::watch::channel(false).0,
+                interrupted: Arc::new(AtomicBool::new(false)),
+                pending_generation: None,
+                active: false,
+                closed: false,
+            }),
+        }
+    }
+
+    fn sender(&self) -> tokio::sync::watch::Sender<bool> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .sender
+            .clone()
+    }
+
+    fn control(self: &Arc<Self>) -> Result<Arc<dyn StatementCancellation>, RdbcError> {
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state.closed {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        let generation = if state.active || state.sender.receiver_count() > 0 {
+            state.generation
+        } else {
+            state.generation.saturating_add(1)
+        };
+        Ok(Arc::new(SqlxStatementCancellation {
+            domain: Arc::clone(self),
+            generation,
+        }))
+    }
+
+    fn begin_execution(self: &Arc<Self>) -> Result<ExecutionGeneration, RdbcError> {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let generation = state.generation.checked_add(1).ok_or_else(|| {
+            RdbcError::InvalidArgument("statement execution generation overflow".to_owned())
+        })?;
+        state.sender.send_replace(true);
+        state.interrupted.store(true, Ordering::Release);
+        state.generation = generation;
+        state.sender = tokio::sync::watch::channel(false).0;
+        state.interrupted = Arc::new(AtomicBool::new(false));
+        state.active = true;
+        let cancelled = state.pending_generation == Some(generation);
+        if state
+            .pending_generation
+            .map_or(false, |pending| pending <= generation)
+        {
+            state.pending_generation = None;
+        }
+        if cancelled {
+            state.active = false;
+            state.interrupted.store(true, Ordering::Release);
+            Err(cancelled_exception())
+        } else {
+            Ok(ExecutionGeneration {
+                domain: Arc::clone(self),
+                generation,
+            })
+        }
+    }
+
+    fn cancel_generation(&self, generation: u64) -> Result<(), RdbcError> {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state.closed {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        if generation < state.generation {
+            return Ok(());
+        }
+        if generation == state.generation {
+            // 只操作当前仍在执行或持有活动游标的代次；完成代次的迟到请求为空操作。
+            if state.active || state.sender.receiver_count() > 0 {
+                state.interrupted.store(true, Ordering::Release);
+            }
+            if state.sender.receiver_count() > 0 {
+                state.sender.send_replace(true);
+            }
+        } else if generation == state.generation.saturating_add(1) {
+            state.pending_generation = Some(generation);
+        }
+        Ok(())
+    }
+
+    fn cancel_current_or_next(&self) -> Result<(), RdbcError> {
+        let target = {
+            let state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if state.closed {
+                return Err(RdbcError::ConnectionDiscarded);
+            }
+            if state.active || state.sender.receiver_count() > 0 {
+                state.generation
+            } else {
+                state.generation.saturating_add(1)
+            }
+        };
+        self.cancel_generation(target)
+    }
+
+    fn close(&self) {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.closed = true;
+        state.pending_generation = None;
+        state.sender.send_replace(true);
+    }
+
+    fn interruption(&self) -> Arc<AtomicBool> {
+        Arc::clone(
+            &self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .interrupted,
+        )
+    }
+
+    fn finish_execution(&self, generation: u64) {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state.generation == generation {
+            state.active = false;
+        }
+    }
+}
+
+struct ExecutionGeneration {
+    domain: Arc<CancellationDomain>,
+    generation: u64,
+}
+
+impl Drop for ExecutionGeneration {
+    fn drop(&mut self) {
+        self.domain.finish_execution(self.generation);
+    }
+}
+
+struct SqlxStatementCancellation {
+    domain: Arc<CancellationDomain>,
+    generation: u64,
+}
+
+#[async_trait::async_trait]
+impl StatementCancellation for SqlxStatementCancellation {
+    async fn cancel(&self) -> Result<(), RdbcError> {
+        self.domain.cancel_generation(self.generation)
+    }
+}
+
+pub(super) fn cancelled_exception() -> RdbcError {
+    RdbcError::SqlException(Box::new(SqlException::new(
+        0,
+        Some("HY008".to_owned()),
+        Some("statement execution cancelled".to_owned()),
+    )))
+}
+
 pub struct SqlxPreparedStatement {
     sql: String,
     actor: Option<Arc<SqlxConnectionActor>>,
     closed: AtomicBool,
-    cursor_shutdown: tokio::sync::watch::Sender<bool>,
-    /// 没有活动游标时的取消请求只阻止下一次执行，不能永久关闭句柄。
-    cancel_pending: bool,
+    cancellation: Arc<CancellationDomain>,
     options: StatementOptions,
     max_field_size: AtomicI32,
     max_rows: AtomicI64,
@@ -81,8 +271,7 @@ impl SqlxPreparedStatement {
             sql,
             actor: Some(actor),
             closed: AtomicBool::new(false),
-            cursor_shutdown: tokio::sync::watch::channel(false).0,
-            cancel_pending: false,
+            cancellation: Arc::new(CancellationDomain::new()),
             options,
             max_field_size: AtomicI32::new(0),
             max_rows: AtomicI64::new(0),
@@ -145,25 +334,15 @@ impl SqlxPreparedStatement {
 
     /// 在可能失败或挂起的执行步骤前使上一轮结果失效。
     /// 参数物化、驱动错误或调用取消均不得继续暴露旧生成键。
-    fn reset_execution_results(&mut self) -> Result<(), RdbcError> {
+    fn reset_execution_results(&mut self) -> Result<ExecutionGeneration, RdbcError> {
         self.actor()?;
         *self
             .generated_key
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Vec::new();
         self.last_update_count.store(-1, Ordering::Release);
-        // 每次执行拥有独立的取消代次；旧游标继续观察旧 Sender 的停止状态。
-        self.cursor_shutdown.send_replace(true);
-        self.cursor_shutdown = tokio::sync::watch::channel(false).0;
-        if std::mem::take(&mut self.cancel_pending) {
-            // 在读取参数流或调用驱动前拒绝，避免取消的更新产生数据库副作用。
-            return Err(RdbcError::SqlException(Box::new(SqlException::new(
-                0,
-                Some("HY008".to_owned()),
-                Some("statement execution cancelled".to_owned()),
-            ))));
-        }
-        Ok(())
+        // 每次执行拥有独立代次；旧句柄不能操作新 Sender，准入处消费预取消。
+        self.cancellation.begin_execution()
     }
 
     async fn execute_update_values(
@@ -199,11 +378,24 @@ impl SqlxPreparedStatement {
             ));
         }
         let actor = Arc::clone(self.actor()?);
+        let interrupted = self.cancellation.interruption();
         if std::matches!(generated_keys, GeneratedKeys::ReturnGeneratedKeys) {
-            return self.bounded(actor.execute_update_keys(sql, values)).await;
+            return actor
+                .execute_update_keys(
+                    sql,
+                    values,
+                    self.query_timeout.load(Ordering::Acquire),
+                    interrupted,
+                )
+                .await;
         }
-        let result = self
-            .bounded(actor.execute_update_result(sql, values))
+        let result = actor
+            .execute_update_result(
+                sql,
+                values,
+                self.query_timeout.load(Ordering::Acquire),
+                interrupted,
+            )
             .await?;
         let count = i64::try_from(result.rows_affected).map_err(|_| {
             RdbcError::InvalidArgument("rows affected exceeds canonical i64".to_owned())
@@ -229,12 +421,18 @@ impl SqlxPreparedStatement {
                 values,
                 self.options,
                 fetch_size,
-                self.cursor_shutdown.subscribe(),
+                self.cancellation.sender().subscribe(),
+                self.cancellation.interruption(),
             ))
             .await
         } else {
             actor
-                .execute_query_with_timeout(sql, values, self.query_timeout.load(Ordering::Acquire))
+                .execute_query_with_timeout(
+                    sql,
+                    values,
+                    self.query_timeout.load(Ordering::Acquire),
+                    self.cancellation.interruption(),
+                )
                 .await
         }
     }
@@ -251,7 +449,13 @@ impl SqlxPreparedStatement {
             self.prepared_generated_keys,
             GeneratedKeys::ReturnGeneratedKeys
         ) {
-            self.bounded(actor.execute_query_with_generated_key(&self.sql, values))
+            actor
+                .execute_query_with_generated_key(
+                    &self.sql,
+                    values,
+                    self.query_timeout.load(Ordering::Acquire),
+                    self.cancellation.interruption(),
+                )
                 .await?
         } else {
             (
@@ -396,7 +600,7 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
         &mut self,
         sql: &str,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
-        self.reset_execution_results()?;
+        let _execution = self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
         self.execute_query_values(&actor, sql, Vec::new(), true)
             .await
@@ -407,7 +611,7 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
         sql: &str,
         generated_keys: GeneratedKeys,
     ) -> Result<i64, RdbcError> {
-        self.reset_execution_results()?;
+        let _execution = self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
         let rows_affected = self
             .execute_update_values(sql, Vec::new(), &generated_keys)
@@ -421,17 +625,32 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
         sql: &str,
         generated_keys: GeneratedKeys,
     ) -> Result<Vec<ExecutionResult>, RdbcError> {
-        self.reset_execution_results()?;
+        let _execution = self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
-        if actor.statement_returns_rows(sql).await? {
+        if actor
+            .statement_returns_rows_with_control(
+                sql,
+                self.query_timeout.load(Ordering::Acquire),
+                self.cancellation.interruption(),
+            )
+            .await?
+        {
             self.last_update_count.store(-1, Ordering::Release);
             Ok(vec![ExecutionResult::ResultSet(
-                self.bounded(actor.execute_query(sql, Vec::new())).await?,
+                actor
+                    .execute_query_with_timeout(
+                        sql,
+                        Vec::new(),
+                        self.query_timeout.load(Ordering::Acquire),
+                        self.cancellation.interruption(),
+                    )
+                    .await?,
             )])
         } else {
-            self.execute_update(sql, generated_keys)
-                .await
-                .map(|count| vec![ExecutionResult::UpdateCount(count)])
+            let count = self
+                .execute_update_values(sql, Vec::new(), &generated_keys)
+                .await?;
+            Ok(vec![ExecutionResult::UpdateCount(count)])
         }
     }
 
@@ -463,7 +682,7 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
     }
 
     async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
-        self.reset_execution_results()?;
+        let _execution = self.reset_execution_results()?;
         self.actor()?;
         let batch = std::mem::take(
             &mut *self
@@ -550,15 +769,28 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
     /// 取消当前活动游标；没有游标时，在下一次执行准入处消费取消请求。
     /// 对应 Java: Statement#cancel。语句属性和连接保持可复用。
     fn cancel(&mut self) -> Result<(), RdbcError> {
-        self.actor()?;
-        self.cancel_pending |= self.cursor_shutdown.receiver_count() == 0;
-        self.cursor_shutdown.send_replace(true);
-        Ok(())
+        let actor = self.actor()?;
+        if actor.backend_key() != "sqlite" {
+            return Err(RdbcError::feature_not_supported(
+                "sqlx_statement_cancellation",
+            ));
+        }
+        self.cancellation.cancel_current_or_next()
+    }
+
+    fn cancellation_control(&self) -> Result<Arc<dyn StatementCancellation>, RdbcError> {
+        let actor = self.actor()?;
+        if actor.backend_key() != "sqlite" {
+            return Err(RdbcError::feature_not_supported(
+                "sqlx_statement_cancellation_control",
+            ));
+        }
+        self.cancellation.control()
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
         // 子游标持有同一物理连接；语句关闭或 Sender Drop 都会终止其任务。
-        self.cursor_shutdown.send_replace(true);
+        self.cancellation.close();
         self.closed.store(true, Ordering::Release);
         self.actor.take();
         Ok(())
@@ -573,7 +805,7 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
         sql: &str,
         values: Vec<Value>,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
-        self.reset_execution_results()?;
+        let _execution = self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
         self.execute_query_values(&actor, sql, values, true).await
     }
@@ -695,7 +927,7 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
     async fn execute_prepared_query(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
-        self.reset_execution_results()?;
+        let _execution = self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
         let values = self.parameter_state.values(self.parameter_count).await?;
         let result = self
@@ -706,7 +938,7 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
     }
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
-        self.reset_execution_results()?;
+        let _execution = self.reset_execution_results()?;
         self.actor()?;
         let values = self.parameter_state.values(self.parameter_count).await?;
         self.execute_update_values(&self.sql, values, &self.prepared_generated_keys)
@@ -714,10 +946,17 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
     }
 
     async fn execute_prepared(&mut self) -> Result<Vec<ExecutionResult>, RdbcError> {
-        self.reset_execution_results()?;
+        let _execution = self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
         let values = self.parameter_state.values(self.parameter_count).await?;
-        if actor.statement_returns_rows(&self.sql).await? {
+        if actor
+            .statement_returns_rows_with_control(
+                &self.sql,
+                self.query_timeout.load(Ordering::Acquire),
+                self.cancellation.interruption(),
+            )
+            .await?
+        {
             Ok(vec![ExecutionResult::ResultSet(
                 self.execute_prepared_query_values(&actor, values, false)
                     .await?,
@@ -730,7 +969,7 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
     }
 
     async fn execute_prepared_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
-        self.reset_execution_results()?;
+        let _execution = self.reset_execution_results()?;
         self.actor()?;
         let parameter_sets = std::mem::take(
             &mut *self

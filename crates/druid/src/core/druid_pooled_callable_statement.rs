@@ -31,6 +31,7 @@ struct CallableStatementResource {
     cache_entry: bool,
     statement: tokio::sync::Mutex<Option<Box<dyn CallableStatement>>>,
     closed: AtomicBool,
+    cancellation_gate: tokio::sync::Mutex<bool>,
 }
 
 impl CallableStatementResource {
@@ -44,6 +45,7 @@ impl CallableStatementResource {
             cache_entry,
             statement: tokio::sync::Mutex::new(Some(statement)),
             closed: AtomicBool::new(false),
+            cancellation_gate: tokio::sync::Mutex::new(true),
         })
     }
 
@@ -56,6 +58,8 @@ impl CallableStatementResource {
     }
 
     async fn close_raw(&self) -> Result<(), RdbcError> {
+        let mut cancellation_gate = self.cancellation_gate.lock().await;
+        *cancellation_gate = false;
         if self.closed.load(Ordering::Acquire) {
             return Ok(());
         }
@@ -73,6 +77,27 @@ impl CallableStatementResource {
         statement.take();
         self.closed.store(true, Ordering::Release);
         Ok(())
+    }
+}
+
+struct CallableStatementCancellation {
+    resource: std::sync::Weak<CallableStatementResource>,
+    control: Arc<dyn druid_rdbc::statement::StatementCancellation>,
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::StatementCancellation for CallableStatementCancellation {
+    async fn cancel(&self) -> Result<(), RdbcError> {
+        let resource = self
+            .resource
+            .upgrade()
+            .ok_or(RdbcError::ConnectionDiscarded)?;
+        let cancellation_gate = resource.cancellation_gate.lock().await;
+        if !*cancellation_gate {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        resource.ensure_open()?;
+        self.control.cancel().await
     }
 }
 
@@ -119,6 +144,24 @@ impl Statement for CallableStatementView {
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .set_query_timeout(seconds)
+    }
+
+    fn cancellation_control(
+        &self,
+    ) -> Result<Arc<dyn druid_rdbc::statement::StatementCancellation>, RdbcError> {
+        self.resource.ensure_open()?;
+        let control = self
+            .resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .cancellation_control()?;
+        Ok(Arc::new(CallableStatementCancellation {
+            resource: Arc::downgrade(&self.resource),
+            control,
+        }))
     }
 
     async fn execute_query(&mut self, sql: &str) -> Result<Box<dyn ResultSet>, RdbcError> {

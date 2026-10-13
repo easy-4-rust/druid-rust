@@ -497,25 +497,19 @@ impl SqlxConnectionAdapter {
             .ok_or(RdbcError::ConnectionDiscarded)
     }
 
-    /// 让 SQLite worker 在截止时间到达后自行中断当前 VM 执行。
+    /// 让 SQLite worker 在执行被取消或截止时间到达时自行中断当前 VM。
     /// Tokio future 被取消时，底层 SQLite worker 仍可能继续运行；因此必须把截止时间
     /// 安装到物理连接，而不能只在调用方等待 future 的地方计时。
-    pub(super) async fn install_sqlite_progress_deadline(
+    pub(super) async fn install_sqlite_progress_control(
         &mut self,
-        deadline: Instant,
+        deadline: Option<Instant>,
+        interrupted: Arc<std::sync::atomic::AtomicBool>,
     ) -> Result<(), RdbcError> {
         if let SqlxConnectionBackend::Sqlite(connection) = self.connection_mut()? {
             let mut handle = connection.lock_handle().await.map_err(Self::driver_error)?;
-            let mut interrupted = false;
             handle.set_progress_handler(1_000, move || {
-                if interrupted {
-                    return true;
-                }
-                if Instant::now() >= deadline {
-                    interrupted = true;
-                    return false;
-                }
-                true
+                !interrupted.load(std::sync::atomic::Ordering::Acquire)
+                    && deadline.map_or(true, |deadline| Instant::now() < deadline)
             });
         }
         Ok(())
@@ -1284,6 +1278,10 @@ impl SqlxConnectionAdapter {
             tokio::sync::oneshot::Sender<Result<Vec<ColumnDescriptor>, RdbcError>>,
         >,
         requests: &mut tokio::sync::mpsc::Receiver<super::sqlx_cursor_request::SqlxCursorRequest>,
+        stop: &mut tokio::sync::watch::Receiver<bool>,
+        parent_stop: &mut tokio::sync::watch::Receiver<bool>,
+        statement_stop: &mut tokio::sync::watch::Receiver<bool>,
+        interrupted: Arc<std::sync::atomic::AtomicBool>,
     ) -> Result<(), RdbcError> {
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
@@ -1316,7 +1314,14 @@ impl SqlxConnectionAdapter {
                         .and_then(Self::decode_any_row)
                 });
                 super::sqlx_cursor_request::SqlxCursorRequest::serve(
-                    columns, startup, requests, rows,
+                    columns,
+                    startup,
+                    requests,
+                    stop,
+                    parent_stop,
+                    statement_stop,
+                    Arc::clone(&interrupted),
+                    rows,
                 )
                 .await
             }
@@ -1350,7 +1355,14 @@ impl SqlxConnectionAdapter {
                         .and_then(Self::decode_mysql_row)
                 });
                 super::sqlx_cursor_request::SqlxCursorRequest::serve(
-                    columns, startup, requests, rows,
+                    columns,
+                    startup,
+                    requests,
+                    stop,
+                    parent_stop,
+                    statement_stop,
+                    Arc::clone(&interrupted),
+                    rows,
                 )
                 .await
             }
@@ -1385,7 +1397,14 @@ impl SqlxConnectionAdapter {
                         .and_then(Self::decode_postgresql_row)
                 });
                 super::sqlx_cursor_request::SqlxCursorRequest::serve(
-                    columns, startup, requests, rows,
+                    columns,
+                    startup,
+                    requests,
+                    stop,
+                    parent_stop,
+                    statement_stop,
+                    Arc::clone(&interrupted),
+                    rows,
                 )
                 .await
             }
@@ -1419,7 +1438,14 @@ impl SqlxConnectionAdapter {
                         .and_then(Self::decode_sqlite_row)
                 });
                 super::sqlx_cursor_request::SqlxCursorRequest::serve(
-                    columns, startup, requests, rows,
+                    columns,
+                    startup,
+                    requests,
+                    stop,
+                    parent_stop,
+                    statement_stop,
+                    Arc::clone(&interrupted),
+                    rows,
                 )
                 .await
             }
@@ -1548,7 +1574,14 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
         params: Vec<Value>,
     ) -> Result<druid_rdbc::statement::ExecResult, RdbcError> {
         let result = if let Some(actor) = &self.standard_actor {
-            actor.execute_update_result(sql, params).await?
+            actor
+                .execute_update_result(
+                    sql,
+                    params,
+                    0,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                )
+                .await?
         } else {
             self.execute_update_core(sql, params).await?
         };
