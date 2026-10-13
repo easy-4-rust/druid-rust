@@ -28,6 +28,7 @@
 | Task 1 Pool | 有界关闭队列、补池 `watch` 最新目标、关闭超时与队列指标均已在生产路径使用 | `pool_close_backpressure_test` 11/11、`task6_pool_maintenance_semantics_test_parity` 14/14、`task6_recycle_complete_contract_test` 16/16 |
 | Task 2 Metrics | `MetricsSupervisor` 持有 `JoinSet` 并回收任务；配置项由聚合及关闭路径消费 | `task_supervision_test` 2/2、`shutdown_test` 8/8、`queue_semantics_test` 4/4、`aggregator_output_test` 17/17 |
 | Task 3 Admin | repository 按完整 service/session identity 保存最新状态，实施 TTL 与容量限制 | `repository_capacity_test` 4/4、`ingest_test` 11/11、`prometheus_test` 8/8 |
+| Task 4 Admin 安全 | 非 loopback 绑定校验 TLS、认证与角色隔离；HTTP/gRPC 共享安全配置，管理 JSON 在认证模式脱敏 | `admin_binary_test` 16/16、`servlet_test` 29/29、`grpc_network_e2e_test` 48/48 |
 
 ---
 
