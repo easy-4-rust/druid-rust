@@ -11,7 +11,7 @@ echo "contract-restart: stopping and starting service" >&2
 timeout --signal=TERM --kill-after=5s 90s docker restart "$service_id" >/dev/null
 echo "contract-restart: service process started" >&2
 for attempt in {1..60}; do
-  health="$(docker inspect --format '{{.State.Health.Status}}' "$service_id")"
+  health="$(timeout --signal=TERM --kill-after=5s 10s docker inspect --format '{{.State.Health.Status}}' "$service_id")"
   if [[ "$health" == healthy ]]; then
     echo "contract-restart: service healthy" >&2
     exit 0
