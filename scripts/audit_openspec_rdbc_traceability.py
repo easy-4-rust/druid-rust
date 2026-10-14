@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-CHANGE = ROOT / "openspec/changes/close-rdbc-jdbc42-contract-gaps"
+CHANGE = ROOT / "openspec/changes/archive/2026-10-14-close-rdbc-jdbc42-contract-gaps"
 TASKS = CHANGE / "tasks.md"
 SPECS = CHANGE / "specs"
 EVIDENCE = CHANGE / "evidence"
