@@ -23,6 +23,7 @@ use std::any::TypeId;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
+use tokio::sync::Mutex as AsyncMutex;
 
 // ── helpers ────────────────────────────────────────────────────────
 
@@ -231,7 +232,7 @@ impl StatementEventListener for PanickingStatementEventListener {
 }
 
 struct ReentrantStatementEventListener {
-    owner: Mutex<Option<std::sync::Weak<Mutex<DruidPooledConnection>>>>,
+    owner: Mutex<Option<std::sync::Weak<AsyncMutex<DruidPooledConnection>>>>,
     self_reference: Mutex<Option<std::sync::Weak<Self>>>,
     closed: AtomicUsize,
     removed_self: AtomicBool,
@@ -255,8 +256,8 @@ impl StatementEventListener for ReentrantStatementEventListener {
         if let (Some(owner), Some(listener)) = (owner, listener) {
             let listener: Arc<dyn StatementEventListener> = listener;
             let removed = owner
-                .lock()
-                .unwrap()
+                .try_lock()
+                .expect("connection lock is released during statement callbacks")
                 .remove_statement_event_listener(&listener)
                 .unwrap();
             self.removed_self.store(removed, Ordering::SeqCst);
@@ -574,7 +575,7 @@ async fn statement_listener_panic_does_not_skip_close_or_sql_error_delivery() {
 
 #[tokio::test]
 async fn statement_closed_listener_can_remove_itself_without_deadlock() {
-    let pooled = Arc::new(Mutex::new(make_pooled(make_physical().await).await));
+    let pooled = Arc::new(AsyncMutex::new(make_pooled(make_physical().await).await));
     let listener = Arc::new(ReentrantStatementEventListener {
         owner: Mutex::new(Some(Arc::downgrade(&pooled))),
         self_reference: Mutex::new(None),
@@ -585,13 +586,13 @@ async fn statement_closed_listener_can_remove_itself_without_deadlock() {
     let listener_trait: Arc<dyn StatementEventListener> = listener.clone();
     pooled
         .lock()
-        .unwrap()
+        .await
         .add_statement_event_listener(listener_trait)
         .unwrap();
 
     let mut statement = pooled
         .lock()
-        .unwrap()
+        .await
         .prepare_statement("SELECT 1", StatementOptions::default())
         .await
         .unwrap();

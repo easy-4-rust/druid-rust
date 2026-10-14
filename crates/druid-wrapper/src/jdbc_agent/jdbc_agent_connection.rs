@@ -534,7 +534,7 @@ impl AdapterExecutionCore for JdbcAgentConnection {
             || self
                 .client
                 .as_ref()
-                .map_or(true, |client| client.is_unusable())
+                .is_none_or(|client| client.is_unusable())
     }
 
     async fn standard_connection_control_core(
@@ -789,7 +789,7 @@ impl druid_rdbc::connection::Connection for JdbcAgentConnection {
                     || self
                         .client
                         .as_ref()
-                        .map_or(true, |client| client.is_unusable())
+                        .is_none_or(|client| client.is_unusable())
             },
             |executor| executor.is_closed(),
         ))

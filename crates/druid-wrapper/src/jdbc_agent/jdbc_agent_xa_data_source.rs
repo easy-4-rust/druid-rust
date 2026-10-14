@@ -310,13 +310,13 @@ mod tests {
         }
     }
 
-    fn setup(
-        supports_xa: bool,
-    ) -> (
+    type DataSourceTestSetup = (
         JdbcAgentXaDataSource,
         StdArc<StdMutex<Vec<(String, JsonValue)>>>,
         StdArc<StdMutex<Vec<JsonValue>>>,
-    ) {
+    );
+
+    fn setup(supports_xa: bool) -> DataSourceTestSetup {
         let calls = StdArc::new(StdMutex::new(Vec::new()));
         let payloads = StdArc::new(StdMutex::new(Vec::new()));
         let connector = Arc::new(TestConnector {

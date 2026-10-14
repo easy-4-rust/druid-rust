@@ -10,8 +10,11 @@ use druid::core::xa::{
     flags as xa_flags, XaError, XaErrorCode, XaPrepareResult, XaResource,
     XaResourceManagerIdentity, XaState, XaTransactionState, Xid,
 };
+#[cfg(test)]
 use druid_rdbc::connection::Connection;
+#[cfg(test)]
 use druid_rdbc::data_source::{PooledConnection, XaConnection};
+#[cfg(test)]
 use druid_rdbc::error::RdbcError;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,11 +33,13 @@ struct InMemoryLedger {
     recovery_scan: Mutex<Option<RecoveryScan>>,
 }
 
+#[cfg(test)]
 struct InMemoryXaConnection {
     resource: InMemoryLedger,
     closed: bool,
 }
 
+#[cfg(test)]
 impl InMemoryXaConnection {
     fn new(name: &'static str) -> Self {
         Self {
@@ -82,6 +87,7 @@ impl InMemoryLedger {
         }
     }
 
+    #[cfg(test)]
     fn with_unknown_manager_identity(name: &'static str) -> Self {
         Self {
             name,
@@ -93,6 +99,7 @@ impl InMemoryLedger {
         }
     }
 
+    #[cfg(test)]
     fn close_owner(&self) {
         self.owner_open.store(false, Ordering::Release);
     }
@@ -363,6 +370,7 @@ impl XaResource for InMemoryLedger {
     }
 }
 
+#[cfg(test)]
 #[async_trait::async_trait]
 impl PooledConnection for InMemoryXaConnection {
     async fn connection(&mut self) -> Result<Box<dyn Connection>, RdbcError> {
@@ -378,9 +386,10 @@ impl PooledConnection for InMemoryXaConnection {
     }
 }
 
+#[cfg(test)]
 impl XaConnection for InMemoryXaConnection {
     fn xa_resource_name(&self) -> &str {
-        &self.resource.name
+        self.resource.name
     }
 
     fn xa_resource(&mut self) -> Result<&mut (dyn XaResource + '_), XaError> {

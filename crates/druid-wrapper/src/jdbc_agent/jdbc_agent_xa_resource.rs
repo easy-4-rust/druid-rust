@@ -246,13 +246,15 @@ mod tests {
         }
     }
 
+    type ResourceTestSetup = (
+        JdbcAgentXaResource,
+        StdArc<StdMutex<Vec<(String, JsonValue)>>>,
+    );
+
     fn resource(
         responses: impl IntoIterator<Item = Result<JsonValue, RdbcError>>,
         supports_xa: bool,
-    ) -> (
-        JdbcAgentXaResource,
-        StdArc<StdMutex<Vec<(String, JsonValue)>>>,
-    ) {
+    ) -> ResourceTestSetup {
         resource_with_identity(responses, supports_xa, XaResourceManagerIdentity::new())
     }
 
@@ -260,10 +262,7 @@ mod tests {
         responses: impl IntoIterator<Item = Result<JsonValue, RdbcError>>,
         supports_xa: bool,
         manager_identity: XaResourceManagerIdentity,
-    ) -> (
-        JdbcAgentXaResource,
-        StdArc<StdMutex<Vec<(String, JsonValue)>>>,
-    ) {
+    ) -> ResourceTestSetup {
         let calls = StdArc::new(StdMutex::new(Vec::new()));
         let transport = FakeTransport {
             calls: StdArc::clone(&calls),
@@ -320,7 +319,7 @@ mod tests {
         resource.forget(&recovered).await.unwrap();
         assert_eq!(
             resource.recover(XaFlags::TMSTARTRSCAN).await.unwrap(),
-            [recovered.clone()]
+            std::slice::from_ref(&recovered)
         );
         assert_eq!(resource.get_transaction_timeout().await.unwrap(), 7);
         assert!(resource.set_transaction_timeout(9).await.unwrap());

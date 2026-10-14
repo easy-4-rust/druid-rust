@@ -385,10 +385,11 @@ mod tests {
         let mut second = owner.connection().await.expect("next lease");
         second.close().await.expect("second logical close");
         assert_eq!(recorder.closed.load(Ordering::Acquire), 2);
-        let sources = recorder.sources.lock().expect("event sources");
-        assert_eq!(sources.len(), 2);
-        assert!(Arc::ptr_eq(&sources[0], &sources[1]));
-        drop(sources);
+        {
+            let sources = recorder.sources.lock().expect("event sources");
+            assert_eq!(sources.len(), 2);
+            assert!(Arc::ptr_eq(&sources[0], &sources[1]));
+        }
         assert_eq!(recorder.source_lock_acquired.load(Ordering::Acquire), 2);
         owner.close().await.expect("owner close");
     }

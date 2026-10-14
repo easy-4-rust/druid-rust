@@ -813,43 +813,6 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
     }
 }
 
-#[cfg(test)]
-mod cancellation_domain_tests {
-    use super::{CancellationDomain, RdbcError};
-    use std::sync::Arc;
-
-    #[test]
-    fn pending_cancel_is_consumed_before_a_non_interruptible_backend_starts_query() {
-        let domain = Arc::new(CancellationDomain::new());
-
-        domain
-            .cancel_current_or_next(false)
-            .expect("a not-yet-started operation can be cancelled on every backend");
-        let error = match domain.begin_execution() {
-            Err(error) => error,
-            Ok(_) => panic!("the cancelled generation must not start"),
-        };
-
-        assert!(matches!(error, RdbcError::SqlException(ref source)
-            if source.sql_state() == Some("HY008")));
-    }
-
-    #[test]
-    fn active_cancel_requires_a_backend_interrupt_handle() {
-        let domain = Arc::new(CancellationDomain::new());
-        let execution = domain
-            .begin_execution()
-            .expect("the execution generation must start");
-
-        let error = domain
-            .cancel_current_or_next(false)
-            .expect_err("a backend without an interrupt handle cannot cancel active work");
-        assert!(matches!(error, RdbcError::SqlException(ref source)
-            if source.sql_state() == Some("0A000")));
-        drop(execution);
-    }
-}
-
 #[async_trait::async_trait]
 impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
     fn set_input_parameter(
@@ -1054,5 +1017,42 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
         Ok(Arc::new(PreparedParameterMetaDataSnapshot::unknown_inputs(
             self.parameter_count,
         )))
+    }
+}
+
+#[cfg(test)]
+mod cancellation_domain_tests {
+    use super::{CancellationDomain, RdbcError};
+    use std::sync::Arc;
+
+    #[test]
+    fn pending_cancel_is_consumed_before_a_non_interruptible_backend_starts_query() {
+        let domain = Arc::new(CancellationDomain::new());
+
+        domain
+            .cancel_current_or_next(false)
+            .expect("a not-yet-started operation can be cancelled on every backend");
+        let error = match domain.begin_execution() {
+            Err(error) => error,
+            Ok(_) => panic!("the cancelled generation must not start"),
+        };
+
+        assert!(matches!(error, RdbcError::SqlException(ref source)
+            if source.sql_state() == Some("HY008")));
+    }
+
+    #[test]
+    fn active_cancel_requires_a_backend_interrupt_handle() {
+        let domain = Arc::new(CancellationDomain::new());
+        let execution = domain
+            .begin_execution()
+            .expect("the execution generation must start");
+
+        let error = domain
+            .cancel_current_or_next(false)
+            .expect_err("a backend without an interrupt handle cannot cancel active work");
+        assert!(matches!(error, RdbcError::SqlException(ref source)
+            if source.sql_state() == Some("0A000")));
+        drop(execution);
     }
 }
