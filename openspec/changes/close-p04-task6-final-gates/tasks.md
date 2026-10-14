@@ -5,7 +5,7 @@
 
 ## 2. Behavior parity evidence
 
-- [ ] 2.1 Run exact method-migration parity, including executable behavior selectors; repair only source-backed mismatches.
+- [x] 2.1 Run exact method-migration parity, including executable behavior selectors; repair only source-backed mismatches. Evidence: [method-parity.md](evidence/method-parity.md).
 - [ ] 2.2 Run exact deleted-test parity and the migrated behavior targets; verify current source hashes.
 - [ ] 2.3 Refresh stale compiler-coverage evidence with the approved local generator/toolchain.
 
