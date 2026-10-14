@@ -381,3 +381,61 @@ fn total_state_bytes_budget_rejects_large_sql_batches_and_reclaims_replaced_byte
     assert_eq!(repository.len(), 2);
     assert_eq!(repository.limit_counters(), (2, 0, 0));
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn default_repository_projection_budget_keeps_peak_rss_below_128_mib() {
+    const MAX_STATE_BYTES: usize = 64 * 1024 * 1024;
+    const SQL_BYTES: usize = 60 * 1024;
+    const MAX_PEAK_RSS_KIB: usize = 128 * 1024;
+
+    let config = MetricsRepositoryConfig::default()
+        .with_total_state_bytes(MAX_STATE_BYTES)
+        .expect("valid default repository byte budget");
+    let repository = MetricsRepository::with_config(config);
+    let mut accepted = 0usize;
+
+    for identity in 0..4_096 {
+        let (mut id, mut value) = entry("boot-rss-budget", 1, 1);
+        id.identity = identity;
+        value.datasource.identity = identity;
+        value.sql_stats.insert(
+            1,
+            SqlListContent {
+                sql: Some("x".repeat(SQL_BYTES)),
+                ..Default::default()
+            },
+        );
+        if !repository.upsert_datasource(id, value) {
+            break;
+        }
+        accepted += 1;
+    }
+
+    let retained_bytes = repository.retained_state_bytes();
+    let status = std::fs::read_to_string("/proc/self/status").expect("read Linux process status");
+    let peak_rss_kib = status
+        .lines()
+        .find(|line| line.starts_with("VmHWM:"))
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|value| value.parse::<usize>().ok())
+        .expect("Linux VmHWM is available");
+
+    eprintln!(
+        "admin_repository_budget accepted={} retained_state_bytes={} peak_rss_kib={} rss_limit_kib={}",
+        accepted, retained_bytes, peak_rss_kib, MAX_PEAK_RSS_KIB
+    );
+    assert!(
+        accepted > 1_000,
+        "test must approach the 64 MiB projection cap"
+    );
+    assert!(retained_bytes <= MAX_STATE_BYTES);
+    assert!(
+        MAX_STATE_BYTES - retained_bytes < SQL_BYTES * 2,
+        "test must fill the projection budget within one record"
+    );
+    assert!(
+        peak_rss_kib <= MAX_PEAK_RSS_KIB,
+        "Admin repository exceeded its 128 MiB peak RSS budget"
+    );
+}
