@@ -34,6 +34,14 @@
 - **WHEN** XA owner 的 Agent 传输中断或结果不确定，且原始 `RdbcError` 不含 `SqlException`
 - **THEN** pooled owner 仍发送一次连接错误事件；事件原因标记连接不可继续使用并保留安全的传输错误上下文，调用方仍收到原始 `RdbcError`，外部池不得重新借出该 owner
 
+#### Scenario: Druid native pool 暴露标准 owner
+- **WHEN** 调用方通过新增的标准 owner 路径从 Druid 原生池取得 pooled owner，并借出逻辑连接
+- **THEN** owner 持有唯一池化 holder；逻辑连接关闭只结束当前租约并把可复用 holder 放回同一 owner，后续可再次借出；只有 owner 关闭时才把 holder 归还原生池或按处置结果关闭。现有 `DataSource`/`DruidPooledConnection` 借用 API 的行为与签名保持不变
+
+#### Scenario: 标准 owner 关闭与逻辑连接并发
+- **WHEN** pooled owner 在逻辑连接仍借出时关闭，或同一 owner 再次请求逻辑连接
+- **THEN** owner 立即拒绝新租约，旧逻辑句柄失效；holder 只归还或丢弃一次，关闭事件回调不持有 owner、池或事件注册表锁
+
 ### Requirement: PE-03 预编译语句事件保留标准身份
 
 系统 SHALL 为受池管理的 PreparedStatement 及其 CallableStatement 子类型提供关闭/失效事件；事件源 SHALL 是真实 pooled owner，并包含原语句身份及可用的 SQL 异常，不能用新建空对象替代。

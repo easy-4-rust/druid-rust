@@ -4,12 +4,12 @@
 
 ## 当前状态与执行边界
 
-- 进度：43/55 项完成；6.5.1–6.5.5 已分别由 Rust XA RPC 合同/兼容性、显式数据源与标准入口、owner/外部池真实生命周期、Rust 客户端经 Agent 在 PostgreSQL 的跨 session 恢复，以及 XA 对外交付证据关闭；7.1/CD-01 的可失败登录超时合同、7.2/CD-02–03 的三类数据源日志入口、7.3/CD-02、CD-04 的安全诊断和故障隔离，以及 7.4/CD-01–04、MC-03 的配置迁移文档与公开消费者验证已关闭，证据见 [XA 客户端证据](evidence/xa-rust-client.md)、[CD-01 超时证据](evidence/common-data-source-timeout.md)、[CD-02/03 日志入口证据](evidence/common-data-source-logging.md)、[CD-02/04 诊断证据](evidence/common-data-source-diagnostics.md) 与 [CD-01–04 配置迁移证据](evidence/common-data-source-migration.md)。其余 12 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
+- 进度：43/56 项完成；6.5.1–6.5.5 已分别由 Rust XA RPC 合同/兼容性、显式数据源与标准入口、owner/外部池真实生命周期、Rust 客户端经 Agent 在 PostgreSQL 的跨 session 恢复，以及 XA 对外交付证据关闭；7.1/CD-01 的可失败登录超时合同、7.2/CD-02–03 的三类数据源日志入口、7.3/CD-02、CD-04 的安全诊断和故障隔离，以及 7.4/CD-01–04、MC-03 的配置迁移文档与公开消费者验证已关闭，证据见 [XA 客户端证据](evidence/xa-rust-client.md)、[CD-01 超时证据](evidence/common-data-source-timeout.md)、[CD-02/03 日志入口证据](evidence/common-data-source-logging.md)、[CD-02/04 诊断证据](evidence/common-data-source-diagnostics.md) 与 [CD-01–04 配置迁移证据](evidence/common-data-source-migration.md)。另新增 5.5 原生池标准 owner 路径验收；其余 13 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
 - 取消批证据见 [取消合同证据](evidence/cancellation-contract.md) 和 [SQLx 取消能力矩阵](evidence/sqlx-cancellation-capability-matrix.md)：SQLite runtime 3.46.0 VM 执行中断及同物理连接复用、批处理与结果集入口、清理屏障、Future drop/owner 关闭竞态及连接池精确丢弃计数、PostgreSQL/MySQL/Any/生成键选择精确 `0A000`、三类池化代理的真实租约/缓存隔离及取消代次测试均有记录；取消批 4.1–4.7 已关闭。
 - SQLx 后端×执行入口矩阵、真实 SQLite 执行终态与连接处置、逐路径支持/不支持测试、三类池化代理生命周期回归和用户文档已完成；XA 中立标准 API、JDK 8 常量/分支状态机及 6.3 扫描、身份、超时和示例 owner 失效均有独立证据。6.4 探测已证实 H2 2.3.232 不满足断开后恢复，并以 PostgreSQL 18.6 Testcontainers + pgjdbc 42.7.14 通过独立 JDBC 恢复试验；现已补齐真实 Agent 协议和 Rust RDBC 跨 session 恢复，细节见 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md) 与 [Rust XA 客户端证据](evidence/xa-rust-client.md)。取消范围保持关闭。
 - 每批只运行该批目标测试和直接受影响的回归；达到表格中的停止点即停并报告。最终综合门禁只在第 9 批运行一次，不循环重跑已通过的全量命令。
 - 真实后端、Java 8 或 XA 环境不可用时，相关任务记为 `NOT_RUN` 并说明阻断，不用 mock、编译成功或其他版本的 oracle 替代实际证据，也不自动安装依赖或扩大时间预算。
-- 执行顺序固定为：池事件批次 5 已完成；XA Rust 客户端实库恢复 6.5.4 与 XA 对外交付 6.5.5 已完成；公共数据源 7.1–7.4 已完成，当前下一项为 8.1。随后按顺序处理方法级证据 8.x 和综合验收 9.x；每项独立验收、提交和推送，不循环重跑已通过的全量门禁。
+- 执行顺序固定为：XA Rust 客户端实库恢复 6.5.4 与 XA 对外交付 6.5.5 已完成；公共数据源 7.1–7.4 已完成；因 PE-02 补充要求，当前先完成 5.5 原生池标准 owner 路径，再进入 8.1 方法级证据。随后按顺序处理 8.x 和综合验收 9.x；每项独立验收、提交和推送，不循环重跑已通过的全量门禁。
 - 范围仅限本变更列出的七项能力、MC-06 的资源/结果集方法级验收及证据门禁。MC-06 只要求把现有后端能力和缺口准确分级，不要求所有后端实现所有 JDBC 扩展。额外发现登记到后续清单，不自动加任务；关闭本变更不代表 P04–P07、全 JDBC/TCK 合规或整个项目生产就绪。
 
 ### 架构视角的补充路线
@@ -112,6 +112,7 @@
 - [x] 5.2 将逻辑关闭、致命连接错误和物理 owner 清理接入统一通知；验证原 owner 身份、完整异常、重复关闭只归还一次和失败连接不会再借出。产品层事件已沿用 holder 快照，且现已隔离监听器 panic，避免跳过 fatal 处置或逻辑关闭回收；定向证据见 [池化事件证据](evidence/pooled-connection-events.md)。（PE-02）
 - [x] 5.3 贯通 PreparedStatement/CallableStatement 的关闭与失效事件；验证携带原语句身份、移除监听器生效、回调重入无锁死及可展开 panic 不跳过必要清理。Prepared 与 Callable 的执行 SQL 异常均发送错误事件；逻辑关闭只发送一次，并在锁外调用监听器快照。实现、命令、退出码与源码哈希见 [池化事件证据](evidence/pooled-connection-events.md#pe-03-preparedstatementcallablestatement-事件)。（PE-03、PE-04）
 - [x] 5.4 更新外部池事件示例与生命周期说明，运行标准事件及产品 holder/逻辑代理回归；逐项核对事件顺序和冻结重复注册行为，证据落盘后结束本批。文档见 [池化连接事件与生命周期](../../../docs/rdbc/pooled-connection-events.md)，命令、退出码、事件顺序与源码哈希见 [池化事件证据](evidence/pooled-connection-events.md#pe-05-外部池示例生命周期和顺序验收)。（PE-01–04、MC-03）
+- [ ] 5.5 为 Druid 原生池增加标准 `PooledConnection` owner 入口，保持现有 `DataSource`/`DruidPooledConnection` API 不变。先编写红测证明：owner 稳定身份作为事件源；一次只允许一个活动逻辑租约；逻辑关闭发出一次事件且 holder 留在 owner，可再次借出；owner 关闭拒绝新租约并将 holder 恰好一次交还/丢弃至原生池；owner 关闭与逻辑连接关闭竞态不会复用已失效句柄，监听器回调锁外执行。运行新标准 owner 消费者和原生池直接回归，记录事件顺序、池 active/idle/close/discard 计数、命令、退出码与源码哈希，补生命周期文档后单独提交并推送。（PE-02、MC-02、MC-03）
 
 ## 6. 提供可操作 XA 资源
 

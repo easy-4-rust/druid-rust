@@ -97,7 +97,7 @@ sequenceDiagram
 
 ### D5. 池化事件属于物理 owner，逻辑句柄负责触发
 
-对应 [PE-01–04](specs/rdbc-pooled-connection-events/spec.md)。复用现有事件类型及 holder 注册机制，在标准 `PooledConnection` 暴露四个监听器入口。标准 pooled owner 与借出的逻辑 `Connection` 分开；不能把逻辑句柄自行关闭等同于物理关闭。fatal Agent 传输故障可能是非 `SqlException` 的 `RdbcError`，因此 owner 隔离事件必须仍能让标准池作出 discard 决策；该事件投影不得取代调用方观察到的原始错误，也不得把凭据或连接串写入诊断内容。
+对应 [PE-01–04](specs/rdbc-pooled-connection-events/spec.md)。复用现有事件类型及 holder 注册机制，在标准 `PooledConnection` 暴露四个监听器入口。Druid 原生池新增独立的标准 pooled owner 路径：owner 在多个逻辑租约之间持有同一 holder，逻辑关闭只通知并使当前逻辑句柄失效，可复用 holder 留在 owner；owner 关闭后才通过原生池一次性归还或丢弃。现有 `DataSource`/`DruidPooledConnection` 入口保持兼容。owner 必须稳定提供事件 source 身份，并在 owner 关闭、逻辑句柄关闭竞态下拒绝新租约、最多归还一次。fatal Agent 传输故障可能是非 `SqlException` 的 `RdbcError`，因此 owner 隔离事件必须仍能让标准池作出 discard 决策；该事件投影不得取代调用方观察到的原始错误，也不得把凭据或连接串写入诊断内容。
 
 监听器用稳定对象身份匹配，事件带原 owner 和原语句身份。取注册快照后释放锁再调用。回调中的注册变更影响下一事件；可展开 panic 不跳过清理。重复注册/移除的细节先从冻结 Druid 1.2.28（commit `33824c3dec1612711f9bb4e409319bcab2e4cd0e`）提取案例，不自行发明去重规则。仅在产品内部加便捷方法不足以满足外部池的标准入口需求。
 
