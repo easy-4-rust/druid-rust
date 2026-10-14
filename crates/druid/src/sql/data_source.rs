@@ -46,6 +46,14 @@ impl CommonDataSource for crate::pool::DruidDataSource {
 }
 
 impl druid_rdbc::data_source::CommonDataSource for crate::pool::DruidDataSource {
+    fn try_login_timeout(&self) -> Result<Option<std::time::Duration>, RdbcError> {
+        let seconds = crate::pool::DruidDataSource::login_timeout(self);
+        let seconds = u64::try_from(seconds).map_err(|_| {
+            RdbcError::InvalidArgument(format!("login timeout must not be negative: {seconds}"))
+        })?;
+        Ok(Some(std::time::Duration::from_secs(seconds)))
+    }
+
     fn set_login_timeout(&mut self, _timeout: std::time::Duration) -> Result<(), RdbcError> {
         let error = RdbcError::UnsupportedOperation {
             operation: "set_login_timeout_after_build",

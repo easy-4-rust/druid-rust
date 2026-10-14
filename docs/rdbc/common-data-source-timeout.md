@@ -1,5 +1,7 @@
 # CommonDataSource 登录超时迁移
 
+普通、池化和 XA 数据源的 writer 配置及完整示例见 [CommonDataSource 配置指南](common-data-source.md)。
+
 `druid-rdbc::data_source::CommonDataSource` 的旧 `login_timeout()` 返回 `Option<Duration>`，不能表达底层读取失败。新代码应使用可失败入口：
 
 ```rust
@@ -16,3 +18,5 @@ fn login_timeout(source: &dyn CommonDataSource) -> Result<Option<Duration>, drui
 既有实现只覆盖 `login_timeout()` 时仍可编译，新 `try_login_timeout()` 的默认实现会以 `Ok(old_value)` 适配它。实现可以观察底层读取错误时，应覆盖新方法并返回原始 `RdbcError`。旧方法已弃用，只作为迁移桥梁；`set_login_timeout()` 本身已有可失败结果，拒绝或转换失败必须保留错误。
 
 适配器若与 Java `CommonDataSource` 的有符号秒数交互，须检查负值与目标范围，不能截断、饱和或悄悄回退。Rust `Duration` 的秒和纳秒精度由合同值原样保留。
+
+Druid 池登录超时须在 `DruidPoolBuilder::login_timeout(seconds)` 中于建池前配置。`DruidDataSource` 和 `DruidRdbcDataSource` 的标准 `try_login_timeout()` 返回实际已配置秒数；零值表示无限等待，负值保留为配置错误。产品兼容接口 `druid::sql::CommonDataSource` 使用整数秒，与 `druid_rdbc::data_source::CommonDataSource` 的可失败 `Duration` 合同不同；有重名方法时请明确限定 trait。

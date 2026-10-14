@@ -1,5 +1,7 @@
 # JDBC Agent XA 集成
 
+普通、池化及 XA 数据源共用的日志 writer 与登录超时配置边界见 [CommonDataSource 配置指南](rdbc/common-data-source.md)。
+
 本文面向接入 `druid-rdbc` 的应用、外部连接池和事务管理器。JDBC Agent XA 只在调用方显式配置 `XADataSource` 类并且 Agent 成功协商 XA 后启用。普通 `JdbcAgentConnectionFactory` 建立的 JDBC 连接仍是普通连接；不能通过 JDBC URL、驱动名称或本地事务把它升级为 XA。
 
 ## 启用与配置

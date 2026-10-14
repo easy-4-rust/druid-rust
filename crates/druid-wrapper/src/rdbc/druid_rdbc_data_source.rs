@@ -89,6 +89,10 @@ impl CommonDataSource for DruidRdbcDataSource {
 }
 
 impl druid_rdbc::data_source::CommonDataSource for DruidRdbcDataSource {
+    fn try_login_timeout(&self) -> Result<Option<std::time::Duration>, RdbcError> {
+        druid_rdbc::data_source::CommonDataSource::try_login_timeout(&self.inner)
+    }
+
     fn set_login_timeout(&mut self, timeout: std::time::Duration) -> Result<(), RdbcError> {
         druid_rdbc::data_source::CommonDataSource::set_login_timeout(&mut self.inner, timeout)
     }
