@@ -2,6 +2,8 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
+2026-10-15 Windows/Rust 1.97.1 Admin 重连故障复测：以 `--locked -- --exact --test-threads=1` 分别运行 `grpc_client_reconnects_and_resends_only_pending_frame_bytes`、`admin_restart_with_pending_incremental_supersedes_it_with_monotonic_full_snapshot`、`unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushed`，3/3 通过。它们分别验证仅重发未 ACK frame、Admin 重启时以单调全量快照替代旧增量，以及 Admin 不可用时 shutdown 准确报告未刷新工作。物理内存门禁单项复测输出 accepted=1044、retained_state_bytes=67,071,714、sampled_peak_working_set_bytes=75,730,944（上限 134,217,728）。[当前跨平台门禁 CI run 38645951394](https://github.com/easy-4-rust/druid-rust/actions/runs/38645951394) 尚在执行，不能算跨平台通过；本机全 Admin crate 的网络回归仍有超时，P06 Task5 继续开放。
+
 2026-10-15 JDBC Agent 握手与协议错误脱敏：先运行新增 `malformedHandshakeAndJsonDoNotEchoUntrustedPayloads`，因不支持的 capability 名称出现在 JSON-RPC 错误响应中而失败（RED）。握手能力、协议版本错误改为固定诊断；无法解析请求时返回固定 `invalid JSON-RPC request`，日志只记请求 ID 和异常类型，不记解析异常内容。回归测试同时注入能力标记、畸形 JSON token 和非法 JSON-RPC 版本标记，并断言消息与完整错误对象都不含标记。`mvn -f agents/jdbc-agent/pom.xml -Dtest=AgentServerTest,XaAgentProtocolTest test` 8/8 通过，包含 PostgreSQL Testcontainers XA 协议测试。此处验证错误响应不回显；日志路径由固定异常类型格式确认，尚未用日志 appender 做端到端断言。P06 Task5 的其他故障和运行预算仍开放。
 
 2026-10-15 Windows/Rust 1.97.1 Admin 内存预算复测：将原 Linux-only `/proc/self/status` 峰值 RSS 检查改为 Linux/macOS RSS 与 Windows Working Set 的跨平台物理内存采样，每 32 条成功写入采样一次并在结束时补采样；指标不可用会使测试失败。`cargo test -p druid-admin --test repository_capacity_test --locked` 10/10 通过；两次单项 `-- --nocapture` 输出均为 accepted=1044、retained_state_bytes=67,071,714，采样 Working Set 峰值为 75,739,136–76,046,336 字节，上限 134,217,728 字节。该值是采样峰值，不代表操作系统全程峰值。随后 `cargo test -p druid-admin --locked` 在 37 项 gRPC 网络用例通过后，有 13 项重连/ACK 用例超时；这是失败的本机全 crate 回归，不能计为通过。Linux/macOS 的当前变更 CI 证据待推送后记录；P06 Task5 仍开放。
