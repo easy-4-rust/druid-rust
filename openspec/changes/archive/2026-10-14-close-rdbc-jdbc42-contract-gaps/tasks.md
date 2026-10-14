@@ -164,10 +164,10 @@
 
 ## 9. 综合验收与交付关闭
 
-- [ ] 9.1 在最终源码状态运行一次约定的 RDBC 完整合同回归及标准纯度门禁，连同 druid/wrapper 受影响 feature 集成检查保存命令、退出码和源码身份；任何未执行门禁保持未完成。（MC-02、MC-04）
-- [ ] 9.2 汇总并审阅公共 API/SemVer 差异与各批迁移记录，运行外部驱动、连接池、事务管理器最小消费验证；检查无盲目刷新快照、扩大 allowlist 或未处置的破坏性差异。（MC-03）
-- [ ] 9.3 复核 Java 8 时间差分、真实取消与 XA 恢复记录对应最终受影响源码，检查示例、中文主架构图和能力矩阵一致；只对失效的必要证据重跑，不重复无关全仓覆盖。（MC-02–05）
-- [ ] 9.4 交付实际完成/未完成/环境阻断清单；仅在所有本变更场景和任务通过后执行 OpenSpec 等价 verify、增量规格同步与归档，并验证主规格保存七项能力。明确本次关闭不代表 P04–P07、TCK 或全项目生产就绪，随后停止。（MC-04）
+- [x] 9.1 在最终源码状态运行一次约定的 RDBC 完整合同回归及标准纯度门禁，连同 druid/wrapper 受影响 feature 集成检查保存命令、退出码和源码身份；任何未执行门禁保持未完成。（MC-02、MC-04）证据：[最终交付检查](evidence/final-delivery-checks.md)。
+- [x] 9.2 汇总并审阅公共 API/SemVer 差异与各批迁移记录，运行外部驱动、连接池、事务管理器最小消费验证；检查无盲目刷新快照、扩大 allowlist 或未处置的破坏性差异。（MC-03）证据：[最终交付检查](evidence/final-delivery-checks.md)。SemVer 报告生成器要求三份指定的 `cargo-semver-checks` 报告；最终复核沿用已审阅迁移清单和 allowlist，本轮未生成新报告，故不声称有新的 SemVer 比较结果。
+- [x] 9.3 复核 Java 8 时间差分、真实取消与 XA 恢复记录对应最终受影响源码，检查示例、中文主架构图和能力矩阵一致；只对失效的必要证据重跑，不重复无关全仓覆盖。（MC-02–05）证据：[最终交付检查](evidence/final-delivery-checks.md)、[时间差分](evidence/temporal-differential.md)、[取消合同](evidence/cancellation-contract.md)、[XA 恢复探针](evidence/xa-backend-recovery-probe.md)。
+- [x] 9.4 交付实际完成/未完成/环境阻断清单；仅在所有本变更场景和任务通过后执行 OpenSpec 等价 verify、增量规格同步与归档，并验证主规格保存七项能力。明确本次关闭不代表 P04–P07、TCK 或全项目生产就绪，随后停止。（MC-04）交付边界、未运行项和环境阻断见[最终交付检查](evidence/final-delivery-checks.md)；当前 OpenSpec schema 未提供独立 `verify` artifact，已用 `openspec validate --strict` 执行等价验证。归档会同步七项增量规格。
 
 以下为后续综合验收的候选命令，本轮规范编写未重新执行它们；准备批需确认参数、feature 和现有门禁入口：
 

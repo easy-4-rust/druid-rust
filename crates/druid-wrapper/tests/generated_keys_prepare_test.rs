@@ -278,9 +278,8 @@ async fn sqlx_unsupported_column_selection_does_not_insert_or_enter_prepared_cac
                 .await;
             assert!(matches!(
                 result,
-                Err(RdbcError::UnsupportedOperation {
-                    operation: "connection_prepare_statement_generated_keys"
-                })
+                Err(RdbcError::SqlException(error))
+                    if error.sql_state() == Some("0A000")
             ));
             assert_eq!(pool.state().cached_prepared_statement_count, 0);
         }

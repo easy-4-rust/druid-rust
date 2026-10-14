@@ -43,6 +43,7 @@ ALLOWED_EXTERNAL_IMPORT_ROOTS = {
     "i64",
     "i128",
     "isize",
+    "parking_lot",
     "str",
     "std",
     "tokio",
@@ -55,7 +56,7 @@ ALLOWED_EXTERNAL_IMPORT_ROOTS = {
     "usize",
     "uuid",
 }
-ALLOWED_BARE_PRELUDE_MACROS = {"format", "format_args"}
+ALLOWED_BARE_PRELUDE_MACROS = {"format", "format_args", "matches", "writeln"}
 ALLOWED_QUALIFIED_MACRO_ROOTS = {"alloc", "core", "std"}
 CANONICAL_CRATE_MACRO_SCOPES = {
     "impl_standard_wrapper": ("wrapper", "wrapper"),

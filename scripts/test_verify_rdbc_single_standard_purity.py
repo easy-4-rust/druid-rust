@@ -326,12 +326,34 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "format_args|shadow"):
             verify_tree(self.root, phase="transitional")
 
+    def test_accepts_unshadowed_standard_matches_macro(self) -> None:
+        """The standard matches! prelude macro is accepted only without a local shadow."""
+
+        source = self.root / "data_source/contract.rs"
+        source.write_text(
+            'pub fn classify(value: Option<u8>) -> bool { matches!(value, Some(1)) }\n'
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+        source.write_text(
+            "macro_rules! matches { ($value:expr, $pattern:pat) => { true }; }\n"
+            'pub fn classify(value: Option<u8>) -> bool { matches!(value, Some(1)) }\n'
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "matches|shadow"):
+            verify_tree(self.root, phase="final")
+
     def test_allows_tokio_dependency_without_local_alias_spoofing(self) -> None:
         """Async standard contracts may use Tokio only through real external provenance."""
 
         source = self.root / "data_source/contract.rs"
         source.write_text(
-            "use tokio::sync::Mutex;\npub trait Contract: Send {}\n",
+            "use parking_lot::Mutex;\n"
+            "use tokio::sync::Mutex as TokioMutex;\n"
+            "pub trait Contract: Send {}\n",
             encoding="utf-8",
         )
         verify_tree(self.root, phase="transitional")
@@ -343,6 +365,15 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
             encoding="utf-8",
         )
         with self.assertRaisesRegex(VerificationError, "tokio|compat|sync"):
+            verify_tree(self.root, phase="transitional")
+
+        source.write_text(
+            "use crate::compat as parking_lot;\n"
+            "use parking_lot::Mutex;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "parking_lot|compat|Mutex"):
             verify_tree(self.root, phase="transitional")
 
     def test_rejects_physical_and_product_runtime_identities(self) -> None:

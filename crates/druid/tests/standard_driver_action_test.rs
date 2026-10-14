@@ -231,7 +231,10 @@ async fn manager_connection_lookup_does_not_query_unrelated_driver_metadata() {
     let result = DriverManager::get_connection("rdbc:name-observation-test://localhost/db").await;
 
     assert!(DriverManager::deregister_driver(&driver));
-    assert!(matches!(result, Err(RdbcError::DriverError(_))));
+    assert!(matches!(
+        result,
+        Err(RdbcError::SqlException(error)) if error.sql_state() == Some("08001")
+    ));
     assert_eq!(name_calls.load(Ordering::SeqCst), 0);
 }
 
