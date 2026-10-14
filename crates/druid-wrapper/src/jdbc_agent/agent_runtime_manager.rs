@@ -288,6 +288,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn agent_that_never_answers_handshake_obeys_startup_timeout() {
+        #[cfg(windows)]
+        let options = JdbcAgentOptions::new("powershell.exe")
+            .argument("-NoProfile")
+            .argument("-Command")
+            .argument("[Console]::Out.WriteLine('{\"jsonrpc\":\"2.0\",\"method\":\"ready\",\"params\":{\"protocolVersion\":1}}'); [Console]::In.ReadLine() | Out-Null; Start-Sleep -Seconds 10")
+            .runtime_identity("silent-handshake", "unmanaged", "handshake-test")
+            .request_timeout(Duration::from_millis(100));
+        #[cfg(not(windows))]
+        let options = JdbcAgentOptions::new("sh")
+            .argument("-c")
+            .argument("printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"ready\",\"params\":{\"protocolVersion\":1}}'; IFS= read -r request; sleep 10")
+            .runtime_identity("silent-handshake", "unmanaged", "handshake-test")
+            .request_timeout(Duration::from_millis(100));
+        let key = options.runtime_key();
+
+        let result = tokio::time::timeout(
+            Duration::from_secs(2),
+            AgentRuntimeManager::acquire(&options),
+        )
+        .await
+        .expect("an Agent that stalls after ready must not block startup indefinitely");
+        assert!(
+            matches!(result, Err(RdbcError::DriverError(message)) if message.contains("startup timed out")),
+            "a stalled handshake must report the configured startup timeout"
+        );
+        assert!(
+            !AgentRuntimeManager::global()
+                .startup_locks
+                .lock()
+                .expect("startup lock map")
+                .contains_key(&key),
+            "failed handshake must release its startup lock"
+        );
+    }
+
+    #[tokio::test]
     async fn silent_agent_does_not_block_unrelated_runtime_identity() {
         #[cfg(windows)]
         let stalled = JdbcAgentOptions::new("powershell.exe")

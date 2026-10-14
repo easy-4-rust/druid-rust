@@ -208,6 +208,10 @@ jobs:
           distribution: temurin
           java-version: '17'
       - run: cargo test --workspace
+      - name: Verify JDBC Agent handshake startup budget
+        run: >-
+          cargo test -p druid-wrapper --lib --features jdbc-agent
+          agent_that_never_answers_handshake_obeys_startup_timeout --locked -- --nocapture
       - name: Gate Admin repository sampled physical memory at the default state-byte limit
         run: >-
           cargo test -p druid-admin --test repository_capacity_test
