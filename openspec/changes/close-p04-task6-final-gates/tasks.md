@@ -12,11 +12,11 @@
 ## 3. Public API and documentation
 
 - [x] 3.1 Generate the current `druid-rdbc` API and compare the reviewed snapshot; inspect and classify every diff. Evidence: [public-api-diff.md](evidence/public-api-diff.md).
-- [ ] 3.2 Run strict rustdoc and SemVer checks; update reviewed evidence only after resolving any findings. Strict Druid rustdoc passes locally. CI run `38623351362` found one unlisted legacy XA module constant category; restored `xa::flags` and `xa_flags` constants to their prior paths. SemVer must be rerun against that source.
+- [ ] 3.2 Run strict rustdoc and SemVer checks; update reviewed evidence only after resolving any findings. Strict Druid rustdoc passes locally. CI run `38630325025` confirmed the two restored XA compatibility modules are no longer SemVer removals; the exact Druid `module_missing` baseline is now 26 findings with SHA-256 `72afa2efd2aafcd842ae8d7220d83e0f1b747a23a4a704d9c3f522b126763431`. The local verifier accepts all 27 approved categories against the uploaded reports; rerun CI after pushing the reviewed allowlist and migration-map updates.
 
 ## 4. Build and compatibility acceptance
 
-- [ ] 4.1 Run required workspace tests and lint gates to terminal completion; resolve failures or record a concrete environment blocker. CI run `38623351362` failed the Linux projection-budget test because the default per-service cap stopped its single-service fixture at 256 records; the fixture now explicitly allows 4,096. Rerun the Linux gate before marking complete. Local Windows excludes this `target_os = "linux"` test.
+- [ ] 4.1 Run required workspace tests and lint gates to terminal completion; resolve failures or record a concrete environment blocker. CI run `38630325025` passed the Linux projection-budget test and Windows/macOS workspace tests; the aggregate Rust contract and remaining Apple database matrix jobs are still running. The fixture explicitly allows 4,096 records so the Linux pressure test reaches its byte-budget assertion. Local Windows excludes this `target_os = "linux"` test.
 - [ ] 4.2 Run required feature combinations and MSRV checks to terminal completion.
 - [ ] 4.3 Validate this OpenSpec change, sync the accepted delta, commit and push the completed Task 6 feature point.
 - [ ] 4.4 Mark Task 6 complete only when every preceding required gate has actual passing evidence.

@@ -1,6 +1,4 @@
 old_module	target_file	transition	test_file
-druid::core::xa::flags	crates/druid/src/core/xa.rs	SPLIT_STANDARD	crates/druid/tests/xa_state_machine_test.rs
-druid::core::xa_flags	crates/druid/src/core/mod.rs	SPLIT_STANDARD	crates/druid/tests/xa_state_machine_test.rs
 druid::core::result_set_statement	crates/druid-rdbc/src/result_set/result_set.rs	STANDARD_PORT	crates/druid/tests/task6_canonical_standard_test_parity.rs
 druid::core::physical_connection_capabilities	crates/druid-rdbc/src/extensions/connection_capabilities.rs	STANDARD_PORT	crates/druid/tests/task6_standard_connection_contract_parity.rs
 druid::core::physical_connection_lease	crates/druid/src/core/external_connection_lease.rs	PRIVATE_OWNER	crates/druid/tests/raw_logical_ownership_test.rs
