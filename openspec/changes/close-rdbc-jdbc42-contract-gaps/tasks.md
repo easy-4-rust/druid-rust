@@ -4,7 +4,7 @@
 
 ## 当前状态与执行边界
 
-- 进度：44/56 项完成；6.5.1–6.5.5 已分别由 Rust XA RPC 合同/兼容性、显式数据源与标准入口、owner/外部池真实生命周期、Rust 客户端经 Agent 在 PostgreSQL 的跨 session 恢复，以及 XA 对外交付证据关闭；7.1/CD-01 的可失败登录超时合同、7.2/CD-02–03 的三类数据源日志入口、7.3/CD-02、CD-04 的安全诊断和故障隔离，以及 7.4/CD-01–04、MC-03 的配置迁移文档与公开消费者验证已关闭；5.5 原生池标准 owner 路径亦完成，证据见 [XA 客户端证据](evidence/xa-rust-client.md)、[CD-01 超时证据](evidence/common-data-source-timeout.md)、[CD-02/03 日志入口证据](evidence/common-data-source-logging.md)、[CD-02/04 诊断证据](evidence/common-data-source-diagnostics.md)、[CD-01–04 配置迁移证据](evidence/common-data-source-migration.md) 与 [原生池标准 owner 证据](evidence/pooled-connection-owner.md)。其余 12 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
+- 进度：45/56 项完成；6.5.1–6.5.5 已分别由 Rust XA RPC 合同/兼容性、显式数据源与标准入口、owner/外部池真实生命周期、Rust 客户端经 Agent 在 PostgreSQL 的跨 session 恢复，以及 XA 对外交付证据关闭；7.1–7.4 公共数据源合同、诊断和迁移文档已关闭；5.5 原生池标准 owner 路径和 8.1 冻结 Java 方法清单提取器亦完成。证据见 [XA 客户端证据](evidence/xa-rust-client.md)、[公共数据源证据](evidence/common-data-source-timeout.md)、[原生池标准 owner 证据](evidence/pooled-connection-owner.md) 与 [Java API 清单证据](evidence/java8-api-method-inventory.md)。其余 11 项仍未完成。完成项必须同时有实现和本地证据，不能仅凭旧测试记录勾选。
 - 取消批证据见 [取消合同证据](evidence/cancellation-contract.md) 和 [SQLx 取消能力矩阵](evidence/sqlx-cancellation-capability-matrix.md)：SQLite runtime 3.46.0 VM 执行中断及同物理连接复用、批处理与结果集入口、清理屏障、Future drop/owner 关闭竞态及连接池精确丢弃计数、PostgreSQL/MySQL/Any/生成键选择精确 `0A000`、三类池化代理的真实租约/缓存隔离及取消代次测试均有记录；取消批 4.1–4.7 已关闭。
 - SQLx 后端×执行入口矩阵、真实 SQLite 执行终态与连接处置、逐路径支持/不支持测试、三类池化代理生命周期回归和用户文档已完成；XA 中立标准 API、JDK 8 常量/分支状态机及 6.3 扫描、身份、超时和示例 owner 失效均有独立证据。6.4 探测已证实 H2 2.3.232 不满足断开后恢复，并以 PostgreSQL 18.6 Testcontainers + pgjdbc 42.7.14 通过独立 JDBC 恢复试验；现已补齐真实 Agent 协议和 Rust RDBC 跨 session 恢复，细节见 [XA 后端恢复探测](evidence/xa-backend-recovery-probe.md) 与 [Rust XA 客户端证据](evidence/xa-rust-client.md)。取消范围保持关闭。
 - 每批只运行该批目标测试和直接受影响的回归；达到表格中的停止点即停并报告。最终综合门禁只在第 9 批运行一次，不循环重跑已通过的全量命令。
@@ -153,7 +153,7 @@
 
 ## 8. 建立方法级覆盖与证据门禁
 
-- [ ] 8.1 实现或扩展冻结 Java 来源的方法清单提取器，包含构造器、常量、重载、default 及继承来源；以漏监听器、合并重载和继承案例验证清单独立于 Rust 现有实现且输出确定。（MC-01）
+- [x] 8.1 新增 Java 8 Javadoc Doclet 与生成脚本，输入固定 OpenJDK 8u502 归档，按源码直接枚举 `java.sql`/`javax.sql` 公开类型和成员，记录构造器、常量、重载、default 与继承来源；fixture 验证事件监听器完整、重载不合并、显式/隐式构造器、父类/接口继承、非 API 私有成员排除和重复输出确定。完整清单、来源校验、退出码与 SHA-256 见 [Java API 清单证据](evidence/java8-api-method-inventory.md)。（MC-01）
 - [ ] 8.2 将各批已有证据关联到 Java 签名、Rust 入口与规范场景，分别保留声明/合同/适配器/逻辑代理/实库状态；验证启用能力缺正向证据和精确不支持证据时门禁确实失败。（MC-02）
 - [ ] 8.3 增加源码哈希及输入版本失效检查，运行一次故意过期证据的负向验证；明确 NOT_RUN/失败/通过区别，更新证据使用说明，不保存二进制或大型归档。（MC-02、MC-03）
 - [ ] 8.4 生成本次六类缺口与全局其余缺口分开的报告，逐项核验七份规范所有场景可追溯；范围外问题记录位置、影响和证据，验证没有自动加入实施任务或宣称全 JDBC 完成。（MC-01–04）
