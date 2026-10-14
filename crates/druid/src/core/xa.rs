@@ -11,13 +11,42 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use crate::core::DruidError;
-pub use druid_rdbc::data_source::flags::{
-    TMFAIL, TMJOIN, TMNOFLAGS, TMONEPHASE, TMRESUME, TMSUCCESS, TMSUSPEND, XA_RDONLY,
-};
 pub use druid_rdbc::data_source::{
-    flags, XaError, XaErrorCode, XaFlags, XaPrepareResult, XaResource, XaResourceManagerIdentity,
-    Xid, XID_MAX_BQUAL_LENGTH, XID_MAX_GTRID_LENGTH,
+    XaError, XaErrorCode, XaFlags, XaPrepareResult, XaResource, XaResourceManagerIdentity, Xid,
 };
+
+/// XA 事务分支标识的兼容长度上限，对应 Java: `Xid#MAXGTRIDSIZE`。
+pub const XID_MAX_GTRID_LENGTH: usize = druid_rdbc::data_source::XID_MAX_GTRID_LENGTH;
+/// XA 分支限定符的兼容长度上限，对应 Java: `Xid#MAXBQUALSIZE`。
+pub const XID_MAX_BQUAL_LENGTH: usize = druid_rdbc::data_source::XID_MAX_BQUAL_LENGTH;
+
+/// 对应 Java: `javax.transaction.xa.XAResource` 的 XA 标志兼容常量。
+pub mod flags {
+    /// 无特殊标志。
+    pub const TMNOFLAGS: i32 = druid_rdbc::data_source::flags::TMNOFLAGS;
+    /// 加入已有事务分支。
+    pub const TMJOIN: i32 = druid_rdbc::data_source::flags::TMJOIN;
+    /// 恢复挂起的事务分支。
+    pub const TMRESUME: i32 = druid_rdbc::data_source::flags::TMRESUME;
+    /// 事务分支操作成功。
+    pub const TMSUCCESS: i32 = druid_rdbc::data_source::flags::TMSUCCESS;
+    /// 事务分支操作失败。
+    pub const TMFAIL: i32 = druid_rdbc::data_source::flags::TMFAIL;
+    /// 挂起事务分支。
+    pub const TMSUSPEND: i32 = druid_rdbc::data_source::flags::TMSUSPEND;
+    /// 一阶段提交标志。
+    pub const TMONEPHASE: i32 = druid_rdbc::data_source::flags::TMONEPHASE;
+    /// 开始 XA 恢复扫描。
+    pub const TMSTARTRSCAN: i32 = druid_rdbc::data_source::flags::TMSTARTRSCAN;
+    /// 结束 XA 恢复扫描。
+    pub const TMENDRSCAN: i32 = druid_rdbc::data_source::flags::TMENDRSCAN;
+    /// XA prepare 正常投票结果。
+    pub const XA_OK: i32 = druid_rdbc::data_source::flags::XA_OK;
+    /// 旧异步标志的兼容别名；标准资源管理器使用 `TMSUSPEND`。
+    pub const TMASYNC: i32 = druid_rdbc::data_source::flags::TMSUSPEND;
+    /// RM 返回的只读投票结果。
+    pub const XA_RDONLY: i32 = druid_rdbc::data_source::flags::XA_RDONLY;
+}
 
 // ─── XA State Machine ───────────────────────────────────────────────────────
 

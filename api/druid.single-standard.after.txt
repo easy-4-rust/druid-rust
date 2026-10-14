@@ -90,7 +90,6 @@ pub use druid::core::XaResourceManagerIdentity
 pub use druid::core::Xid
 pub use druid::core::XmlResult
 pub use druid::core::XmlSource
-pub use druid::core::xa_flags
 pub mod druid::core::abstract_oracle_exception_sorter
 pub struct druid::core::abstract_oracle_exception_sorter::AbstractOracleExceptionSorter
 impl druid::core::abstract_oracle_exception_sorter::AbstractOracleExceptionSorter
@@ -3813,8 +3812,6 @@ pub use druid::core::wrapper::StandardUnwrapped
 pub use druid::core::wrapper::Wrapper
 pub use druid::core::wrapper::WrapperExt
 pub mod druid::core::xa
-pub use druid::core::xa::XID_MAX_BQUAL_LENGTH
-pub use druid::core::xa::XID_MAX_GTRID_LENGTH
 pub use druid::core::xa::XaError
 pub use druid::core::xa::XaErrorCode
 pub use druid::core::xa::XaFlags
@@ -3822,7 +3819,19 @@ pub use druid::core::xa::XaPrepareResult
 pub use druid::core::xa::XaResource
 pub use druid::core::xa::XaResourceManagerIdentity
 pub use druid::core::xa::Xid
-pub use druid::core::xa::flags
+pub mod druid::core::xa::flags
+pub const druid::core::xa::flags::TMASYNC: i32
+pub const druid::core::xa::flags::TMENDRSCAN: i32
+pub const druid::core::xa::flags::TMFAIL: i32
+pub const druid::core::xa::flags::TMJOIN: i32
+pub const druid::core::xa::flags::TMNOFLAGS: i32
+pub const druid::core::xa::flags::TMONEPHASE: i32
+pub const druid::core::xa::flags::TMRESUME: i32
+pub const druid::core::xa::flags::TMSTARTRSCAN: i32
+pub const druid::core::xa::flags::TMSUCCESS: i32
+pub const druid::core::xa::flags::TMSUSPEND: i32
+pub const druid::core::xa::flags::XA_OK: i32
+pub const druid::core::xa::flags::XA_RDONLY: i32
 #[non_exhaustive] pub enum druid::core::xa::XaOperation
 pub druid::core::xa::XaOperation::Commit
 pub druid::core::xa::XaOperation::End
@@ -3882,6 +3891,21 @@ pub fn druid::core::xa::XaTransactionState::suspend(&mut self) -> core::result::
 pub fn druid::core::xa::XaTransactionState::timeout(&self) -> core::option::Option<core::time::Duration>
 pub fn druid::core::xa::XaTransactionState::with_timeout(druid_rdbc::data_source::xid::Xid, core::time::Duration) -> Self
 pub fn druid::core::xa::XaTransactionState::xid(&self) -> &druid_rdbc::data_source::xid::Xid
+pub const druid::core::xa::XID_MAX_BQUAL_LENGTH: usize
+pub const druid::core::xa::XID_MAX_GTRID_LENGTH: usize
+pub mod druid::core::xa_flags
+pub const druid::core::xa_flags::TMASYNC: i32
+pub const druid::core::xa_flags::TMENDRSCAN: i32
+pub const druid::core::xa_flags::TMFAIL: i32
+pub const druid::core::xa_flags::TMJOIN: i32
+pub const druid::core::xa_flags::TMNOFLAGS: i32
+pub const druid::core::xa_flags::TMONEPHASE: i32
+pub const druid::core::xa_flags::TMRESUME: i32
+pub const druid::core::xa_flags::TMSTARTRSCAN: i32
+pub const druid::core::xa_flags::TMSUCCESS: i32
+pub const druid::core::xa_flags::TMSUSPEND: i32
+pub const druid::core::xa_flags::XA_OK: i32
+pub const druid::core::xa_flags::XA_RDONLY: i32
 pub enum druid::core::BatchExecKind
 pub druid::core::BatchExecKind::PreparedStatement
 pub druid::core::BatchExecKind::Statement

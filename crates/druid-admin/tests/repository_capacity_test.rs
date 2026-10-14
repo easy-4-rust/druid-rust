@@ -389,7 +389,8 @@ fn default_repository_projection_budget_keeps_peak_rss_below_128_mib() {
     const SQL_BYTES: usize = 60 * 1024;
     const MAX_PEAK_RSS_KIB: usize = 128 * 1024;
 
-    let config = MetricsRepositoryConfig::default()
+    let config = MetricsRepositoryConfig::try_new(1, 4_096, 1, Duration::from_secs(60), 1 << 20)
+        .expect("one service can exercise the global byte budget")
         .with_total_state_bytes(MAX_STATE_BYTES)
         .expect("valid default repository byte budget");
     let repository = MetricsRepository::with_config(config);
