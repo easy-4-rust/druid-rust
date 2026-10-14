@@ -3,9 +3,11 @@ use druid::pool::DruidPoolBuilder;
 use druid_rdbc::connection::Connection;
 use druid_rdbc::data_source::{CommonDataSource as StandardCommonDataSource, RdbcLogWriter};
 use druid_rdbc::error::RdbcError;
+#[cfg(feature = "jdbc-agent")]
 use druid_wrapper::jdbc_agent::{JdbcAgentOptions, JdbcAgentXaDataSource};
 use druid_wrapper::rdbc::DruidRdbcDataSource;
 use parking_lot::Mutex;
+#[cfg(feature = "jdbc-agent")]
 use serde_json::Map;
 use std::sync::Arc;
 use std::time::Duration;
@@ -85,16 +87,19 @@ async fn common_data_source_configuration_examples_use_public_contracts() {
         Err(RdbcError::InvalidArgument(_))
     ));
 
-    // XA 示例：显式构造厂商 XA 数据源；厂商属性在创建时提供。
-    let xa_options = JdbcAgentOptions::new("java");
-    let xa_source =
-        JdbcAgentXaDataSource::new("org.example.DriverXaDataSource", Map::new(), xa_options)
-            .expect("construct explicit XA source");
-    StandardCommonDataSource::set_log_writer(&xa_source, Some(example_writer()))
-        .expect("configure XA diagnostics");
-    assert!(StandardCommonDataSource::get_log_writer(&xa_source).is_some());
-    assert_eq!(
-        StandardCommonDataSource::get_parent_logger(&xa_source),
-        Ok("druid.jdbc_agent.xa")
-    );
+    #[cfg(feature = "jdbc-agent")]
+    {
+        // XA 示例：显式构造厂商 XA 数据源；厂商属性在创建时提供。
+        let xa_options = JdbcAgentOptions::new("java");
+        let xa_source =
+            JdbcAgentXaDataSource::new("org.example.DriverXaDataSource", Map::new(), xa_options)
+                .expect("construct explicit XA source");
+        StandardCommonDataSource::set_log_writer(&xa_source, Some(example_writer()))
+            .expect("configure XA diagnostics");
+        assert!(StandardCommonDataSource::get_log_writer(&xa_source).is_some());
+        assert_eq!(
+            StandardCommonDataSource::get_parent_logger(&xa_source),
+            Ok("druid.jdbc_agent.xa")
+        );
+    }
 }

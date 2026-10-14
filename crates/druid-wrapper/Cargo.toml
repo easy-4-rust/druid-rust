@@ -115,6 +115,14 @@ name = "task6_adapter_boundary_test_parity"
 required-features = ["sqlx-bb8", "sqlx-deadpool", "toasty", "rbdc"]
 
 [[test]]
+name = "common_data_source_public_examples_test"
+required-features = ["driver-catalog"]
+
+[[test]]
+name = "common_data_source_logging_test"
+required-features = ["driver-catalog"]
+
+[[test]]
 name = "task6_database_profile_live_contract_test_parity"
 required-features = ["driver-catalog"]
 

@@ -1,4 +1,5 @@
 old_type	target_file	target_symbol	transition	test_file
+Xid	crates/druid-rdbc/src/data_source/xid.rs	Xid	STANDARD_PORT	crates/druid/tests/xa_state_machine_test.rs
 ConnectionDatabaseMetaDataFilterChain	crates/druid/src/core/database_meta_data_proxy_impl.rs	DatabaseMetaDataProxyImpl	PRIVATE_OWNER	crates/druid/tests/task6_metadata_filter_contract_test.rs
 ConnectionLobFilterChain	crates/druid/src/core/standard_connection_lob_filter_chain.rs	StandardConnectionLobFilterChain	RENAMED	crates/druid/tests/resource_owner_cancellation_test.rs
 ConnectionWarningFilterChain	crates/druid/src/core/standard_connection_warning_filter_chain.rs	StandardConnectionWarningFilterChain	RENAMED	crates/druid/tests/task6_sql_warning_semantics_test_parity.rs
