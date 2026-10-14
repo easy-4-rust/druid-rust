@@ -38,6 +38,7 @@ mod druid_execution_filter_policy;
 mod druid_n_clob;
 pub mod druid_pooled_callable_statement;
 pub mod druid_pooled_connection;
+pub mod druid_pooled_connection_owner;
 pub mod druid_pooled_prepared_statement;
 pub mod druid_pooled_result_set;
 pub mod druid_pooled_statement;
@@ -178,6 +179,7 @@ pub use druid_connection_holder::{
 pub use druid_pooled_callable_statement::DruidPooledCallableStatement;
 pub use druid_pooled_connection::DruidPooledConnection;
 pub use druid_pooled_connection::DruidPooledConnection as PooledConnection;
+pub use druid_pooled_connection_owner::DruidPooledConnectionOwner;
 pub use druid_pooled_prepared_statement::DruidPooledPreparedStatement;
 pub use druid_pooled_result_set::DruidPooledResultSet;
 pub use druid_pooled_statement::DruidPooledStatement;

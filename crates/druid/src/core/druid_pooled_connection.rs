@@ -77,6 +77,8 @@ pub struct DruidPooledConnection {
     lease_active: Arc<AtomicBool>,
     execution_running: Arc<AtomicBool>,
     standard_policy: Option<Arc<StandardLogicalPolicy>>,
+    /// 由标准 pooled owner 管理时，逻辑关闭只结束租约并保留 holder。
+    owner_managed: bool,
     borrowed_at: Instant,
     recycled: bool,
     connection_closed_notified: bool,
@@ -228,6 +230,7 @@ impl DruidPooledConnection {
             lease_active,
             execution_running,
             standard_policy,
+            owner_managed: false,
             borrowed_at: Instant::now(),
             recycled: false,
             connection_closed_notified: false,
@@ -480,6 +483,73 @@ impl DruidPooledConnection {
     /// 返回池管理器使用的执行中令牌。
     pub(crate) fn execution_running_token(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.execution_running)
+    }
+
+    /// 将 native pool checkout 转为标准 owner 管理的 holder。
+    pub(crate) fn prepare_for_pooled_owner(&mut self) {
+        self.owner_managed = true;
+        self.lease_active.store(false, Ordering::Release);
+        self.execution_running.store(false, Ordering::Release);
+        self.standard_policy = None;
+    }
+
+    /// 将 owner 保留的已复位 holder 通过一次性 native callback 归还池。
+    pub(crate) fn return_from_pooled_owner(&mut self) {
+        self.owner_managed = false;
+        self.recycle_once(ConnectionRecycleDisposition::Reusable);
+    }
+
+    /// 复位失败时丢弃 owner 持有的 holder，避免污染 native idle pool。
+    pub(crate) fn discard_from_pooled_owner(&mut self) {
+        self.owner_managed = false;
+        if let Some(holder) = self.holder.as_mut() {
+            holder.mark_discarded();
+        }
+        self.recycle_once(ConnectionRecycleDisposition::discard());
+    }
+
+    /// 为标准 owner 开启一个新的逻辑租约；旧租约的 policy generation 保持失效。
+    pub(crate) fn activate_owner_logical_lease(&mut self) -> Result<(), RdbcError> {
+        if !self.owner_managed || self.recycled || self.owner_disposition.is_signaled() {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        let holder = self.holder.as_ref().ok_or(RdbcError::ConnectionDiscarded)?;
+        let resource_generation = holder.begin_standard_lease()?;
+        self.lease_active.store(true, Ordering::Release);
+        self.execution_running.store(false, Ordering::Release);
+        let policy = StandardLogicalPolicy::new(
+            self.id,
+            self.data_source.clone(),
+            Arc::clone(&self.lease_active),
+            Arc::clone(&self.execution_running),
+            self.filter_chain.clone(),
+            holder.defaults().standard_auto_commit(),
+            resource_generation,
+            Arc::clone(&self.owner_disposition),
+        );
+        policy.set_statement_event_listeners(holder.statement_event_listeners_handle());
+        if let Some(stats_collector) = self.stats_collector.as_ref() {
+            policy.set_stats_collector(Arc::clone(stats_collector));
+        }
+        if let Some(exception_sorter) = self.exception_sorter.as_ref() {
+            policy.set_exception_sorter(Arc::clone(exception_sorter));
+        }
+        if let Some(fatal_error_handler) = self.fatal_error_handler.as_ref() {
+            policy.set_fatal_error_handler(Arc::clone(fatal_error_handler));
+        }
+        self.standard_policy = Some(policy);
+        self.connection_closed_notified = false;
+        self.borrowed_at = Instant::now();
+        Ok(())
+    }
+
+    /// 完成 owner 管理的逻辑租约关闭，但保留池 holder 供 owner 再次借出。
+    fn finish_owner_logical_lease(&mut self) {
+        self.lease_active.store(false, Ordering::Release);
+        self.execution_running.store(false, Ordering::Release);
+        self.standard_policy = None;
+        self.connection_closed_notified = false;
+        self.end_transaction_info();
     }
 
     /// 装配数据源的异常分类器。
@@ -861,7 +931,7 @@ impl DruidPooledConnection {
         if let Some(holder) = self.holder.as_ref() {
             for listener in holder.connection_event_listeners() {
                 if catch_unwind(AssertUnwindSafe(|| {
-                    listener.connection_error_occurred(self.id, &product_error)
+                    listener.connection_error_occurred(self.id, &product_error);
                 }))
                 .is_err()
                 {
@@ -1033,6 +1103,12 @@ impl DruidPooledConnection {
             return self.await_return_completion().await;
         }
         let disposition = self.prepare_for_recycle().await;
+        if self.owner_managed && disposition.is_reusable() {
+            // 逻辑句柄的 filter release 已完成；holder 仍由标准 owner 持有，
+            // 不更新 native pool 的 active/idle 记账，也不触发 native return callback。
+            self.finish_owner_logical_lease();
+            return Ok(());
+        }
         if self.native_return_validation.is_some() {
             if let Some(holder) = self.holder.as_mut() {
                 self.pending_return_completion = Some(holder.begin_return_completion());
@@ -1123,7 +1199,9 @@ impl DruidPooledConnection {
             }
             return Err(error);
         }
-        if !self.recycled {
+        if !self.recycled && self.owner_managed {
+            self.finish_owner_logical_lease();
+        } else if !self.recycled {
             self.lease_active.store(false, Ordering::Release);
             self.recycled = true;
             self.return_connection.take();

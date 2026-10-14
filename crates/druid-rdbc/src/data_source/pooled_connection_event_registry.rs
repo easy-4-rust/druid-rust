@@ -103,7 +103,7 @@ impl PooledConnectionEventRegistry {
             .into_iter()
             .filter(|listener| {
                 catch_unwind(AssertUnwindSafe(|| {
-                    listener.connection_error_occurred(&event)
+                    listener.connection_error_occurred(&event);
                 }))
                 .is_err()
             })
@@ -137,7 +137,7 @@ impl PooledConnectionEventRegistry {
             .into_iter()
             .filter(|listener| {
                 catch_unwind(AssertUnwindSafe(|| {
-                    listener.statement_error_occurred(&event)
+                    listener.statement_error_occurred(&event);
                 }))
                 .is_err()
             })

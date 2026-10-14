@@ -277,7 +277,7 @@ where
             .map(|connection| {
                 connection
                     .as_ref()
-                    .map_or(true, AdapterExecutionCore::is_unusable_core)
+                    .is_none_or(AdapterExecutionCore::is_unusable_core)
             })
             .unwrap_or(false)
     }

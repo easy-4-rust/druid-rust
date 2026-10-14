@@ -107,9 +107,10 @@ fn local_to_instant(value: NaiveDateTime) -> Result<jiff::Timestamp, RdbcError> 
     let ambiguous = zone.to_ambiguous_zoned(datetime);
     // Java lenient Calendar moves forward across gaps, while overlaps choose the later instant.
     let disambiguation = match ambiguous.offset() {
-        AmbiguousOffset::Gap { .. } => Disambiguation::Compatible,
         AmbiguousOffset::Fold { .. } => Disambiguation::Later,
-        AmbiguousOffset::Unambiguous { .. } => Disambiguation::Compatible,
+        AmbiguousOffset::Gap { .. } | AmbiguousOffset::Unambiguous { .. } => {
+            Disambiguation::Compatible
+        }
     };
     ambiguous
         .disambiguate(disambiguation)

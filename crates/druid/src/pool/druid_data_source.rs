@@ -4,7 +4,8 @@ use std::time::Duration;
 use parking_lot::RwLock;
 
 use crate::core::{
-    ConnectionFactory, DruidError, DruidPooledConnection, Pool, PoolState, RdbcError,
+    ConnectionFactory, DruidError, DruidPooledConnection, DruidPooledConnectionOwner, Pool,
+    PoolState, RdbcError,
 };
 use crate::stats::{
     DataSourceIdentity, DataSourceMonitorable, DruidDataSourceStatManager,
@@ -54,6 +55,13 @@ impl DruidDataSource {
         let result = self.pool.get_connection().await;
         self.record_connection_failure("get_connection", &result);
         result
+    }
+
+    /// 获取标准 pooled owner；现有 [`get_connection`](Self::get_connection) API 保持不变。
+    pub async fn get_pooled_connection_owner(
+        &self,
+    ) -> Result<DruidPooledConnectionOwner, DruidError> {
+        self.pool.get_pooled_connection_owner().await
     }
 
     /// 使用本次 maxWait 获取池化连接。

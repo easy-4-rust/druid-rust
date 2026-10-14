@@ -517,7 +517,7 @@ impl SqlxConnectionAdapter {
             let mut handle = connection.lock_handle().await.map_err(Self::driver_error)?;
             handle.set_progress_handler(1_000, move || {
                 !interrupted.load(std::sync::atomic::Ordering::Acquire)
-                    && deadline.map_or(true, |deadline| Instant::now() < deadline)
+                    && deadline.is_none_or(|deadline| Instant::now() < deadline)
             });
         }
         Ok(())

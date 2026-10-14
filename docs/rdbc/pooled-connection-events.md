@@ -68,6 +68,29 @@ impl PoolEvents {
 
 `PooledConnection` 的四个 add/remove 方法应委托到同一 owner 的 listener registry。每个 notify 返回发生 panic 的 listener 数，池应将非零数写入受控诊断。不要在持有 owner、statement 或 pool 内部互斥锁时调用用户回调；先完成状态转换并复制通知所需句柄，再在锁外分发。监听器可能同步回调注册/移除方法。
 
+## Druid 原生池 owner
+
+现有 `DruidDataSource::get_connection()` 与 `DruidPool::get_connection()` 仍返回原有 `DruidPooledConnection`。需要 JDBC `PooledConnection` 生命周期的调用方使用新增的 `get_pooled_connection_owner()`，取得 `DruidPooledConnectionOwner`：owner 拥有池中的一个 holder，每次只发放一个逻辑 `Connection`；关闭逻辑连接通知 owner 并完成异步复位，holder 留在 owner 内供下一次借用；关闭 owner 时才通过原生池 callback 归还 holder，复位失败则丢弃。owner 关闭会让尚存的逻辑句柄立即报告 closed，且不会等待调用方先 drop 句柄。owner 的事件 source 在所有通知间保持同一 `Arc` 身份。
+
+```mermaid
+sequenceDiagram
+    participant App as 应用
+    participant Owner as DruidPooledConnectionOwner
+    participant Logical as 逻辑 Connection
+    participant Holder as DruidConnectionHolder
+    participant Pool as DruidPool
+    App->>Pool: get_pooled_connection_owner()
+    Pool-->>Owner: 持有一个 active holder
+    App->>Owner: connection()
+    Owner-->>App: 标准逻辑 Connection
+    App->>Logical: close()
+    Logical->>Owner: connection_closed（稳定 owner source）
+    Logical->>Holder: 复位当前租约，保留 holder
+    App->>Owner: connection()（可重复借用）
+    App->>Owner: close()
+    Owner->>Pool: holder 恰好归还一次或 discard
+```
+
 ## 通知顺序和资源所有权
 
 ```mermaid

@@ -86,7 +86,7 @@ impl CancellationDomain {
         let cancelled = state.pending_generation == Some(generation);
         if state
             .pending_generation
-            .map_or(false, |pending| pending <= generation)
+            .is_some_and(|pending| pending <= generation)
         {
             state.pending_generation = None;
         }

@@ -179,12 +179,19 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    P["DruidPooledConnection<br/>标准Connection的池化代理"] --> H["DruidConnectionHolder<br/>生命周期、缓存与资源登记"]
+    A["应用 / ORM"] -->|既有 API| P["DruidPooledConnection<br/>兼容的直接租约"]
+    A -->|标准 pooled owner API| O["DruidPooledConnectionOwner<br/>稳定事件源与 owner 生命周期"]
+    O -->|发放 / 关闭逻辑租约| L["标准逻辑 Connection<br/>逐操作代理"]
+    L --> P
+    P --> H["DruidConnectionHolder<br/>生命周期、缓存与资源登记"]
     H --> C["Box&lt;dyn Connection&gt;<br/>druid-rdbc统一标准"]
     T["ToastyConnectionAdapter"] -.实现.-> C
     S["SqlxConnectionAdapter"] -.实现.-> C
     R["RbdcConnectionAdapter / 其他adapter"] -.实现.-> C
+    O -->|owner.close 后归还一次| N["DruidPool native idle / close"]
 ```
+
+标准 `PooledConnection` 路径将 pooled owner 与逻辑 `Connection` 分开：owner 持有唯一 holder，并允许同一时刻一个逻辑租约；逻辑连接关闭后 holder 留在 owner，可再次借出；owner 关闭时才把复位后的 holder 归还原生池，复位失败则丢弃。现有 `DruidDataSource::get_connection` 和 `DruidPooledConnection` API 保持原有语义，新增 `get_pooled_connection_owner` 作为标准入口。标准关闭事件引用稳定 owner source，监听器快照在无注册表锁的情况下调用。
 
 ### 5.1 `DruidPooledConnection`
 

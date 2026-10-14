@@ -10,12 +10,12 @@ use super::pool_inner::PoolInner;
 use crate::core::fatal_error_handler::FatalErrorHandler;
 use crate::core::{
     ConnectionFactory, DataSourceConnectionProvider, Db2ExceptionSorter, DruidConnectionHolder,
-    DruidError, DruidPooledConnection, ExceptionSorter, FilterChain, InformixExceptionSorter,
-    MockExceptionSorter, MsSqlValidConnectionChecker, MySqlExceptionSorter,
-    MySqlValidConnectionChecker, OceanBaseOracleExceptionSorter, OceanBaseValidConnectionChecker,
-    OracleExceptionSorter, OracleValidConnectionChecker, PgExceptionSorter,
-    PgValidConnectionChecker, PhoenixExceptionSorter, PoolState, RdbcError, SybaseExceptionSorter,
-    ValidConnectionChecker,
+    DruidError, DruidPooledConnection, DruidPooledConnectionOwner, ExceptionSorter, FilterChain,
+    InformixExceptionSorter, MockExceptionSorter, MsSqlValidConnectionChecker,
+    MySqlExceptionSorter, MySqlValidConnectionChecker, OceanBaseOracleExceptionSorter,
+    OceanBaseValidConnectionChecker, OracleExceptionSorter, OracleValidConnectionChecker,
+    PgExceptionSorter, PgValidConnectionChecker, PhoenixExceptionSorter, PoolState, RdbcError,
+    SybaseExceptionSorter, ValidConnectionChecker,
 };
 use crate::sql::RdbcUrl;
 use crate::sql::WallProvider;
@@ -375,6 +375,15 @@ impl DruidPool {
     pub async fn get_connection(&self) -> Result<DruidPooledConnection, DruidError> {
         self.get_connection_with_max_wait(self.inner.config.acquire_timeout)
             .await
+    }
+
+    /// 获取标准 pooled owner；owner 关闭时才将其 holder 归还 native pool。
+    pub async fn get_pooled_connection_owner(
+        &self,
+    ) -> Result<DruidPooledConnectionOwner, DruidError> {
+        self.get_connection()
+            .await
+            .map(DruidPooledConnectionOwner::new)
     }
 
     /// 使用本次 maxWait 获取池化连接。

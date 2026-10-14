@@ -14,6 +14,7 @@ pub mod pool_inner;
 pub mod tracing_data_source_stat_sink;
 
 pub use crate::core::DruidPooledConnection;
+pub use crate::core::DruidPooledConnectionOwner;
 pub use config::{DruidPoolBuilder, PoolInnerConfig};
 pub use data_source_proxy::DataSourceProxy;
 pub use data_source_stat_sink::DataSourceStatSink;

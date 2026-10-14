@@ -16,6 +16,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+type StatementListenerHandle = Arc<RwLock<Vec<Arc<dyn StatementEventListener>>>>;
+
 /// 同一 logical lease 的 canonical execution policy actor。
 pub(crate) struct StandardLogicalPolicy {
     connection_id: u64,
@@ -31,7 +33,7 @@ pub(crate) struct StandardLogicalPolicy {
     resource_generation: u64,
     discarded: AtomicBool,
     owner_disposition: Arc<OwnerDispositionControl>,
-    statement_event_listeners: RwLock<Option<Arc<RwLock<Vec<Arc<dyn StatementEventListener>>>>>>,
+    statement_event_listeners: RwLock<Option<StatementListenerHandle>>,
 }
 
 impl StandardLogicalPolicy {
@@ -63,10 +65,7 @@ impl StandardLogicalPolicy {
         })
     }
 
-    pub(crate) fn set_statement_event_listeners(
-        &self,
-        listeners: Arc<RwLock<Vec<Arc<dyn StatementEventListener>>>>,
-    ) {
+    pub(crate) fn set_statement_event_listeners(&self, listeners: StatementListenerHandle) {
         *self.statement_event_listeners.write() = Some(listeners);
     }
 
@@ -78,7 +77,7 @@ impl StandardLogicalPolicy {
         let listeners = registry.read().clone();
         for listener in listeners {
             if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                listener.statement_closed(self.connection_id, statement_id)
+                listener.statement_closed(self.connection_id, statement_id);
             }))
             .is_err()
             {
@@ -110,7 +109,7 @@ impl StandardLogicalPolicy {
                     self.connection_id,
                     statement_id as usize,
                     &product_error,
-                )
+                );
             }))
             .is_err()
             {
