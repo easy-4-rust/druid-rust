@@ -81,8 +81,16 @@ pub use druid::core::StatementOptions
 pub use druid::core::Value
 pub use druid::core::Wrapper
 pub use druid::core::WrapperExt
+pub use druid::core::XaError
+pub use druid::core::XaErrorCode
+pub use druid::core::XaFlags
+pub use druid::core::XaPrepareResult
+pub use druid::core::XaResource
+pub use druid::core::XaResourceManagerIdentity
+pub use druid::core::Xid
 pub use druid::core::XmlResult
 pub use druid::core::XmlSource
+pub use druid::core::xa_flags
 pub mod druid::core::abstract_oracle_exception_sorter
 pub struct druid::core::abstract_oracle_exception_sorter::AbstractOracleExceptionSorter
 impl druid::core::abstract_oracle_exception_sorter::AbstractOracleExceptionSorter
@@ -428,6 +436,7 @@ pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatemen
 impl druid_rdbc::statement::statement::Statement for druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::cancel(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::cancellation_control(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::statement::statement_cancellation::StatementCancellation>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -563,6 +572,16 @@ impl druid_rdbc::wrapper::wrapper::Wrapper for druid::core::druid_pooled_connect
 pub type druid::core::druid_pooled_connection::DruidConnectionDispositionObserver = alloc::boxed::Box<(dyn core::ops::function::FnOnce(druid::core::connection_recycle_disposition::ConnectionRecycleDisposition) + core::marker::Send + 'static)>
 pub type druid::core::druid_pooled_connection::DruidConnectionReturnCallback = alloc::boxed::Box<(dyn core::ops::function::FnOnce(druid::core::druid_connection_holder::DruidConnectionHolder, druid::core::connection_recycle_disposition::ConnectionRecycleDisposition) -> bool + core::marker::Send)>
 pub type druid::core::druid_pooled_connection::StandardConnectionReturnCallback = alloc::boxed::Box<(dyn core::ops::function::FnOnce(alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid::core::connection_recycle_disposition::ConnectionRecycleDisposition) + core::marker::Send)>
+pub mod druid::core::druid_pooled_connection_owner
+pub struct druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner
+impl druid_rdbc::data_source::pooled_connection::PooledConnection for druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::add_connection_event_listener(&mut self, alloc::sync::Arc<dyn druid_rdbc::data_source::connection_event_listener::ConnectionEventListener>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::add_statement_event_listener(&mut self, alloc::sync::Arc<dyn druid_rdbc::data_source::statement_event_listener::StatementEventListener>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::connection<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::remove_connection_event_listener(&mut self, &alloc::sync::Arc<dyn druid_rdbc::data_source::connection_event_listener::ConnectionEventListener>) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::remove_statement_event_listener(&mut self, &alloc::sync::Arc<dyn druid_rdbc::data_source::statement_event_listener::StatementEventListener>) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner
 pub mod druid::core::druid_pooled_prepared_statement
 pub struct druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement
 impl druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement
@@ -589,6 +608,7 @@ pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatemen
 impl druid_rdbc::statement::statement::Statement for druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::cancel(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::cancellation_control(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::statement::statement_cancellation::StatementCancellation>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -727,6 +747,7 @@ impl druid_rdbc::statement::statement::Statement for druid::core::druid_pooled_s
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::batch(&self) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::cancel(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::cancellation_control(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::statement::statement_cancellation::StatementCancellation>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -3792,28 +3813,28 @@ pub use druid::core::wrapper::StandardUnwrapped
 pub use druid::core::wrapper::Wrapper
 pub use druid::core::wrapper::WrapperExt
 pub mod druid::core::xa
-pub mod druid::core::xa::flags
-pub const druid::core::xa::flags::TMASYNC: i32
-pub const druid::core::xa::flags::TMFAIL: i32
-pub const druid::core::xa::flags::TMJOIN: i32
-pub const druid::core::xa::flags::TMNOFLAGS: i32
-pub const druid::core::xa::flags::TMONEPHASE: i32
-pub const druid::core::xa::flags::TMRESUME: i32
-pub const druid::core::xa::flags::TMSUCCESS: i32
-pub const druid::core::xa::flags::TMSUSPEND: i32
-pub const druid::core::xa::flags::XA_RDONLY: i32
+pub use druid::core::xa::XID_MAX_BQUAL_LENGTH
+pub use druid::core::xa::XID_MAX_GTRID_LENGTH
+pub use druid::core::xa::XaError
+pub use druid::core::xa::XaErrorCode
+pub use druid::core::xa::XaFlags
+pub use druid::core::xa::XaPrepareResult
+pub use druid::core::xa::XaResource
+pub use druid::core::xa::XaResourceManagerIdentity
+pub use druid::core::xa::Xid
+pub use druid::core::xa::flags
 #[non_exhaustive] pub enum druid::core::xa::XaOperation
 pub druid::core::xa::XaOperation::Commit
 pub druid::core::xa::XaOperation::End
 pub druid::core::xa::XaOperation::Forget
+pub druid::core::xa::XaOperation::Join
 pub druid::core::xa::XaOperation::Prepare
+pub druid::core::xa::XaOperation::Resume
 pub druid::core::xa::XaOperation::Rollback
 pub druid::core::xa::XaOperation::Start
+pub druid::core::xa::XaOperation::Suspend
 impl core::fmt::Display for druid::core::xa::XaOperation
 pub fn druid::core::xa::XaOperation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum druid::core::xa::XaPrepareResult
-pub druid::core::xa::XaPrepareResult::Ok
-pub druid::core::xa::XaPrepareResult::ReadOnly
 #[non_exhaustive] pub enum druid::core::xa::XaState
 pub druid::core::xa::XaState::Active
 pub druid::core::xa::XaState::Committed
@@ -3824,6 +3845,7 @@ pub druid::core::xa::XaState::Prepared
 pub druid::core::xa::XaState::Preparing
 pub druid::core::xa::XaState::RolledBack
 pub druid::core::xa::XaState::RollingBack
+pub druid::core::xa::XaState::Suspended
 impl core::fmt::Display for druid::core::xa::XaState
 pub fn druid::core::xa::XaState::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct druid::core::xa::XaStateTransitionError
@@ -3848,46 +3870,18 @@ pub fn druid::core::xa::XaTransactionState::forget(&mut self) -> core::result::R
 pub fn druid::core::xa::XaTransactionState::history(&self) -> &[druid::core::xa::XaStateTransitionRecord]
 pub fn druid::core::xa::XaTransactionState::is_terminal(&self) -> bool
 pub fn druid::core::xa::XaTransactionState::is_timed_out(&self) -> bool
+pub fn druid::core::xa::XaTransactionState::join(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
 pub fn druid::core::xa::XaTransactionState::mark_failed(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
-pub fn druid::core::xa::XaTransactionState::new(druid::core::xa::Xid) -> Self
+pub fn druid::core::xa::XaTransactionState::new(druid_rdbc::data_source::xid::Xid) -> Self
 pub fn druid::core::xa::XaTransactionState::prepare(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
+pub fn druid::core::xa::XaTransactionState::resume(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
 pub fn druid::core::xa::XaTransactionState::rollback(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
 pub fn druid::core::xa::XaTransactionState::start(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
 pub fn druid::core::xa::XaTransactionState::state(&self) -> druid::core::xa::XaState
+pub fn druid::core::xa::XaTransactionState::suspend(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
 pub fn druid::core::xa::XaTransactionState::timeout(&self) -> core::option::Option<core::time::Duration>
-pub fn druid::core::xa::XaTransactionState::with_timeout(druid::core::xa::Xid, core::time::Duration) -> Self
-pub fn druid::core::xa::XaTransactionState::xid(&self) -> &druid::core::xa::Xid
-pub struct druid::core::xa::Xid
-impl druid::core::xa::Xid
-pub fn druid::core::xa::Xid::branch_qualifier(&self) -> &[u8]
-pub fn druid::core::xa::Xid::format_id(&self) -> i32
-pub fn druid::core::xa::Xid::global_transaction_id(&self) -> &[u8]
-pub fn druid::core::xa::Xid::new(i32, alloc::vec::Vec<u8>, alloc::vec::Vec<u8>) -> core::result::Result<Self, druid::core::error::DruidError>
-impl core::fmt::Display for druid::core::xa::Xid
-pub fn druid::core::xa::Xid::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub const druid::core::xa::XID_MAX_BQUAL_LENGTH: usize
-pub const druid::core::xa::XID_MAX_GTRID_LENGTH: usize
-pub trait druid::core::xa::XaResource: core::marker::Send + core::marker::Sync
-pub fn druid::core::xa::XaResource::commit<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::xa::XaResource::end<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::xa::XaResource::forget<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::xa::XaResource::get_transaction_timeout<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<u64, druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
-pub fn druid::core::xa::XaResource::is_same_rm<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 dyn druid::core::xa::XaResource) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::xa::XaResource::prepare<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::xa::XaPrepareResult, druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::xa::XaResource::recover<'life0, 'async_trait>(&'life0 self, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid::core::xa::Xid>, druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
-pub fn druid::core::xa::XaResource::rollback<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::xa::XaResource::set_transaction_timeout<'life0, 'async_trait>(&'life0 mut self, u64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
-pub fn druid::core::xa::XaResource::start<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub mod druid::core::xa_flags
-pub const druid::core::xa_flags::TMASYNC: i32
-pub const druid::core::xa_flags::TMFAIL: i32
-pub const druid::core::xa_flags::TMJOIN: i32
-pub const druid::core::xa_flags::TMNOFLAGS: i32
-pub const druid::core::xa_flags::TMONEPHASE: i32
-pub const druid::core::xa_flags::TMRESUME: i32
-pub const druid::core::xa_flags::TMSUCCESS: i32
-pub const druid::core::xa_flags::TMSUSPEND: i32
-pub const druid::core::xa_flags::XA_RDONLY: i32
+pub fn druid::core::xa::XaTransactionState::with_timeout(druid_rdbc::data_source::xid::Xid, core::time::Duration) -> Self
+pub fn druid::core::xa::XaTransactionState::xid(&self) -> &druid_rdbc::data_source::xid::Xid
 pub enum druid::core::BatchExecKind
 pub druid::core::BatchExecKind::PreparedStatement
 pub druid::core::BatchExecKind::Statement
@@ -4117,14 +4111,14 @@ pub druid::core::StatementType::Statement
 pub druid::core::XaOperation::Commit
 pub druid::core::XaOperation::End
 pub druid::core::XaOperation::Forget
+pub druid::core::XaOperation::Join
 pub druid::core::XaOperation::Prepare
+pub druid::core::XaOperation::Resume
 pub druid::core::XaOperation::Rollback
 pub druid::core::XaOperation::Start
+pub druid::core::XaOperation::Suspend
 impl core::fmt::Display for druid::core::xa::XaOperation
 pub fn druid::core::xa::XaOperation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum druid::core::XaPrepareResult
-pub druid::core::XaPrepareResult::Ok
-pub druid::core::XaPrepareResult::ReadOnly
 #[non_exhaustive] pub enum druid::core::XaState
 pub druid::core::XaState::Active
 pub druid::core::XaState::Committed
@@ -4135,6 +4129,7 @@ pub druid::core::XaState::Prepared
 pub druid::core::XaState::Preparing
 pub druid::core::XaState::RolledBack
 pub druid::core::XaState::RollingBack
+pub druid::core::XaState::Suspended
 impl core::fmt::Display for druid::core::xa::XaState
 pub fn druid::core::xa::XaState::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct druid::core::AbstractOracleExceptionSorter
@@ -4565,6 +4560,7 @@ pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatemen
 impl druid_rdbc::statement::statement::Statement for druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::cancel(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::cancellation_control(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::statement::statement_cancellation::StatementCancellation>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -4696,6 +4692,15 @@ pub fn druid::core::druid_pooled_connection::DruidPooledConnection::transaction_
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::type_map(&self) -> core::result::Result<core::option::Option<druid_rdbc::types::rdbc_type_map::RdbcTypeMap>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 impl druid_rdbc::wrapper::wrapper::Wrapper for druid::core::druid_pooled_connection::DruidPooledConnection
+pub struct druid::core::DruidPooledConnectionOwner
+impl druid_rdbc::data_source::pooled_connection::PooledConnection for druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::add_connection_event_listener(&mut self, alloc::sync::Arc<dyn druid_rdbc::data_source::connection_event_listener::ConnectionEventListener>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::add_statement_event_listener(&mut self, alloc::sync::Arc<dyn druid_rdbc::data_source::statement_event_listener::StatementEventListener>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::connection<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::remove_connection_event_listener(&mut self, &alloc::sync::Arc<dyn druid_rdbc::data_source::connection_event_listener::ConnectionEventListener>) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::remove_statement_event_listener(&mut self, &alloc::sync::Arc<dyn druid_rdbc::data_source::statement_event_listener::StatementEventListener>) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner
 pub struct druid::core::DruidPooledPreparedStatement
 impl druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::id(&self) -> u64
@@ -4721,6 +4726,7 @@ pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatemen
 impl druid_rdbc::statement::statement::Statement for druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::cancel(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::cancellation_control(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::statement::statement_cancellation::StatementCancellation>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -4857,6 +4863,7 @@ impl druid_rdbc::statement::statement::Statement for druid::core::druid_pooled_s
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::batch(&self) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::cancel(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::cancellation_control(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::statement::statement_cancellation::StatementCancellation>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -6037,23 +6044,18 @@ pub fn druid::core::xa::XaTransactionState::forget(&mut self) -> core::result::R
 pub fn druid::core::xa::XaTransactionState::history(&self) -> &[druid::core::xa::XaStateTransitionRecord]
 pub fn druid::core::xa::XaTransactionState::is_terminal(&self) -> bool
 pub fn druid::core::xa::XaTransactionState::is_timed_out(&self) -> bool
+pub fn druid::core::xa::XaTransactionState::join(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
 pub fn druid::core::xa::XaTransactionState::mark_failed(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
-pub fn druid::core::xa::XaTransactionState::new(druid::core::xa::Xid) -> Self
+pub fn druid::core::xa::XaTransactionState::new(druid_rdbc::data_source::xid::Xid) -> Self
 pub fn druid::core::xa::XaTransactionState::prepare(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
+pub fn druid::core::xa::XaTransactionState::resume(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
 pub fn druid::core::xa::XaTransactionState::rollback(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
 pub fn druid::core::xa::XaTransactionState::start(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
 pub fn druid::core::xa::XaTransactionState::state(&self) -> druid::core::xa::XaState
+pub fn druid::core::xa::XaTransactionState::suspend(&mut self) -> core::result::Result<(), druid::core::xa::XaStateTransitionError>
 pub fn druid::core::xa::XaTransactionState::timeout(&self) -> core::option::Option<core::time::Duration>
-pub fn druid::core::xa::XaTransactionState::with_timeout(druid::core::xa::Xid, core::time::Duration) -> Self
-pub fn druid::core::xa::XaTransactionState::xid(&self) -> &druid::core::xa::Xid
-pub struct druid::core::Xid
-impl druid::core::xa::Xid
-pub fn druid::core::xa::Xid::branch_qualifier(&self) -> &[u8]
-pub fn druid::core::xa::Xid::format_id(&self) -> i32
-pub fn druid::core::xa::Xid::global_transaction_id(&self) -> &[u8]
-pub fn druid::core::xa::Xid::new(i32, alloc::vec::Vec<u8>, alloc::vec::Vec<u8>) -> core::result::Result<Self, druid::core::error::DruidError>
-impl core::fmt::Display for druid::core::xa::Xid
-pub fn druid::core::xa::Xid::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn druid::core::xa::XaTransactionState::with_timeout(druid_rdbc::data_source::xid::Xid, core::time::Duration) -> Self
+pub fn druid::core::xa::XaTransactionState::xid(&self) -> &druid_rdbc::data_source::xid::Xid
 pub const druid::core::ORACLE_FATAL_ERROR_CODES_PROPERTY: &str
 pub trait druid::core::AfterFilter: core::marker::Send + core::marker::Sync
 pub fn druid::core::AfterFilter::after<'life0, 'life1, 'life2, 'life3, 'async_trait>(&'life0 self, &'life1 druid::core::filter::ExecContext<'life2>, &'life3 core::result::Result<druid_rdbc::statement::statement::ExecResult, druid::core::error::DruidError>, core::time::Duration) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait, 'life2: 'async_trait, 'life3: 'async_trait
@@ -7161,17 +7163,6 @@ pub fn druid::core::valid_connection_checker_adapter::ValidConnectionCheckerAdap
 pub fn druid::core::valid_connection_checker_adapter::ValidConnectionCheckerAdapter::config_from_properties(&mut self, &std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>)
 pub fn druid::core::valid_connection_checker_adapter::ValidConnectionCheckerAdapter::is_valid<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 mut alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = bool> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
 pub fn druid::core::valid_connection_checker_adapter::ValidConnectionCheckerAdapter::is_valid_connection<'life0, 'life1, 'life2, 'async_trait>(&'life0 self, &'life1 mut alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, core::option::Option<&'life2 str>, core::time::Duration) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait, 'life2: 'async_trait
-pub trait druid::core::XaResource: core::marker::Send + core::marker::Sync
-pub fn druid::core::XaResource::commit<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::XaResource::end<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::XaResource::forget<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::XaResource::get_transaction_timeout<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<u64, druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
-pub fn druid::core::XaResource::is_same_rm<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 dyn druid::core::xa::XaResource) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::XaResource::prepare<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::xa::XaPrepareResult, druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::XaResource::recover<'life0, 'async_trait>(&'life0 self, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid::core::xa::Xid>, druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
-pub fn druid::core::XaResource::rollback<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
-pub fn druid::core::XaResource::set_transaction_timeout<'life0, 'async_trait>(&'life0 mut self, u64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
-pub fn druid::core::XaResource::start<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid::core::xa::Xid, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid::core::error::DruidError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
 pub type druid::core::ExceptionSorterProperties = alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
 pub type druid::core::FilterChain = druid::core::filter_chain_impl::FilterChainImpl
 pub mod druid::dynamic
@@ -7199,12 +7190,12 @@ pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::new(druid::dynamic
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::route(&self, druid::dynamic::sql_hint::SqlHint) -> alloc::sync::Arc<dyn druid::core::pool::Pool>
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::switch(&self, druid::dynamic::datasource_group::DataSourceGroup)
 impl druid::sql::common_data_source::CommonDataSource for druid::dynamic::dynamic_datasource::DynamicDataSource
-pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_log_writer(&self) -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_log_writer(&self) -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_login_timeout(&self) -> u64
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_parent_logger(&self) -> &'static str
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::login_timeout(&self) -> u64
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::parent_logger(&self) -> &'static str
-pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::set_log_writer(&self, core::option::Option<druid::sql::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::set_login_timeout(&self, u64) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 impl druid::sql::data_source::DataSource for druid::dynamic::dynamic_datasource::DynamicDataSource
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -7968,12 +7959,12 @@ pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::new(druid::dynamic
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::route(&self, druid::dynamic::sql_hint::SqlHint) -> alloc::sync::Arc<dyn druid::core::pool::Pool>
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::switch(&self, druid::dynamic::datasource_group::DataSourceGroup)
 impl druid::sql::common_data_source::CommonDataSource for druid::dynamic::dynamic_datasource::DynamicDataSource
-pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_log_writer(&self) -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_log_writer(&self) -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_login_timeout(&self) -> u64
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_parent_logger(&self) -> &'static str
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::login_timeout(&self) -> u64
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::parent_logger(&self) -> &'static str
-pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::set_log_writer(&self, core::option::Option<druid::sql::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::set_login_timeout(&self, u64) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 impl druid::sql::data_source::DataSource for druid::dynamic::dynamic_datasource::DynamicDataSource
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -8543,6 +8534,7 @@ pub async fn druid::pool::druid_data_source::DruidDataSource::get(&self) -> core
 pub async fn druid::pool::druid_data_source::DruidDataSource::get_connection(&self) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
 pub async fn druid::pool::druid_data_source::DruidDataSource::get_connection_direct(&self, core::time::Duration) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
 pub async fn druid::pool::druid_data_source::DruidDataSource::get_connection_with_max_wait(&self, core::time::Duration) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
+pub async fn druid::pool::druid_data_source::DruidDataSource::get_pooled_connection_owner(&self) -> core::result::Result<druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner, druid::core::error::DruidError>
 pub async fn druid::pool::druid_data_source::DruidDataSource::get_timeout(&self, core::time::Duration) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
 pub async fn druid::pool::druid_data_source::DruidDataSource::init(&self) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::pool::druid_data_source::DruidDataSource::is_async_init(&self) -> bool
@@ -8604,12 +8596,12 @@ pub fn druid::pool::druid_data_source::DruidDataSource::object_name(&self) -> co
 pub fn druid::pool::druid_data_source::DruidDataSource::set_enable(&self, bool)
 pub fn druid::pool::druid_data_source::DruidDataSource::set_object_name(&self, core::option::Option<alloc::string::String>)
 impl druid::sql::common_data_source::CommonDataSource for druid::pool::druid_data_source::DruidDataSource
-pub fn druid::pool::druid_data_source::DruidDataSource::get_log_writer(&self) -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::pool::druid_data_source::DruidDataSource::get_log_writer(&self) -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::pool::druid_data_source::DruidDataSource::get_login_timeout(&self) -> u64
 pub fn druid::pool::druid_data_source::DruidDataSource::get_parent_logger(&self) -> &'static str
 pub fn druid::pool::druid_data_source::DruidDataSource::login_timeout(&self) -> u64
 pub fn druid::pool::druid_data_source::DruidDataSource::parent_logger(&self) -> &'static str
-pub fn druid::pool::druid_data_source::DruidDataSource::set_log_writer(&self, core::option::Option<druid::sql::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::pool::druid_data_source::DruidDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::pool::druid_data_source::DruidDataSource::set_login_timeout(&self, u64) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 impl druid::sql::data_source::DataSource for druid::pool::druid_data_source::DruidDataSource
 pub fn druid::pool::druid_data_source::DruidDataSource::get_connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -8628,6 +8620,12 @@ pub fn druid::pool::druid_data_source::DruidDataSource::reset_stat(&self)
 pub fn druid::pool::druid_data_source::DruidDataSource::sql_stat_data(&self) -> alloc::vec::Vec<serde_json::value::Value>
 pub fn druid::pool::druid_data_source::DruidDataSource::try_snapshot(&self) -> core::result::Result<druid::stats::druid_telemetry_snapshot::DruidTelemetrySnapshot, druid::stats::snapshot_unavailable::SnapshotUnavailable>
 pub fn druid::pool::druid_data_source::DruidDataSource::wall_stat_data(&self) -> serde_json::value::Value
+impl druid_rdbc::data_source::common_data_source::CommonDataSource for druid::pool::druid_data_source::DruidDataSource
+pub fn druid::pool::druid_data_source::DruidDataSource::get_log_writer(&self) -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
+pub fn druid::pool::druid_data_source::DruidDataSource::get_parent_logger(&self) -> core::result::Result<&'static str, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::pool::druid_data_source::DruidDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::pool::druid_data_source::DruidDataSource::set_login_timeout(&mut self, core::time::Duration) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::pool::druid_data_source::DruidDataSource::try_login_timeout(&self) -> core::result::Result<core::option::Option<core::time::Duration>, druid_rdbc::error::rdbc_error::RdbcError>
 pub mod druid::pool::druid_data_source_factory
 pub struct druid::pool::druid_data_source_factory::DruidDataSourceFactory
 impl druid::pool::druid_data_source_factory::DruidDataSourceFactory
@@ -8709,6 +8707,7 @@ pub async fn druid::pool::druid_pool::DruidPool::get(&self) -> core::result::Res
 pub async fn druid::pool::druid_pool::DruidPool::get_connection(&self) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
 pub async fn druid::pool::druid_pool::DruidPool::get_connection_direct(&self, core::time::Duration) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
 pub async fn druid::pool::druid_pool::DruidPool::get_connection_with_max_wait(&self, core::time::Duration) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
+pub async fn druid::pool::druid_pool::DruidPool::get_pooled_connection_owner(&self) -> core::result::Result<druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner, druid::core::error::DruidError>
 pub async fn druid::pool::druid_pool::DruidPool::get_timeout(&self, core::time::Duration) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
 pub async fn druid::pool::druid_pool::DruidPool::init(&self) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::pool::druid_pool::DruidPool::is_async_init(&self) -> bool
@@ -8804,6 +8803,7 @@ pub async fn druid::pool::druid_data_source::DruidDataSource::get(&self) -> core
 pub async fn druid::pool::druid_data_source::DruidDataSource::get_connection(&self) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
 pub async fn druid::pool::druid_data_source::DruidDataSource::get_connection_direct(&self, core::time::Duration) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
 pub async fn druid::pool::druid_data_source::DruidDataSource::get_connection_with_max_wait(&self, core::time::Duration) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
+pub async fn druid::pool::druid_data_source::DruidDataSource::get_pooled_connection_owner(&self) -> core::result::Result<druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner, druid::core::error::DruidError>
 pub async fn druid::pool::druid_data_source::DruidDataSource::get_timeout(&self, core::time::Duration) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
 pub async fn druid::pool::druid_data_source::DruidDataSource::init(&self) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::pool::druid_data_source::DruidDataSource::is_async_init(&self) -> bool
@@ -8865,12 +8865,12 @@ pub fn druid::pool::druid_data_source::DruidDataSource::object_name(&self) -> co
 pub fn druid::pool::druid_data_source::DruidDataSource::set_enable(&self, bool)
 pub fn druid::pool::druid_data_source::DruidDataSource::set_object_name(&self, core::option::Option<alloc::string::String>)
 impl druid::sql::common_data_source::CommonDataSource for druid::pool::druid_data_source::DruidDataSource
-pub fn druid::pool::druid_data_source::DruidDataSource::get_log_writer(&self) -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::pool::druid_data_source::DruidDataSource::get_log_writer(&self) -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::pool::druid_data_source::DruidDataSource::get_login_timeout(&self) -> u64
 pub fn druid::pool::druid_data_source::DruidDataSource::get_parent_logger(&self) -> &'static str
 pub fn druid::pool::druid_data_source::DruidDataSource::login_timeout(&self) -> u64
 pub fn druid::pool::druid_data_source::DruidDataSource::parent_logger(&self) -> &'static str
-pub fn druid::pool::druid_data_source::DruidDataSource::set_log_writer(&self, core::option::Option<druid::sql::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::pool::druid_data_source::DruidDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::pool::druid_data_source::DruidDataSource::set_login_timeout(&self, u64) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 impl druid::sql::data_source::DataSource for druid::pool::druid_data_source::DruidDataSource
 pub fn druid::pool::druid_data_source::DruidDataSource::get_connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -8889,6 +8889,12 @@ pub fn druid::pool::druid_data_source::DruidDataSource::reset_stat(&self)
 pub fn druid::pool::druid_data_source::DruidDataSource::sql_stat_data(&self) -> alloc::vec::Vec<serde_json::value::Value>
 pub fn druid::pool::druid_data_source::DruidDataSource::try_snapshot(&self) -> core::result::Result<druid::stats::druid_telemetry_snapshot::DruidTelemetrySnapshot, druid::stats::snapshot_unavailable::SnapshotUnavailable>
 pub fn druid::pool::druid_data_source::DruidDataSource::wall_stat_data(&self) -> serde_json::value::Value
+impl druid_rdbc::data_source::common_data_source::CommonDataSource for druid::pool::druid_data_source::DruidDataSource
+pub fn druid::pool::druid_data_source::DruidDataSource::get_log_writer(&self) -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
+pub fn druid::pool::druid_data_source::DruidDataSource::get_parent_logger(&self) -> core::result::Result<&'static str, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::pool::druid_data_source::DruidDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::pool::druid_data_source::DruidDataSource::set_login_timeout(&mut self, core::time::Duration) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::pool::druid_data_source::DruidDataSource::try_login_timeout(&self) -> core::result::Result<core::option::Option<core::time::Duration>, druid_rdbc::error::rdbc_error::RdbcError>
 pub struct druid::pool::DruidDataSourceFactory
 impl druid::pool::druid_data_source_factory::DruidDataSourceFactory
 pub const druid::pool::druid_data_source_factory::DruidDataSourceFactory::PROP_ASYNC_INIT: &'static str
@@ -8968,6 +8974,7 @@ pub async fn druid::pool::druid_pool::DruidPool::get(&self) -> core::result::Res
 pub async fn druid::pool::druid_pool::DruidPool::get_connection(&self) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
 pub async fn druid::pool::druid_pool::DruidPool::get_connection_direct(&self, core::time::Duration) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
 pub async fn druid::pool::druid_pool::DruidPool::get_connection_with_max_wait(&self, core::time::Duration) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
+pub async fn druid::pool::druid_pool::DruidPool::get_pooled_connection_owner(&self) -> core::result::Result<druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner, druid::core::error::DruidError>
 pub async fn druid::pool::druid_pool::DruidPool::get_timeout(&self, core::time::Duration) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid::core::error::DruidError>
 pub async fn druid::pool::druid_pool::DruidPool::init(&self) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::pool::druid_pool::DruidPool::is_async_init(&self) -> bool
@@ -9199,6 +9206,15 @@ pub fn druid::core::druid_pooled_connection::DruidPooledConnection::transaction_
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::type_map(&self) -> core::result::Result<core::option::Option<druid_rdbc::types::rdbc_type_map::RdbcTypeMap>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_connection::DruidPooledConnection::warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 impl druid_rdbc::wrapper::wrapper::Wrapper for druid::core::druid_pooled_connection::DruidPooledConnection
+pub struct druid::pool::DruidPooledConnectionOwner
+impl druid_rdbc::data_source::pooled_connection::PooledConnection for druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::add_connection_event_listener(&mut self, alloc::sync::Arc<dyn druid_rdbc::data_source::connection_event_listener::ConnectionEventListener>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::add_statement_event_listener(&mut self, alloc::sync::Arc<dyn druid_rdbc::data_source::statement_event_listener::StatementEventListener>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::connection<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::remove_connection_event_listener(&mut self, &alloc::sync::Arc<dyn druid_rdbc::data_source::connection_event_listener::ConnectionEventListener>) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner::remove_statement_event_listener(&mut self, &alloc::sync::Arc<dyn druid_rdbc::data_source::statement_event_listener::StatementEventListener>) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid::core::druid_pooled_connection_owner::DruidPooledConnectionOwner
 pub struct druid::pool::PoolInner
 impl druid::pool::pool_inner::PoolInner
 pub fn druid::pool::pool_inner::PoolInner::can_grow(&self) -> bool
@@ -9338,6 +9354,7 @@ pub use druid::sql::RdbcBlob
 pub use druid::sql::RdbcCharacterLength
 pub use druid::sql::RdbcClob
 pub use druid::sql::RdbcInputStream
+pub use druid::sql::RdbcLogWriter
 pub use druid::sql::RdbcNClob
 pub use druid::sql::RdbcOutputStream
 pub use druid::sql::RdbcReader
@@ -9446,6 +9463,7 @@ pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatemen
 impl druid_rdbc::statement::statement::Statement for druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::cancel(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::cancellation_control(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::statement::statement_cancellation::StatementCancellation>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -9553,31 +9571,31 @@ pub mod druid::sql::clob
 pub use druid::sql::clob::Clob
 pub use druid::sql::clob::RdbcClob
 pub mod druid::sql::common_data_source
+pub use druid::sql::common_data_source::RdbcLogWriter
 pub trait druid::sql::common_data_source::CommonDataSource: core::marker::Send + core::marker::Sync
-pub fn druid::sql::common_data_source::CommonDataSource::get_log_writer(&self) -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::sql::common_data_source::CommonDataSource::get_log_writer(&self) -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::sql::common_data_source::CommonDataSource::get_login_timeout(&self) -> u64
 pub fn druid::sql::common_data_source::CommonDataSource::get_parent_logger(&self) -> &'static str
 pub fn druid::sql::common_data_source::CommonDataSource::login_timeout(&self) -> u64
 pub fn druid::sql::common_data_source::CommonDataSource::parent_logger(&self) -> &'static str
-pub fn druid::sql::common_data_source::CommonDataSource::set_log_writer(&self, core::option::Option<druid::sql::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::sql::common_data_source::CommonDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::sql::common_data_source::CommonDataSource::set_login_timeout(&self, u64) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 impl druid::sql::common_data_source::CommonDataSource for druid::dynamic::dynamic_datasource::DynamicDataSource
-pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_log_writer(&self) -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_log_writer(&self) -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_login_timeout(&self) -> u64
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_parent_logger(&self) -> &'static str
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::login_timeout(&self) -> u64
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::parent_logger(&self) -> &'static str
-pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::set_log_writer(&self, core::option::Option<druid::sql::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::set_login_timeout(&self, u64) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 impl druid::sql::common_data_source::CommonDataSource for druid::pool::druid_data_source::DruidDataSource
-pub fn druid::pool::druid_data_source::DruidDataSource::get_log_writer(&self) -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::pool::druid_data_source::DruidDataSource::get_log_writer(&self) -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::pool::druid_data_source::DruidDataSource::get_login_timeout(&self) -> u64
 pub fn druid::pool::druid_data_source::DruidDataSource::get_parent_logger(&self) -> &'static str
 pub fn druid::pool::druid_data_source::DruidDataSource::login_timeout(&self) -> u64
 pub fn druid::pool::druid_data_source::DruidDataSource::parent_logger(&self) -> &'static str
-pub fn druid::pool::druid_data_source::DruidDataSource::set_log_writer(&self, core::option::Option<druid::sql::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::pool::druid_data_source::DruidDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::pool::druid_data_source::DruidDataSource::set_login_timeout(&self, u64) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
-pub type druid::sql::common_data_source::RdbcLogWriter = alloc::sync::Arc<parking_lot::mutex::Mutex<alloc::boxed::Box<(dyn core::io::write::Write + core::marker::Send)>>>
 pub mod druid::sql::connection
 pub struct druid::sql::connection::Connection
 impl druid::core::druid_pooled_connection::DruidPooledConnection
@@ -9962,14 +9980,14 @@ pub async fn druid::sql::driver_manager::DriverManager::get_connection_with_cred
 pub async fn druid::sql::driver_manager::DriverManager::get_connection_with_properties(&str, &std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::sql::driver_manager::DriverManager::get_driver(&str) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::sql::driver_manager::DriverManager::get_drivers() -> alloc::vec::Vec<alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>>
-pub fn druid::sql::driver_manager::DriverManager::get_log_writer() -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::sql::driver_manager::DriverManager::get_log_writer() -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::sql::driver_manager::DriverManager::get_login_timeout() -> u64
-pub fn druid::sql::driver_manager::DriverManager::log_writer() -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::sql::driver_manager::DriverManager::log_writer() -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::sql::driver_manager::DriverManager::login_timeout() -> u64
 pub fn druid::sql::driver_manager::DriverManager::println(&str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::sql::driver_manager::DriverManager::register_driver(alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>)
 pub fn druid::sql::driver_manager::DriverManager::register_driver_with_action(alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>, core::option::Option<alloc::sync::Arc<dyn druid_rdbc::driver::driver_action::DriverAction>>)
-pub fn druid::sql::driver_manager::DriverManager::set_log_writer(core::option::Option<druid::sql::common_data_source::RdbcLogWriter>)
+pub fn druid::sql::driver_manager::DriverManager::set_log_writer(core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>)
 pub fn druid::sql::driver_manager::DriverManager::set_login_timeout(u64)
 pub mod druid::sql::driver_property_info
 pub use druid::sql::driver_property_info::DriverPropertyInfo
@@ -10358,6 +10376,7 @@ pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatemen
 impl druid_rdbc::statement::statement::Statement for druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::cancel(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::cancellation_control(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::statement::statement_cancellation::StatementCancellation>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -10949,6 +10968,7 @@ impl druid_rdbc::statement::statement::Statement for druid::core::druid_pooled_s
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::batch(&self) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::cancel(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::cancellation_control(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::statement::statement_cancellation::StatementCancellation>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -12832,6 +12852,7 @@ pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatemen
 impl druid_rdbc::statement::statement::Statement for druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::cancel(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::cancellation_control(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::statement::statement_cancellation::StatementCancellation>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -13050,14 +13071,14 @@ pub async fn druid::sql::driver_manager::DriverManager::get_connection_with_cred
 pub async fn druid::sql::driver_manager::DriverManager::get_connection_with_properties(&str, &std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::sql::driver_manager::DriverManager::get_driver(&str) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::sql::driver_manager::DriverManager::get_drivers() -> alloc::vec::Vec<alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>>
-pub fn druid::sql::driver_manager::DriverManager::get_log_writer() -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::sql::driver_manager::DriverManager::get_log_writer() -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::sql::driver_manager::DriverManager::get_login_timeout() -> u64
-pub fn druid::sql::driver_manager::DriverManager::log_writer() -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::sql::driver_manager::DriverManager::log_writer() -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::sql::driver_manager::DriverManager::login_timeout() -> u64
 pub fn druid::sql::driver_manager::DriverManager::println(&str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::sql::driver_manager::DriverManager::register_driver(alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>)
 pub fn druid::sql::driver_manager::DriverManager::register_driver_with_action(alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>, core::option::Option<alloc::sync::Arc<dyn druid_rdbc::driver::driver_action::DriverAction>>)
-pub fn druid::sql::driver_manager::DriverManager::set_log_writer(core::option::Option<druid::sql::common_data_source::RdbcLogWriter>)
+pub fn druid::sql::driver_manager::DriverManager::set_log_writer(core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>)
 pub fn druid::sql::driver_manager::DriverManager::set_login_timeout(u64)
 pub struct druid::sql::EofParserException
 impl druid::sql::eof_parser_exception::EofParserException
@@ -13299,6 +13320,7 @@ pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatemen
 impl druid_rdbc::statement::statement::Statement for druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::cancel(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::cancellation_control(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::statement::statement_cancellation::StatementCancellation>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -13631,6 +13653,7 @@ impl druid_rdbc::statement::statement::Statement for druid::core::druid_pooled_s
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::batch(&self) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::cancel(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::cancellation_control(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::statement::statement_cancellation::StatementCancellation>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -14163,28 +14186,28 @@ pub static druid::sql::SQLITE_KEYWORDS: std::sync::lazy_lock::LazyLock<druid::sq
 pub trait druid::sql::CommentHandler: core::marker::Send + core::marker::Sync
 pub fn druid::sql::CommentHandler::handle(&self, core::option::Option<druid::sql::token::Token>, &druid_rdbc::types::rdbc_string::RdbcString) -> bool
 pub trait druid::sql::CommonDataSource: core::marker::Send + core::marker::Sync
-pub fn druid::sql::CommonDataSource::get_log_writer(&self) -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::sql::CommonDataSource::get_log_writer(&self) -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::sql::CommonDataSource::get_login_timeout(&self) -> u64
 pub fn druid::sql::CommonDataSource::get_parent_logger(&self) -> &'static str
 pub fn druid::sql::CommonDataSource::login_timeout(&self) -> u64
 pub fn druid::sql::CommonDataSource::parent_logger(&self) -> &'static str
-pub fn druid::sql::CommonDataSource::set_log_writer(&self, core::option::Option<druid::sql::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::sql::CommonDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::sql::CommonDataSource::set_login_timeout(&self, u64) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 impl druid::sql::common_data_source::CommonDataSource for druid::dynamic::dynamic_datasource::DynamicDataSource
-pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_log_writer(&self) -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_log_writer(&self) -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_login_timeout(&self) -> u64
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::get_parent_logger(&self) -> &'static str
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::login_timeout(&self) -> u64
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::parent_logger(&self) -> &'static str
-pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::set_log_writer(&self, core::option::Option<druid::sql::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::dynamic::dynamic_datasource::DynamicDataSource::set_login_timeout(&self, u64) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 impl druid::sql::common_data_source::CommonDataSource for druid::pool::druid_data_source::DruidDataSource
-pub fn druid::pool::druid_data_source::DruidDataSource::get_log_writer(&self) -> core::option::Option<druid::sql::common_data_source::RdbcLogWriter>
+pub fn druid::pool::druid_data_source::DruidDataSource::get_log_writer(&self) -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
 pub fn druid::pool::druid_data_source::DruidDataSource::get_login_timeout(&self) -> u64
 pub fn druid::pool::druid_data_source::DruidDataSource::get_parent_logger(&self) -> &'static str
 pub fn druid::pool::druid_data_source::DruidDataSource::login_timeout(&self) -> u64
 pub fn druid::pool::druid_data_source::DruidDataSource::parent_logger(&self) -> &'static str
-pub fn druid::pool::druid_data_source::DruidDataSource::set_log_writer(&self, core::option::Option<druid::sql::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::pool::druid_data_source::DruidDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::pool::druid_data_source::DruidDataSource::set_login_timeout(&self, u64) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub trait druid::sql::DataSource: druid::sql::common_data_source::CommonDataSource + core::marker::Sync
 pub fn druid::sql::DataSource::get_connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -14335,7 +14358,6 @@ pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>:
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::violations(&self) -> &[druid::sql::wall_violation::WallViolation]
 pub fn druid::sql::registered_wall_provider_creators() -> alloc::vec::Vec<alloc::boxed::Box<dyn druid::sql::wall_provider_creator::WallProviderCreator>>
 pub type druid::sql::DatabaseMetaData = druid::core::database_meta_data_proxy_impl::DatabaseMetaDataProxyImpl
-pub type druid::sql::RdbcLogWriter = alloc::sync::Arc<parking_lot::mutex::Mutex<alloc::boxed::Box<(dyn core::io::write::Write + core::marker::Send)>>>
 pub mod druid::stats
 pub mod druid::stats::data_source_identity
 pub struct druid::stats::data_source_identity::DataSourceIdentity

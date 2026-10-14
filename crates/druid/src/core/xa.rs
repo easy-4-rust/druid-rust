@@ -45,8 +45,6 @@ pub enum XaState {
     Idle,
     /// 事务分支已通过 `start` 加入，可执行本地操作。
     Active,
-    /// 事务分支已 suspend，等待 `TMRESUME` 重新关联。
-    Suspended,
     /// `prepare` 已调用，等待 RM 决议。
     Preparing,
     /// RM 已投票提交，等待 `commit`。
@@ -61,6 +59,8 @@ pub enum XaState {
     RolledBack,
     /// 不可恢复的错误导致事务分支失败。
     Failed,
+    /// 事务分支已 suspend，等待 `TMRESUME` 重新关联。
+    Suspended,
 }
 
 impl fmt::Display for XaState {
@@ -90,12 +90,6 @@ pub enum XaOperation {
     Start,
     /// 对应 `XAResource#end(Xid, int)`
     End,
-    /// 对应 `XAResource#start(Xid, TMJOIN)`
-    Join,
-    /// 对应 `XAResource#start(Xid, TMRESUME)`
-    Resume,
-    /// 对应 `XAResource#end(Xid, TMSUSPEND)`
-    Suspend,
     /// 对应 `XAResource#prepare(Xid)`
     Prepare,
     /// 对应 `XAResource#commit(Xid, boolean)`
@@ -104,6 +98,12 @@ pub enum XaOperation {
     Rollback,
     /// 对应 `XAResource#forget(Xid)`
     Forget,
+    /// 对应 `XAResource#start(Xid, TMJOIN)`
+    Join,
+    /// 对应 `XAResource#start(Xid, TMRESUME)`
+    Resume,
+    /// 对应 `XAResource#end(Xid, TMSUSPEND)`
+    Suspend,
 }
 
 impl fmt::Display for XaOperation {

@@ -106,13 +106,29 @@ impl Driver for SecondCandidateDriver {
 
     async fn connect(
         &self,
-        _url: &str,
+        url: &str,
         _properties: &ConnectionProperties,
     ) -> Result<Option<Box<dyn Connection>>, RdbcError> {
-        Err(RdbcError::DriverError(
-            "second candidate reached".to_owned(),
-        ))
+        if url.starts_with("rdbc:next-candidate-test://") {
+            Err(RdbcError::DriverError(
+                "second candidate reached".to_owned(),
+            ))
+        } else {
+            Ok(None)
+        }
     }
+}
+
+#[tokio::test]
+async fn second_candidate_driver_ignores_unrelated_urls() {
+    let driver = SecondCandidateDriver;
+    let result = driver
+        .connect(
+            "rdbc:unrelated-driver-test://localhost/db",
+            &ConnectionProperties::new(),
+        )
+        .await;
+    assert!(matches!(result, Ok(None)));
 }
 
 #[async_trait::async_trait]

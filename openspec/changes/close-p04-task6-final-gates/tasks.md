@@ -11,7 +11,7 @@
 
 ## 3. Public API and documentation
 
-- [ ] 3.1 Generate the current `druid-rdbc` API and compare the reviewed snapshot; inspect and classify every diff.
+- [x] 3.1 Generate the current `druid-rdbc` API and compare the reviewed snapshot; inspect and classify every diff. Evidence: [public-api-diff.md](evidence/public-api-diff.md).
 - [ ] 3.2 Run strict rustdoc and SemVer checks; update reviewed evidence only after resolving any findings.
 
 ## 4. Build and compatibility acceptance

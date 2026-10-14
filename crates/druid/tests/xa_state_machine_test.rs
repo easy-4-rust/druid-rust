@@ -574,6 +574,26 @@ fn xa_operation_display_values() {
     assert_eq!(format!("{}", XaOperation::Forget), "forget");
 }
 
+#[test]
+fn xa_enum_discriminants_preserve_existing_values() {
+    // 保持既有无 repr 枚举变体的序号，避免新增 XA 操作破坏下游数值映射。
+    assert_eq!(XaState::Idle as isize, 0);
+    assert_eq!(XaState::Active as isize, 1);
+    assert_eq!(XaState::Preparing as isize, 2);
+    assert_eq!(XaState::Prepared as isize, 3);
+    assert_eq!(XaState::Committing as isize, 4);
+    assert_eq!(XaState::Committed as isize, 5);
+    assert_eq!(XaState::RollingBack as isize, 6);
+    assert_eq!(XaState::RolledBack as isize, 7);
+    assert_eq!(XaState::Failed as isize, 8);
+    assert_eq!(XaOperation::Start as isize, 0);
+    assert_eq!(XaOperation::End as isize, 1);
+    assert_eq!(XaOperation::Prepare as isize, 2);
+    assert_eq!(XaOperation::Commit as isize, 3);
+    assert_eq!(XaOperation::Rollback as isize, 4);
+    assert_eq!(XaOperation::Forget as isize, 5);
+}
+
 // ── Edge Cases ──────────────────────────────────────────────────────────────
 
 #[test]
