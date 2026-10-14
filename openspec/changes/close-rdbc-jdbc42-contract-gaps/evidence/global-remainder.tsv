@@ -1,0 +1,5 @@
+remainder	scope	observed	impact	evidence	status	added_to_tasks
+METHOD_LEVEL_API_COVERAGE	全量 JDBC Java 方法行为/适配器/实库证据	1564 of 1573 method identities remain unassessed	当前清单是分母；未评估项不得算作支持或精确不支持	docs/verification/rdbc-first/java8-method-evidence.tsv; evidence/method-evidence-ledger.md	OUTSIDE_CURRENT_BOUNDED_SCENARIO_SET	NO
+MC06_RESOURCES_AND_RESULT_SETS	Array/LOB/SQLXML/SQLData/RowSet及流式/缓冲结果集有限验收	8.6,8.7,8.8	资源/游标/owner关闭及known_row_count边界尚未通过本批完成门禁	openspec/changes/close-rdbc-jdbc42-contract-gaps/tasks.md; evidence/method-evidence-ledger.md	PENDING_IN_THIS_CHANGE	NO_NEW_TASKS
+P04_P07_PROGRAM_COMPLETION	跨项目原长期任务和生产就绪总验收	本变更仅覆盖提案定义的七项增量；不包含原计划全部 P04-P07 关闭条件	不能据本变更报告推断 18 项历史任务或全项目生产就绪已关闭	openspec/changes/close-rdbc-jdbc42-contract-gaps/proposal.md#规格归属和范围	OUTSIDE_THIS_CHANGE	NO
+JDBC_TCK_AND_ALL_BACKENDS	第三方 JDBC TCK/全部数据库适配器认证	无 TCK 完成声明；不同后端需按方法能力分别验证	具体数据库和可选能力不可由标准类型声明推断	openspec/changes/close-rdbc-jdbc42-contract-gaps/evidence/method-evidence-ledger.md	NOT_CERTIFIED	NO
