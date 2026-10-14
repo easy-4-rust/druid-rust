@@ -29,9 +29,10 @@ wire goldens and the external public-consumer check. Local environment settings
 used the approved `cargo-public-api 0.52.0`, `nightly-2026-08-07`, UTF-8 child
 process decoding, and a temporary `python3` shim on `D:` because this Windows
 installation exposes Python as `python` only. The shim is outside the repository.
-The GitHub `public-api` job passes for commit `1602d21`. Strict `druid-rdbc`
-rustdoc also passes with `nightly-2026-08-07`,
-`--all-features`, `--no-deps`, and `RUSTDOCFLAGS=-D warnings`.
+The GitHub `public-api` job passes for commit `650d9a4` (run
+[38607142129](https://github.com/easy-4-rust/druid-rust/actions/runs/38607142129)).
+Strict `druid-rdbc` rustdoc also passes locally with `--all-features`,
+`--no-deps`, and `RUSTDOCFLAGS=-D warnings`.
 
 The first CI SemVer report revealed shifted implicit discriminants after adding
 XA variants. A regression test reproduced the shift (`Preparing` was 3 instead
@@ -41,21 +42,33 @@ prior numeric values for every old variant. The `standard_driver_action_test`
 CI failures on Linux, Windows, and macOS came from its shared global registry
 fixture: `SecondCandidateDriver` returned its test error for unrelated URLs.
 The fixture is now URL-scoped, with a regression test proving unrelated URLs
-return `Ok(None)`. The updated focused test binary passes 7/7.
+return `Ok(None)`. The updated focused test binary passes 7/7. Workspace
+Clippy and the focused Task 6 regressions also pass on commit `650d9a4`.
 
-GitHub Actions run [38521437447](https://github.com/easy-4-rust/druid-rust/actions/runs/38521437447)
-completed for commit `1602d21`. Public API snapshots, supply-chain checks, MSRV,
-Windows/macOS/Linux workspace tests, database integration contracts, and driver
-matrices passed. The run failed in workspace Clippy and SemVer. Clippy exposed
-eight wrapper diagnostics plus one differential-test lock held across `await`
-and dead-code / import issues in the XA example. These have been repaired and
-the full local workspace Clippy command now passes; targeted regression tests
-are running before the fix is committed.
+GitHub Actions run [38607142129](https://github.com/easy-4-rust/druid-rust/actions/runs/38607142129)
+ran for commit `650d9a4`. Public API snapshots, MSRV, Linux and Windows Rust
+contracts, database integration contracts, and driver matrices passed. The
+workflow was superseded while its SemVer report step was still running, so that
+run does not provide a SemVer result. Its supply-chain job failed because the
+lockfile contained `rustls 0.23.45`, which had four newly published RustSec
+advisories. `Cargo.lock` now pins the patched `rustls 0.23.46` in commit
+`214abec`; `cargo check -p druid-admin --all-targets --all-features --locked`
+and strict `druid-rdbc` rustdoc pass locally. Run
+[38610436084](https://github.com/easy-4-rust/druid-rust/actions/runs/38610436084)
+is queued to re-run the supply-chain and compatibility gates against that fix.
+
+The local Windows run of the `druid-admin` gRPC network E2E target had transport
+setup timeouts, including when an individual case was run. This was not
+reproduced by the GitHub Linux and Windows Rust-contract jobs, both of which
+passed on `650d9a4`; the local E2E result remains a recorded environment-specific
+failure rather than passing evidence.
 
 SemVer remains an open acceptance gate. The report verifier rejected pending
 `druid/inherent_method_missing` and `druid/trait_method_missing` findings, an
 unlisted `druid/pub_module_level_const_missing` finding, and changed fingerprints
 for `druid/enum_missing`, `module_missing`, `struct_missing`, and `trait_missing`.
-The detailed reports are attached to the workflow run. These changes must be
-traced to the migration authority and either restored as compatible APIs or
-explicitly resolved with tested migration evidence before Task 6 can close.
+The detailed reports are attached to run
+[38521437447](https://github.com/easy-4-rust/druid-rust/actions/runs/38521437447).
+These changes must be traced to the migration authority and either restored as
+compatible APIs or explicitly resolved with tested migration evidence before
+Task 6 can close.
