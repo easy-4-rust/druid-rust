@@ -162,6 +162,27 @@ flowchart LR
 
 `druid-rdbc` 定义与具体数据库无关的统一标准；`druid` 为应用提供连接池、过滤器和池化代理；`druid-wrapper` 将 SQLx、Toasty、RBDC、JDBC Agent 等后端接入该合同。标准对象链和合同组成见第 3 节总架构图。`druid-rdbc` 不持有池化 owner，owner、租约和回收策略属于 `druid`；具体数据库 I/O 属于 `druid-wrapper` 及其后端。
 
+下图聚焦应用数据访问路径和统一标准合同。箭头表达调用、实现或依赖关系；图示不表示每个适配器都实现了合同中的全部可选能力。
+
+```mermaid
+flowchart TB
+    App["应用 / ORM"] --> Druid["druid<br/>连接池 / 过滤器 / 池化代理"]
+    Druid --> Rdbc["druid-rdbc<br/>统一标准合同"]
+    Wrapper["druid-wrapper<br/>数据库适配器"] --> Rdbc
+    Wrapper --> Backend["SQLx / Toasty / RBDC / JDBC Agent 等"]
+
+    subgraph Standard["druid-rdbc 标准合同分组"]
+        Connection["Connection"] --> Statement["Statement"] --> ResultSet["ResultSet"]
+        Statement --> Prepared["PreparedStatement"] --> Callable["CallableStatement"]
+        Metadata["Metadata / SQL 类型 / 异常"]
+        Resources["LOB / Array / SQLXML / SQLData"]
+        Entry["DataSource / Driver / RowSet"]
+    end
+    Rdbc --- Standard
+```
+
+图中实线跨模块箭头表示访问或接入统一合同；标准分组内的 `Connection → Statement → ResultSet` 是操作对象链，`PreparedStatement → CallableStatement` 是接口特化；`druid-wrapper → SQLx / Toasty / RBDC / JDBC Agent` 表示适配器将数据库 I/O 委托给具体后端。`druid` 持有池化 owner、逻辑租约和回收策略，`druid-wrapper` 执行后端 I/O。详细 Cargo 依赖方向仍以第 3 节和第 4 节图为准。
+
 历史上 13 个 workspace crate 曾在 2026-07-29 物理收敛为三个；下表只记录
 归并来源，不代表当前模块数量或目标拓扑：
 
