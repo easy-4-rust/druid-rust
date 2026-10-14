@@ -11,8 +11,8 @@
 
 ## 3. Acceptance and delivery
 
-- [ ] 3.1 Review the public API diff and SemVer report for the additive standard type and unchanged Druid facade.
-- [ ] 3.2 Run `openspec validate p05-unified-driver-resolution --strict`, sync accepted requirements, then commit and push this P05 feature point.
+- [x] 3.1 Review the public API diff and SemVer report for the additive standard type and unchanged Druid facade. CI run `38634035936` passed both `public-api` and `semver` after the reviewed RDBC API snapshot and XA migration baseline updates.
+- [x] 3.2 Run `openspec validate p05-unified-driver-resolution --strict`, sync accepted requirements, then commit and push this P05 feature point. Strict validation passed; archive this completed change to sync its accepted delta before the P05 commit.
 
 ## 4. Remaining P05 runtime and package gates
 
