@@ -435,7 +435,8 @@ fn default_repository_projection_budget_keeps_sampled_physical_memory_below_128_
             break;
         }
         accepted += 1;
-        if accepted % 32 == 0 {
+        // 32 是 2 的幂，用位掩码保留采样周期并兼容 MSRV。
+        if accepted & 31 == 0 {
             record_physical_memory_sample(
                 &mut sampled_peak_bytes,
                 memory_stats::memory_stats().map(|stats| stats.physical_mem),
