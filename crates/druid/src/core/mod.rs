@@ -297,7 +297,8 @@ pub use valid_connection_checker_adapter::ValidConnectionCheckerAdapter;
 pub use xa::{
     flags as xa_flags, XaError, XaErrorCode, XaFlags, XaOperation, XaPrepareResult, XaResource,
     XaResourceManagerIdentity, XaState, XaStateTransitionError, XaStateTransitionRecord,
-    XaTransactionState, Xid,
+    XaTransactionState, Xid, TMFAIL, TMJOIN, TMNOFLAGS, TMONEPHASE, TMRESUME, TMSUCCESS, TMSUSPEND,
+    XA_RDONLY, XID_MAX_BQUAL_LENGTH, XID_MAX_GTRID_LENGTH,
 };
 mod prepared_statement_property_snapshot;
 
