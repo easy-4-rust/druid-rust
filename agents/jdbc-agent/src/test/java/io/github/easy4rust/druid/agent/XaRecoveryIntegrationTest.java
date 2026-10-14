@@ -1,6 +1,7 @@
 package io.github.easy4rust.druid.agent;
 
 import org.junit.jupiter.api.Test;
+import org.testcontainers.DockerClientFactory;
 import org.postgresql.xa.PGXADataSource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
@@ -16,12 +17,14 @@ import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /** 使用真实 PostgreSQL 验证 XA 分支跨 XAConnection 关闭后的恢复语义。 */
 class XaRecoveryIntegrationTest {
 
     @Test
     void postgresRecoversPreparedBranchAfterXaConnectionCloses() throws Exception {
+        assumeTrue(DockerClientFactory.instance().isDockerAvailable(), "Docker is unavailable");
         PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6")
                 .withDatabaseName("xa_recovery")
                 .withUsername("xa_user")

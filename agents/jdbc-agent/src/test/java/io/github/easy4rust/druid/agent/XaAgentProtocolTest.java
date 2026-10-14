@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.io.BufferedReader;
@@ -25,6 +26,7 @@ import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /** 验证真实 JDBC Agent XA 协议可跨 session 恢复 PostgreSQL prepared transaction。 */
 class XaAgentProtocolTest {
@@ -42,6 +44,7 @@ class XaAgentProtocolTest {
 
     @Test
     void recoversAndCommitsPreparedBranchAcrossAgentSessions() throws Exception {
+        assumeTrue(DockerClientFactory.instance().isDockerAvailable(), "Docker is unavailable");
         PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6")
                 .withDatabaseName("xa_agent")
                 .withUsername("xa_user")
