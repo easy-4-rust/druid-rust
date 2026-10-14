@@ -1836,9 +1836,21 @@ mod tests {
     use super::{read_only_session_sql, SqlxConnectionAdapter, SqlxConnectionBackend};
     use druid_rdbc::connection::Connection;
     use druid_rdbc::error::RdbcError;
+    use druid_rdbc::result_set::ColumnIndex;
     use druid_rdbc::statement::StatementOptions;
+    use druid_rdbc::types::{RdbcObject, Value};
     use sqlx::any::AnyConnectOptions;
     use sqlx::ConnectOptions;
+
+    fn assert_feature_not_supported<T>(result: Result<T, RdbcError>, operation: &str) {
+        match result {
+            Err(RdbcError::SqlException(error)) => {
+                assert_eq!(error.sql_state(), Some("0A000"), "{operation}");
+            }
+            Err(error) => panic!("{operation} returned the wrong error: {error:?}"),
+            Ok(_) => panic!("{operation} unexpectedly succeeded"),
+        }
+    }
 
     #[test]
     fn read_only_session_sql_is_backend_specific() {
@@ -1889,5 +1901,67 @@ mod tests {
         ));
         statement.close().await.unwrap();
         adapter.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn sqlite_live_resources_capabilities_and_async_result_set_are_truthful() {
+        let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+            .await
+            .expect("real SQLx SQLite connection should open");
+
+        assert_eq!(
+            connection.capabilities(),
+            druid_rdbc::extensions::ConnectionCapabilities {
+                transactions: true,
+                savepoints: true,
+                catalogs: false,
+                schemas: false,
+                callable_statements: false,
+            }
+        );
+
+        assert_feature_not_supported(
+            connection
+                .create_array_of(Some("INTEGER"), Some(Vec::new()))
+                .await,
+            "Connection#createArrayOf",
+        );
+        assert_feature_not_supported(connection.create_blob().await, "Connection#createBlob");
+        assert_feature_not_supported(connection.create_clob().await, "Connection#createClob");
+        assert_feature_not_supported(connection.create_n_clob().await, "Connection#createNClob");
+        assert_feature_not_supported(connection.create_sql_xml().await, "Connection#createSQLXML");
+        assert_feature_not_supported(
+            connection
+                .create_struct(Some("address"), Some(Vec::<RdbcObject>::new()))
+                .await,
+            "Connection#createStruct",
+        );
+
+        let mut statement = connection
+            .create_statement(StatementOptions::default())
+            .await
+            .expect("standard statement should be created");
+        let mut result_set = statement
+            .execute_query("SELECT 10 UNION ALL SELECT 20 UNION ALL SELECT 30")
+            .await
+            .expect("SQLite should execute the real multi-row query");
+        let column = ColumnIndex::new(1).expect("one-based column index should be valid");
+        for expected in [10, 20, 30] {
+            assert!(result_set.next().await.expect("row fetch should succeed"));
+            assert_eq!(
+                result_set.value(column).expect("current row exists"),
+                Value::Int(expected)
+            );
+        }
+        assert!(!result_set.next().await.expect("EOF should be observable"));
+        result_set
+            .close()
+            .await
+            .expect("result set should close explicitly");
+        statement.close().await.expect("statement should close");
+        connection
+            .close()
+            .await
+            .expect("SQLite connection should close");
     }
 }
