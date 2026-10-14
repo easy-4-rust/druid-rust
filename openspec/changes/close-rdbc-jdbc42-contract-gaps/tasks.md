@@ -160,7 +160,7 @@
 - [x] 8.5 验收 `docs/druid-rust-Architecture.zh_CN.md` 第 4.1 节的 Mermaid 架构图与本变更架构决策及能力矩阵一致。保留五个主节点与合同分组；核对源图和 GitHub Markdown Mermaid 渲染可读，正文分清模块依赖箭头、标准对象链/接口特化、owner/租约回收与后端 I/O 职责，并明确图示不等于后端能力支持。行号、渲染方式和源码 SHA-256 见 [架构图边界审查](evidence/architecture-boundary-review.md)。（MC-05）
 - [x] 8.6 对 Array、LOB、SQLXML、SQLData、RowSet、流式结果集和缓冲结果集建立有限方法级清单；核对资源 capability 与实际方法、关闭/释放错误、owner/游标归属及精确不支持结果。每一项归类为合同通过、具体后端通过、精确不支持、`NOT_RUN` 或缺陷；不以类型声明、CodeGraph 符号数或旧测试总数代替行为证据。有限方法矩阵、状态边界及目标合同验证见 [资源与结果集方法矩阵](evidence/resource-resultset-method-matrix.md)。（MC-01、MC-02、MC-06）
 - [x] 8.7 为清单中的高风险场景补充或复用最小合同/适配器测试：重复/失败释放、结果集耗尽与显式关闭、owner 关闭时游标清理、关闭错误保真、`known_row_count` 不消费流，以及未声明能力返回精确错误。补充流式计数零消费断言，并使 Array 能力拒绝断言精确 SQLState、Java 重载身份和 driver 零调用；生命周期复用测试及目标运行结果见 [资源与结果集生命周期验收](evidence/resource-resultset-lifecycle.md)。（MC-02、MC-06）
-- [ ] 8.8 将资源和结果集能力状态、测试命令、后端/版本及源码身份写入证据台账，并与主架构图的职责边界核对；所有缺环境项保留 `NOT_RUN`，完成本批证据后停止，不顺延新增任务。（MC-04–06）
+- [x] 8.8 将资源和结果集能力状态、测试命令、后端/版本及源码身份写入证据台账，并与主架构图的职责边界核对；真实数据库资源专项保留 `NOT_RUN`。命令结果、Rust/SQLx/Toasty 版本、源码 SHA-256 和架构责任边界见 [资源与结果集证据台账](evidence/resource-resultset-evidence-ledger.md)；本批完成后停止，不顺延新增任务。（MC-04–06）
 
 ## 9. 综合验收与交付关闭
 
