@@ -24,7 +24,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
-#[path = "druid_pooled_prepared_statement/cancellation_control_tests.rs"]
 mod cancellation_control_tests;
 
 struct PreparedStatementResource {

@@ -1207,7 +1207,6 @@ impl Statement for DruidPooledStatement {
 }
 
 #[cfg(test)]
-#[path = "druid_pooled_statement/cancellation_control_tests.rs"]
 mod cancellation_control_tests;
 
 impl std::fmt::Debug for DruidPooledStatement {
