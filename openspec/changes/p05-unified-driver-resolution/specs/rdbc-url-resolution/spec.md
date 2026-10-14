@@ -41,3 +41,19 @@ Product URL parsing SHALL remain separate from runtime-specific native DSN norma
 #### Scenario: Resolve a product URL for a runtime
 - **WHEN** the profile resolver accepts a parsed product URL
 - **THEN** it applies profile/runtime URL rules after parsing and passes only the runtime-compatible URL to the selected provider
+
+### Requirement: Physical factory creation remains asynchronous
+
+Physical connection factories SHALL expose asynchronous creation and SHALL NOT synchronously block on an executor or create a private runtime to bridge asynchronous driver I/O.
+
+#### Scenario: Factory opens a physical connection
+- **WHEN** a pool asks a provider factory to create a physical connection
+- **THEN** the operation is awaited through the caller's runtime and any I/O error is returned through the standard result
+
+### Requirement: Optional driver runtimes stay isolated
+
+Driver-specific runtime dependencies SHALL be enabled only by their declared Cargo features; a no-default-feature wrapper build SHALL NOT resolve SQLx, DuckDB, HTTP SQL, libSQL, or Toasty runtime dependencies.
+
+#### Scenario: Build wrapper without driver features
+- **WHEN** Cargo resolves `druid-wrapper` with `--no-default-features`
+- **THEN** optional database runtime packages are absent from the normal dependency graph and the feature-isolation contract test passes

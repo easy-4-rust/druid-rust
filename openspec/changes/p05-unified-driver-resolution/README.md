@@ -1,3 +1,3 @@
 # P05 unified RDBC URL resolution
 
-Create one standard parsing entry point for product-profile RDBC URLs while preserving Druid's existing public URL API and keeping legacy JDBC/native DSN adaptation at the compatibility boundary.
+Close P05's five driver resolution and packaging gates. The change adds a standard RDBC product URL parser, preserves the Druid compatibility API, and verifies async factories, registry delegation, optional dependency isolation, and CI ownership.

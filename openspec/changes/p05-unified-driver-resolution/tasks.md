@@ -13,3 +13,10 @@
 
 - [ ] 3.1 Review the public API diff and SemVer report for the additive standard type and unchanged Druid facade.
 - [ ] 3.2 Run `openspec validate p05-unified-driver-resolution --strict`, sync accepted requirements, then commit and push this P05 feature point.
+
+## 4. Remaining P05 runtime and package gates
+
+- [x] 4.1 Inspect every production connection factory and runtime entry; confirm physical factory creation is async and no `block_on` or private runtime bridge remains.
+- [x] 4.2 Verify `DriverManager::connect_registered` delegates to `DriverRegistry::connect`; run the standard negotiation and callback regression tests.
+- [x] 4.3 Resolve `druid-wrapper` with `--no-default-features` and run the feature-isolation test; confirm optional runtime packages do not appear.
+- [x] 4.4 Run the package publication/CI ownership verifier and confirm workspace package, binary, driver, and live-contract coverage.
