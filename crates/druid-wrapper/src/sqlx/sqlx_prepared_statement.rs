@@ -127,7 +127,7 @@ impl CancellationDomain {
         Ok(())
     }
 
-    fn cancel_current_or_next(&self) -> Result<(), RdbcError> {
+    fn cancel_current_or_next(&self, can_interrupt_active: bool) -> Result<(), RdbcError> {
         let target = {
             let state = self
                 .state
@@ -136,7 +136,13 @@ impl CancellationDomain {
             if state.closed {
                 return Err(RdbcError::ConnectionDiscarded);
             }
-            if state.active || state.sender.receiver_count() > 0 {
+            let has_active_execution = state.active || state.sender.receiver_count() > 0;
+            if has_active_execution && !can_interrupt_active {
+                return Err(RdbcError::feature_not_supported(
+                    "sqlx_statement_active_cancellation",
+                ));
+            }
+            if has_active_execution {
                 state.generation
             } else {
                 state.generation.saturating_add(1)
@@ -766,16 +772,12 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
         Ok(())
     }
 
-    /// 取消当前活动游标；没有游标时，在下一次执行准入处消费取消请求。
+    /// 取消当前活动游标；不支持中断活动执行的驱动会在下一次执行前消费请求。
     /// 对应 Java: Statement#cancel。语句属性和连接保持可复用。
     fn cancel(&mut self) -> Result<(), RdbcError> {
         let actor = self.actor()?;
-        if actor.backend_key() != "sqlite" {
-            return Err(RdbcError::feature_not_supported(
-                "sqlx_statement_cancellation",
-            ));
-        }
-        self.cancellation.cancel_current_or_next()
+        self.cancellation
+            .cancel_current_or_next(actor.backend_key() == "sqlite")
     }
 
     fn cancellation_control(&self) -> Result<Arc<dyn StatementCancellation>, RdbcError> {
@@ -808,6 +810,43 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
         let _execution = self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
         self.execute_query_values(&actor, sql, values, true).await
+    }
+}
+
+#[cfg(test)]
+mod cancellation_domain_tests {
+    use super::{CancellationDomain, RdbcError};
+    use std::sync::Arc;
+
+    #[test]
+    fn pending_cancel_is_consumed_before_a_non_interruptible_backend_starts_query() {
+        let domain = Arc::new(CancellationDomain::new());
+
+        domain
+            .cancel_current_or_next(false)
+            .expect("a not-yet-started operation can be cancelled on every backend");
+        let error = match domain.begin_execution() {
+            Err(error) => error,
+            Ok(_) => panic!("the cancelled generation must not start"),
+        };
+
+        assert!(matches!(error, RdbcError::SqlException(ref source)
+            if source.sql_state() == Some("HY008")));
+    }
+
+    #[test]
+    fn active_cancel_requires_a_backend_interrupt_handle() {
+        let domain = Arc::new(CancellationDomain::new());
+        let execution = domain
+            .begin_execution()
+            .expect("the execution generation must start");
+
+        let error = domain
+            .cancel_current_or_next(false)
+            .expect_err("a backend without an interrupt handle cannot cancel active work");
+        assert!(matches!(error, RdbcError::SqlException(ref source)
+            if source.sql_state() == Some("0A000")));
+        drop(execution);
     }
 }
 
