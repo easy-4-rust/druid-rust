@@ -241,7 +241,8 @@ public final class JdbcApiInventoryDoclet {
                 continue;
             }
             String parameters = parameters(method.parameters());
-            String identity = owner + "#" + method.name() + "(" + parameters + ")";
+            // 继承声明与接收类型自身的同签名重声明均须进入分母，身份键附加声明类型以免碰撞。
+            String identity = owner + "#" + method.name() + "(" + parameters + ")@" + declaringType;
             String key = "method\0" + identity + "\0" + declaringType;
             if (emitted.add(key)) {
                 records.add(new Record(

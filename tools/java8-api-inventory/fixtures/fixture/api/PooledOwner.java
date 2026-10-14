@@ -6,4 +6,5 @@ public final class PooledOwner extends BaseOwner implements InheritedContract {
     public PooledOwner(int id) {}
     public void borrow() {}
     public void borrow(String options) {}
+    @Override public String classify() { return "receiver"; }
 }

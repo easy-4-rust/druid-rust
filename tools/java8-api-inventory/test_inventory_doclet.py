@@ -82,8 +82,15 @@ class InventoryDocletTest(unittest.TestCase):
                 signatures,
                 "source classes with an implicit public constructor remain in the API denominator",
             )
-            self.assertIn(("inherited_method", f"{owner}#ownerName()", listener, "true"), signatures)
-            self.assertIn(("inherited_method", f"{owner}#closeOwner()", "fixture.api.BaseOwner", "false"), signatures)
+            self.assertIn(("inherited_method", f"{owner}#ownerName()@{listener}", listener, "true"), signatures)
+            self.assertIn(("inherited_method", f"{owner}#closeOwner()@fixture.api.BaseOwner", "fixture.api.BaseOwner", "false"), signatures)
+            self.assertIn(("inherited_method", f"{owner}#classify()@{listener}", listener, "false"), signatures)
+            self.assertEqual(
+                2,
+                sum(row["name"] == "classify" and row["parameters"] == ""
+                    and row["owner"] == owner for row in records),
+                "an inherited declaration and receiver override share behavior but retain distinct source identities",
+            )
             self.assertIn(("inherited_constant", f"{owner}#CONTRACT_VERSION", "fixture.api.InheritedContract", "false"), signatures)
             self.assertFalse(any("internalOnly" in row["identity"] for row in records))
             self.assertFalse(any("crates/druid" in row["source"] or "druid-rdbc" in row["source"] for row in records))
