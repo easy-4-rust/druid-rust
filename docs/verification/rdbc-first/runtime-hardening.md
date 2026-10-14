@@ -2,6 +2,8 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
+2026-10-15 JDBC Agent 握手与协议错误脱敏：先运行新增 `malformedHandshakeAndJsonDoNotEchoUntrustedPayloads`，因不支持的 capability 名称出现在 JSON-RPC 错误响应中而失败（RED）。握手能力、协议版本错误改为固定诊断；无法解析请求时返回固定 `invalid JSON-RPC request`，日志只记请求 ID 和异常类型，不记解析异常内容。回归测试同时注入能力标记、畸形 JSON token 和非法 JSON-RPC 版本标记，并断言消息与完整错误对象都不含标记。`mvn -f agents/jdbc-agent/pom.xml -Dtest=AgentServerTest,XaAgentProtocolTest test` 8/8 通过，包含 PostgreSQL Testcontainers XA 协议测试。此处验证错误响应不回显；日志路径由固定异常类型格式确认，尚未用日志 appender 做端到端断言。P06 Task5 的其他故障和运行预算仍开放。
+
 2026-10-15 Windows/Rust 1.97.1 Admin 内存预算复测：将原 Linux-only `/proc/self/status` 峰值 RSS 检查改为 Linux/macOS RSS 与 Windows Working Set 的跨平台物理内存采样，每 32 条成功写入采样一次并在结束时补采样；指标不可用会使测试失败。`cargo test -p druid-admin --test repository_capacity_test --locked` 10/10 通过；两次单项 `-- --nocapture` 输出均为 accepted=1044、retained_state_bytes=67,071,714，采样 Working Set 峰值为 75,739,136–76,046,336 字节，上限 134,217,728 字节。该值是采样峰值，不代表操作系统全程峰值。随后 `cargo test -p druid-admin --locked` 在 37 项 gRPC 网络用例通过后，有 13 项重连/ACK 用例超时；这是失败的本机全 crate 回归，不能计为通过。Linux/macOS 的当前变更 CI 证据待推送后记录；P06 Task5 仍开放。
 
 2026-10-15 Windows/Rust 1.97.1 复测：Metrics 容量 1、20 个注册数据源的饱和关闭测试输出 coalesced=159、shutdown=124 µs，且关闭后 active_tasks=0、unflushed=0；Admin 两代会话 churn 写入 p50/p95/p99 为 107/175/178 µs，TTL 淘汰 64 条并保留新代 64 条。对应测试分别为 `saturated_runtime_shutdown_drains_and_joins_every_owned_task` 与 `expired_session_churn_reclaims_capacity_without_mixing_boot_identities`，均以 `--locked` 通过。这是各单次复测，不扩展成跨平台延迟承诺；Admin 长期 churn 的进程峰值 RSS 仍未测，Task 5 保持开放。当前 [CI run 38616750204](https://github.com/easy-4-rust/druid-rust/actions/runs/38616750204) 尚在执行，终态未计入本记录。

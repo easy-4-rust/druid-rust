@@ -162,14 +162,22 @@ public final class AgentServer implements Closeable {
             }
         } catch (Exception exception) {
             long requestId = Objects.isNull(request) ? 0 : request.id();
+            Throwable exposedException = Objects.isNull(request)
+                    ? new IllegalArgumentException("invalid JSON-RPC request")
+                    : exception;
             try {
                 writeLine(objectMapper.valueToTree(
-                        AgentResponse.failure(requestId, sessionId, exception)));
+                        AgentResponse.failure(requestId, sessionId, exposedException)));
             } catch (IOException writeException) {
                 log.error("Unable to write JDBC Agent error response", writeException);
                 requestShutdown();
             }
-            log.debug("JDBC operation failed: requestId={}", requestId, exception);
+            if (Objects.isNull(request)) {
+                log.debug("JDBC Agent rejected malformed request: requestId={}, errorType={}",
+                        requestId, exception.getClass().getSimpleName());
+            } else {
+                log.debug("JDBC operation failed: requestId={}", requestId, exception);
+            }
         }
     }
 
@@ -178,7 +186,7 @@ public final class AgentServer implements Closeable {
         Objects.requireNonNull(request.method(), "method");
         Objects.requireNonNull(request.params(), "params");
         if (!"2.0".equals(request.jsonrpc())) {
-            throw new IllegalArgumentException("unsupported jsonrpc version " + request.jsonrpc());
+            throw new IllegalArgumentException("unsupported JSON-RPC version");
         }
     }
 
@@ -263,8 +271,7 @@ public final class AgentServer implements Closeable {
 
     private JsonNode handshake(JsonNode params) {
         if (params.path("protocolVersion").asInt() != PROTOCOL_VERSION) {
-            throw new IllegalArgumentException("unsupported protocolVersion "
-                    + params.path("protocolVersion").asInt());
+            throw new IllegalArgumentException("unsupported JDBC Agent protocol version");
         }
         JsonNode requestedCapabilities = params.path("capabilities");
         if (!requestedCapabilities.isArray()) {
@@ -273,8 +280,7 @@ public final class AgentServer implements Closeable {
         for (JsonNode capability : requestedCapabilities) {
             String name = capability.asText();
             if (!AGENT_CAPABILITIES.contains(name)) {
-                throw new UnsupportedOperationException(
-                        "unsupported JDBC Agent capability " + name);
+                throw new UnsupportedOperationException("unsupported JDBC Agent capability");
             }
         }
         ObjectNode result = JsonNodeFactory.instance.objectNode();

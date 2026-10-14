@@ -165,6 +165,53 @@ class AgentServerTest {
     }
 
     @Test
+    void malformedHandshakeAndJsonDoNotEchoUntrustedPayloads() throws Exception {
+        String capabilityMarker = "CAPABILITY-SECRET-MARKER";
+        String jsonMarker = "MALFORMED-SECRET-MARKER";
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+
+            assertEquals("ready", read(responses).path("method").asText());
+            ObjectNode handshake = handshakePayload();
+            handshake.putArray("capabilities").add(capabilityMarker);
+            write(requests, request(1, "handshake", handshake));
+            JsonNode capabilityError = read(responses).path("error");
+            assertEquals("unsupported JDBC Agent capability", capabilityError.path("message").asText());
+            assertTrue(!capabilityError.toString().contains(capabilityMarker));
+
+            requests.write("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"handshake\",\"params\":{\"token\":\""
+                    + jsonMarker + "\", broken}}}");
+            requests.newLine();
+            requests.flush();
+            JsonNode malformedError = read(responses).path("error");
+            assertEquals("invalid JSON-RPC request", malformedError.path("message").asText());
+            assertTrue(!malformedError.toString().contains(jsonMarker));
+
+            ObjectNode invalidVersion = request(3, "handshake", handshakePayload());
+            invalidVersion.put("jsonrpc", capabilityMarker);
+            write(requests, invalidVersion);
+            JsonNode versionError = read(responses).path("error");
+            assertEquals("unsupported JSON-RPC version", versionError.path("message").asText());
+            assertTrue(!versionError.toString().contains(capabilityMarker));
+
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void preservesSQLExceptionHierarchyCauseAndNextException() {
         SQLTransientConnectionException exception =
                 new SQLTransientConnectionException("connection timed out", "08006", 77);
