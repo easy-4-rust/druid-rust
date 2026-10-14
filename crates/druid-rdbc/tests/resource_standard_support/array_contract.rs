@@ -397,6 +397,18 @@ async fn task7_array_value_all_capabilities_gate_before_driver_and_after_free() 
         flags[0] | flags[1] | flags[3],
         flags[0] | flags[1] | flags[3] | flags[2],
     ];
+    let operation_names = [
+        "Array#getBaseTypeName",
+        "Array#getBaseType",
+        "Array#getArray",
+        "Array#getArray(Map)",
+        "Array#getArray(long,int)",
+        "Array#getArray(long,int,Map)",
+        "Array#getResultSet",
+        "Array#getResultSet(Map)",
+        "Array#getResultSet(long,int)",
+        "Array#getResultSet(long,int,Map)",
+    ];
     for mask in 0..32 {
         let mut supported = ResourceOperations::empty();
         for (bit, flag) in flags.iter().enumerate() {
@@ -422,6 +434,11 @@ async fn task7_array_value_all_capabilities_gate_before_driver_and_after_free() 
                     error.class_name(),
                     "java.sql.SQLFeatureNotSupportedException"
                 );
+                assert_eq!(error.sql_exception().unwrap().sql_state(), Some("0A000"));
+                assert!(
+                    error.to_string().contains(operation_names[op]),
+                    "mask {mask} op {op} lost its operation identity: {error}"
+                );
                 assert_eq!(probe.calls.lock().unwrap().len(), before);
             }
         }
@@ -441,6 +458,8 @@ async fn task7_array_value_all_capabilities_gate_before_driver_and_after_free() 
                 error.class_name(),
                 "java.sql.SQLFeatureNotSupportedException"
             );
+            assert_eq!(error.sql_exception().unwrap().sql_state(), Some("0A000"));
+            assert!(error.to_string().contains("Array#free"));
             assert_eq!(probe.frees.load(Ordering::SeqCst), 0);
             assert!(!value.is_freed());
         }

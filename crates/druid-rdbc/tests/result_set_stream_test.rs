@@ -74,6 +74,8 @@ fn cursor(
 #[tokio::test]
 async fn standard_trait_object_stream_is_lazy_send_and_drops_owned_cursor() {
     let (cursor, next, closes, drops) = cursor(false, false);
+    assert_eq!(cursor.known_row_count(), None);
+    assert_eq!(next.load(Ordering::SeqCst), 0, "count lookup must not poll the stream");
     let mut stream = cursor.into_stream(|row| row.int(ColumnIndex::new(1)?));
     fn assert_send<T: Send>(_: &T) {}
     assert_send(&stream);
