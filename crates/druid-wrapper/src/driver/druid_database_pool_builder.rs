@@ -7,8 +7,8 @@ use druid::core::{
     PgExceptionSorter, PgValidConnectionChecker, ValidConnectionChecker,
 };
 use druid::pool::{DruidDataSource, DruidPool, DruidPoolBuilder};
-use druid::sql::RdbcUrl;
 use druid_rdbc::error::RdbcError;
+use druid_rdbc::url::RdbcConnectionUrl;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -27,14 +27,15 @@ impl DruidDatabasePoolBuilder {
     /// 从统一 `rdbc:profile://endpoint/database` URL 创建建池器。
     pub fn from_rdbc_url(url: impl Into<String>) -> Result<Self, DriverRegistryError> {
         let url = url.into();
-        let parsed = RdbcUrl::parse(&url).map_err(|_| DriverRegistryError::InvalidUrl {
-            profile: "unknown".to_owned(),
-            url: if url.starts_with("rdbc:") {
-                "rdbc:<redacted>".to_owned()
-            } else {
-                "<redacted connection URL>".to_owned()
-            },
-        })?;
+        let parsed =
+            RdbcConnectionUrl::parse(&url).map_err(|_| DriverRegistryError::InvalidUrl {
+                profile: "unknown".to_owned(),
+                url: if url.starts_with("rdbc:") {
+                    "rdbc:<redacted>".to_owned()
+                } else {
+                    "<redacted connection URL>".to_owned()
+                },
+            })?;
         Ok(Self::new(parsed.profile(), url))
     }
 

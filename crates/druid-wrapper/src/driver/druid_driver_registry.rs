@@ -12,7 +12,6 @@ use crate::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
 use crate::libsql::LibSqlConnectionFactory;
 #[cfg(feature = "sqlx")]
 use crate::sqlx::SqlxConnectionFactory;
-use druid::sql::RdbcUrl;
 #[cfg(any(
     feature = "sqlx",
     feature = "jdbc-agent",
@@ -30,6 +29,7 @@ use druid_rdbc::driver::ConnectionFactory;
 ))]
 use druid_rdbc::driver::ConnectionProperties;
 use druid_rdbc::driver::DriverRegistry;
+use druid_rdbc::url::RdbcConnectionUrl;
 use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
 #[cfg(any(
@@ -222,11 +222,12 @@ impl DruidDriverRegistry {
     ) -> Result<ResolvedDatabaseDriver, DriverRegistryError> {
         let profile = self.profile(config.profile_id())?.clone();
         let (driver_url, display_url, properties) = if config.url().starts_with("rdbc:") {
-            let rdbc_url =
-                RdbcUrl::parse(config.url()).map_err(|_| DriverRegistryError::InvalidUrl {
+            let rdbc_url = RdbcConnectionUrl::parse(config.url()).map_err(|_| {
+                DriverRegistryError::InvalidUrl {
                     profile: profile.id().to_string(),
                     url: "rdbc:<redacted>".to_owned(),
-                })?;
+                }
+            })?;
             if rdbc_url.profile() != profile.id().as_str() {
                 return Err(DriverRegistryError::InvalidUrl {
                     profile: profile.id().to_string(),
@@ -253,7 +254,7 @@ impl DruidDriverRegistry {
             feature = "libsql-native",
             feature = "http-sql"
         ))]
-        let diagnostic_url = RdbcUrl::parse(config.url()).map_or_else(
+        let diagnostic_url = RdbcConnectionUrl::parse(config.url()).map_or_else(
             |_| "<redacted connection URL>".to_owned(),
             |url| url.redacted(),
         );
@@ -408,7 +409,7 @@ impl DruidDriverRegistry {
 
     fn rdbc_driver_url(
         profile: &DatabaseProfile,
-        rdbc_url: &RdbcUrl,
+        rdbc_url: &RdbcConnectionUrl,
         properties: &HashMap<String, String>,
     ) -> Result<String, DriverRegistryError> {
         let invalid = || DriverRegistryError::InvalidUrl {

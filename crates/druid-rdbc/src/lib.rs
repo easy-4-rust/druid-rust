@@ -20,6 +20,8 @@ pub mod result_set;
 pub mod statement;
 /// 标准对象运行时识别与解包合同。
 pub mod wrapper;
+/// 产品档案连接 URL 解析合同。
+pub mod url;
 
 /// 迁移期 Java 语义兼容合同。
 pub mod compat;

@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-10-15
+goal: Make the standard driver registry the single runtime/provider resolution
+  entry for Druid wrapper profiles while preserving profile policy, URL
+  redaction, optional feature boundaries, and existing public Druid builder
+  behavior.

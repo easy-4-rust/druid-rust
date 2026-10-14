@@ -4318,6 +4318,21 @@ pub type druid_rdbc::types::RdbcReader = druid_rdbc::extensions::ReaderHandle
 pub type druid_rdbc::types::RdbcRef = druid_rdbc::extensions::RefHandle
 pub type druid_rdbc::types::RdbcSqlXml = druid_rdbc::extensions::SqlXmlHandle
 pub type druid_rdbc::types::RdbcStreamLength = druid_rdbc::extensions::StreamLength
+pub mod druid_rdbc::url
+pub struct druid_rdbc::url::RdbcConnectionUrl
+impl druid_rdbc::url::RdbcConnectionUrl
+pub fn druid_rdbc::url::RdbcConnectionUrl::as_str(&self) -> &str
+pub fn druid_rdbc::url::RdbcConnectionUrl::authenticated_network_url(&self, &str) -> core::result::Result<alloc::string::String, druid_rdbc::RdbcError>
+pub fn druid_rdbc::url::RdbcConnectionUrl::database(&self) -> &str
+pub fn druid_rdbc::url::RdbcConnectionUrl::endpoint(&self) -> &str
+pub fn druid_rdbc::url::RdbcConnectionUrl::network_url(&self, &str) -> core::result::Result<alloc::string::String, druid_rdbc::RdbcError>
+pub fn druid_rdbc::url::RdbcConnectionUrl::parse(&str) -> core::result::Result<Self, druid_rdbc::RdbcError>
+pub fn druid_rdbc::url::RdbcConnectionUrl::profile(&self) -> &str
+pub fn druid_rdbc::url::RdbcConnectionUrl::properties(&self) -> &std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+pub fn druid_rdbc::url::RdbcConnectionUrl::property(&self, &str) -> core::option::Option<&str>
+pub fn druid_rdbc::url::RdbcConnectionUrl::redacted(&self) -> alloc::string::String
+impl core::fmt::Debug for druid_rdbc::url::RdbcConnectionUrl
+pub fn druid_rdbc::url::RdbcConnectionUrl::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod druid_rdbc::wrapper
 #[non_exhaustive] pub enum druid_rdbc::wrapper::StandardUnwrapped<'a>
 pub druid_rdbc::wrapper::StandardUnwrapped::CallableStatement(&'a dyn druid_rdbc::statement::CallableStatement)
