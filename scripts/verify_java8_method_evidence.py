@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 from pathlib import Path
 import re
 import sys
@@ -13,8 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 FIELDS = (
     "identity", "owner", "name", "parameters", "rust_type_entry", "rust_method_entry",
     "spec_scenario", "batch", "backend", "declaration", "contract", "adapter",
-    "logical_proxy", "real_db", "capability", "positive_evidence",
-    "unsupported_evidence", "unsupported_result", "not_run_reason",
+    "logical_proxy", "real_db", "capability", "rust_source", "rust_source_sha256",
+    "positive_evidence", "positive_evidence_sha256", "unsupported_evidence",
+    "unsupported_evidence_sha256", "unsupported_result", "not_run_reason",
 )
 LAYERS = ("declaration", "contract", "adapter", "logical_proxy", "real_db")
 VALID_STATES = {"UNASSESSED", "PASS", "FAIL", "NOT_RUN", "NOT_APPLICABLE"}
@@ -42,7 +44,33 @@ def evidence_exists(reference: str) -> bool:
     return True
 
 
+def file_digest(reference: str) -> str:
+    """Hash an evidence reference's file, ignoring any #test selector."""
+    path = (ROOT / reference.partition("#")[0]).resolve()
+    if ROOT.resolve() not in path.parents or not path.is_file():
+        return ""
+    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
+
+
+def inventory_metadata(path: Path) -> tuple[str, str]:
+    """Read the version marker and source commit from the frozen API denominator."""
+    first_line = path.read_text(encoding="utf-8").splitlines()[0]
+    match = re.fullmatch(r"# schema=([^\t]+)\tsource_commit=(.+)", first_line)
+    if not match:
+        raise EvidenceError("Java inventory has no recognized schema/source version header")
+    return match.group(1), match.group(2)
+
+
 def verify(ledger: Path, inventory: Path) -> dict[str, int]:
+    ledger_header = ledger.read_text(encoding="utf-8").splitlines()[0]
+    schema, source_commit = inventory_metadata(inventory)
+    expected_header = (
+        f"# schema=java8-method-evidence-v1\tinventory_sha256="
+        f"{hashlib.sha256(inventory.read_bytes()).hexdigest().upper()}\tsource_schema={schema}"
+        f"\tsource_commit={source_commit}"
+    )
+    if ledger_header != expected_header:
+        raise EvidenceError("ledger inventory hash or source version is stale; regenerate/review evidence links")
     source_rows = read_rows(inventory)
     rows = read_rows(ledger)
     source_ids = {row["identity"] for row in source_rows}
@@ -79,8 +107,30 @@ def verify(ledger: Path, inventory: Path) -> dict[str, int]:
         for reference in (row["positive_evidence"], row["unsupported_evidence"]):
             if reference and not evidence_exists(reference):
                 raise EvidenceError(f"row {line}: stale or missing evidence reference: {reference}")
+        for reference_field, hash_field in (("positive_evidence", "positive_evidence_sha256"),
+                                            ("unsupported_evidence", "unsupported_evidence_sha256")):
+            reference = row[reference_field]
+            recorded_hash = row[hash_field]
+            if reference and (not recorded_hash or file_digest(reference) != recorded_hash.upper()):
+                raise EvidenceError(f"row {line}: stale evidence source hash for {reference}")
+        if row["rust_source"]:
+            rust_reference = row["rust_source"]
+            rust_path = (ROOT / rust_reference).resolve()
+            if (ROOT.resolve() not in rust_path.parents or not rust_path.is_file()
+                    or file_digest(rust_reference) != row["rust_source_sha256"].upper()):
+                raise EvidenceError(f"row {line}: stale or missing Rust source hash for {rust_reference}")
+            if row["rust_method_entry"] and row["rust_method_entry"] != "UNMAPPED":
+                rust_text = rust_path.read_text(encoding="utf-8", errors="replace")
+                rust_method = row["rust_method_entry"].rsplit("::", 1)[-1]
+                if not re.search(rf"\bfn\s+{re.escape(rust_method)}\s*(?:<|\()", rust_text):
+                    raise EvidenceError(f"row {line}: Rust method entry is absent from {rust_reference}")
+        elif row["capability"] in {"SUPPORTED", "PARTIAL"}:
+            raise EvidenceError(f"row {line}: linked capability lacks a Rust source file")
     return {"inventory": len(source_rows), "ledger": len(rows),
-            "linked": sum(row["capability"] != "UNASSESSED" for row in rows)}
+            "linked": sum(row["capability"] != "UNASSESSED" for row in rows),
+            "unassessed": sum(row["capability"] == "UNASSESSED" for row in rows),
+            "not_run": sum(row["capability"] == "NOT_RUN" for row in rows),
+            "failed_layers": sum(row[layer] == "FAIL" for row in rows for layer in LAYERS)}
 
 
 def main() -> int:
@@ -93,7 +143,8 @@ def main() -> int:
     except (EvidenceError, OSError, KeyError) as error:
         print(f"EVIDENCE_GATE_FAIL: {error}", file=sys.stderr)
         return 1
-    print(f"EVIDENCE_GATE_PASS inventory={result['inventory']} ledger={result['ledger']} linked={result['linked']}")
+    print(f"EVIDENCE_GATE_PASS inventory={result['inventory']} ledger={result['ledger']} linked={result['linked']} "
+          f"unassessed={result['unassessed']} not_run={result['not_run']} failed_layers={result['failed_layers']}")
     return 0
 
 

@@ -17,3 +17,9 @@ python scripts/generate_java8_api_method_inventory.py
 ```
 
 For an already cached source archive, pass `--archive <path>`. To write elsewhere, pass `--output <path>`. The output is sorted and includes the pinned source commit in its header.
+
+## Method evidence ledger
+
+`docs/verification/rdbc-first/java8-method-evidence.tsv` uses the full frozen inventory as its denominator. Each evaluated link records the Rust source path and SHA-256, the linked test source SHA-256, and an inventory SHA-256/source commit in the ledger header. Re-run `python scripts/verify_java8_method_evidence.py` after regenerating the inventory or changing a linked source file. A stale inventory header or test/Rust source hash fails closed; review and refresh the affected evidence instead of copying a new hash without rerunning its test.
+
+Layer values distinguish `PASS`, `FAIL`, `NOT_RUN`, `NOT_APPLICABLE`, and `UNASSESSED`. Capability values distinguish `SUPPORTED`, `PARTIAL`, `UNSUPPORTED`, `NOT_RUN`, and `UNASSESSED`. `NOT_RUN` needs a reason; `SUPPORTED` needs a method mapping, positive test reference, and a passing layer; `UNSUPPORTED` needs a negative test reference and exact observable error text. A SQLState alone does not prove the precise failure. `PARTIAL` records only the linked layers and never implies that unassessed layers passed.
