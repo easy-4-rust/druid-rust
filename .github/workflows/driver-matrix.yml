@@ -208,11 +208,10 @@ jobs:
           distribution: temurin
           java-version: '17'
       - run: cargo test --workspace
-      - name: Gate Admin repository peak RSS at the default state-byte limit
-        if: runner.os == 'Linux'
+      - name: Gate Admin repository sampled physical memory at the default state-byte limit
         run: >-
           cargo test -p druid-admin --test repository_capacity_test
-          default_repository_projection_budget_keeps_peak_rss_below_128_mib
+          default_repository_projection_budget_keeps_sampled_physical_memory_below_128_mib
           --locked -- --exact --test-threads=1 --nocapture
 
   sqlite-product-contract:

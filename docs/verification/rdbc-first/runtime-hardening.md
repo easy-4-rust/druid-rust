@@ -2,6 +2,8 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
+2026-10-15 Windows/Rust 1.97.1 Admin 内存预算复测：将原 Linux-only `/proc/self/status` 峰值 RSS 检查改为 Linux/macOS RSS 与 Windows Working Set 的跨平台物理内存采样，每 32 条成功写入采样一次并在结束时补采样；指标不可用会使测试失败。`cargo test -p druid-admin --test repository_capacity_test --locked` 10/10 通过；两次单项 `-- --nocapture` 输出均为 accepted=1044、retained_state_bytes=67,071,714，采样 Working Set 峰值为 75,739,136–76,046,336 字节，上限 134,217,728 字节。该值是采样峰值，不代表操作系统全程峰值。随后 `cargo test -p druid-admin --locked` 在 37 项 gRPC 网络用例通过后，有 13 项重连/ACK 用例超时；这是失败的本机全 crate 回归，不能计为通过。Linux/macOS 的当前变更 CI 证据待推送后记录；P06 Task5 仍开放。
+
 2026-10-15 Windows/Rust 1.97.1 复测：Metrics 容量 1、20 个注册数据源的饱和关闭测试输出 coalesced=159、shutdown=124 µs，且关闭后 active_tasks=0、unflushed=0；Admin 两代会话 churn 写入 p50/p95/p99 为 107/175/178 µs，TTL 淘汰 64 条并保留新代 64 条。对应测试分别为 `saturated_runtime_shutdown_drains_and_joins_every_owned_task` 与 `expired_session_churn_reclaims_capacity_without_mixing_boot_identities`，均以 `--locked` 通过。这是各单次复测，不扩展成跨平台延迟承诺；Admin 长期 churn 的进程峰值 RSS 仍未测，Task 5 保持开放。当前 [CI run 38616750204](https://github.com/easy-4-rust/druid-rust/actions/runs/38616750204) 尚在执行，终态未计入本记录。
 
 2026-10-13 SIGTERM 待 ACK 进程试验：关闭错误的 HTTP 状态先复现 400（RED），将 broker 的 `shutting down` 归入脱敏 503 后，目标单测 GREEN，严格 Clippy 通过。新增 Unix-only 真实子进程试验：认证的 gRPC 流已收到命令而未 ACK 时发送 SIGTERM，要求 HTTP 等待者在 2 秒内收到脱敏 503、进程在 4 秒内退出，均早于 5 秒关闭期限。[Linux Rust contracts](https://github.com/easy-4-rust/druid-rust/actions/runs/38397483551/job/115296951596) 日志明确显示 `sigterm_releases_pending_command_http_waiter_before_deadline ... ok`，同一 `admin_binary_test` 19/19 通过，已有的 held-connection SIGTERM 用例也通过。此结果只关闭待 ACK SIGTERM 故障场景，完整 P06 数值预算与其他故障注入仍开放。

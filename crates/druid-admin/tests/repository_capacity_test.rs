@@ -33,6 +33,15 @@ fn entry(boot_id: &str, sequence: u64, active_count: i64) -> (DataSourceId, Data
     (id, entry)
 }
 
+fn record_physical_memory_sample(
+    peak: &mut usize,
+    sample: Option<usize>,
+) -> Result<(), &'static str> {
+    let sample = sample.ok_or("physical memory metrics are unavailable")?;
+    *peak = (*peak).max(sample);
+    Ok(())
+}
+
 #[test]
 fn restarted_pod_sessions_are_isolated_and_capacity_rejection_is_atomic() {
     let config = MetricsRepositoryConfig::try_new(2, 1, 1, Duration::from_secs(10), 1 << 20)
@@ -382,12 +391,21 @@ fn total_state_bytes_budget_rejects_large_sql_batches_and_reclaims_replaced_byte
     assert_eq!(repository.limit_counters(), (2, 0, 0));
 }
 
-#[cfg(target_os = "linux")]
 #[test]
-fn default_repository_projection_budget_keeps_peak_rss_below_128_mib() {
+fn sampled_physical_memory_peak_tracks_highest_observation_and_requires_metrics() {
+    let mut peak = 0;
+    record_physical_memory_sample(&mut peak, Some(100)).unwrap();
+    record_physical_memory_sample(&mut peak, Some(250)).unwrap();
+    record_physical_memory_sample(&mut peak, Some(150)).unwrap();
+    assert_eq!(peak, 250);
+    assert!(record_physical_memory_sample(&mut peak, None).is_err());
+}
+
+#[test]
+fn default_repository_projection_budget_keeps_sampled_physical_memory_below_128_mib() {
     const MAX_STATE_BYTES: usize = 64 * 1024 * 1024;
     const SQL_BYTES: usize = 60 * 1024;
-    const MAX_PEAK_RSS_KIB: usize = 128 * 1024;
+    const MAX_SAMPLED_PHYSICAL_MEMORY_BYTES: usize = 128 * 1024 * 1024;
 
     let config = MetricsRepositoryConfig::try_new(1, 4_096, 1, Duration::from_secs(60), 1 << 20)
         .expect("one service can exercise the global byte budget")
@@ -395,6 +413,12 @@ fn default_repository_projection_budget_keeps_peak_rss_below_128_mib() {
         .expect("valid default repository byte budget");
     let repository = MetricsRepository::with_config(config);
     let mut accepted = 0usize;
+    let mut sampled_peak_bytes = 0usize;
+    record_physical_memory_sample(
+        &mut sampled_peak_bytes,
+        memory_stats::memory_stats().map(|stats| stats.physical_mem),
+    )
+    .expect("physical memory metrics must be available on supported CI platforms");
 
     for identity in 0..4_096 {
         let (mut id, mut value) = entry("boot-rss-budget", 1, 1);
@@ -411,20 +435,34 @@ fn default_repository_projection_budget_keeps_peak_rss_below_128_mib() {
             break;
         }
         accepted += 1;
+        if accepted % 32 == 0 {
+            record_physical_memory_sample(
+                &mut sampled_peak_bytes,
+                memory_stats::memory_stats().map(|stats| stats.physical_mem),
+            )
+            .expect("physical memory metrics must remain available while sampling");
+        }
     }
 
     let retained_bytes = repository.retained_state_bytes();
-    let status = std::fs::read_to_string("/proc/self/status").expect("read Linux process status");
-    let peak_rss_kib = status
-        .lines()
-        .find(|line| line.starts_with("VmHWM:"))
-        .and_then(|line| line.split_whitespace().nth(1))
-        .and_then(|value| value.parse::<usize>().ok())
-        .expect("Linux VmHWM is available");
+    record_physical_memory_sample(
+        &mut sampled_peak_bytes,
+        memory_stats::memory_stats().map(|stats| stats.physical_mem),
+    )
+    .expect("final physical memory sample must be available");
+
+    #[cfg(target_os = "windows")]
+    let metric_name = "working_set";
+    #[cfg(not(target_os = "windows"))]
+    let metric_name = "rss";
 
     eprintln!(
-        "admin_repository_budget accepted={} retained_state_bytes={} peak_rss_kib={} rss_limit_kib={}",
-        accepted, retained_bytes, peak_rss_kib, MAX_PEAK_RSS_KIB
+        "admin_repository_budget accepted={} retained_state_bytes={} sampled_peak_{}_bytes={} sampled_memory_limit_bytes={}",
+        accepted,
+        retained_bytes,
+        metric_name,
+        sampled_peak_bytes,
+        MAX_SAMPLED_PHYSICAL_MEMORY_BYTES
     );
     assert!(
         accepted > 1_000,
@@ -436,7 +474,7 @@ fn default_repository_projection_budget_keeps_peak_rss_below_128_mib() {
         "test must fill the projection budget within one record"
     );
     assert!(
-        peak_rss_kib <= MAX_PEAK_RSS_KIB,
-        "Admin repository exceeded its 128 MiB peak RSS budget"
+        sampled_peak_bytes <= MAX_SAMPLED_PHYSICAL_MEMORY_BYTES,
+        "Admin repository exceeded its 128 MiB sampled physical memory budget"
     );
 }
