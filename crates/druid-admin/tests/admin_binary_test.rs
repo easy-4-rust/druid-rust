@@ -17,6 +17,8 @@ use druid_metrics::protocol::metrics_ingest_client::MetricsIngestClient;
 use druid_metrics::protocol::{client_frame, server_frame, ClientFrame, ClientHello, FrameHeader};
 use druid_metrics::protocol::{PoolSnapshotMsg, SnapshotEntry};
 #[cfg(unix)]
+use tokio::io::AsyncReadExt as _;
+#[cfg(unix)]
 use tokio::io::AsyncWriteExt as _;
 #[cfg(unix)]
 use tokio::sync::mpsc;
@@ -716,8 +718,10 @@ async fn sigterm_forces_held_connection_exit_before_shutdown_deadline() {
     )
     .await
     .expect("write partial request body");
+    // Tokio 的 readable 可能虚假唤醒；实际 read 才能证明服务端未提前应答或断开。
+    let mut response = [0_u8; 1];
     assert!(
-        tokio::time::timeout(Duration::from_millis(100), held.readable())
+        tokio::time::timeout(Duration::from_millis(100), held.read(&mut response))
             .await
             .is_err(),
         "partial request remains in flight before SIGTERM"
