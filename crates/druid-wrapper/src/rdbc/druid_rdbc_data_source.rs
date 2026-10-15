@@ -102,8 +102,17 @@ impl druid_rdbc::wrapper::Wrapper for DruidRdbcDataSource {
         &self,
         target: TypeId,
     ) -> Option<druid_rdbc::wrapper::StandardUnwrapped<'_>> {
-        (target == TypeId::of::<dyn druid_rdbc::wrapper::Wrapper>())
-            .then_some(druid_rdbc::wrapper::StandardUnwrapped::Wrapper(self))
+        use druid_rdbc::wrapper::StandardUnwrapped;
+
+        if target == TypeId::of::<dyn druid_rdbc::data_source::DataSource>() {
+            Some(StandardUnwrapped::DataSource(self))
+        } else if target == TypeId::of::<dyn druid_rdbc::data_source::CommonDataSource>() {
+            Some(StandardUnwrapped::CommonDataSource(self))
+        } else if target == TypeId::of::<dyn druid_rdbc::wrapper::Wrapper>() {
+            Some(StandardUnwrapped::Wrapper(self))
+        } else {
+            None
+        }
     }
 }
 
