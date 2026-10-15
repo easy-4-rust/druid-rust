@@ -1,0 +1,405 @@
+     Cloning 2c421efa6caf8bfc983633529fc3775c251f9492
+warning: patch `toasty-driver-sqlite v0.9.0 (E:\workspaces\workspace-github-easy-4-rust\druid-rust\vendor\toasty-driver-sqlite)` was not used in the crate graph
+help: Check that the patched package version and available features are compatible
+      with the dependency requirements. If the patch has a different version from
+      what is locked in the Cargo.lock file, run `cargo update` to use the new
+      version. This may also occur with an optional dependency that is not enabled.
+     Locking 112 packages to latest compatible versions
+    Building druid-rdbc v0.0.0-design (current)
+warning: patch `toasty-driver-sqlite v0.9.0 (E:\workspaces\workspace-github-easy-4-rust\druid-rust\vendor\toasty-driver-sqlite)` was not used in the crate graph
+help: Check that the patched package version and available features are compatible
+      with the dependency requirements. If the patch has a different version from
+      what is locked in the Cargo.lock file, run `cargo update` to use the new
+      version. This may also occur with an optional dependency that is not enabled.
+ Documenting druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.42s
+       Built [   1.567s] (current)
+     Parsing druid-rdbc v0.0.0-design (current)
+      Parsed [   0.024s] (current)
+warning: patch `toasty-driver-sqlite v0.9.0 (E:\workspaces\workspace-github-easy-4-rust\druid-rust\vendor\toasty-driver-sqlite)` was not used in the crate graph
+help: Check that the patched package version and available features are compatible
+      with the dependency requirements. If the patch has a different version from
+      what is locked in the Cargo.lock file, run `cargo update` to use the new
+      version. This may also occur with an optional dependency that is not enabled.
+     Locking 111 packages to latest compatible versions
+    Building druid-rdbc v0.0.0-design (baseline)
+warning: patch `toasty-driver-sqlite v0.9.0 (E:\workspaces\workspace-github-easy-4-rust\druid-rust\vendor\toasty-driver-sqlite)` was not used in the crate graph
+help: Check that the patched package version and available features are compatible
+      with the dependency requirements. If the patch has a different version from
+      what is locked in the Cargo.lock file, run `cargo update` to use the new
+      version. This may also occur with an optional dependency that is not enabled.
+ Documenting druid-rdbc v0.0.0-design (D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.89s
+       Built [   1.060s] (baseline)
+     Parsing druid-rdbc v0.0.0-design (baseline)
+      Parsed [   0.014s] (baseline)
+    Checking druid-rdbc v0.0.0-design -> v0.0.0-design (assume patch change)
+    Starting 229 checks, 31 unnecessary on 24 threads
+        PASS [   0.006s]       major        attribute_proc_macro_missing
+        PASS [   0.016s]       major        auto_trait_impl_removed
+        PASS [   0.001s]       major        constructible_struct_adds_field
+        PASS [   0.011s]       major        constructible_struct_adds_private_field
+        PASS [   0.000s]       major        constructible_struct_changed_type
+        PASS [   0.008s]       major        copy_impl_added
+        PASS [   0.000s]       major        declarative_macro_missing
+        PASS [   0.006s]       major        derive_helper_attr_removed
+        PASS [   0.000s]       major        derive_proc_macro_missing
+        PASS [   0.017s]       major        derive_trait_impl_removed
+        PASS [   0.007s]       major        enum_changed_kind
+        PASS [   0.001s]       major        enum_discriminants_undefined_non_exhaustive_variant
+        PASS [   0.001s]       major        enum_discriminants_undefined_non_unit_variant
+        PASS [   0.000s]       major        enum_marked_non_exhaustive
+        FAIL [   0.007s]       major        enum_missing
+        PASS [   0.000s]       minor        enum_must_use_added
+        PASS [   0.002s]       major        enum_no_repr_variant_discriminant_changed
+        PASS [   0.000s]       major        enum_non_exhaustive_tuple_variant_changed_kind
+        PASS [   0.000s]       major        enum_now_doc_hidden
+        PASS [   0.000s]       major        enum_repr_int_changed
+        PASS [   0.000s]       major        enum_repr_int_removed
+        PASS [   0.000s]       major        enum_repr_transparent_removed
+        PASS [   0.001s]       major        enum_repr_variant_discriminant_changed
+        PASS [   0.001s]       major        enum_struct_variant_changed_kind
+        PASS [   0.001s]       major        enum_struct_variant_field_added
+        PASS [   0.001s]       minor        enum_struct_variant_field_marked_deprecated
+        PASS [   0.001s]       major        enum_struct_variant_field_missing
+        PASS [   0.001s]       major        enum_struct_variant_field_now_doc_hidden
+        PASS [   0.007s]       major        enum_tuple_variant_changed_kind
+        PASS [   0.008s]       major        enum_tuple_variant_field_added
+        PASS [   0.002s]       minor        enum_tuple_variant_field_marked_deprecated
+        PASS [   0.008s]       major        enum_tuple_variant_field_missing
+        PASS [   0.007s]       major        enum_tuple_variant_field_now_doc_hidden
+        PASS [   0.007s]       major        enum_unit_variant_changed_kind
+        FAIL [   0.008s]       major        enum_variant_added
+        PASS [   0.007s]       minor        enum_variant_marked_deprecated
+        PASS [   0.002s]       major        enum_variant_marked_non_exhaustive
+        PASS [   0.002s]       major        enum_variant_missing
+        PASS [   0.000s]       major        exported_function_abi_no_longer_unwind
+        PASS [   0.000s]       major        exported_function_abi_now_unwind
+        PASS [   0.000s]       major        exported_function_changed_abi
+        PASS [   0.000s]       major        exported_function_now_returns_unit
+        PASS [   0.006s]       major        exported_function_parameter_count_changed
+        PASS [   0.000s]       major        exported_function_requires_more_target_features
+        PASS [   0.000s]       major        exported_function_return_value_added
+        PASS [   0.000s]       major        exported_function_target_feature_added
+        PASS [   0.001s]       major        feature_missing
+        PASS [   0.001s]       major        feature_no_longer_enables_feature
+        PASS [   0.001s]       major        feature_not_enabled_by_default
+        PASS [   0.000s]       major        function_abi_no_longer_unwind
+        PASS [   0.000s]       major        function_abi_now_unwind
+        PASS [   0.000s]       major        function_changed_abi
+        PASS [   0.000s]       major        function_const_generic_reordered
+        PASS [   0.000s]       major        function_const_removed
+        PASS [   0.001s]       major        function_export_name_changed
+        PASS [   0.000s]       major        function_generic_type_reordered
+        PASS [   0.000s]       major        function_like_proc_macro_missing
+        PASS [   0.006s]       minor        function_marked_deprecated
+        PASS [   0.000s]       major        function_missing
+        PASS [   0.000s]       minor        function_must_use_added
+        PASS [   0.000s]       major        function_no_longer_variadic
+        PASS [   0.000s]       major        function_now_doc_hidden
+        PASS [   0.000s]       major        function_now_returns_unit
+        PASS [   0.000s]       major        function_now_variadic
+        PASS [   0.000s]       major        function_parameter_count_changed
+        PASS [   0.000s]       major        function_requires_different_const_generic_params
+        PASS [   0.000s]       major        function_requires_different_generic_type_params
+        PASS [   0.000s]       major        function_unsafe_added
+        PASS [   0.000s]       minor        global_value_marked_deprecated
+        PASS [   0.004s]       major        inherent_associated_const_now_doc_hidden
+        PASS [   0.003s]       major        inherent_associated_pub_const_missing
+        PASS [   0.025s]       major        inherent_method_changed_abi
+        PASS [   0.003s]       major        inherent_method_const_generic_reordered
+        PASS [   0.001s]       major        inherent_method_const_removed
+        PASS [   0.008s]       major        inherent_method_generic_type_reordered
+        FAIL [   0.013s]       major        inherent_method_missing
+        PASS [   0.005s]       minor        inherent_method_must_use_added
+        PASS [   0.003s]       major        inherent_method_no_longer_unwind
+        PASS [   0.001s]       major        inherent_method_no_longer_variadic
+        PASS [   0.013s]       major        inherent_method_now_doc_hidden
+        PASS [   0.013s]       major        inherent_method_now_returns_unit
+        PASS [   0.017s]       major        inherent_method_now_unwind
+        PASS [   0.011s]       major        inherent_method_now_variadic
+        PASS [   0.016s]       major        inherent_method_unsafe_added
+        PASS [   0.000s]       minor        macro_marked_deprecated
+        PASS [   0.006s]       major        macro_no_longer_exported
+        PASS [   0.006s]       major        macro_now_doc_hidden
+        PASS [   0.007s]       major        method_export_name_changed
+        PASS [   0.026s]       major        method_no_longer_has_receiver
+        PASS [   0.027s]       major        method_parameter_count_changed
+        PASS [   0.008s]       major        method_receiver_mut_ref_became_owned
+        PASS [   0.015s]       major        method_receiver_ref_became_mut
+        PASS [   0.015s]       major        method_receiver_ref_became_owned
+        PASS [   0.016s]       major        method_receiver_type_changed
+        PASS [   0.021s]       major        method_requires_different_const_generic_params
+        PASS [   0.023s]       major        method_requires_different_generic_type_params
+        FAIL [   0.000s]       major        module_missing
+        PASS [   0.000s]       major        non_exhaustive_struct_changed_type
+        PASS [   0.001s]       major        partial_ord_enum_struct_variant_fields_reordered
+        PASS [   0.007s]       major        partial_ord_enum_variants_reordered
+        PASS [   0.001s]       major        partial_ord_struct_fields_reordered
+        PASS [   0.012s]       minor        proc_macro_marked_deprecated
+        PASS [   0.000s]       major        proc_macro_now_doc_hidden
+        PASS [   0.000s]       minor        pub_api_sealed_trait_became_unconditionally_sealed
+        PASS [   0.000s]       minor        pub_api_sealed_trait_became_unsealed
+        PASS [   0.000s]       major        pub_api_sealed_trait_method_receiver_added
+        PASS [   0.000s]       major        pub_api_sealed_trait_method_receiver_mut_ref_became_ref
+        PASS [   0.000s]       major        pub_api_sealed_trait_method_return_value_added
+        PASS [   0.000s]       major        pub_api_sealed_trait_method_target_feature_removed
+        PASS [   0.000s]       major        pub_module_level_const_missing
+        PASS [   0.000s]       major        pub_module_level_const_now_doc_hidden
+        PASS [   0.000s]       major        pub_static_missing
+        PASS [   0.000s]       major        pub_static_mut_now_immutable
+        PASS [   0.000s]       major        pub_static_now_doc_hidden
+        PASS [   0.006s]       major        pub_static_now_mutable
+        PASS [   0.001s]       major        repr_align_added
+        PASS [   0.001s]       major        repr_align_changed
+        PASS [   0.000s]       major        repr_align_removed
+        PASS [   0.000s]       major        repr_c_enum_struct_variant_fields_reordered
+        PASS [   0.000s]       major        repr_c_plain_struct_fields_reordered
+        PASS [   0.000s]       major        repr_c_removed
+        PASS [   0.000s]       major        repr_packed_added
+        PASS [   0.000s]       major        repr_packed_changed
+        PASS [   0.000s]       major        repr_packed_removed
+        PASS [   0.001s]       minor        repr_transparent_added
+        PASS [   0.000s]       major        safe_function_requires_more_target_features
+        PASS [   0.000s]       major        safe_function_target_feature_added
+        PASS [   0.002s]       major        safe_inherent_method_requires_more_target_features
+        PASS [   0.002s]       major        safe_inherent_method_target_feature_added
+        PASS [   0.004s]       major        sized_impl_removed
+        PASS [   0.000s]       major        static_became_unsafe
+        PASS [   0.001s]       minor        struct_field_marked_deprecated
+        PASS [   0.000s]       major        struct_marked_non_exhaustive
+        FAIL [   0.001s]       major        struct_missing
+        PASS [   0.000s]       minor        struct_must_use_added
+        PASS [   0.001s]       major        struct_now_doc_hidden
+        PASS [   0.001s]       major        struct_pub_field_missing
+        PASS [   0.001s]       major        struct_pub_field_now_doc_hidden
+        PASS [   0.000s]       major        struct_repr_transparent_removed
+        FAIL [   0.001s]       major        struct_with_no_pub_fields_changed_type
+        PASS [   0.000s]       major        struct_with_pub_fields_changed_type
+        PASS [   0.000s]       major        trait_added_supertrait
+        PASS [   0.001s]       major        trait_allows_fewer_const_generic_params
+        PASS [   0.000s]       major        trait_allows_fewer_generic_type_params
+        PASS [   0.000s]       major        trait_associated_const_added
+        PASS [   0.000s]       major        trait_associated_const_default_removed
+        PASS [   0.000s]       minor        trait_associated_const_marked_deprecated
+        PASS [   0.000s]       major        trait_associated_const_now_doc_hidden
+        PASS [   0.000s]       major        trait_associated_type_added
+        PASS [   0.000s]       major        trait_associated_type_default_removed
+        PASS [   0.000s]       minor        trait_associated_type_marked_deprecated
+        PASS [   0.000s]       major        trait_associated_type_now_doc_hidden
+        PASS [   0.000s]       major        trait_changed_kind
+        PASS [   0.000s]       major        trait_const_generic_reordered
+        PASS [   0.000s]       major        trait_generic_type_reordered
+        PASS [   0.000s]       minor        trait_marked_deprecated
+        PASS [   0.001s]       major        trait_method_added
+        PASS [   0.002s]       major        trait_method_changed_abi
+        PASS [   0.002s]       major        trait_method_const_generic_reordered
+        PASS [   0.001s]       major        trait_method_default_impl_removed
+        PASS [   0.002s]       major        trait_method_generic_type_reordered
+        PASS [   0.001s]       minor        trait_method_marked_deprecated
+        PASS [   0.001s]       major        trait_method_missing
+        PASS [   0.002s]       major        trait_method_no_longer_has_receiver
+        PASS [   0.001s]       major        trait_method_no_longer_unwind
+        PASS [   0.000s]       major        trait_method_no_longer_variadic
+        PASS [   0.001s]       major        trait_method_now_doc_hidden
+        PASS [   0.001s]       major        trait_method_now_returns_unit
+        PASS [   0.002s]       major        trait_method_now_unwind
+        PASS [   0.001s]       major        trait_method_now_variadic
+        PASS [   0.003s]       major        trait_method_parameter_count_changed
+        PASS [   0.001s]       major        trait_method_receiver_added
+        PASS [   0.001s]       major        trait_method_receiver_mut_ref_became_owned
+        PASS [   0.001s]       major        trait_method_receiver_mut_ref_became_ref
+        PASS [   0.001s]       major        trait_method_receiver_owned_became_mut_ref
+        PASS [   0.001s]       major        trait_method_receiver_owned_became_ref
+        PASS [   0.001s]       major        trait_method_receiver_ref_became_mut
+        PASS [   0.001s]       major        trait_method_receiver_ref_became_owned
+        PASS [   0.002s]       major        trait_method_receiver_type_changed
+        PASS [   0.003s]       major        trait_method_requires_different_const_generic_params
+        PASS [   0.002s]       major        trait_method_requires_different_generic_type_params
+        PASS [   0.001s]       major        trait_method_return_value_added
+        PASS [   0.001s]       major        trait_method_target_feature_removed
+        PASS [   0.001s]       major        trait_method_unsafe_added
+        PASS [   0.000s]       major        trait_method_unsafe_removed
+        PASS [   0.000s]       major        trait_mismatched_generic_lifetimes
+        FAIL [   0.001s]       major        trait_missing
+        PASS [   0.000s]       minor        trait_must_use_added
+        PASS [   0.000s]       major        trait_newly_sealed
+        PASS [   0.000s]       major        trait_no_longer_dyn_compatible
+        PASS [   0.000s]       major        trait_now_doc_hidden
+        PASS [   0.000s]       major        trait_removed_associated_constant
+        PASS [   0.000s]       major        trait_removed_associated_type
+        PASS [   0.000s]       major        trait_removed_supertrait
+        PASS [   0.001s]       major        trait_requires_more_const_generic_params
+        PASS [   0.002s]       major        trait_requires_more_generic_type_params
+        PASS [   0.000s]       major        trait_unsafe_added
+        PASS [   0.000s]       major        trait_unsafe_removed
+        PASS [   0.000s]       major        tuple_struct_to_plain_struct
+        PASS [   0.002s]       major        type_allows_fewer_const_generic_params
+        PASS [   0.001s]       major        type_allows_fewer_generic_type_params
+        PASS [   0.001s]       minor        type_associated_const_marked_deprecated
+        PASS [   0.001s]       major        type_const_generic_reordered
+        PASS [   0.001s]       major        type_generic_type_reordered
+        PASS [   0.000s]       minor        type_marked_deprecated
+        PASS [   0.001s]       minor        type_method_marked_deprecated
+        PASS [   0.002s]       major        type_mismatched_generic_lifetimes
+        PASS [   0.002s]       major        type_requires_more_const_generic_params
+        PASS [   0.002s]       major        type_requires_more_generic_type_params
+        PASS [   0.000s]       minor        unconditionally_sealed_trait_became_pub_api_sealed
+        PASS [   0.000s]       minor        unconditionally_sealed_trait_became_unsealed
+        PASS [   0.000s]       major        union_changed_kind
+        PASS [   0.000s]       major        union_changed_to_incompatible_struct
+        PASS [   0.000s]       major        union_field_added_with_all_pub_fields
+        PASS [   0.000s]       major        union_field_added_with_non_pub_fields
+        PASS [   0.000s]       minor        union_field_marked_deprecated
+        PASS [   0.000s]       major        union_field_missing
+        PASS [   0.000s]       major        union_missing
+        PASS [   0.000s]       minor        union_must_use_added
+        PASS [   0.000s]       major        union_now_doc_hidden
+        PASS [   0.000s]       major        union_pub_field_now_doc_hidden
+        PASS [   0.000s]       major        union_with_multiple_pub_fields_changed_to_struct
+        PASS [   0.000s]       major        unit_struct_changed_kind
+        PASS [   0.000s]       major        unsafe_function_requires_more_target_features
+        PASS [   0.000s]       major        unsafe_function_target_feature_added
+        PASS [   0.003s]       major        unsafe_inherent_method_requires_more_target_features
+        PASS [   0.002s]       major        unsafe_inherent_method_target_feature_added
+        PASS [   0.001s]       major        unsafe_trait_method_requires_more_target_features
+        PASS [   0.001s]       major        unsafe_trait_method_target_feature_added
+     Checked [   0.033s] 229 checks: 222 pass, 7 fail, 0 warn, 31 skip
+
+--- failure enum_missing: pub enum removed or renamed ---
+
+Description:
+A publicly-visible enum cannot be imported by its prior path. A `pub use` may have been removed, or the enum itself may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/enum_missing.ron
+
+Failed in:
+  enum druid_rdbc::spi::Unwrapped, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\wrapper.rs:14
+  enum druid_rdbc::spi::CallableInputParameter, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\callable_input_parameter.rs:21
+  enum druid_rdbc::spi::ResultSetUpdate, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\result_set_update.rs:18
+  enum druid_rdbc::spi::StatementExecuteResult, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_statement.rs:45
+  enum druid_rdbc::resource::RdbcResourceState, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_resource_state.rs:4
+  enum druid_rdbc::spi::ResultSetColumnType, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\result_set_column_type.rs:8
+  enum druid_rdbc::spi::PreparedTypeNameArgument, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\prepared_input_parameter.rs:24
+  enum druid_rdbc::spi::CallableParameter, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\callable_parameter.rs:10
+  enum druid_rdbc::spi::StatementGeneratedKeys, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_statement.rs:29
+  enum druid_rdbc::spi::DatabaseMetaDataRowIdLifetime, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\database_meta_data_row_id_lifetime.rs:7
+  enum druid_rdbc::spi::PreparedStatementMethodType, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\prepared_statement_key.rs:15
+  enum druid_rdbc::spi::PreparedInputParameter, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\prepared_input_parameter.rs:37
+  enum druid_rdbc::spi::ResultSetNullability, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\result_set_nullability.rs:8
+  enum druid_rdbc::compat::DruidError, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\compat\druid_error.rs:13
+  enum druid_rdbc::resource::RdbcResourceKind, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_resource_kind.rs:4
+
+--- failure enum_variant_added: enum variant added on exhaustive enum ---
+
+Description:
+A publicly-visible enum without #[non_exhaustive] has a new variant.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#enum-variant-new
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/enum_variant_added.ron
+
+Failed in:
+  variant RdbcObject:Struct in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc\src\types\rdbc_object.rs:54
+
+--- failure inherent_method_missing: pub method removed or renamed ---
+
+Description:
+A publicly-visible method or associated fn is no longer available under its prior name. It may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/inherent_method_missing.ron
+
+Failed in:
+  RdbcClob::state, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\clob.rs:193
+  RdbcSqlXml::state, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\sql_xml.rs:137
+  RdbcOpaqueObject::physical, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\types\rdbc_opaque_object.rs:43
+  RdbcArray::state, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\array.rs:196
+  RdbcRef::state, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\ref_value.rs:86
+  RdbcBlob::state, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\blob.rs:165
+  RdbcXmlSource::physical, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_xml_source.rs:22
+  RdbcNClob::state, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\n_clob.rs:141
+  RdbcXmlResult::physical, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_xml_result.rs:22
+
+--- failure module_missing: pub module removed or renamed ---
+
+Description:
+A publicly-visible module cannot be imported by its prior path. A `pub use` may have been removed, or the module may have been renamed, removed, or made non-public.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/module_missing.ron
+
+Failed in:
+  mod druid_rdbc::spi, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\mod.rs:1
+
+--- failure struct_missing: pub struct removed or renamed ---
+
+Description:
+A publicly-visible struct cannot be imported by its prior path. A `pub use` may have been removed, or the struct itself may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/struct_missing.ron
+
+Failed in:
+  struct druid_rdbc::spi::PreparedStatementKey, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\prepared_statement_key.rs:41
+  struct druid_rdbc::spi::RdbcResultSet, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\rdbc_result_set.rs:1689
+  struct druid_rdbc::resource::Clob, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\clob.rs:16
+  struct druid_rdbc::spi::PhysicalConnectionInfo, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_connection_info.rs:16
+  struct druid_rdbc::spi::ExecResult, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\exec_result.rs:7
+  struct druid_rdbc::spi::ResultSetColumnMeta, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\result_set_column_meta.rs:10
+  struct druid_rdbc::resource::SqlXml, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\sql_xml.rs:15
+  struct druid_rdbc::spi::SqlTextPreparedStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_prepared_statement.rs:244
+  struct druid_rdbc::spi::SqlTextStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_statement.rs:226
+  struct druid_rdbc::spi::CallableOutParameter, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\callable_out_parameter.rs:7
+  struct druid_rdbc::resource::Array, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\array.rs:18
+  struct druid_rdbc::resource::Ref, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\ref_value.rs:13
+  struct druid_rdbc::resource::Blob, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\blob.rs:15
+  struct druid_rdbc::spi::PhysicalConnectionCapabilities, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_connection_capabilities.rs:8
+  struct druid_rdbc::resource::RdbcResourceCapabilities, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_resource_capabilities.rs:1
+  struct druid_rdbc::resource::NClob, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\n_clob.rs:17
+  struct druid_rdbc::resource::RdbcResourceFactory, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_resource_factory.rs:11
+  struct druid_rdbc::spi::RowSetResultSet, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\rdbc_result_set.rs:1054
+  struct druid_rdbc::spi::ResultSetMetaData, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\result_set_meta_data.rs:21
+  struct druid_rdbc::spi::PhysicalStatementOptions, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_statement.rs:15
+  struct druid_rdbc::resource::RdbcResourceContext, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_resource_context.rs:12
+  struct druid_rdbc::resource::RdbcResourceId, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_resource_id.rs:5
+
+--- failure struct_with_no_pub_fields_changed_type: public API struct with no public fields is no longer a struct ---
+
+Description:
+A struct without pub fields became an enum or union, breaking pattern matching.
+        ref: https://internals.rust-lang.org/t/rest-patterns-foo-should-match-non-struct-types/21607
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/struct_with_no_pub_fields_changed_type.ron
+
+Failed in:
+  struct druid_rdbc::error::RdbcError became enum in file E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc\src\error\rdbc_error.rs:60
+
+--- failure trait_missing: pub trait removed or renamed ---
+
+Description:
+A publicly-visible trait cannot be imported by its prior path. A `pub use` may have been removed, or the trait itself may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/trait_missing.ron
+
+Failed in:
+  trait druid_rdbc::resource::RdbcResourceOwner, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_resource_owner.rs:9
+  trait druid_rdbc::resource::RdbcRefAccess, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_ref_access.rs:7
+  trait druid_rdbc::spi::PhysicalPreparedStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_prepared_statement.rs:18
+  trait druid_rdbc::resource::RdbcNClobAccess, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_n_clob_access.rs:4
+  trait druid_rdbc::resource::RdbcClobAccess, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_clob_access.rs:9
+  trait druid_rdbc::resource::RdbcResourceAccess, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_resource_access.rs:7
+  trait druid_rdbc::types::PhysicalRdbcOpaqueObject, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\types\rdbc_opaque_object.rs:12
+  trait druid_rdbc::spi::Wrapper, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\wrapper.rs:140
+  trait druid_rdbc::spi::PhysicalConnection, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_connection.rs:21
+  trait druid_rdbc::resource::PhysicalXmlResult, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_xml_result.rs:7
+  trait druid_rdbc::spi::PhysicalCallableStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_callable_statement.rs:22
+  trait druid_rdbc::spi::WrapperExt, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\wrapper.rs:189
+  trait druid_rdbc::spi::PhysicalStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_statement.rs:81
+  trait druid_rdbc::resource::RdbcBlobAccess, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_blob_access.rs:6
+  trait druid_rdbc::spi::PhysicalResultSetMetaData, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_result_set_meta_data.rs:12
+  trait druid_rdbc::resource::RdbcSqlXmlAccess, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_sql_xml_access.rs:10
+  trait druid_rdbc::spi::PhysicalResultSet, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\rdbc_result_set.rs:22
+  trait druid_rdbc::resource::PhysicalCharacterWriter, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_writer.rs:15
+  trait druid_rdbc::resource::RdbcArrayAccess, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_array_access.rs:8
+  trait druid_rdbc::resource::PhysicalXmlSource, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_xml_source.rs:7
+  trait druid_rdbc::spi::PhysicalConnectionFactory, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_connection_factory.rs:14
+  trait druid_rdbc::resource::PhysicalCharacterReader, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\resource\rdbc_reader.rs:18
+  trait druid_rdbc::spi::PhysicalDatabaseMetaData, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc\src\spi\physical_database_meta_data.rs:13
+
+     Summary semver requires new major version: 7 major and 0 minor checks failed
+    Finished [   4.179s] druid-rdbc
