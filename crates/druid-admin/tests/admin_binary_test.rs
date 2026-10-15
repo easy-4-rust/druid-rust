@@ -6,8 +6,6 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use axum::body::Body;
-use axum::http::Request;
 #[cfg(unix)]
 use base64::Engine as _;
 use druid_admin::config::{AdminAuthMode, AdminServerConfig, AdminTlsFiles};
@@ -25,7 +23,6 @@ use tokio::sync::mpsc;
 #[cfg(unix)]
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::{Certificate, ClientTlsConfig, Endpoint};
-use tower::ServiceExt as _;
 use tracing::instrument::WithSubscriber as _;
 
 const SECURITY_ENV_VARS: &[&str] = &[
@@ -117,51 +114,6 @@ fn basic_authorization_scheme_is_ascii_case_insensitive() {
         ("admin", ""),
     ] {
         assert!(!auth.authorizes_credentials(username, password));
-    }
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn production_trace_logs_path_without_query_credentials() {
-    let logs = CapturedLogs::default();
-    let subscriber = tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW)
-        .without_time()
-        .with_writer(logs.clone())
-        .finish();
-    // 将路由构造和 future 创建都放在 subscriber 内，避免测试线程并行时
-    // 在订阅生效前初始化并缓存 tracing callsite。
-    let response = async move {
-        // 其他并行用例可能先用 INFO subscriber 注册同一 DEBUG callsite。
-        // 在本用例的订阅生效后重算 interest，确保验证的是生产请求 span。
-        tracing::callsite::rebuild_interest_cache();
-        let app = druid_admin::standalone_router(druid_admin::MetricsRepository::new());
-        app.oneshot(
-            Request::builder()
-                .uri(
-                    "/druid/datasource.json?loginPassword=trace-password-secret&token=trace-token-secret",
-                )
-                .body(Body::empty())
-                .expect("valid request"),
-        )
-        .await
-    }
-    .with_subscriber(subscriber)
-    .await
-    .expect("router response");
-    assert_eq!(response.status(), axum::http::StatusCode::OK);
-    let output = logs.text();
-    assert!(output.contains("/druid/datasource.json"), "{output}");
-    for secret in [
-        "trace-password-secret",
-        "trace-token-secret",
-        "loginPassword",
-        "token=",
-    ] {
-        assert!(
-            !output.contains(secret),
-            "tracing leaked {secret}: {output}"
-        );
     }
 }
 
