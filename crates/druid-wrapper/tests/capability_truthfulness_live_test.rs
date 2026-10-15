@@ -6,6 +6,9 @@
 
 use druid_rdbc::connection::Connection;
 use druid_rdbc::driver::ConnectionFactory;
+use druid_rdbc::error::RdbcError;
+use druid_rdbc::result_set::ColumnIndex;
+use druid_rdbc::statement::StatementOptions;
 use druid_rdbc::types::{Row, Value};
 use druid_wrapper::sqlx::SqlxConnectionFactory;
 use druid_wrapper::toasty::ToastyConnectionFactory;
@@ -70,6 +73,45 @@ async fn verify_capabilities(mut connection: Box<dyn Connection>, backend: &str,
     assert!(!capabilities.catalogs);
     assert!(!capabilities.schemas);
     assert!(!capabilities.callable_statements);
+
+    assert_feature_not_supported(
+        connection
+            .create_array_of(Some("INTEGER"), Some(vec![]))
+            .await,
+        backend,
+        driver,
+        "createArrayOf",
+    );
+    assert_feature_not_supported(
+        connection.create_blob().await,
+        backend,
+        driver,
+        "createBlob",
+    );
+    assert_feature_not_supported(
+        connection.create_clob().await,
+        backend,
+        driver,
+        "createClob",
+    );
+    assert_feature_not_supported(
+        connection.create_n_clob().await,
+        backend,
+        driver,
+        "createNClob",
+    );
+    assert_feature_not_supported(
+        connection.create_sql_xml().await,
+        backend,
+        driver,
+        "createSQLXML",
+    );
+    assert_feature_not_supported(
+        connection.create_struct(Some("probe"), Some(vec![])).await,
+        backend,
+        driver,
+        "createStruct",
+    );
 
     connection
         .exec(
@@ -137,5 +179,41 @@ async fn verify_capabilities(mut connection: Box<dyn Connection>, backend: &str,
         vec![Row::new(vec![Value::Int(1)])],
         "{backend}/{driver} must roll back the whole second transaction"
     );
+
+    let mut statement = connection
+        .create_statement(StatementOptions::default())
+        .await
+        .expect("create standard statement");
+    let mut result_set = statement
+        .execute_query("SELECT value FROM druid_capability_probe")
+        .await
+        .expect("execute standard query");
+    let column = ColumnIndex::new(1).expect("one-based column index");
+    assert!(result_set.next().await.expect("read committed row"));
+    assert_eq!(
+        result_set.value(column).expect("read current value"),
+        Value::Int(1)
+    );
+    assert!(!result_set.next().await.expect("observe EOF"));
+    result_set.close().await.expect("close result set");
+    assert!(result_set.is_closed().expect("closed state"));
+    statement.close().await.expect("close statement");
     connection.close().await.expect("close live connection");
+}
+
+fn assert_feature_not_supported<T>(
+    result: Result<T, RdbcError>,
+    backend: &str,
+    driver: &str,
+    operation: &str,
+) {
+    match result {
+        Err(RdbcError::SqlException(error)) => assert_eq!(
+            error.sql_state(),
+            Some("0A000"),
+            "{backend}/{driver} {operation} must reject unsupported resources"
+        ),
+        Err(error) => panic!("{backend}/{driver} {operation} returned {error:?}"),
+        Ok(_) => panic!("{backend}/{driver} {operation} unexpectedly succeeded"),
+    }
 }
