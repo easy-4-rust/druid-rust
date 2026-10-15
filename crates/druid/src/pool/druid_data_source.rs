@@ -1,3 +1,4 @@
+use std::any::TypeId;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -327,6 +328,38 @@ impl DruidDataSource {
     pub fn register_monitoring_arc(self: &Arc<Self>) -> Arc<dyn DataSourceMonitorable> {
         self.register_monitoring();
         self.monitorable()
+    }
+}
+
+impl druid_rdbc::wrapper::Wrapper for DruidDataSource {
+    fn wrapper_view(&self) -> &dyn druid_rdbc::wrapper::Wrapper {
+        self
+    }
+
+    fn canonical_unwrap(
+        &self,
+        target: TypeId,
+    ) -> Option<druid_rdbc::wrapper::StandardUnwrapped<'_>> {
+        use druid_rdbc::wrapper::StandardUnwrapped;
+
+        if target == TypeId::of::<dyn druid_rdbc::data_source::DataSource>() {
+            Some(StandardUnwrapped::DataSource(self))
+        } else if target == TypeId::of::<dyn druid_rdbc::data_source::CommonDataSource>() {
+            Some(StandardUnwrapped::CommonDataSource(self))
+        } else {
+            None
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::data_source::DataSource for DruidDataSource {
+    /// 从现有原生池取得一个有所有权的标准逻辑连接；关闭时归还同一个池。
+    async fn connection(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        DruidDataSource::get_connection(self)
+            .await
+            .map(|connection| Box::new(connection) as Box<dyn druid_rdbc::connection::Connection>)
+            .map_err(RdbcError::from)
     }
 }
 
