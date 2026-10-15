@@ -22,7 +22,9 @@ jobs:
         with:
           toolchain: 1.97.1
       - name: Verify benchmark evidence parser
-        run: python3 scripts/test_measure_runtime_benchmark.py
+        run: |
+          python3 scripts/test_measure_runtime_benchmark.py
+          python3 scripts/test_measure_metrics_saturation.py
       - name: Build runtime benchmark
         run: |
           mkdir -p target/benchmark-evidence
@@ -39,6 +41,18 @@ jobs:
             --max-shutdown-ms 250 \
             --max-wait-queue-depth 56 \
             --max-active-peak 8
+      - name: Build Metrics saturation test
+        run: |
+          cargo test -p druid-metrics --locked --test queue_semantics_test --no-run --message-format=json > target/benchmark-evidence/metrics-build.jsonl
+      - name: Measure Metrics saturated shutdown
+        run: |
+          python3 scripts/measure_metrics_saturation.py \
+            --build-log target/benchmark-evidence/metrics-build.jsonl \
+            --run-log target/benchmark-evidence/metrics-saturation-run.log \
+            --output target/benchmark-evidence/metrics-saturation-measurement.json \
+            --repetitions 20 \
+            --max-p99-shutdown-us 100000 \
+            --max-peak-rss-kib 65536
       - name: Upload runtime measurement
         if: always()
         uses: actions/upload-artifact@v4
@@ -48,5 +62,7 @@ jobs:
             target/benchmark-evidence/runtime-measurement.json
             target/benchmark-evidence/runtime-run.log
             target/criterion/runtime_pool_burst_64/new/sample.json
+            target/benchmark-evidence/metrics-saturation-measurement.json
+            target/benchmark-evidence/metrics-saturation-run.log
           if-no-files-found: error
           retention-days: 90
