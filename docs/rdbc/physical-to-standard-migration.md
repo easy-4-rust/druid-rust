@@ -172,7 +172,11 @@ behavioral support module links the eight executed bb8/deadpool C3 cases directl
 - The frozen Task 6 consumer handoff is `75 CLOSED / 0 ACTIVE`; Task 5 remains `180 CLOSED` and Task 7 remains `108 PENDING`.
 - Production, public API, rustdoc, macros, re-exports, path attributes and reachable Cargo feature modules contain zero retired `Physical[A-Z]` identities and no `druid_rdbc::spi` module.
 - Canonical `Driver` preserves the BASE/JDBC-facing `druid::rdbc` parent logger string as a
-  behavioral value; `CommonDataSource` continues to use the distinct `druid::sql` namespace.
+  behavioral value. `druid::sql::CommonDataSource` now re-exports the single canonical
+  `druid_rdbc::data_source::CommonDataSource` trait rather than defining a second contract.
+- Pre-release callers of the old Druid trait must migrate integer-seconds timeout calls to
+  `try_login_timeout()` and `set_login_timeout(Duration)`. The standard contract reports
+  unsupported parent logging with SQLState `0A000`; it does not fabricate a logger name.
 - The 67 deleted integration-test paths are derived from the BASE diff. The exact function ledger
   binds all 1,283 BASE tests one-to-one to executable canonical tests; only the zero-test module shell
   is identity-only, while the zero-test behavioral support module binds the eight C3 pool cases.

@@ -1,5 +1,6 @@
 use druid::core::{RdbcObject, RdbcParameter, RdbcParameterString, RdbcParameterValue};
 use druid::sql::CommonDataSource;
+use std::time::Duration;
 
 struct MinimalDataSource;
 
@@ -10,15 +11,21 @@ impl druid::sql::CommonDataSource for MinimalDataSource {}
 #[test]
 fn common_datasource_login_timeout_default() {
     let ds = MinimalDataSource;
-    assert_eq!(ds.login_timeout(), 0);
-    assert_eq!(ds.get_login_timeout(), 0);
+    assert_eq!(ds.try_login_timeout(), Ok(None));
+    fn requires_canonical<T: druid_rdbc::data_source::CommonDataSource + ?Sized>() {}
+    requires_canonical::<dyn druid::sql::CommonDataSource>();
 }
 
 #[test]
 fn common_datasource_set_login_timeout_unsupported() {
-    let ds = MinimalDataSource;
-    let result = ds.set_login_timeout(30);
-    assert!(result.is_err());
+    let mut ds = MinimalDataSource;
+    let result = ds.set_login_timeout(Duration::from_secs(30));
+    assert!(matches!(
+        result,
+        Err(druid_rdbc::error::RdbcError::UnsupportedOperation {
+            operation: "common_data_source_set_login_timeout"
+        })
+    ));
 }
 
 #[test]
@@ -37,8 +44,8 @@ fn common_datasource_set_log_writer_unsupported() {
 #[test]
 fn common_datasource_parent_logger() {
     let ds = MinimalDataSource;
-    assert_eq!(ds.parent_logger(), "druid::sql");
-    assert_eq!(ds.get_parent_logger(), "druid::sql");
+    let error = ds.get_parent_logger().unwrap_err();
+    assert_eq!(error.sql_exception().unwrap().sql_state(), Some("0A000"));
 }
 
 // ── RdbcParameterString ────────────────────────────────────────

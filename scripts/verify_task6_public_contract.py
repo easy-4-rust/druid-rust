@@ -9,6 +9,7 @@ import hashlib
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import NoReturn
 
@@ -217,7 +218,7 @@ def verify_repository(root: Path) -> tuple[int, dict[str, str], str]:
     run_gate(
         root,
         [
-            "python3",
+            sys.executable,
             "scripts/verify_task6_external_public_contract.py",
             "--root",
             str(root),

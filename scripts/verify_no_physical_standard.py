@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from collections import Counter
 from dataclasses import dataclass
@@ -749,7 +750,7 @@ def verify_repository(root: Path) -> tuple[int, int, int, int, int, int]:
     rustdoc = generate_rustdoc_text(root)
     verify_text_artifact("rustdoc", rustdoc)
     run_checked(
-        ["python3", "scripts/verify_task6_method_parity.py"],
+        [sys.executable, "scripts/verify_task6_method_parity.py"],
         cwd=root,
         label="Task 6 exact method parity",
     )

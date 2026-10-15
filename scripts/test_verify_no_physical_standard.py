@@ -297,9 +297,12 @@ class NoPhysicalVerifierTest(unittest.TestCase):
     def test_live_gate_requires_exact_method_test_and_public_contract_execution(self) -> None:
         source = inspect.getsource(verifier.verify_repository)
         self.assertIn("verify_task6_method_parity.py", source)
+        self.assertIn("sys.executable", source)
         self.assertIn("verify_handoff_ledgers", source)
         self.assertIn("deleted_test_parity.execute_targets", source)
         self.assertIn("public_contract.verify_repository", source)
+        import verify_task6_public_contract as public_contract
+        self.assertIn("sys.executable", inspect.getsource(public_contract.verify_repository))
 
 
 if __name__ == "__main__":

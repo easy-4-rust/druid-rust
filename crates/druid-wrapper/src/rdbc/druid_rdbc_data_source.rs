@@ -3,7 +3,7 @@ use std::any::TypeId;
 use async_trait::async_trait;
 use druid::core::DruidPooledConnection;
 use druid::pool::DruidDataSource;
-use druid::sql::{CommonDataSource, DataSource};
+use druid::sql::DataSource;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlException;
 
@@ -82,12 +82,6 @@ impl druid_rdbc::wrapper::Wrapper for DruidRdbcDataSource {
     }
 }
 
-impl CommonDataSource for DruidRdbcDataSource {
-    fn login_timeout(&self) -> u64 {
-        u64::try_from(self.inner.login_timeout()).unwrap_or(0)
-    }
-}
-
 impl druid_rdbc::data_source::CommonDataSource for DruidRdbcDataSource {
     fn try_login_timeout(&self) -> Result<Option<std::time::Duration>, RdbcError> {
         druid_rdbc::data_source::CommonDataSource::try_login_timeout(&self.inner)
@@ -98,14 +92,14 @@ impl druid_rdbc::data_source::CommonDataSource for DruidRdbcDataSource {
     }
 
     fn get_log_writer(&self) -> Option<druid_rdbc::data_source::RdbcLogWriter> {
-        druid::sql::CommonDataSource::get_log_writer(&self.inner)
+        druid_rdbc::data_source::CommonDataSource::get_log_writer(&self.inner)
     }
 
     fn set_log_writer(
         &self,
         writer: Option<druid_rdbc::data_source::RdbcLogWriter>,
     ) -> Result<(), RdbcError> {
-        druid::sql::CommonDataSource::set_log_writer(&self.inner, writer)
+        druid_rdbc::data_source::CommonDataSource::set_log_writer(&self.inner, writer)
     }
 
     fn get_parent_logger(&self) -> Result<&'static str, RdbcError> {

@@ -30,21 +30,6 @@ pub trait DataSource: CommonDataSource + Sync {
     }
 }
 
-impl CommonDataSource for crate::pool::DruidDataSource {
-    fn login_timeout(&self) -> u64 {
-        u64::try_from(crate::pool::DruidDataSource::login_timeout(self)).unwrap_or(0)
-    }
-
-    fn get_log_writer(&self) -> Option<super::RdbcLogWriter> {
-        self.log_writer.read().clone()
-    }
-
-    fn set_log_writer(&self, writer: Option<super::RdbcLogWriter>) -> Result<(), RdbcError> {
-        *self.log_writer.write() = writer;
-        Ok(())
-    }
-}
-
 impl druid_rdbc::data_source::CommonDataSource for crate::pool::DruidDataSource {
     fn try_login_timeout(&self) -> Result<Option<std::time::Duration>, RdbcError> {
         let seconds = crate::pool::DruidDataSource::login_timeout(self);
