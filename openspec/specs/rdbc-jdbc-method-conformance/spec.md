@@ -140,3 +140,14 @@ Evidence for capability reporting, unsupported resource factories, and live asyn
 #### Scenario: Iterate and close a live SQLx SQLite result set
 - **WHEN** a standard Statement executes a multi-row query against in-memory SQLx SQLite
 - **THEN** rows are returned in order, EOF is observed, and explicit ResultSet close succeeds
+
+### Requirement: HTTP SQL and libSQL do not advertise unsupported standard connection capabilities
+
+The HTTP SQL and libSQL adapters SHALL advertise no transaction, savepoint, catalog, schema, or callable capability until those operations have backend evidence. Calls to transaction, savepoint, and callable operations SHALL return the standard unsupported-operation error. SQL Array creation SHALL return the standard feature-not-supported SQLState `0A000`.
+
+#### Scenario: Deterministic transport keeps unsupported capabilities explicit
+
+- **GIVEN** a standard connection created by the HTTP SQL or libSQL factory with its deterministic transport
+- **WHEN** the caller reads capabilities and invokes unsupported transaction, savepoint, callable, and SQL Array operations
+- **THEN** all five flags are false and each operation returns its documented standard error
+- **AND** this test certifies adapter behavior only, not live remote service behavior

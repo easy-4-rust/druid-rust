@@ -160,6 +160,35 @@ mod tests {
         let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
             .await
             .unwrap();
+        assert_eq!(
+            connection.capabilities(),
+            druid_rdbc::extensions::ConnectionCapabilities::default()
+        );
+        assert!(matches!(
+            connection.set_auto_commit(false).await,
+            Err(RdbcError::UnsupportedOperation {
+                operation: "connection_set_auto_commit"
+            })
+        ));
+        assert!(matches!(
+            connection.set_savepoint_named("unsupported").await,
+            Err(RdbcError::UnsupportedOperation {
+                operation: "connection_set_savepoint_named"
+            })
+        ));
+        assert!(matches!(
+            connection
+                .prepare_call("CALL unsupported()", StatementOptions::default())
+                .await,
+            Err(RdbcError::UnsupportedOperation {
+                operation: "connection_prepare_call"
+            })
+        ));
+        match connection.create_array_of(Some("INTEGER"), None).await {
+            Err(RdbcError::SqlException(error)) => assert_eq!(error.sql_state(), Some("0A000")),
+            Err(error) => panic!("unexpected SQL Array error: {error:?}"),
+            Ok(_) => panic!("libSQL unexpectedly created a SQL Array"),
+        }
         let mut statement = connection
             .create_statement(StatementOptions::default())
             .await
