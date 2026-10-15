@@ -183,6 +183,38 @@ class BreakingApiAllowlistTest(unittest.TestCase):
             findings_by_lint(report("Different"), 100),
         )
 
+    def test_windows_workspace_and_external_target_paths_match_linux_report(self) -> None:
+        linux_report = (
+            "--- failure inherent_method_missing: removed ---\n"
+            "Failed in:\n"
+            "  DruidPooledConnection::close, previously in file "
+            "/home/runner/work/druid-rust/druid-rust/target/semver-checks/git-base/rev/"
+            "crates/druid/src/core/pooled_connection.rs:40\n"
+            "Summary semver requires new major version: 1 major and 0 minor checks failed\n"
+        )
+        windows_workspace = linux_report.replace(
+            "/home/runner/work/druid-rust/druid-rust/target/semver-checks/git-base/rev/",
+            "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\target\\semver-checks\\git-base\\rev\\",
+        )
+        windows_external_target = linux_report.replace(
+            "/home/runner/work/druid-rust/druid-rust/target/semver-checks/git-base/rev/",
+            "D:\\druid-rust-task8-target\\semver-checks\\git-base\\rev\\",
+        )
+        expected = verifier.render_method_migration_ledger(linux_report)
+        for windows_report in (windows_workspace, windows_external_target):
+            with self.subTest(report=windows_report):
+                self.assertEqual(
+                    findings_by_lint(windows_report, 100),
+                    findings_by_lint(linux_report, 100),
+                )
+                self.assertEqual(verifier.render_method_migration_ledger(windows_report), expected)
+        unexpected_checkout = windows_workspace.replace(
+            "druid-rust\\target\\semver-checks\\git-base\\rev\\",
+            "unrelated\\source\\",
+        )
+        with self.assertRaisesRegex(ValueError, "not repository-relative"):
+            verifier.render_method_migration_ledger(unexpected_checkout)
+
     def test_incomplete_report_and_non_semver_exit_fail_closed(self) -> None:
         with self.assertRaises(ValueError):
             findings_by_lint(report("Removed"), 101)

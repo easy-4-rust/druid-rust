@@ -18,6 +18,11 @@ WORKSPACE_PREFIX = re.compile(
     r"/home/runner/work/druid-rust/druid-rust/"
     r"(?:target/semver-checks/git-[^/]+/[^/]+/)?"
 )
+WINDOWS_PREFIX = re.compile(
+    r"[A-Za-z]:/(?:[^/\n]+/)*"
+    r"(?:druid-rust/(?:target/semver-checks/git-[^/]+/[^/]+/)?|"
+    r"semver-checks/git-[^/]+/[^/]+/)(?=crates/)"
+)
 SOURCE_LINE = re.compile(r"(?<=\.rs):\d+")
 FAILURE_SUMMARY = re.compile(
     r"Summary semver requires new (?:major|minor) version: "
@@ -55,6 +60,13 @@ METHOD_FINDING = re.compile(
 )
 
 
+def normalize_report_path(value: str) -> str:
+    """Make approved Linux and Windows SemVer checkout paths repository-relative."""
+
+    forward_slashes = value.replace("\\", "/")
+    return WINDOWS_PREFIX.sub("", WORKSPACE_PREFIX.sub("", forward_slashes))
+
+
 def findings_by_lint(report: str, exit_code: int) -> dict[str, tuple[int, str]]:
     """Return a count and order-independent digest for each failed lint."""
     report = ANSI_ESCAPE.sub("", report)
@@ -80,7 +92,7 @@ def findings_by_lint(report: str, exit_code: int) -> dict[str, tuple[int, str]]:
         for line in body.split("Failed in:", 1)[1].splitlines():
             if not line.startswith("  ") or line.lstrip().startswith(("Summary ", "Finished ")):
                 continue
-            finding = WORKSPACE_PREFIX.sub("", line.strip())
+            finding = normalize_report_path(line.strip())
             finding = SOURCE_LINE.sub(":<line>", finding)
             findings.append(finding)
         if not findings:
@@ -129,10 +141,13 @@ def method_migration_rows(report: str) -> tuple[tuple[str, ...], ...]:
             match = METHOD_FINDING.fullmatch(line)
             if match is None:
                 raise ValueError(f"unrecognized {lint} finding: {line.strip()}")
-            source = WORKSPACE_PREFIX.sub("", match.group("source"))
-            source = source.replace("\\", "/")
+            source = normalize_report_path(match.group("source"))
             source = SOURCE_LINE.sub(":<line>", source)
-            if source.startswith("/") or ".." in Path(source).parts:
+            if (
+                Path(source).is_absolute()
+                or re.match(r"^[A-Za-z]:/", source)
+                or ".." in Path(source).parts
+            ):
                 raise ValueError(f"SemVer source path is not repository-relative: {source}")
             key = (lint, match.group("identity"), source, match.group("line"))
             observed[key] += 1
