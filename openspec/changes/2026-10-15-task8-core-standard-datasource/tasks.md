@@ -9,3 +9,4 @@
 
 - [x] 2.1 Run formatter, strict Druid Clippy, relevant regression tests, and strict OpenSpec validation; record remaining broader CI or environment failures without promoting unrelated JDBC matrix rows.
 - [x] 2.2 Commit and push this verified feature point; verify local and remote commit IDs match.
+- [x] 2.3 Reconcile the pinned macOS/AArch64 Druid public API snapshot against CI run 38744709577's observed artifact: exactly six additive lines for the new canonical trait implementations; preserve byte-identical RDBC and wrapper snapshots. The new CI run remains the authority for post-update integration.

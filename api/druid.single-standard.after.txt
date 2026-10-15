@@ -8628,6 +8628,9 @@ pub fn druid::pool::druid_data_source::DruidDataSource::get_parent_logger(&self)
 pub fn druid::pool::druid_data_source::DruidDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::pool::druid_data_source::DruidDataSource::set_login_timeout(&mut self, core::time::Duration) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::pool::druid_data_source::DruidDataSource::try_login_timeout(&self) -> core::result::Result<core::option::Option<core::time::Duration>, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::data_source::data_source::DataSource for druid::pool::druid_data_source::DruidDataSource
+pub fn druid::pool::druid_data_source::DruidDataSource::connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid::pool::druid_data_source::DruidDataSource
 pub mod druid::pool::druid_data_source_factory
 pub struct druid::pool::druid_data_source_factory::DruidDataSourceFactory
 impl druid::pool::druid_data_source_factory::DruidDataSourceFactory
@@ -8889,6 +8892,9 @@ pub fn druid::pool::druid_data_source::DruidDataSource::get_parent_logger(&self)
 pub fn druid::pool::druid_data_source::DruidDataSource::set_log_writer(&self, core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::pool::druid_data_source::DruidDataSource::set_login_timeout(&mut self, core::time::Duration) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::pool::druid_data_source::DruidDataSource::try_login_timeout(&self) -> core::result::Result<core::option::Option<core::time::Duration>, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::data_source::data_source::DataSource for druid::pool::druid_data_source::DruidDataSource
+pub fn druid::pool::druid_data_source::DruidDataSource::connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid::pool::druid_data_source::DruidDataSource
 pub struct druid::pool::DruidDataSourceFactory
 impl druid::pool::druid_data_source_factory::DruidDataSourceFactory
 pub const druid::pool::druid_data_source_factory::DruidDataSourceFactory::PROP_ASYNC_INIT: &'static str
