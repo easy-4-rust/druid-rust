@@ -8,3 +8,7 @@
 - `cargo clippy -p druid-wrapper --all-targets --all-features --locked --offline -- -D warnings` failed in pre-existing `jdbc_agent_xa_connection.rs` and `jdbc_agent_xa_external_consumer.rs` test assertions (`manual_assert_eq` and `manual_assert`). The changed library passed its targeted strict Clippy gate. The two broader warnings remain open P07 quality work.
 
 The Task 8 final JDBC semantic inventory remains incomplete; this change does not promote its planned rows or claim production readiness.
+
+## CI correction
+
+Run `38728847589` exposed two omissions in the first submission: the new test's target metadata required `sqlx` but not the `driver-catalog` module it imports, and the pinned macOS public-API snapshot omitted the newly implemented `Debug` trait. The target now requires both features. The wrapper snapshot and SHA-256 were copied from that run's `public-api-observed` artifact; comparison with the previous snapshot showed only the two expected `Debug` declarations. Local `cargo check -p druid-wrapper --no-default-features --features sqlx --tests --locked --offline --quiet` and `cargo test -p druid-wrapper --no-default-features --features driver-catalog,sqlx --test data_source_credential_hardening_test --locked --offline --quiet` both exited successfully (the latter 2/2 tests). The corrected commit still requires a fresh CI result.
