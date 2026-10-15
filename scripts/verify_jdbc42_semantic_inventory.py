@@ -114,6 +114,19 @@ TASK3_STANDARD_ENTRIES = {
     "javax.sql.XAConnection": "druid_rdbc::data_source::XaConnection",
     "javax.sql.XADataSource": "druid_rdbc::data_source::XaDataSource",
 }
+# 已核对的公开声明修正。冻结的 Task 2/3 来源摘要仍使用上方原始映射。
+# 每项为（冻结形态，当前形态，当前公开路径）；其他行不得借此改变摘要。
+CURRENT_DECLARATION_CORRECTIONS = {
+    "java.sql.BatchUpdateException": ("ENUM_KIND", "DTO", TASK3_STANDARD_ENTRIES["java.sql.BatchUpdateException"]),
+    "java.sql.DataTruncation": ("ENUM_KIND", "DTO", TASK3_STANDARD_ENTRIES["java.sql.DataTruncation"]),
+    "java.sql.DriverManager": ("MODULE", "DTO", TASK3_STANDARD_ENTRIES["java.sql.DriverManager"]),
+    "java.sql.SQLClientInfoException": ("ENUM_KIND", "DTO", TASK3_STANDARD_ENTRIES["java.sql.SQLClientInfoException"]),
+    "java.sql.SQLException": ("ENUM_KIND", "DTO", TASK3_STANDARD_ENTRIES["java.sql.SQLException"]),
+    "java.sql.SQLInvalidAuthorizationSpecException": (
+        "ENUM_KIND", "ENUM_KIND", "druid_rdbc::error::SqlExceptionKind::InvalidAuthorization"
+    ),
+    "java.sql.SQLWarning": ("ENUM_KIND", "DTO", TASK3_STANDARD_ENTRIES["java.sql.SQLWarning"]),
+}
 TASK4_ADAPTER_LIVE_ENTRIES = {
     "java.sql.Connection",
     "java.sql.DatabaseMetaData",
@@ -249,6 +262,15 @@ def canonical_semantic_payload(rows: list[list[str]]) -> bytes:
     ).encode("utf-8")
 
 
+def verify_current_declaration_corrections(rows: list[list[str]]) -> None:
+    """仅接受已审定的当前公开形态和路径，避免冻结摘要归一化掩盖漂移。"""
+
+    for row in rows:
+        correction = CURRENT_DECLARATION_CORRECTIONS.get(row[1])
+        if correction and (row[3], row[5]) != correction[1:]:
+            fail(f"current public declaration correction drift: {row[1]}")
+
+
 def verify_final_state_policy(rows: list[list[str]]) -> None:
     """检查最终状态自洽性；来源、公开类型及运行证据仍须独立验证。"""
 
@@ -351,7 +373,13 @@ def normalized_phase_digest(
 ) -> str:
     """Preserve the frozen denominator while advancing Task 4/5 evidence columns."""
 
+    verify_current_declaration_corrections(rows)
     normalized = [row.copy() for row in rows]
+    for row in normalized:
+        correction = CURRENT_DECLARATION_CORRECTIONS.get(row[1])
+        if correction:
+            row[3] = correction[0]
+            row[5] = TASK3_STANDARD_ENTRIES[row[1]]
     if phase in {"adapter-live", "logical-live"}:
         for row in normalized:
             if row[1] in adapter_live_entries:
@@ -512,6 +540,7 @@ def verify_inventory(
     payload = semantic.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     rows = parse_semantic_payload(payload)
+    verify_current_declaration_corrections(rows)
     if require_final_evidence:
         if not require_adapter_evidence or not require_logical_evidence:
             fail("final semantic gate cannot skip adapter or logical evidence")
@@ -524,7 +553,9 @@ def verify_inventory(
             if row[4] not in SEMANTIC_DISPOSITIONS:
                 fail(f"final semantic row {line_number} has unknown disposition")
             if require_standard_entries and row[1] in TASK3_STANDARD_ENTRIES:
-                if row[5] != TASK3_STANDARD_ENTRIES[row[1]]:
+                expected_entry = CURRENT_DECLARATION_CORRECTIONS.get(row[1])
+                canonical_entry = expected_entry[2] if expected_entry else TASK3_STANDARD_ENTRIES[row[1]]
+                if row[5] != canonical_entry:
                     fail(f"final Task3 canonical entry drift: {row[1]}")
         verify_final_runtime_evidence(root, rows)
         if semantic.read_bytes() != payload:
@@ -682,7 +713,11 @@ def verify_inventory(
         drift = sorted(
             fqcn
             for fqcn, expected in TASK3_STANDARD_ENTRIES.items()
-            if standard_entries[fqcn] != (expected, "DECLARED")
+            if standard_entries[fqcn] != (
+                CURRENT_DECLARATION_CORRECTIONS[fqcn][2]
+                if fqcn in CURRENT_DECLARATION_CORRECTIONS else expected,
+                "DECLARED",
+            )
         )
         if drift:
             fail(

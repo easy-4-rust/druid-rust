@@ -16,7 +16,7 @@ def verify_api_shapes(rows: list[list[str]], public_api: str) -> None:
     declarations = {}
     aliases = {}
     unit_variants = set()
-    pattern = r"^pub (trait|struct|enum|mod|type) (druid_rdbc(?:::[A-Za-z_][A-Za-z0-9_]*)+)"
+    pattern = r"^(?:#\[non_exhaustive\] )?pub (trait|struct|enum|mod|type) (druid_rdbc(?:::[A-Za-z_][A-Za-z0-9_]*)+)"
     for line in public_api.splitlines():
         match = re.match(pattern, line)
         if not match:
