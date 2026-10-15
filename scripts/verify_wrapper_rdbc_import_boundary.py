@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import tempfile
 import unittest
@@ -17,9 +18,16 @@ from verify_rdbc_public_paths import tokenize
 
 MANIFEST_HEADER = "path\tsymbol_family\tclassification\texpected_source"
 PUBLIC_PATH_MAP = Path("docs/verification/rdbc-first/rdbc-public-path-map.tsv")
+PUBLIC_API_SNAPSHOT = Path("api/druid-rdbc.single-standard.after.txt")
 WRAPPER_SOURCE_ROOT = Path("crates/druid-wrapper/src")
 CLASSIFICATIONS = {"RDBC_DIRECT", "DRUID_PRODUCT"}
 SOURCES = {"druid", "druid_rdbc"}
+PUBLIC_DECLARATION = re.compile(
+    r"^(?:#\[[^]]+\] )*pub (?:struct|enum|trait|type|union|macro|fn|const) "
+    r"(druid_rdbc(?:::[A-Za-z_][A-Za-z_0-9]*)+)"
+)
+# cargo-public-api prints the root re-export; the public module re-export remains valid.
+PUBLIC_REEXPORT_PATHS = {("druid_rdbc", "error", "RdbcError")}
 
 
 class VerificationError(RuntimeError):
@@ -74,7 +82,7 @@ def canonical_identifier(token: object) -> str:
 
 
 def load_public_paths(root: Path) -> tuple[dict[tuple[str, ...], tuple[str, ...]], set[tuple[str, ...]]]:
-    """Load the frozen old-to-canonical public paths used to recognize moved names."""
+    """Load reviewed migrations and the tracked current public declarations."""
 
     mapping_file = root / PUBLIC_PATH_MAP
     if not mapping_file.is_file():
@@ -103,6 +111,14 @@ def load_public_paths(root: Path) -> tuple[dict[tuple[str, ...], tuple[str, ...]
         canonical_paths.add(new_path)
     if not old_to_new:
         fail("public-path map must not be empty")
+    snapshot = root / PUBLIC_API_SNAPSHOT
+    if not snapshot.is_file():
+        fail(f"public API snapshot not found: {PUBLIC_API_SNAPSHOT}")
+    for line in snapshot.read_text(encoding="utf-8").splitlines():
+        match = PUBLIC_DECLARATION.match(line)
+        if match is not None:
+            canonical_paths.add(tuple(match.group(1).split("::")))
+    canonical_paths.update(PUBLIC_REEXPORT_PATHS)
     return old_to_new, canonical_paths
 
 
@@ -260,6 +276,13 @@ def rdbc_family(canonical_path: tuple[str, ...]) -> str:
     """Map one canonical RDBC path to its reviewed symbol family."""
 
     domain = canonical_path[1]
+    if domain == "impl_standard_wrapper":
+        return "RDBC_WRAPPER"
+    if domain in {
+        "connection", "data_source", "driver", "extensions", "metadata",
+        "result_set", "statement", "url", "wrapper",
+    }:
+        return "RDBC_" + domain.upper()
     if domain == "types":
         return "RDBC_TYPES"
     if domain == "spi":
@@ -286,6 +309,10 @@ def product_family(path: tuple[str, ...]) -> str | None:
         return "DRUID_LIFECYCLE"
     if len(path) >= 3 and path[1] == "core":
         item = path[2]
+        if item == "DruidConnectionHolder":
+            return "DRUID_POOL"
+        if item == "ExternalConnectionLease":
+            return "DRUID_LIFECYCLE"
         if item.startswith("DruidPooled"):
             return "DRUID_LOGICAL"
         if item in {"Pool", "PoolState"}:
@@ -497,6 +524,13 @@ class WrapperBoundaryVerifierTest(unittest.TestCase):
             "crates/druid/src/core/mod.rs\tFACADE_MEMBERSHIP\n",
             encoding="utf-8",
         )
+        snapshot = self.root / PUBLIC_API_SNAPSHOT
+        snapshot.parent.mkdir(parents=True)
+        snapshot.write_text(
+            "pub trait druid_rdbc::driver::ConnectionFactory: Send + Sync\n"
+            "pub fn druid_rdbc::driver::ConnectionFactory::create(&self)\n",
+            encoding="utf-8",
+        )
 
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
@@ -533,6 +567,23 @@ class WrapperBoundaryVerifierTest(unittest.TestCase):
 
     def test_unclassified_druid_symbol_is_rejected(self) -> None:
         self.write_source("adapter.rs", "use druid::core::MysteryContract;\n")
+        with self.assertRaisesRegex(VerificationError, "unclassified"):
+            scan_live_rows(self.root)
+
+    def test_canonical_only_connection_factory_is_classified_exactly(self) -> None:
+        self.write_source("adapter.rs", "use druid_rdbc::driver::ConnectionFactory;\n")
+        self.assertEqual(
+            scan_live_rows(self.root),
+            [
+                BoundaryRow(
+                    "crates/druid-wrapper/src/adapter.rs",
+                    "RDBC_DRIVER",
+                    "RDBC_DIRECT",
+                    "druid_rdbc",
+                )
+            ],
+        )
+        self.write_source("adapter.rs", "use druid_rdbc::driver::UnknownContract;\n")
         with self.assertRaisesRegex(VerificationError, "unclassified"):
             scan_live_rows(self.root)
 
