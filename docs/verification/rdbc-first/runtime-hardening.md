@@ -2,7 +2,9 @@
 
 状态：**未关闭**。本记录只保存已实际运行的基线；缺少的指标和故障场景不计为通过。
 
-2026-10-15 Metrics 饱和关闭数值门禁候选：OpenSpec `2026-10-15-p06-metrics-saturation-budget` 为定期/手动 `runtime-benchmark` 加入 20 次真实 runtime 试验、最近秩关闭 p50/p95/p99、coalesced 下限、零遗留任务/工作和 Linux 子进程峰值 RSS；原始日志与 JSON 在失败时仍上传。本机 Windows 同一可执行文件 20/20 通过，合并次数最少 159，关闭 p50/p95/p99 为 127/157/194 µs；解析器 4/4 通过，预算超限会先写 JSON 再失败。CI 目前使用 p99 ≤ 100,000 µs、峰值 RSS ≤ 65,536 KiB 的候选上限；Linux 实测及门禁终态未取得，不能视为 Task5 验收。
+2026-10-15 Metrics 饱和关闭数值门禁：OpenSpec `2026-10-15-p06-metrics-saturation-budget` 为定期/手动 `runtime-benchmark` 加入 20 次真实 runtime 试验、最近秩关闭 p50/p95/p99、coalesced 下限、零遗留任务/工作和 Linux 子进程峰值 RSS；原始日志与 JSON 在失败时仍上传。本机 Windows 同一可执行文件 20/20 通过，合并次数最少 159，关闭 p50/p95/p99 为 127/157/194 µs；解析器 4/4 通过，预算超限会先写 JSON 再失败。CI 门禁采用 p99 ≤ 100,000 µs、峰值 RSS ≤ 65,536 KiB 的上限。
+
+提交 `41ebb11` 的[Linux 手动基准](https://github.com/easy-4-rust/druid-rust/actions/runs/38706412617)成功，上传 JSON 源码 SHA 匹配该提交，20/20 次 Metrics 饱和关闭的合并次数最少 2,019，关闭 p50/p95/p99 为 96/100/105 µs，子进程峰值 RSS 18,012 KiB，两个预算均无违规。此项关闭 Metrics 饱和关闭的数值证据缺口；P06 Task5 仍缺其他故障预算，保持未关闭。
 
 2026-10-15 CI 跨平台 Admin 投影内存门禁：提交 `115f3cef2a15704229f3f0a8a1c21cf8890e404f` 的 [driver-matrix run 38661619894](https://github.com/easy-4-rust/druid-rust/actions/runs/38661619894) 中，Linux、macOS、Windows `Rust contracts` 均成功。三平台都运行 `default_repository_projection_budget_keeps_sampled_physical_memory_below_128_mib`，并接受 1,044 条投影记录、保留状态 67,071,714 字节；采样峰值分别为 Linux RSS 74,018,816 字节、macOS RSS 83,148,800 字节、Windows Working Set 75,890,688 字节，统一上限 134,217,728 字节。此结果关闭 P06 Admin 跨平台门禁 Task3；这是每 32 条成功写入一次的采样峰值，不等同于操作系统全程峰值。P06 Task5 及运行预算仍开放。
 
