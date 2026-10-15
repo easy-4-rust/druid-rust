@@ -285,6 +285,64 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, r"resource[/\\]blob.rs"):
             verify_tree(self.root, phase="final")
 
+    def test_accepts_reachable_canonical_file_module(self) -> None:
+        """A single-object file module is a complete canonical root."""
+
+        self.install_final_resource_module()
+        with (self.root / "lib.rs").open("a", encoding="utf-8") as root:
+            root.write("pub mod url;\n")
+        (self.root / "url.rs").write_text(
+            "pub struct RdbcConnectionUrl;\n", encoding="utf-8"
+        )
+
+        verified = verify_tree(self.root, phase="final")
+        self.assertIn(Path("url.rs"), verified)
+
+    def test_file_module_root_and_hidden_child_are_checked(self) -> None:
+        """File-module layout cannot hide forbidden production identities."""
+
+        self.install_final_resource_module()
+        with (self.root / "lib.rs").open("a", encoding="utf-8") as root:
+            root.write("pub mod url;\n")
+        module = self.root / "url.rs"
+        module.write_text("pub struct DruidPool;\n", encoding="utf-8")
+        with self.assertRaisesRegex(VerificationError, "DruidPool"):
+            verify_tree(self.root, phase="final")
+
+        module.write_text("pub struct RdbcConnectionUrl;\n", encoding="utf-8")
+        (self.root / "url").mkdir()
+        (self.root / "url/hidden.rs").write_text(
+            "pub struct DruidPool;\n", encoding="utf-8"
+        )
+        with self.assertRaisesRegex(VerificationError, "unreachable|DruidPool"):
+            verify_tree(self.root, phase="final")
+
+    def test_rejects_ambiguous_canonical_file_and_directory_roots(self) -> None:
+        """The gate must not choose a root when Rust has two candidates."""
+
+        self.install_final_resource_module()
+        with (self.root / "lib.rs").open("a", encoding="utf-8") as root:
+            root.write("pub mod url;\n")
+        (self.root / "url.rs").write_text(
+            "pub struct RdbcConnectionUrl;\n", encoding="utf-8"
+        )
+        (self.root / "url").mkdir()
+        (self.root / "url/mod.rs").write_text(
+            "pub struct OtherUrl;\n", encoding="utf-8"
+        )
+        with self.assertRaisesRegex(VerificationError, "ambiguous|both|module"):
+            verify_tree(self.root, phase="final")
+
+    def install_final_resource_module(self) -> None:
+        """Give a final-phase fixture a canonical resource object."""
+
+        (self.root / "resource/mod.rs").write_text(
+            "mod blob;\npub use blob::Blob;\n", encoding="utf-8"
+        )
+        (self.root / "resource/blob.rs").write_text(
+            "pub trait Blob: Send {}\n", encoding="utf-8"
+        )
+
     def test_final_phase_accepts_external_bitflags_macro_only(self) -> None:
         """Resource capability flags may use the external bitflags macro, never a local alias."""
 

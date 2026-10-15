@@ -2139,6 +2139,16 @@ def discover_standard_files(index: ModuleScopeIndex) -> tuple[Path, ...]:
     for module in index.canonical_roots:
         directory = index.root / module
         module_root = directory / "mod.rs"
+        file_root = index.root / f"{module}.rs"
+        if file_root.is_file():
+            if module_root.is_file():
+                fail(f"ambiguous canonical module root: {file_root} and {module_root}")
+            # Rust file modules may have child modules under a same-named directory.
+            # Keep even undeclared physical children in the pollution denominator.
+            files.append(file_root)
+            if directory.is_dir():
+                files.extend(path for path in directory.rglob("*.rs") if path.is_file())
+            continue
         if not module_root.is_file():
             missing.append(module_root.relative_to(index.root).as_posix())
             continue
