@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import io
 import re
 import sys
 from collections import Counter
@@ -36,6 +37,21 @@ ARITY_MAP_HEADER = ("owner", "findings", "shifts", "test_files")
 ARITY_FINDING = re.compile(
     r"(?m)^  (druid::[A-Za-z0-9_:]+)::([A-Za-z0-9_]+) takes ([0-9]+) "
     r"parameters in [^\n]+, but now takes ([0-9]+) parameters in [^\n]+$"
+)
+METHOD_MIGRATION_HEADER = (
+    "crate",
+    "lint",
+    "old_identity",
+    "baseline_source",
+    "baseline_line",
+    "report_occurrences",
+    "disposition",
+    "standard_contract_entry",
+)
+METHOD_BREAK_LINTS = {"inherent_method_missing", "trait_method_missing"}
+METHOD_MIGRATION_LEDGER = Path("api/task6-prerelease-method-migration.tsv")
+METHOD_FINDING = re.compile(
+    r"^  (?P<identity>.+), previously in file (?P<source>.+\.rs):(?P<line>[0-9]+)$"
 )
 
 
@@ -91,6 +107,100 @@ def read_allowlist(path: Path) -> dict[tuple[str, str], tuple[int, str, str, str
                 row["reason"],
             )
     return result
+
+
+def method_migration_rows(report: str) -> tuple[tuple[str, ...], ...]:
+    """Aggregate exact retired-method identities while preserving SemVer occurrence counts."""
+
+    report = ANSI_ESCAPE.sub("", report)
+    sections = list(SECTION.finditer(report))
+    observed: Counter[tuple[str, str, str, str]] = Counter()
+    for index, section in enumerate(sections):
+        lint = section.group(1)
+        if lint not in METHOD_BREAK_LINTS:
+            continue
+        end = sections[index + 1].start() if index + 1 < len(sections) else len(report)
+        body = report[section.end() : end]
+        if "Failed in:" not in body:
+            raise ValueError(f"SemVer method lint has no findings: {lint}")
+        finding_lines = [line for line in body.split("Failed in:", 1)[1].splitlines() if line.startswith("  ")]
+        parsed = 0
+        for line in finding_lines:
+            match = METHOD_FINDING.fullmatch(line)
+            if match is None:
+                raise ValueError(f"unrecognized {lint} finding: {line.strip()}")
+            source = WORKSPACE_PREFIX.sub("", match.group("source"))
+            source = source.replace("\\", "/")
+            source = SOURCE_LINE.sub(":<line>", source)
+            if source.startswith("/") or ".." in Path(source).parts:
+                raise ValueError(f"SemVer source path is not repository-relative: {source}")
+            key = (lint, match.group("identity"), source, match.group("line"))
+            observed[key] += 1
+            parsed += 1
+        if parsed == 0:
+            raise ValueError(f"SemVer method lint has no findings: {lint}")
+
+    if not observed:
+        raise ValueError("SemVer report has no retired-method findings")
+    rows = []
+    for (lint, identity, source, line), occurrences in sorted(observed.items()):
+        route = standard_contract_entry(lint, identity)
+        disposition = (
+            "APPROVED_PRE_RELEASE_STANDARD_MIGRATION"
+            if route.startswith("druid::DataSource")
+            else "APPROVED_PRE_RELEASE_INTERNAL_RETIREMENT"
+        )
+        rows.append(
+            (
+                "druid",
+                lint,
+                identity,
+                source,
+                line,
+                str(occurrences),
+                disposition,
+                route,
+            )
+        )
+    return tuple(rows)
+
+
+def standard_contract_entry(lint: str, identity: str) -> str:
+    """Describe the standard contract family or internal owner replacing an old path."""
+
+    if lint == "trait_method_missing":
+        return "retired internal filter/statistics extension surface"
+    owner = identity.split("::", 1)[0]
+    standard_owners = (
+        ("DruidPooledConnection", "druid::DataSource -> druid_rdbc::connection::Connection"),
+        ("DruidPooledPreparedStatement", "druid::DataSource -> druid_rdbc::statement::PreparedStatement"),
+        ("DruidPooledCallableStatement", "druid::DataSource -> druid_rdbc::statement::CallableStatement"),
+        ("DruidPooledStatement", "druid::DataSource -> druid_rdbc::statement::Statement"),
+        ("DruidPooledResultSet", "druid::DataSource -> druid_rdbc::result_set::ResultSet"),
+        ("DatabaseMetaDataProxyImpl", "druid::DataSource -> druid_rdbc::metadata::DatabaseMetaData"),
+    )
+    for prefix, target in standard_owners:
+        if owner == prefix:
+            return target
+    return "retired internal pool/filter implementation surface"
+
+
+def render_method_migration_ledger(report: str) -> bytes:
+    """Render deterministic item-level evidence for all old-method findings."""
+
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, delimiter="\t", lineterminator="\n")
+    writer.writerow(METHOD_MIGRATION_HEADER)
+    writer.writerows(method_migration_rows(report))
+    return output.getvalue().encode("utf-8")
+
+
+def verify_method_migration_ledger(report: str, path: Path) -> None:
+    """Require the checked-in item ledger to match the full live SemVer report."""
+
+    expected = render_method_migration_ledger(report)
+    if not path.is_file() or path.read_bytes() != expected:
+        raise ValueError("retired-method migration ledger is missing or differs from SemVer findings")
 
 
 def verify_module_migration_map(report: str, path: Path, root: Path) -> None:
@@ -261,6 +371,16 @@ def main() -> int:
     parser.add_argument("--module-migration-map", type=Path)
     parser.add_argument("--struct-migration-map", type=Path)
     parser.add_argument("--arity-migration-map", type=Path)
+    parser.add_argument(
+        "--method-migration-ledger",
+        type=Path,
+        default=Path(__file__).resolve().parent.parent / METHOD_MIGRATION_LEDGER,
+    )
+    parser.add_argument(
+        "--write-method-migration-ledger",
+        action="store_true",
+        help="write the parsed retired-method findings for human review",
+    )
     for short, crate in (("rdbc", "druid-rdbc"), ("druid", "druid"), ("wrapper", "druid-wrapper")):
         parser.add_argument(f"--{short}-report", type=Path, required=True)
         parser.add_argument(f"--{short}-exit-code", type=int, required=True)
@@ -287,7 +407,19 @@ def main() -> int:
         print(f"Wrote {len(actual)} pending breaking categories to {args.allowlist}")
         return 0
 
+    if args.write_method_migration_ledger:
+        ledger = args.method_migration_ledger
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        ledger.write_bytes(render_method_migration_ledger(args.druid_report.read_text(encoding="utf-8")))
+        print(f"Wrote {len(method_migration_rows(args.druid_report.read_text(encoding='utf-8')))} unique method identities to {ledger}")
+        return 0
+
     allowlist = read_allowlist(args.allowlist)
+    if any(("druid", lint) in actual for lint in METHOD_BREAK_LINTS):
+        verify_method_migration_ledger(
+            args.druid_report.read_text(encoding="utf-8"),
+            args.method_migration_ledger,
+        )
     if ("druid", "module_missing") in actual:
         if args.module_migration_map is None:
             raise ValueError("druid/module_missing requires an exact module migration map")

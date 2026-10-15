@@ -28,6 +28,57 @@ def report(item: str, line: int = 4) -> str:
 
 
 class BreakingApiAllowlistTest(unittest.TestCase):
+    def test_retired_method_ledger_preserves_exact_identities_and_duplicate_counts(self) -> None:
+        method_report = (
+            "--- failure inherent_method_missing: pub method removed or renamed ---\n"
+            "\x1b[1mFailed in:\x1b[0m\n"
+            "  DruidPooledConnection::close, previously in file "
+            "/home/runner/work/druid-rust/druid-rust/target/semver-checks/git-base/rev/"
+            "crates/druid/src/core/pooled_connection.rs:40\n"
+            "  DruidPooledConnection::close, previously in file "
+            "/home/runner/work/druid-rust/druid-rust/target/semver-checks/git-base/rev/"
+            "crates/druid/src/core/pooled_connection.rs:40\n"
+            "--- failure trait_method_missing: pub trait method removed ---\n"
+            "Failed in:\n"
+            "  method result_set_get_string of trait ResultSetFilter, previously in file "
+            "/home/runner/work/druid-rust/druid-rust/crates/druid/src/core/result_filter.rs:80\n"
+            "Summary semver requires new major version: 2 major and 0 minor checks failed\n"
+        )
+        rows = verifier.method_migration_rows(method_report)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(sum(int(row[5]) for row in rows), 3)
+        self.assertEqual(rows[0][3], "crates/druid/src/core/pooled_connection.rs")
+        self.assertEqual(rows[0][5], "2")
+        self.assertEqual(rows[0][6], "APPROVED_PRE_RELEASE_STANDARD_MIGRATION")
+        self.assertIn("druid_rdbc::connection::Connection", rows[0][7])
+        self.assertEqual(rows[1][6], "APPROVED_PRE_RELEASE_INTERNAL_RETIREMENT")
+        self.assertEqual(
+            verifier.render_method_migration_ledger(method_report),
+            verifier.render_method_migration_ledger(method_report),
+        )
+
+    def test_retired_method_ledger_rejects_unknown_finding_and_drift(self) -> None:
+        malformed = (
+            "--- failure inherent_method_missing: removed ---\n"
+            "Failed in:\n  unexpected report format\n"
+        )
+        with self.assertRaisesRegex(ValueError, "unrecognized"):
+            verifier.method_migration_rows(malformed)
+
+        report_text = (
+            "--- failure inherent_method_missing: removed ---\n"
+            "Failed in:\n"
+            "  DruidPooledConnection::close, previously in file old.rs:40\n"
+            "Summary semver requires new major version: 1 major and 0 minor checks failed\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "migration.tsv"
+            ledger.write_bytes(verifier.render_method_migration_ledger(report_text))
+            verifier.verify_method_migration_ledger(report_text, ledger)
+            ledger.write_text(ledger.read_text(encoding="utf-8").replace("close", "open"), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "differs from SemVer"):
+                verifier.verify_method_migration_ledger(report_text, ledger)
+
     def test_method_arity_map_requires_exact_owner_and_shift_counts(self) -> None:
         arity_report = (
             "--- failure method_parameter_count_changed: pub method parameter count changed ---\n"

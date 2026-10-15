@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-10-15
+goal: Make the 2,968 old DruidPooled and FilterChain method removals auditable
+  as an intentional pre-release migration while retaining the standard
+  DataSource contract as the supported entry.
+skip_specs: true
