@@ -1,7 +1,7 @@
 # metrics-runtime Specification
 
 ## Purpose
-TBD - created by archiving change 2026-10-15-p06-metrics-saturation-budget. Update Purpose after archive.
+Define measurable shutdown and work-drain guarantees for the Metrics runtime under saturated sampling, so release checks can detect stranded work and unbounded shutdown cost.
 
 ## Requirements
 
