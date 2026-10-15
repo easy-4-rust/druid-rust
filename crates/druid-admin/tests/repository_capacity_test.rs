@@ -435,8 +435,8 @@ fn default_repository_projection_budget_keeps_sampled_physical_memory_below_128_
             break;
         }
         accepted += 1;
-        // 32 是 2 的幂，用位掩码保留采样周期并兼容 MSRV。
-        if accepted & 31 == 0 {
+        // 每接受 32 个数据源采样一次物理内存。
+        if accepted.is_multiple_of(32) {
             record_physical_memory_sample(
                 &mut sampled_peak_bytes,
                 memory_stats::memory_stats().map(|stats| stats.physical_mem),
@@ -458,12 +458,7 @@ fn default_repository_projection_budget_keeps_sampled_physical_memory_below_128_
     let metric_name = "rss";
 
     eprintln!(
-        "admin_repository_budget accepted={} retained_state_bytes={} sampled_peak_{}_bytes={} sampled_memory_limit_bytes={}",
-        accepted,
-        retained_bytes,
-        metric_name,
-        sampled_peak_bytes,
-        MAX_SAMPLED_PHYSICAL_MEMORY_BYTES
+        "admin_repository_budget accepted={accepted} retained_state_bytes={retained_bytes} sampled_peak_{metric_name}_bytes={sampled_peak_bytes} sampled_memory_limit_bytes={MAX_SAMPLED_PHYSICAL_MEMORY_BYTES}"
     );
     assert!(
         accepted > 1_000,
