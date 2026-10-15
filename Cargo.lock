@@ -1854,6 +1854,7 @@ dependencies = [
  "sqlparser",
  "sqlx",
  "static_assertions",
+ "subtle",
  "thiserror 1.0.69",
  "toasty",
  "toasty-core",

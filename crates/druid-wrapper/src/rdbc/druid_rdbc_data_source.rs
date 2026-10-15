@@ -1,4 +1,5 @@
 use std::any::TypeId;
+use std::fmt;
 
 use async_trait::async_trait;
 use druid::core::DruidPooledConnection;
@@ -6,6 +7,8 @@ use druid::pool::DruidDataSource;
 use druid::sql::DataSource;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlException;
+use sha2::{Digest as _, Sha256};
+use subtle::ConstantTimeEq as _;
 
 use crate::driver::{DriverRegistryError, DruidDatabasePoolBuilder};
 
@@ -15,7 +18,27 @@ use crate::driver::{DriverRegistryError, DruidDatabasePoolBuilder};
 /// [`DruidDataSource`]，显式凭据仅用于校验，禁止每次调用创建新连接池。
 pub struct DruidRdbcDataSource {
     inner: DruidDataSource,
-    credentials: Option<(String, String)>,
+    credential_digest: Option<[u8; 32]>,
+}
+
+impl fmt::Debug for DruidRdbcDataSource {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("DruidRdbcDataSource")
+            .field("credentials_configured", &self.credential_digest.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+fn credential_digest(username: &str, password: &str) -> [u8; 32] {
+    let mut digest = Sha256::new();
+    digest.update(b"druid-rdbc-data-source-credentials-v1\0");
+    // 长度前缀保持用户名和密码的边界，避免分隔符移动形成同一字节串。
+    digest.update((username.len() as u64).to_be_bytes());
+    digest.update(username.as_bytes());
+    digest.update((password.len() as u64).to_be_bytes());
+    digest.update(password.as_bytes());
+    digest.finalize().into()
 }
 
 impl DruidRdbcDataSource {
@@ -32,7 +55,7 @@ impl DruidRdbcDataSource {
     pub fn new(inner: DruidDataSource) -> Self {
         Self {
             inner,
-            credentials: None,
+            credential_digest: None,
         }
     }
 
@@ -43,9 +66,11 @@ impl DruidRdbcDataSource {
         username: impl Into<String>,
         password: impl Into<String>,
     ) -> Self {
+        let username = username.into();
+        let password = password.into();
         Self {
             inner,
-            credentials: Some((username.into(), password.into())),
+            credential_digest: Some(credential_digest(&username, &password)),
         }
     }
 
@@ -135,27 +160,27 @@ impl DataSource for DruidRdbcDataSource {
         username: &str,
         password: &str,
     ) -> Result<DruidPooledConnection, RdbcError> {
-        match &self.credentials {
-            Some((expected_username, expected_password))
-                if expected_username == username && expected_password == password =>
-            {
-                self.get_connection().await
+        let candidate = credential_digest(username, password);
+        if self
+            .credential_digest
+            .as_ref()
+            .is_some_and(|expected| bool::from(candidate.ct_eq(expected)))
+        {
+            self.get_connection().await
+        } else {
+            let error = Self::authorization_error();
+            if let Err(log_error) = druid_rdbc::data_source::CommonDataSource::write_diagnostic(
+                self,
+                "connection_credentials",
+                &error,
+            ) {
+                tracing::warn!(
+                    operation = "connection_credentials",
+                    error_kind = ?log_error.kind(),
+                    "ordinary data-source diagnostic writer failed; preserving the authorization error"
+                );
             }
-            _ => {
-                let error = Self::authorization_error();
-                if let Err(log_error) = druid_rdbc::data_source::CommonDataSource::write_diagnostic(
-                    self,
-                    "connection_credentials",
-                    &error,
-                ) {
-                    tracing::warn!(
-                        operation = "connection_credentials",
-                        error_kind = ?log_error.kind(),
-                        "ordinary data-source diagnostic writer failed; preserving the authorization error"
-                    );
-                }
-                Err(error)
-            }
+            Err(error)
         }
     }
 }
