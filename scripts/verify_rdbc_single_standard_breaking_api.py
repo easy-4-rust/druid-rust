@@ -19,7 +19,7 @@ WORKSPACE_PREFIX = re.compile(
     r"(?:target/semver-checks/git-[^/]+/[^/]+/)?"
 )
 WINDOWS_PREFIX = re.compile(
-    r"[A-Za-z]:/(?:[^/\n]+/)*"
+    r"[A-Za-z]:/(?:[^/,\n]+/)*"
     r"(?:druid-rust/(?:target/semver-checks/git-[^/]+/[^/]+/)?|"
     r"semver-checks/git-[^/]+/[^/]+/)(?=crates/)"
 )

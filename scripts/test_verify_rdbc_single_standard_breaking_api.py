@@ -215,6 +215,25 @@ class BreakingApiAllowlistTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not repository-relative"):
             verifier.render_method_migration_ledger(unexpected_checkout)
 
+    def test_windows_arity_finding_keeps_both_source_paths(self) -> None:
+        linux_report = (
+            "--- failure method_parameter_count_changed: changed ---\n"
+            "Failed in:\n"
+            "  druid::core::Owner::read takes 1 parameters in "
+            "/home/runner/work/druid-rust/druid-rust/target/semver-checks/git-base/rev/"
+            "crates/druid/src/owner.rs:10, but now takes 2 parameters in "
+            "/home/runner/work/druid-rust/druid-rust/crates/druid/src/owner.rs:20\n"
+            "Summary semver requires new major version: 1 major and 0 minor checks failed\n"
+        )
+        windows_report = linux_report.replace(
+            "/home/runner/work/druid-rust/druid-rust/target/semver-checks/git-base/rev/",
+            "D:\\druid-rust-task8-target\\semver-checks\\git-base\\rev\\",
+        ).replace(
+            "/home/runner/work/druid-rust/druid-rust/",
+            "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\",
+        )
+        self.assertEqual(findings_by_lint(windows_report, 100), findings_by_lint(linux_report, 100))
+
     def test_incomplete_report_and_non_semver_exit_fail_closed(self) -> None:
         with self.assertRaises(ValueError):
             findings_by_lint(report("Removed"), 101)
