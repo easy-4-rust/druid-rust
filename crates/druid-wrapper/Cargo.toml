@@ -32,6 +32,10 @@ all-databases = ["driver-catalog", "sqlite", "postgresql", "mysql", "turso", "du
 name = "data_source_credential_hardening_test"
 required-features = ["driver-catalog", "sqlx"]
 
+[[test]]
+name = "dynamic_standard_data_source_test"
+required-features = ["driver-catalog", "sqlx"]
+
 [[bin]]
 name = "druid-driver"
 path = "src/bin/druid_driver.rs"
