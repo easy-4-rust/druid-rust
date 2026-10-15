@@ -1,7 +1,7 @@
 # rdbc-adapter-live-resource-resultset Specification
 
 ## Purpose
-TBD - created by archiving change p04-task7-cross-backend-resource-resultset-evidence. Update Purpose after archive.
+Define live SQLx and Toasty adapter evidence for truthful resource capability errors and the standard asynchronous ResultSet lifecycle across SQLite, PostgreSQL, and MySQL.
 
 ## Requirements
 
