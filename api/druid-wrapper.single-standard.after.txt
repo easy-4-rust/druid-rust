@@ -675,6 +675,8 @@ pub fn druid_wrapper::rdbc::DynamicRdbcDataSource::switch(&self, druid::dynamic:
 impl druid::sql::data_source::DataSource for druid_wrapper::rdbc::DynamicRdbcDataSource
 pub fn druid_wrapper::rdbc::DynamicRdbcDataSource::get_connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 impl druid_rdbc::data_source::common_data_source::CommonDataSource for druid_wrapper::rdbc::DynamicRdbcDataSource
+impl druid_rdbc::data_source::data_source::DataSource for druid_wrapper::rdbc::DynamicRdbcDataSource
+pub fn druid_wrapper::rdbc::DynamicRdbcDataSource::connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::rdbc::DynamicRdbcDataSource
 pub mod druid_wrapper::sqlx
 pub mod druid_wrapper::sqlx::bb8

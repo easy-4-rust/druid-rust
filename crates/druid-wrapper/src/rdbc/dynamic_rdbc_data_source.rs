@@ -61,8 +61,26 @@ impl druid_rdbc::wrapper::Wrapper for DynamicRdbcDataSource {
         &self,
         target: TypeId,
     ) -> Option<druid_rdbc::wrapper::StandardUnwrapped<'_>> {
-        (target == TypeId::of::<dyn druid_rdbc::wrapper::Wrapper>())
-            .then_some(druid_rdbc::wrapper::StandardUnwrapped::Wrapper(self))
+        use druid_rdbc::wrapper::StandardUnwrapped;
+
+        if target == TypeId::of::<dyn druid_rdbc::data_source::DataSource>() {
+            Some(StandardUnwrapped::DataSource(self))
+        } else if target == TypeId::of::<dyn druid_rdbc::data_source::CommonDataSource>() {
+            Some(StandardUnwrapped::CommonDataSource(self))
+        } else if target == TypeId::of::<dyn druid_rdbc::wrapper::Wrapper>() {
+            Some(StandardUnwrapped::Wrapper(self))
+        } else {
+            None
+        }
+    }
+}
+
+#[async_trait]
+impl druid_rdbc::data_source::DataSource for DynamicRdbcDataSource {
+    async fn connection(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        DataSource::get_connection(self)
+            .await
+            .map(|connection| Box::new(connection) as Box<dyn druid_rdbc::connection::Connection>)
     }
 }
 
