@@ -1571,13 +1571,23 @@ def verify_final_repository(
     expected = Counter({TASK5_CLOSED: 180, TASK6_CLOSED: 75, TASK7_PENDING: 108})
     if counts != expected:
         fail(f"final Task 5/6/7 consumer partition drift: {counts} != {expected}")
+    # 历史清单保留原 108 条计划态；独立闭合账本必须绑定原身份、当前
+    # ResourceOperations 公开面与真实资源合同，才能抵扣这部分待办。
+    from verify_task7_resource_operations_closure import verify_repository as verify_resource_operations
+
+    try:
+        task7_closed = verify_resource_operations(root)
+    except (OSError, ValueError) as error:
+        fail(f"Task 7 ResourceOperations closure failed: {error}")
+    if task7_closed != counts[TASK7_PENDING]:
+        fail("Task 7 ResourceOperations closure does not cover the historical consumer count")
     verify_task4_evidence_handoff(root)
     verify_task5_runtime_contracts(root)
     return VerificationSummary(
         len(task5),
         counts[TASK5_CLOSED],
         counts[TASK6_PENDING],
-        counts[TASK7_PENDING],
+        counts[TASK7_PENDING] - task7_closed,
         len(STANDARD_IMPLS),
         7,
     )

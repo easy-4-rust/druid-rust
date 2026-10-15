@@ -1,0 +1,3 @@
+# Design
+
+The historical `rdbc-production-consumers.tsv` remains a fixed denominator. A separate closure ledger stores the original source path, occurrence kind, symbol, and old path for every one of its 108 `RdbcResourceCapabilities` rows plus the actual accepted standard target. The verifier compares multisets, rejects duplicate or invented identities, scans all production Rust files for the retired identifier, checks the canonical module/export, and runs `resource_standard_contract_test`. `verify_final_repository` uses this proof to report zero outstanding consumer rows while preserving the historical manifest's pending state and the other Task 7 obligations.
