@@ -124,9 +124,10 @@ impl ConnectionEventListener for ExternalPoolListener {
                 .add_connection_event_listener(Arc::new(ExternalPoolListener(Arc::clone(&self.0))))
                 .expect("listener re-registration during callback must not deadlock");
         }
-        if self.0.panic_on_error.load(Ordering::Acquire) {
-            panic!("injected external pool listener failure");
-        }
+        assert!(
+            !self.0.panic_on_error.load(Ordering::Acquire),
+            "injected external pool listener failure"
+        );
     }
 }
 

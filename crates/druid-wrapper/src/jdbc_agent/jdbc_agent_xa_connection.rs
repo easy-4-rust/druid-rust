@@ -480,7 +480,7 @@ mod tests {
                 .as_slice(),
             &[Some("08006".to_owned())]
         );
-        assert!(recorder.closed.load(Ordering::Acquire) == 0);
+        assert_eq!(recorder.closed.load(Ordering::Acquire), 0);
         owner
             .close()
             .await

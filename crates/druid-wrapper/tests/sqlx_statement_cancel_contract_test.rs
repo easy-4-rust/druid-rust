@@ -818,10 +818,10 @@ async fn independent_cancel_interrupts_running_sqlite_generated_key_update() {
         .unwrap();
     let mut statement = connection
         .prepare_statement_with_generated_keys(
-            r#"INSERT INTO generated_key_cancel_update(value)
+            r"INSERT INTO generated_key_cancel_update(value)
                WITH RECURSIVE counter(value) AS (
                    VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 5000000
-               ) SELECT sum(value) FROM counter"#,
+               ) SELECT sum(value) FROM counter",
             StatementOptions::default(),
             GeneratedKeys::ReturnGeneratedKeys,
         )
