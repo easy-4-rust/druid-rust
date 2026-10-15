@@ -50,29 +50,32 @@ impl AdminRedactionPolicy {
                         .collect::<String>();
                     // 属性映射可嵌套任意深度；凭据键不能依赖固定 DTO 字段名。
                     let credential = normalized.ends_with("password")
+                        || normalized.ends_with("pwd")
                         || normalized.ends_with("secret")
                         || normalized.ends_with("token")
                         || matches!(
                             normalized.as_str(),
                             "apikey" | "accesskey" | "secretkey" | "authorization"
                         );
-                    if credential
-                        || matches!(
-                            normalized.as_str(),
-                            "url"
-                                | "jdbcurl"
-                                | "connectionurl"
-                                | "username"
-                                | "sql"
-                                | "formattedsql"
-                                | "rawsql"
-                                | "lastslowparameters"
-                                | "bindparameters"
-                                | "sqlparameters"
-                                | "lasterrormessage"
-                                | "lasterrorstacktrace"
-                                | "lasterror"
-                        )
+                    let diagnostic = normalized.ends_with("errormessage")
+                        || normalized.ends_with("exceptionmessage")
+                        || normalized.ends_with("errorstacktrace");
+                    let connection = normalized.ends_with("url")
+                        || normalized.ends_with("connectionstring")
+                        || normalized.ends_with("username")
+                        || matches!(normalized.as_str(), "dsn" | "user");
+                    let query = matches!(
+                        normalized.as_str(),
+                        "sql"
+                            | "formattedsql"
+                            | "rawsql"
+                            | "statementsql"
+                            | "querysql"
+                            | "lastslowparameters"
+                            | "bindparameters"
+                            | "sqlparameters"
+                    ) || normalized.ends_with("sqltext");
+                    if credential || diagnostic || connection || query || normalized == "lasterror"
                     {
                         *field = Value::String("[REDACTED]".to_owned());
                     } else {
@@ -111,5 +114,42 @@ mod tests {
             assert_eq!(properties[field], "[REDACTED]", "{field} must be hidden");
         }
         assert_eq!(properties["activeCount"], 3);
+    }
+
+    #[test]
+    fn secure_policy_redacts_sensitive_aliases_in_nested_arrays() {
+        let original = json!({
+            "Content": [{
+                "databaseUrl": "jdbc:postgresql://host/db?password=secret",
+                "connection_string": "Server=host;Password=secret",
+                "dbUserName": "operator",
+                "statementSql": "SELECT secret FROM users",
+                "bindParameters": ["secret"],
+                "exceptionMessage": "password=secret",
+                "activeCount": 3,
+                "nested": {"data_source_url": "jdbc:mysql://host/db?password=secret", "errorCount": 2}
+            }]
+        });
+        let mut secure = original.clone();
+        AdminRedactionPolicy::secure().redact_json(&mut secure);
+
+        let content = &secure["Content"][0];
+        for field in [
+            "databaseUrl",
+            "connection_string",
+            "dbUserName",
+            "statementSql",
+            "bindParameters",
+            "exceptionMessage",
+        ] {
+            assert_eq!(content[field], "[REDACTED]", "{field} must be hidden");
+        }
+        assert_eq!(content["nested"]["data_source_url"], "[REDACTED]");
+        assert_eq!(content["activeCount"], 3);
+        assert_eq!(content["nested"]["errorCount"], 2);
+
+        let mut compatible = original.clone();
+        AdminRedactionPolicy::compatibility().redact_json(&mut compatible);
+        assert_eq!(compatible, original);
     }
 }
