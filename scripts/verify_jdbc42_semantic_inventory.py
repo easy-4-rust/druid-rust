@@ -271,6 +271,17 @@ def verify_current_declaration_corrections(rows: list[list[str]]) -> None:
             fail(f"current public declaration correction drift: {row[1]}")
 
 
+def is_static_capability_not_applicable(row: list[str]) -> bool:
+    """只接受无适配器/逻辑对象的值声明；DriverManager 是主动注册服务。"""
+
+    return (
+        row[1] != "java.sql.DriverManager"
+        and row[3] in {"DTO", "ENUM_KIND", "MODULE"}
+        and row[12:16] == ["-", "NOT_APPLICABLE", "-", "NOT_APPLICABLE"]
+        and row[16] == "V0_STATIC"
+    )
+
+
 def verify_final_state_policy(rows: list[list[str]]) -> None:
     """检查最终状态自洽性；来源、公开类型及运行证据仍须独立验证。"""
 
@@ -303,6 +314,12 @@ def verify_final_state_policy(rows: list[list[str]]) -> None:
             fail(f"final semantic row {line_number} has invalid evidence level {row[16]}")
         if row[17] not in {"NOT_APPLICABLE", "LIVE"}:
             fail(f"final semantic row {line_number} has invalid capability state {row[17]}")
+        if (
+            row[17] == "NOT_APPLICABLE"
+            and row[3] != "EXCLUDED_RUNTIME"
+            and not is_static_capability_not_applicable(row)
+        ):
+            fail(f"final semantic row {line_number} has invalid static capability disposition")
         live = row[13] == "LIVE" or row[15] == "LIVE" or row[17] == "LIVE"
         if live and row[16] != "V1_LIVE":
             fail(f"final semantic row {line_number} lacks LIVE evidence")
@@ -380,6 +397,9 @@ def normalized_phase_digest(
         if correction:
             row[3] = correction[0]
             row[5] = TASK3_STANDARD_ENTRIES[row[1]]
+        if row[17] == "NOT_APPLICABLE" and is_static_capability_not_applicable(row):
+            # 仅证据分类前进；冻结的 Java 来源与既有语义映射摘要保持不变。
+            row[17] = "PLANNED"
     if phase in {"adapter-live", "logical-live"}:
         for row in normalized:
             if row[1] in adapter_live_entries:
@@ -632,6 +652,12 @@ def verify_inventory(
             fail(f"semantic row {line_number} has an invalid canonical Rust target")
         if adapter_state not in ADAPTER_STATES or logical_state not in LOGICAL_STATES:
             fail(f"semantic row {line_number} has unknown implementation state")
+        if (
+            capability_state == "NOT_APPLICABLE"
+            and rust_shape != "EXCLUDED_RUNTIME"
+            and not is_static_capability_not_applicable(fields)
+        ):
+            fail(f"semantic row {line_number} has invalid static capability disposition")
         adapter_live = fqcn in adapter_live_entries and phase in {
             "adapter-live",
             "logical-live",

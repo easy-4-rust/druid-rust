@@ -351,6 +351,7 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
         """仅构造状态策略正向控制，不宣称这些合成类型已编译。"""
         rows = self.rows()
         for row in rows:
+            row[3] = "DTO"
             row[5] = "druid_rdbc::fixture::" + row[2]
             row[6] = "DECLARED"
             row[12:18] = ["-", "NOT_APPLICABLE", "-", "NOT_APPLICABLE", "V0_STATIC", "NOT_APPLICABLE"]
@@ -359,6 +360,27 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
     def test_final_state_policy_accepts_complete_declared_static_states(self) -> None:
         """纯值状态可以 DECLARED，但最终来源与编译证据仍由后续门禁验证。"""
         self.final_state_policy(self.completed_state_rows())
+
+    def test_final_state_policy_rejects_behavioral_static_capability_claim(self) -> None:
+        """行为接口和主动注册服务不得冒充无运行能力的静态声明。"""
+        for fqcn, shape in [("java.sql.Type00", "TRAIT"), ("java.sql.DriverManager", "DTO")]:
+            with self.subTest(fqcn=fqcn):
+                rows = self.completed_state_rows()
+                rows[0][1] = fqcn
+                rows[0][3] = shape
+                with self.assertRaisesRegex(VerificationError, "static capability"):
+                    self.final_state_policy(rows)
+
+    def test_static_capability_progress_preserves_frozen_phase_hash(self) -> None:
+        """仅晋升静态能力列，阶段摘要仍对应原冻结 Java 映射。"""
+        import verify_jdbc42_semantic_inventory as verifier
+
+        rows, _, _ = self.real_source_bound_inputs()
+        before = verifier.normalized_phase_digest(rows, "planned", set(), set())
+        static_row = next(row for row in rows if row[1] == "java.sql.BatchUpdateException")
+        static_row[17] = "NOT_APPLICABLE"
+        after = verifier.normalized_phase_digest(rows, "planned", set(), set())
+        self.assertEqual(after, before)
 
     def test_final_state_policy_rejects_each_planned_column(self) -> None:
         """每一计划态列独立暴露失败，避免被别列或 digest 错误遮蔽。"""

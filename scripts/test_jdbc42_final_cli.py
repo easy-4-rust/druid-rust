@@ -24,7 +24,13 @@ class FinalCliTest(unittest.TestCase):
         # 只构造状态组件的正向控制；运行组件另行验证，不能据此签发产品完成结论。
         for row in self.rows:
             row[6] = "DECLARED"
-            row[12:18] = ["-", "NOT_APPLICABLE", "-", "NOT_APPLICABLE", "V0_STATIC", "NOT_APPLICABLE"]
+            row[12:16] = ["-", "NOT_APPLICABLE", "-", "NOT_APPLICABLE"]
+            row[16] = "V0_STATIC"
+            if row[3] == "EXCLUDED_RUNTIME" or gate.is_static_capability_not_applicable(row):
+                row[17] = "NOT_APPLICABLE"
+            else:
+                # 合成控制只用于抵达后续门禁；真实 LIVE 必须由运行组件证明。
+                row[16:18] = ["V1_LIVE", "LIVE"]
 
     def verify(self, **kwargs):
         self.semantic.write_bytes(gate.canonical_semantic_payload(self.rows))
