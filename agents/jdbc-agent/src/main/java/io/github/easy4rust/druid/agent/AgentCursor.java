@@ -154,7 +154,11 @@ public final class AgentCursor implements AutoCloseable {
             try {
                 statement.close();
             } catch (SQLException exception) {
-                failure = exception;
+                if (Objects.isNull(failure)) {
+                    failure = exception;
+                } else {
+                    failure.addSuppressed(exception);
+                }
             }
         }
         if (Objects.nonNull(failure)) {

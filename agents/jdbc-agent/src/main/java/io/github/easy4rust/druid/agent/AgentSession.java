@@ -136,7 +136,7 @@ public final class AgentSession implements Closeable {
                 try {
                     closeCursor(entry.getKey());
                 } catch (SQLException exception) {
-                    failure = exception;
+                    failure = appendFailure(failure, exception);
                 }
             }
         }
@@ -145,7 +145,7 @@ public final class AgentSession implements Closeable {
             try {
                 statement.close();
             } catch (SQLException exception) {
-                failure = exception;
+                failure = appendFailure(failure, exception);
             }
         }
         if (Objects.nonNull(failure)) {
