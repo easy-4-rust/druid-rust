@@ -53,7 +53,7 @@ xxhash-rust.workspace = true
 x509-cert.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
 toasty.workspace = true
 druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", features = ["sqlx"] }
 

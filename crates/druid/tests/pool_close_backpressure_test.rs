@@ -7,7 +7,7 @@ use druid::core::{
 use druid::pool::{DataSourceStatSink, DruidPool};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc as std_mpsc, Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::Semaphore;
 
 /// 可阻塞物理关闭的测试连接。对应 Java: DruidDataSource 的物理 Connection。
@@ -679,6 +679,7 @@ async fn shutdown_deadline_retains_blocked_maintenance_until_completion() {
 #[tokio::test]
 async fn synchronous_stat_sink_does_not_block_the_async_runtime() {
     let (release, receiver) = std_mpsc::channel();
+    let (progress, progressed) = std_mpsc::channel();
     let entered = Arc::new(AtomicUsize::new(0));
     let pool = DruidPool::builder()
         .name("stat-sink-runtime-isolation")
@@ -699,23 +700,28 @@ async fn synchronous_stat_sink_does_not_block_the_async_runtime() {
         .await
         .expect("build pool");
     let release_after = std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(400));
+        // 同步 sink 若占住唯一异步 worker，进度信号只能在救援释放后发出。
+        let runtime_progressed = progressed.recv_timeout(Duration::from_secs(5)).is_ok();
         release.send(()).expect("release sink");
+        runtime_progressed
     });
-    let started = Instant::now();
     pool.init().await.expect("start publisher");
-    tokio::time::sleep(Duration::from_millis(30)).await;
-    let elapsed = started.elapsed();
-    release_after.join().expect("release thread joins");
+    let wait_started = std::time::Instant::now();
+    while entered.load(Ordering::Acquire) == 0 {
+        assert!(
+            wait_started.elapsed() < Duration::from_secs(5),
+            "stat sink did not start"
+        );
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    progress.send(()).expect("report async runtime progress");
+    let runtime_progressed = release_after.join().expect("release thread joins");
     assert!(entered.load(Ordering::Acquire) > 0);
-    assert!(
-        elapsed < Duration::from_millis(200),
-        "blocked sink stalled the async runtime for {elapsed:?}"
-    );
+    assert!(runtime_progressed, "blocked sink stalled the async runtime");
     pool.close().await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[tokio::test(start_paused = true)]
 async fn shutdown_uses_one_deadline_across_publisher_and_filter_cleanup() {
     let (release_stat, receiver) = std_mpsc::channel();
     let stat_entered = Arc::new(AtomicUsize::new(0));
@@ -761,28 +767,32 @@ async fn shutdown_uses_one_deadline_across_publisher_and_filter_cleanup() {
         tokio::time::sleep(Duration::from_millis(45)).await;
         release_stat.send(()).expect("release stat sink");
     });
-    let filter_release = tokio::spawn({
-        let filter_gate = Arc::clone(&filter_gate);
-        let filter_entered = Arc::clone(&filter_entered);
+    let pool = Arc::new(pool);
+    let closing = tokio::spawn({
+        let pool = Arc::clone(&pool);
         async move {
-            while filter_entered.load(Ordering::Acquire) == 0 {
-                tokio::task::yield_now().await;
-            }
-            tokio::time::sleep(Duration::from_millis(70)).await;
-            filter_gate.add_permits(1);
+            // 虚拟时钟精确限定整个关闭流程，避免繁忙 CI 的墙钟调度误差。
+            tokio::time::timeout(Duration::from_millis(65), pool.close()).await
         }
     });
-    let started = Instant::now();
-    pool.close().await;
-    let elapsed = started.elapsed();
+    tokio::task::yield_now().await;
+    tokio::time::advance(Duration::from_millis(45)).await;
+    let wait_started = std::time::Instant::now();
+    while filter_entered.load(Ordering::Acquire) == 0 {
+        assert!(
+            wait_started.elapsed() < Duration::from_secs(5),
+            "filter cleanup did not start"
+        );
+        tokio::task::yield_now().await;
+    }
+    tokio::time::advance(Duration::from_millis(20)).await;
+    let close_result = closing.await.expect("close task joins");
     let completed_at_return = filter_completed.load(Ordering::Acquire);
     stat_release.await.expect("stat release joins");
-    filter_release.await.expect("filter release joins");
-    assert!(
-        elapsed < Duration::from_millis(100),
-        "shutdown multiplied its 60 ms budget: {elapsed:?}"
-    );
+    assert!(close_result.is_ok(), "shutdown multiplied its 60 ms budget");
+    assert!(filter_entered.load(Ordering::Acquire) > 0);
     assert_eq!(completed_at_return, 0);
+    filter_gate.add_permits(1);
     tokio::time::timeout(Duration::from_secs(1), pool.restart())
         .await
         .expect("restart after background cleanup completes")
