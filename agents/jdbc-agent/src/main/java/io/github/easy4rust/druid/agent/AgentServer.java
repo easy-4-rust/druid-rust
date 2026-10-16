@@ -34,6 +34,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Base64;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,7 @@ public final class AgentServer implements Closeable {
     private static final int DEFAULT_PAGE_SIZE = 500;
     private static final int MAX_PAGE_SIZE = 10_000;
     private static final int MAX_BLOB_BYTES = 8 * 1024 * 1024;
+    private static final int MAX_BLOB_STREAM_CHUNK_BYTES = 64 * 1024;
     private static final int DEFAULT_RESPONSE_BYTES = 8 * 1024 * 1024;
     private static final int MIN_RESPONSE_BYTES = 1024;
     private static final List<String> AGENT_CAPABILITIES = List.of(
@@ -271,6 +273,9 @@ public final class AgentServer implements Closeable {
             case "blob_position_blob" -> throw new SQLFeatureNotSupportedException(
                     "Blob#position(Blob,long) is not supported", "0A000");
             case "blob_truncate" -> blobTruncate(session, params);
+            case "blob_open_input_stream" -> blobOpenInputStream(session, params);
+            case "blob_read_input_stream" -> blobReadInputStream(session, params);
+            case "blob_close_stream" -> blobCloseStream(session, params);
             case "free_blob" -> freeBlob(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);
             case "reopen_logical_connection" -> reopenLogicalConnection(session);
@@ -634,6 +639,57 @@ public final class AgentServer implements Closeable {
     /** 释放远程 Blob；失败时会话保留句柄供重试。 */
     private JsonNode freeBlob(AgentSession session, JsonNode payload) throws SQLException {
         session.freeBlob(requiredText(payload, "blobId"));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    /** 打开 Blob 的完整或 JDBC 1-based 范围输入流，注册到父 Blob 资源域。 */
+    private JsonNode blobOpenInputStream(AgentSession session, JsonNode payload) throws SQLException {
+        String blobId = requiredText(payload, "blobId");
+        Blob blob = session.blob(blobId);
+        boolean hasPosition = payload.has("position");
+        boolean hasLength = payload.has("length");
+        if (hasPosition != hasLength) {
+            throw new IllegalArgumentException("position and length must be supplied together");
+        }
+        InputStream input = hasPosition
+                ? blob.getBinaryStream(requiredLong(payload, "position"), requiredLong(payload, "length"))
+                : blob.getBinaryStream();
+        try {
+            return JsonNodeFactory.instance.objectNode()
+                    .put("streamId", session.registerBlobInputStream(blobId, input));
+        } catch (SQLException exception) {
+            try {
+                input.close();
+            } catch (IOException closeFailure) {
+                exception.addSuppressed(closeFailure);
+            }
+            throw exception;
+        }
+    }
+
+    /** 单次只读取至多 64 KiB，并显式返回 EOF 状态。 */
+    private JsonNode blobReadInputStream(AgentSession session, JsonNode payload) throws SQLException {
+        InputStream input = session.blobInputStream(requiredText(payload, "streamId"));
+        int maxBytes = requiredInt(payload, "maxBytes");
+        if (maxBytes < 1 || maxBytes > MAX_BLOB_STREAM_CHUNK_BYTES) {
+            throw new IllegalArgumentException("maxBytes must be between 1 and 65536");
+        }
+        byte[] buffer = new byte[maxBytes];
+        int count;
+        try {
+            count = input.read(buffer);
+        } catch (IOException exception) {
+            throw new SQLException("JDBC Agent blob stream read failed", exception);
+        }
+        return JsonNodeFactory.instance.objectNode()
+                .put("bytes", Base64.getEncoder().encodeToString(
+                        count < 0 ? new byte[0] : Arrays.copyOf(buffer, count)))
+                .put("eof", count < 0);
+    }
+
+    /** 关闭 Blob 子流句柄，重复关闭无副作用。 */
+    private JsonNode blobCloseStream(AgentSession session, JsonNode payload) throws SQLException {
+        session.closeBlobStream(requiredText(payload, "streamId"));
         return JsonNodeFactory.instance.objectNode();
     }
 
