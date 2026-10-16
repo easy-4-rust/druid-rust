@@ -650,6 +650,22 @@ class AgentServerTest {
 
     @Test
     void h2ClobProtocolPreservesUtf16LengthAndOneBasedRead() throws Exception {
+        SQLException expectedReadError;
+        SQLException expectedSearchError;
+        SQLException expectedTruncateError;
+        String driverIsolatedSurrogate;
+        try (Connection direct = DriverManager.getConnection("jdbc:h2:mem:agent-clob-direct")) {
+            java.sql.Clob driverClob = direct.createClob();
+            driverClob.setString(1, "A😀Z");
+            expectedReadError = assertThrows(SQLException.class, () -> driverClob.getSubString(1, -1));
+            expectedSearchError = assertThrows(SQLException.class, () -> driverClob.position("😀", 1));
+            expectedTruncateError = assertThrows(SQLException.class, () -> driverClob.truncate(3));
+            driverClob.free();
+            java.sql.Clob isolated = direct.createClob();
+            isolated.setString(1, new String(new char[] {(char) 0xd800}));
+            driverIsolatedSurrogate = isolated.getSubString(1, 1);
+            isolated.free();
+        }
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try (PipedInputStream serverInput = new PipedInputStream();
              PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
@@ -662,8 +678,16 @@ class AgentServerTest {
                 server.run();
                 return null;
             });
-            assertEquals("ready", read(responses).path("method").asText());
-            assertTrue(call(requests, responses, 801, "handshake", handshakePayload()).path("result").isObject());
+            JsonNode ready = read(responses);
+            assertEquals("ready", ready.path("method").asText());
+            for (JsonNode capability : ready.at("/params/capabilities")) {
+                assertNotEquals("clob-position-clob", capability.asText());
+            }
+            JsonNode handshake = call(requests, responses, 801, "handshake", handshakePayload());
+            assertTrue(handshake.path("result").isObject());
+            for (JsonNode capability : handshake.at("/result/capabilities")) {
+                assertNotEquals("clob-position-clob", capability.asText());
+            }
             String sessionId = call(requests, responses, 802, "open_session", connectPayload())
                     .at("/result/sessionId").asText();
             String clobId = call(requests, responses, 803, "create_clob", sessionOnly(sessionId))
@@ -685,8 +709,55 @@ class AgentServerTest {
             range.put("length", 2);
             assertEquals("😀", decodeUtf16(call(requests, responses, 807, "clob_get_sub_string", range)
                     .at("/result/utf16").asText()));
+            ObjectNode invalid = range.deepCopy();
+            invalid.put("length", -1);
+            JsonNode readError = call(requests, responses, 811, "clob_get_sub_string", invalid).path("error");
+            assertEquals(expectedReadError.getSQLState(), readError.at("/data/sqlState").asText());
+            assertEquals(expectedReadError.getErrorCode(), readError.at("/data/vendorCode").asInt());
+            ObjectNode search = clob.deepCopy();
+            search.put("utf16", encodeUtf16("😀"));
+            search.put("start", 1L);
+            JsonNode searchError = call(requests, responses, 812, "clob_position_string", search).path("error");
+            assertEquals(expectedSearchError.getSQLState(), searchError.at("/data/sqlState").asText());
+            assertEquals(expectedSearchError.getErrorCode(), searchError.at("/data/vendorCode").asInt());
+            ObjectNode truncate = clob.deepCopy();
+            truncate.put("length", 3L);
+            JsonNode truncateError = call(requests, responses, 813, "clob_truncate", truncate).path("error");
+            assertEquals(expectedTruncateError.getSQLState(), truncateError.at("/data/sqlState").asText());
+            assertEquals(expectedTruncateError.getErrorCode(), truncateError.at("/data/vendorCode").asInt());
+            ObjectNode unsupported = clob.deepCopy();
+            unsupported.put("patternClobId", clobId);
+            unsupported.put("start", 1L);
+            assertEquals("0A000", call(requests, responses, 814, "clob_position_clob", unsupported)
+                    .at("/error/data/sqlState").asText());
+            assertEquals(4, call(requests, responses, 815, "clob_length", clob)
+                    .at("/result/length").asLong());
             assertTrue(call(requests, responses, 808, "free_clob", clob).path("result").isObject());
             assertTrue(call(requests, responses, 809, "clob_length", clob).path("error").isObject());
+            String isolatedId = call(requests, responses, 816, "create_clob", sessionOnly(sessionId))
+                    .at("/result/clobId").asText();
+            ObjectNode isolated = sessionOnly(sessionId);
+            isolated.put("clobId", isolatedId);
+            ObjectNode isolatedWrite = isolated.deepCopy();
+            isolatedWrite.put("position", 1L);
+            isolatedWrite.put("utf16", encodeUtf16(new String(new char[] {(char) 0xd800})));
+            assertEquals(1, call(requests, responses, 817, "clob_set_string", isolatedWrite)
+                    .at("/result/written").asInt());
+            ObjectNode isolatedRead = isolated.deepCopy();
+            isolatedRead.put("position", 1L);
+            isolatedRead.put("length", 1);
+            assertEquals(driverIsolatedSurrogate,
+                    decodeUtf16(call(requests, responses, 818, "clob_get_sub_string", isolatedRead)
+                            .at("/result/utf16").asText()));
+            isolatedWrite.put("utf16", Base64.getEncoder().encodeToString(new byte[] {(byte) 0xd8}));
+            assertTrue(call(requests, responses, 819, "clob_set_string", isolatedWrite)
+                    .path("error").isObject());
+            isolatedWrite.putNull("utf16");
+            assertTrue(call(requests, responses, 832, "clob_set_string", isolatedWrite)
+                    .path("error").isObject());
+            assertEquals(1L, call(requests, responses, 833, "clob_length", isolated)
+                    .at("/result/length").asLong());
+            assertTrue(call(requests, responses, 820, "free_clob", isolated).path("result").isObject());
             assertTrue(call(requests, responses, 810, "close_session", sessionOnly(sessionId))
                     .path("result").isObject());
             requests.close();
@@ -713,6 +784,69 @@ class AgentServerTest {
             units[index] = (char) (((bytes[index * 2] & 0xff) << 8) | (bytes[index * 2 + 1] & 0xff));
         }
         return new String(units);
+    }
+
+    @Test
+    void hsqldbClobProtocolSearchesAndTruncatesWithUtf16Positions() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            assertEquals("ready", read(responses).path("method").asText());
+            assertTrue(call(requests, responses, 821, "handshake", handshakePayload()).path("result").isObject());
+            ObjectNode connect = connectPayload();
+            connect.put("url", "jdbc:hsqldb:mem:agent_clob_search");
+            connect.put("validationQuery", "VALUES (1)");
+            connect.with("properties").put("user", "SA").put("password", "");
+            String sessionId = call(requests, responses, 822, "open_session", connect)
+                    .at("/result/sessionId").asText();
+            String clobId = call(requests, responses, 823, "create_clob", sessionOnly(sessionId))
+                    .at("/result/clobId").asText();
+            ObjectNode clob = sessionOnly(sessionId);
+            clob.put("clobId", clobId);
+            ObjectNode write = clob.deepCopy();
+            write.put("position", 1L);
+            write.put("utf16", encodeUtf16("A😀BCD"));
+            assertEquals(6, call(requests, responses, 824, "clob_set_string", write)
+                    .at("/result/written").asInt());
+            ObjectNode rangedWrite = clob.deepCopy();
+            rangedWrite.put("position", 5L);
+            rangedWrite.put("utf16", encodeUtf16("xYz"));
+            rangedWrite.put("offset", 1);
+            rangedWrite.put("length", 1);
+            assertEquals(1, call(requests, responses, 825, "clob_set_string", rangedWrite)
+                    .at("/result/written").asInt());
+            ObjectNode search = clob.deepCopy();
+            search.put("utf16", encodeUtf16("BY"));
+            search.put("start", 1L);
+            assertEquals(4L, call(requests, responses, 826, "clob_position_string", search)
+                    .at("/result/position").asLong());
+            ObjectNode truncate = clob.deepCopy();
+            truncate.put("length", 5L);
+            assertTrue(call(requests, responses, 827, "clob_truncate", truncate).path("result").isObject());
+            assertEquals(5L, call(requests, responses, 828, "clob_length", clob)
+                    .at("/result/length").asLong());
+            ObjectNode read = clob.deepCopy();
+            read.put("position", 1L);
+            read.put("length", 5);
+            assertEquals("A😀BY", decodeUtf16(call(requests, responses, 829, "clob_get_sub_string", read)
+                    .at("/result/utf16").asText()));
+            assertTrue(call(requests, responses, 830, "free_clob", clob).path("result").isObject());
+            assertTrue(call(requests, responses, 831, "close_session", sessionOnly(sessionId))
+                    .path("result").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test

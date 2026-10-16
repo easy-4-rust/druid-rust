@@ -286,6 +286,10 @@ public final class AgentServer implements Closeable {
             case "clob_length" -> clobLength(session, params);
             case "clob_get_sub_string" -> clobGetSubString(session, params);
             case "clob_set_string" -> clobSetString(session, params);
+            case "clob_position_string" -> clobPositionString(session, params);
+            case "clob_position_clob" -> throw new SQLFeatureNotSupportedException(
+                    "Clob#position(Clob,long) is not supported", "0A000");
+            case "clob_truncate" -> clobTruncate(session, params);
             case "free_clob" -> freeClob(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);
             case "reopen_logical_connection" -> reopenLogicalConnection(session);
@@ -692,6 +696,19 @@ public final class AgentServer implements Closeable {
                 ? clob.setString(position, value, requiredInt(payload, "offset"), requiredInt(payload, "length"))
                 : clob.setString(position, value);
         return JsonNodeFactory.instance.objectNode().put("written", written);
+    }
+
+    /** 以 UTF-16 字符模式搜索 Clob，直接返回驱动的 1-based 位置或 -1。 */
+    private JsonNode clobPositionString(AgentSession session, JsonNode payload) throws SQLException {
+        Clob clob = session.clob(requiredText(payload, "clobId"));
+        return JsonNodeFactory.instance.objectNode().put("position",
+                clob.position(decodeUtf16(payload, "utf16"), requiredLong(payload, "start")));
+    }
+
+    /** 将 Clob 截断到驱动指定的 UTF-16 单元长度。 */
+    private JsonNode clobTruncate(AgentSession session, JsonNode payload) throws SQLException {
+        session.clob(requiredText(payload, "clobId")).truncate(requiredLong(payload, "length"));
+        return JsonNodeFactory.instance.objectNode();
     }
 
     /** 释放远程 Clob；失败时会话保留句柄供重试。 */
