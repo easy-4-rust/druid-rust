@@ -56,7 +56,10 @@ async fn h2_callable_function_round_trip_and_pooled_owner_close() {
     let first_execution_cancel = callable
         .cancellation_control()
         .expect("Agent callable cancellation control");
-    assert!(callable.cancel().is_err(), "sync cancellation must not report false success");
+    assert!(
+        callable.cancel().is_err(),
+        "sync cancellation must not report false success"
+    );
     callable
         .register_out_parameter(
             CallableParameter::by_index(1).unwrap(),
@@ -120,6 +123,65 @@ async fn h2_callable_function_round_trip_and_pooled_owner_close() {
     owner.close().await.expect("pooled owner close");
     assert!(callable.out_value(ParameterIndex::new(1).unwrap()).is_err());
     pool.close().await;
+}
+
+#[tokio::test]
+async fn h2_cancellable_callable_query_keeps_statement_retryable() {
+    let Some(options) = options("DRUID_JDBC_DRIVER_JAR") else {
+        return;
+    };
+    let factory = JdbcAgentConnectionFactory::new(
+        "jdbc:h2:mem:callable_cancel_query;DB_CLOSE_DELAY=-1",
+        Some("SELECT 1".to_owned()),
+        options.runtime_identity("callable-cancel-query", "local", "isolated"),
+    );
+    let mut connection = factory.create().await.expect("H2 session");
+    let mut callable = connection
+        .prepare_call(
+            "CALL (SELECT SUM(X) FROM SYSTEM_RANGE(1, ?))",
+            StatementOptions::default(),
+        )
+        .await
+        .expect("query callable");
+    callable
+        .set_parameter(PreparedParameter {
+            index: ParameterIndex::new(1).unwrap(),
+            value: Value::Int(1_000_000_000),
+        })
+        .expect("large range");
+    let cancel = callable
+        .cancellation_control()
+        .expect("cancellation handle");
+    let executing = tokio::spawn(async move {
+        let result = callable.execute_prepared().await;
+        (callable, result)
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    cancel.cancel().await.expect("cancel active request");
+    let (mut callable, result) = tokio::time::timeout(std::time::Duration::from_secs(5), executing)
+        .await
+        .expect("cancelled execution must finish promptly")
+        .expect("execution task");
+    let cancellation_error = result.expect_err("cancelled execution must fail");
+    assert!(
+        cancellation_error
+            .sql_exception()
+            .and_then(|error| error.sql_state())
+            .is_some(),
+        "cancelled execution must preserve the JDBC SQLState"
+    );
+    callable
+        .set_parameter(PreparedParameter {
+            index: ParameterIndex::new(1).unwrap(),
+            value: Value::Int(10),
+        })
+        .expect("retry range");
+    callable
+        .execute_prepared()
+        .await
+        .expect("same statement retry");
+    callable.close().await.expect("close callable");
+    connection.close().await.expect("close H2 session");
 }
 
 #[tokio::test]
