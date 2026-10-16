@@ -850,6 +850,75 @@ class AgentServerTest {
     }
 
     @Test
+    void h2ClobReaderTransfersBoundedUtf16PagesAndClosesWithParent() throws Exception {
+        String expected = "A😀".repeat(35_000);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            read(responses);
+            call(requests, responses, 841, "handshake", handshakePayload());
+            String sessionId = call(requests, responses, 842, "open_session", connectPayload())
+                    .at("/result/sessionId").asText();
+            String clobId = call(requests, responses, 843, "create_clob", sessionOnly(sessionId))
+                    .at("/result/clobId").asText();
+            ObjectNode clob = sessionOnly(sessionId);
+            clob.put("clobId", clobId);
+            ObjectNode write = clob.deepCopy();
+            write.put("position", 1L);
+            write.put("utf16", encodeUtf16(expected));
+            assertEquals(expected.length(), call(requests, responses, 844, "clob_set_string", write)
+                    .at("/result/written").asInt());
+            String streamId = call(requests, responses, 845, "clob_open_reader", clob)
+                    .at("/result/streamId").asText();
+            ObjectNode stream = sessionOnly(sessionId);
+            stream.put("streamId", streamId);
+            stream.put("maxUnits", 32_768);
+            StringBuilder actual = new StringBuilder();
+            for (int index = 0; index < 5; index++) {
+                JsonNode page = call(requests, responses, 846 + index, "clob_read_reader", stream).path("result");
+                assertTrue(page.isObject(), page.toString());
+                assertTrue(decodeUtf16(page.path("utf16").asText()).length() <= 32_768);
+                actual.append(decodeUtf16(page.path("utf16").asText()));
+                if (page.path("eof").asBoolean()) {
+                    break;
+                }
+            }
+            assertEquals(expected, actual.toString());
+            ObjectNode oversized = stream.deepCopy();
+            oversized.put("maxUnits", 32_769);
+            assertTrue(call(requests, responses, 852, "clob_read_reader", oversized).path("error").isObject());
+            ObjectNode range = clob.deepCopy();
+            range.put("position", 2L);
+            range.put("length", 2L);
+            String rangeId = call(requests, responses, 853, "clob_open_reader", range)
+                    .at("/result/streamId").asText();
+            ObjectNode rangedStream = sessionOnly(sessionId);
+            rangedStream.put("streamId", rangeId);
+            rangedStream.put("maxUnits", 2);
+            assertEquals("😀", decodeUtf16(call(requests, responses, 854, "clob_read_reader", rangedStream)
+                    .at("/result/utf16").asText()));
+            assertTrue(call(requests, responses, 855, "free_clob", clob).path("result").isObject());
+            assertTrue(call(requests, responses, 856, "clob_read_reader", rangedStream).path("error").isObject());
+            assertTrue(call(requests, responses, 857, "clob_close_stream", rangedStream).path("result").isObject());
+            assertTrue(call(requests, responses, 858, "close_session", sessionOnly(sessionId))
+                    .path("result").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void hsqldbBlobProtocolSearchesAndTruncatesSuccessfully() throws Exception {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try (PipedInputStream serverInput = new PipedInputStream();

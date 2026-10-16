@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.io.Reader;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -61,6 +62,7 @@ public final class AgentServer implements Closeable {
     private static final int MAX_PAGE_SIZE = 10_000;
     private static final int MAX_BLOB_BYTES = 8 * 1024 * 1024;
     private static final int MAX_CLOB_UNITS = 4 * 1024 * 1024;
+    private static final int MAX_CLOB_STREAM_CHUNK_UNITS = 32 * 1024;
     private static final int MAX_BLOB_STREAM_CHUNK_BYTES = 64 * 1024;
     private static final int DEFAULT_RESPONSE_BYTES = 8 * 1024 * 1024;
     private static final int MIN_RESPONSE_BYTES = 1024;
@@ -290,6 +292,9 @@ public final class AgentServer implements Closeable {
             case "clob_position_clob" -> throw new SQLFeatureNotSupportedException(
                     "Clob#position(Clob,long) is not supported", "0A000");
             case "clob_truncate" -> clobTruncate(session, params);
+            case "clob_open_reader" -> clobOpenReader(session, params);
+            case "clob_read_reader" -> clobReadReader(session, params);
+            case "clob_close_stream" -> clobCloseStream(session, params);
             case "free_clob" -> freeClob(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);
             case "reopen_logical_connection" -> reopenLogicalConnection(session);
@@ -714,6 +719,56 @@ public final class AgentServer implements Closeable {
     /** 释放远程 Clob；失败时会话保留句柄供重试。 */
     private JsonNode freeClob(AgentSession session, JsonNode payload) throws SQLException {
         session.freeClob(requiredText(payload, "clobId"));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    /** 打开完整或 JDBC 1-based 范围字符读取器，注册到父 Clob 资源域。 */
+    private JsonNode clobOpenReader(AgentSession session, JsonNode payload) throws SQLException {
+        String clobId = requiredText(payload, "clobId");
+        Clob clob = session.clob(clobId);
+        boolean hasPosition = payload.has("position");
+        boolean hasLength = payload.has("length");
+        if (hasPosition != hasLength) {
+            throw new IllegalArgumentException("position and length must be supplied together");
+        }
+        Reader reader = hasPosition
+                ? clob.getCharacterStream(requiredLong(payload, "position"), requiredLong(payload, "length"))
+                : clob.getCharacterStream();
+        try {
+            return JsonNodeFactory.instance.objectNode()
+                    .put("streamId", session.registerClobReader(clobId, reader));
+        } catch (SQLException exception) {
+            try {
+                reader.close();
+            } catch (IOException closeFailure) {
+                exception.addSuppressed(closeFailure);
+            }
+            throw exception;
+        }
+    }
+
+    /** 每次只读取至多 32K 个 UTF-16 单元，并显式报告 EOF。 */
+    private JsonNode clobReadReader(AgentSession session, JsonNode payload) throws SQLException {
+        Reader reader = session.clobReader(requiredText(payload, "streamId"));
+        int maxUnits = requiredInt(payload, "maxUnits");
+        if (maxUnits < 1 || maxUnits > MAX_CLOB_STREAM_CHUNK_UNITS) {
+            throw new IllegalArgumentException("maxUnits must be between 1 and 32768");
+        }
+        char[] buffer = new char[maxUnits];
+        int count;
+        try {
+            count = reader.read(buffer);
+        } catch (IOException exception) {
+            throw new SQLException("JDBC Agent clob reader failed", exception);
+        }
+        return JsonNodeFactory.instance.objectNode()
+                .put("utf16", encodeUtf16(count < 0 ? "" : new String(buffer, 0, count)))
+                .put("eof", count < 0);
+    }
+
+    /** 关闭 Clob 子流句柄；父 Clob 释放后的重复关闭无副作用。 */
+    private JsonNode clobCloseStream(AgentSession session, JsonNode payload) throws SQLException {
+        session.closeClobStream(requiredText(payload, "streamId"));
         return JsonNodeFactory.instance.objectNode();
     }
 
