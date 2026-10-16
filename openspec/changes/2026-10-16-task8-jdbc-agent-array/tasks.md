@@ -10,5 +10,5 @@
 - [x] 3b3. Verify a real-H2 pooled owner close returns its holder and invalidates an outstanding Array and child cursor; run the direct and pooled H2 tests together with separate Agent runtime identities.
 - [x] 3b4. Verify `ResultSet#next` cancellation while a remote page is pending: a controlled executor pauses the page, the caller cancels `next`, and a later `next` resumes the same request without replay before closing the cursor.
 - [x] 3b5. Preserve driver `ResultSetMetaData#getColumnTypeName` across the Agent protocol and Rust Array cursor; verify both Java protocol and real-H2 Rust metadata values.
-- [ ] 4. Run Java and Rust real-H2 tests, resource contract regressions, and Task 8 semantic verifier; update only proven inventory states.
+- [x] 4. Run Java and Rust real-H2 tests, resource contract regressions, and Task 8 semantic verifier; update only proven inventory states. JDK 17 `mvn verify`, H2 2/2, RDBC resource 32/32, release retry 5/5, prepared resource 3/3, and `--phase adapter-live` passed; only the Agent Array adapter row advanced to LIVE.
 - [ ] 5. Validate OpenSpec, review compatibility and resource failure behavior, then sync/archive after complete implementation.
