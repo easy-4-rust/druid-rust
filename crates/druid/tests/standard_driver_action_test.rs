@@ -15,6 +15,9 @@ struct AcceptingButRefusingDriver;
 
 struct SecondCandidateDriver;
 
+/// 只接受此用例的 URL，隔离进程级注册表中并行测试的驱动选择。
+struct SharedManagerDriver;
+
 struct NameObservationDriver(Arc<AtomicUsize>);
 
 #[async_trait::async_trait]
@@ -84,6 +87,25 @@ impl Driver for AcceptingButRefusingDriver {
     fn accepts_url(&self, url: &str) -> bool {
         url.starts_with("rdbc:refusing-redaction-test://")
             || url.starts_with("rdbc:next-candidate-test://")
+    }
+
+    async fn connect(
+        &self,
+        _url: &str,
+        _properties: &ConnectionProperties,
+    ) -> Result<Option<Box<dyn Connection>>, RdbcError> {
+        Ok(None)
+    }
+}
+
+#[async_trait::async_trait]
+impl Driver for SharedManagerDriver {
+    fn name(&self) -> &str {
+        "shared_manager_driver"
+    }
+
+    fn accepts_url(&self, url: &str) -> bool {
+        url.starts_with("rdbc:shared-manager-test://")
     }
 
     async fn connect(
@@ -306,13 +328,13 @@ fn driver_callback_can_register_without_registry_lock_reentrancy() {
 
 #[test]
 fn standard_and_druid_manager_paths_share_registry_callback_and_settings() {
-    let driver: Arc<dyn Driver> = Arc::new(AcceptingButRefusingDriver);
+    let driver: Arc<dyn Driver> = Arc::new(SharedManagerDriver);
     let notifications = Arc::new(AtomicUsize::new(0));
     StandardDriverManager::register_driver_with_action(
         Arc::clone(&driver),
         Some(Arc::new(CountingAction(Arc::clone(&notifications)))),
     );
-    let found = DriverManager::get_driver("rdbc:refusing-redaction-test://localhost/db")
+    let found = DriverManager::get_driver("rdbc:shared-manager-test://localhost/db")
         .expect("Druid path must see standard registration");
     assert!(Arc::ptr_eq(&found, &driver));
 
