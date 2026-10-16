@@ -22,5 +22,5 @@
 
 ## 5. Integration
 
-- [ ] 5.1 Run Java, Rust H2, resource, semantic, API, and SemVer checks; advance only proven Blob inventory state and verify the frozen source oracle remains valid.
-- [ ] 5.2 Review cross-platform CI and compatibility, run strict OpenSpec validation, then sync and archive only when all requirements have evidence.
+- [x] 5.1 Run Java, Rust H2, resource, semantic, API, and SemVer checks; advance only proven Blob inventory state and verify the frozen source oracle remains valid. JDK 17 Maven verify, H2 4/4, HSQLDB 1/1, resource contracts, semantic logical-live, 31 wrapper adapters, public-API and SemVer CI gates passed; frozen source SHA stayed fe4824599b8843f769440afa5c805a822985b9fb8d9ef46e7f8739bf7fa5c26.
+- [x] 5.2 Review cross-platform CI and compatibility, run strict OpenSpec validation, then sync and archive only when all requirements have evidence. driver-matrix run 38852545260 completed successfully across its platform/driver jobs; openspec validate 2026-10-16-task8-jdbc-agent-blob --strict passed.
