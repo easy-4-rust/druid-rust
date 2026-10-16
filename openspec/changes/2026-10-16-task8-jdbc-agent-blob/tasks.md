@@ -13,7 +13,7 @@
 ## 3. Bounded streams
 
 - [ ] 3.1 Add a greater-than-one-page H2 input-stream test and cancellation/close assertions; implement bounded remote reads and pass `mvn verify`.
-- [ ] 3.2 Add a greater-than-one-page H2 output-stream test with write, flush, close, and parent-free behavior; implement bounded remote writes and pass `mvn verify`.
+- [x] 3.2 Add a greater-than-one-page H2 output-stream test with write, flush, close, and parent-free behavior; implement bounded remote writes and pass `mvn verify`. The missing protocol first failed; H2 then passed five 32-KiB writes, the 64-KiB request bound, flush, close, parent free with an open child, and JDK 17 `mvn verify`.
 
 ## 4. Standard Rust adapter
 

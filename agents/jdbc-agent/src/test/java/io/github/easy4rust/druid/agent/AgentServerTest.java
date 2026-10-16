@@ -765,6 +765,81 @@ class AgentServerTest {
         }
     }
 
+    @Test
+    void h2BlobOutputStreamWritesMultipleBoundedPagesAndClosesWithParent() throws Exception {
+        byte[] expected = new byte[160_000];
+        for (int index = 0; index < expected.length; index++) {
+            expected[index] = (byte) (index * 17);
+        }
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            assertEquals("ready", read(responses).path("method").asText());
+            assertTrue(call(requests, responses, 501, "handshake", handshakePayload()).path("result").isObject());
+            String sessionId = call(requests, responses, 502, "open_session", connectPayload())
+                    .at("/result/sessionId").asText();
+            String blobId = call(requests, responses, 503, "create_blob", sessionOnly(sessionId))
+                    .at("/result/blobId").asText();
+            ObjectNode blob = sessionOnly(sessionId);
+            blob.put("blobId", blobId);
+            blob.put("position", 1L);
+            String streamId = call(requests, responses, 504, "blob_open_output_stream", blob)
+                    .at("/result/streamId").asText();
+            ObjectNode stream = sessionOnly(sessionId);
+            stream.put("streamId", streamId);
+            ObjectNode oversized = stream.deepCopy();
+            oversized.put("bytes", Base64.getEncoder().encodeToString(new byte[65_537]));
+            assertTrue(call(requests, responses, 521, "blob_write_output_stream", oversized)
+                    .path("error").isObject());
+            for (int offset = 0; offset < expected.length; offset += 32_768) {
+                byte[] chunk = Arrays.copyOfRange(expected, offset, Math.min(expected.length, offset + 32_768));
+                ObjectNode write = stream.deepCopy();
+                write.put("bytes", Base64.getEncoder().encodeToString(chunk));
+                assertEquals(chunk.length, call(requests, responses, 505 + offset / 32_768,
+                        "blob_write_output_stream", write).at("/result/written").asInt());
+            }
+            assertTrue(call(requests, responses, 511, "blob_flush_stream", stream).path("result").isObject());
+            assertTrue(call(requests, responses, 512, "blob_close_stream", stream).path("result").isObject());
+            assertTrue(call(requests, responses, 513, "blob_write_output_stream", stream).path("error").isObject());
+            ObjectNode read = sessionOnly(sessionId);
+            read.put("blobId", blobId);
+            read.put("position", 1L);
+            read.put("length", expected.length);
+            assertTrue(Arrays.equals(expected, Base64.getDecoder().decode(
+                    call(requests, responses, 514, "blob_get_bytes", read).at("/result/bytes").asText())));
+            assertTrue(call(requests, responses, 515, "free_blob", blob).path("result").isObject());
+            String secondBlobId = call(requests, responses, 517, "create_blob", sessionOnly(sessionId))
+                    .at("/result/blobId").asText();
+            ObjectNode secondBlob = sessionOnly(sessionId);
+            secondBlob.put("blobId", secondBlobId);
+            secondBlob.put("position", 1L);
+            String activeStreamId = call(requests, responses, 518, "blob_open_output_stream", secondBlob)
+                    .at("/result/streamId").asText();
+            ObjectNode activeStream = sessionOnly(sessionId);
+            activeStream.put("streamId", activeStreamId);
+            assertTrue(call(requests, responses, 519, "free_blob", secondBlob).path("result").isObject());
+            ObjectNode afterFreeWrite = activeStream.deepCopy();
+            afterFreeWrite.put("bytes", Base64.getEncoder().encodeToString(new byte[] {1}));
+            assertTrue(call(requests, responses, 520, "blob_write_output_stream", afterFreeWrite)
+                    .path("error").isObject());
+            assertTrue(call(requests, responses, 516, "close_session", sessionOnly(sessionId))
+                    .path("result").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private JsonNode call(BufferedWriter requests, BufferedReader responses, long id,
             String method, ObjectNode params) throws Exception {
         write(requests, request(id, method, params));

@@ -275,6 +275,9 @@ public final class AgentServer implements Closeable {
             case "blob_truncate" -> blobTruncate(session, params);
             case "blob_open_input_stream" -> blobOpenInputStream(session, params);
             case "blob_read_input_stream" -> blobReadInputStream(session, params);
+            case "blob_open_output_stream" -> blobOpenOutputStream(session, params);
+            case "blob_write_output_stream" -> blobWriteOutputStream(session, params);
+            case "blob_flush_stream" -> blobFlushStream(session, params);
             case "blob_close_stream" -> blobCloseStream(session, params);
             case "free_blob" -> freeBlob(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);
@@ -691,6 +694,58 @@ public final class AgentServer implements Closeable {
     private JsonNode blobCloseStream(AgentSession session, JsonNode payload) throws SQLException {
         session.closeBlobStream(requiredText(payload, "streamId"));
         return JsonNodeFactory.instance.objectNode();
+    }
+
+    /** 在 JDBC 1-based 位置打开 Blob 子输出流。 */
+    private JsonNode blobOpenOutputStream(AgentSession session, JsonNode payload) throws SQLException {
+        String blobId = requiredText(payload, "blobId");
+        OutputStream output = session.blob(blobId).setBinaryStream(requiredLong(payload, "position"));
+        try {
+            return JsonNodeFactory.instance.objectNode()
+                    .put("streamId", session.registerBlobOutputStream(blobId, output));
+        } catch (SQLException exception) {
+            try {
+                output.close();
+            } catch (IOException closeFailure) {
+                exception.addSuppressed(closeFailure);
+            }
+            throw exception;
+        }
+    }
+
+    /** 单次向驱动 Blob 流写入至多 64 KiB。 */
+    private JsonNode blobWriteOutputStream(AgentSession session, JsonNode payload) throws SQLException {
+        OutputStream output = session.blobOutputStream(requiredText(payload, "streamId"));
+        byte[] bytes = blobStreamRequestBytes(payload);
+        try {
+            output.write(bytes);
+        } catch (IOException exception) {
+            throw new SQLException("JDBC Agent blob stream write failed", exception);
+        }
+        return JsonNodeFactory.instance.objectNode().put("written", bytes.length);
+    }
+
+    /** 按 JDBC 流语义将缓冲的 Blob 字节刷新到底层驱动。 */
+    private JsonNode blobFlushStream(AgentSession session, JsonNode payload) throws SQLException {
+        OutputStream output = session.blobOutputStream(requiredText(payload, "streamId"));
+        try {
+            output.flush();
+        } catch (IOException exception) {
+            throw new SQLException("JDBC Agent blob stream flush failed", exception);
+        }
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private byte[] blobStreamRequestBytes(JsonNode payload) {
+        String encoded = requiredText(payload, "bytes");
+        if (encoded.length() > ((MAX_BLOB_STREAM_CHUNK_BYTES + 2L) / 3L) * 4L) {
+            throw new IllegalArgumentException("Blob stream write exceeds maximum chunk size");
+        }
+        byte[] bytes = Base64.getDecoder().decode(encoded);
+        if (bytes.length > MAX_BLOB_STREAM_CHUNK_BYTES) {
+            throw new IllegalArgumentException("Blob stream write exceeds maximum chunk size");
+        }
+        return bytes;
     }
 
     private byte[] blobRequestBytes(JsonNode payload, String field) {
