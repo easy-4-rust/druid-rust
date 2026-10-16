@@ -4,6 +4,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Reader;
+import java.io.Writer;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.Clob;
@@ -37,6 +39,7 @@ public final class AgentSession implements Closeable {
     private final Map<String, Array> arrays = new ConcurrentHashMap<>();
     private final Map<String, Blob> blobs = new ConcurrentHashMap<>();
     private final Map<String, Clob> clobs = new ConcurrentHashMap<>();
+    private final Map<String, ClobStreamHandle> clobStreams = new ConcurrentHashMap<>();
     private final Map<String, BlobStreamHandle> blobStreams = new ConcurrentHashMap<>();
     private final Map<Long, Statement> activeStatements = new ConcurrentHashMap<>();
     private final Map<Long, String> activeBlobReads = new HashMap<>();
@@ -350,8 +353,92 @@ public final class AgentSession implements Closeable {
     public void freeClob(String clobId) throws SQLException {
         Clob clob = clobs.get(clobId);
         if (Objects.nonNull(clob)) {
-            clob.free();
-            clobs.remove(clobId, clob);
+            SQLException failure = null;
+            for (Map.Entry<String, ClobStreamHandle> entry : new ArrayList<>(clobStreams.entrySet())) {
+                if (Objects.equals(entry.getValue().clobId, clobId)) {
+                    try {
+                        closeClobStream(entry.getKey());
+                    } catch (SQLException exception) {
+                        failure = appendFailure(failure, exception);
+                    }
+                }
+            }
+            try {
+                clob.free();
+                clobs.remove(clobId, clob);
+            } catch (SQLException exception) {
+                failure = appendFailure(failure, exception);
+            }
+            if (Objects.nonNull(failure)) {
+                throw failure;
+            }
+        }
+    }
+
+    /** 注册 Clob 子字符读取器，并保留父资源身份。 */
+    public String registerClobReader(String clobId, Reader reader) throws SQLException {
+        clob(clobId);
+        return registerClobStream(clobId, Objects.requireNonNull(reader, "reader"));
+    }
+
+    /** 注册 Clob 子字符写入器，并保留父资源身份。 */
+    public String registerClobWriter(String clobId, Writer writer) throws SQLException {
+        clob(clobId);
+        return registerClobStream(clobId, Objects.requireNonNull(writer, "writer"));
+    }
+
+    private String registerClobStream(String clobId, Closeable stream) {
+        String streamId = UUID.randomUUID().toString();
+        clobStreams.put(streamId, new ClobStreamHandle(clobId, stream));
+        return streamId;
+    }
+
+    /** 获取仍在会话内且类型正确的 Clob 字符读取器。 */
+    public Reader clobReader(String streamId) throws SQLException {
+        ClobStreamHandle handle = clobStream(streamId);
+        if (!(handle.stream instanceof Reader)) {
+            throw new SQLException("JDBC Agent clob stream is not a reader: " + streamId);
+        }
+        return (Reader) handle.stream;
+    }
+
+    /** 获取仍在会话内且类型正确的 Clob 字符写入器。 */
+    public Writer clobWriter(String streamId) throws SQLException {
+        ClobStreamHandle handle = clobStream(streamId);
+        if (!(handle.stream instanceof Writer)) {
+            throw new SQLException("JDBC Agent clob stream is not a writer: " + streamId);
+        }
+        return (Writer) handle.stream;
+    }
+
+    private ClobStreamHandle clobStream(String streamId) throws SQLException {
+        ClobStreamHandle handle = clobStreams.get(streamId);
+        if (Objects.isNull(handle)) {
+            throw new SQLException("JDBC Agent clob stream is not open: " + streamId);
+        }
+        clob(handle.clobId);
+        return handle;
+    }
+
+    /** 关闭并移除 Clob 子流；失败保留原始 I/O cause。 */
+    public void closeClobStream(String streamId) throws SQLException {
+        ClobStreamHandle handle = clobStreams.remove(streamId);
+        if (Objects.nonNull(handle)) {
+            try {
+                handle.stream.close();
+            } catch (IOException exception) {
+                throw new SQLException("JDBC Agent clob stream close failed", exception);
+            }
+        }
+    }
+
+    private static final class ClobStreamHandle {
+        private final String clobId;
+        private final Closeable stream;
+
+        private ClobStreamHandle(String clobId, Closeable stream) {
+            this.clobId = clobId;
+            this.stream = stream;
         }
     }
 
