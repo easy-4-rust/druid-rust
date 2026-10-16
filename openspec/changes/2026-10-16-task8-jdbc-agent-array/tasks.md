@@ -5,7 +5,7 @@
 - [x] 2b. Add Agent Array result-set cursor operations, owner cleanup, and H2 protocol tests.
 - [x] 2c. Preserve byte, short, integer, long, float and double Java wrapper identity across the Rust/Java Array element protocol; verify H2 INTEGER metadata and roundtrip.
 - [x] 3a. Connect `Connection#create_array_of` and the Rust Array metadata, value/range, free and retry methods through the owned executor; verify with fake transport and real H2, while advertising only READ/RANGE/FREE.
-- [x] 3b1. Expose a forward-only Array ResultSet through the owned executor with bounded 8-row pages, typed values, metadata and remote close; verify the page boundary and parent `free()` invalidation against real H2 before advertising RESULT_SET.
+- [x] 3b1. Expose a forward-only Array ResultSet through the owned executor with bounded 8-row pages, typed values, metadata and remote close; verify full and one-based range cursors, the page boundary and parent `free()` invalidation against real H2 before advertising RESULT_SET.
 - [x] 3b2. Verify a 503-element Array over multiple bounded pages in one real-H2 Agent session; two consecutive runs passed. The earlier parallel-test timeout came from shared Agent runtime ownership.
 - [x] 3b3. Verify a real-H2 pooled owner close returns its holder and invalidates an outstanding Array and child cursor; run the direct and pooled H2 tests together with separate Agent runtime identities.
 - [x] 3b4. Verify `ResultSet#next` cancellation while a remote page is pending: a controlled executor pauses the page, the caller cancels `next`, and a later `next` resumes the same request without replay before closing the cursor.

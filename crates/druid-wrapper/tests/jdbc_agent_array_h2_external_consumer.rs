@@ -88,6 +88,38 @@ async fn h2_array_factory_roundtrips_through_standard_connection() {
             .expect("null value"),
         Value::Null
     );
+    let mut ranged = array
+        .result_set_range(2, 2)
+        .await
+        .expect("one-based Array range cursor");
+    assert!(ranged.next().await.expect("range first row"));
+    assert_eq!(
+        ranged
+            .value(ColumnIndex::new(1).expect("index column"))
+            .expect("range index"),
+        Value::Int(2),
+    );
+    assert_eq!(
+        ranged
+            .value(ColumnIndex::new(2).expect("value column"))
+            .expect("range null"),
+        Value::Null,
+    );
+    assert!(ranged.next().await.expect("range second row"));
+    assert_eq!(
+        ranged
+            .value(ColumnIndex::new(1).expect("index column"))
+            .expect("range index"),
+        Value::Int(3),
+    );
+    assert_eq!(
+        ranged
+            .object(ColumnIndex::new(2).expect("value column"))
+            .expect("range value"),
+        RdbcObject::Integer(9),
+    );
+    assert!(!ranged.next().await.expect("range end"));
+    ranged.close().await.expect("close ranged cursor");
     array.free().await.expect("free");
     assert!(cursor.next().await.is_err());
     cursor
