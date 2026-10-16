@@ -1232,6 +1232,11 @@ public final class AgentServer implements Closeable {
         session.closeCursorsForStatement(statementId);
         statement.clearParameters();
         statement.setQueryTimeout(Math.max(0, payload.path("queryTimeoutSeconds").asInt(0)));
+        long maxRows = payload.has("maxRows") ? requiredLong(payload, "maxRows") : 0L;
+        if (maxRows < 0L) {
+            throw new IllegalArgumentException("maxRows must not be negative");
+        }
+        statement.setLargeMaxRows(maxRows);
         for (JsonNode output : outputs) {
             registerCallableOut(statement, output);
         }
@@ -1261,7 +1266,7 @@ public final class AgentServer implements Closeable {
             long updateCount = hasRows ? -1 : statement.getLargeUpdateCount();
             ObjectNode result = hasRows
                     ? firstPage(session, new AgentCursor(
-                            statement, statement.getResultSet(), false, statementId, objectMapper), payload)
+                            statement, statement.getResultSet(), false, statementId, objectMapper, maxRows), payload)
                     : updateCount >= 0
                             ? updateResult(statement, updateCount, false)
                             : JsonNodeFactory.instance.objectNode().put("kind", "none");
@@ -1282,7 +1287,8 @@ public final class AgentServer implements Closeable {
         try {
             if (statement.getMoreResults(Statement.CLOSE_CURRENT_RESULT)) {
                 return firstPage(session, new AgentCursor(
-                        statement, statement.getResultSet(), false, statementId, objectMapper), payload);
+                        statement, statement.getResultSet(), false, statementId,
+                        objectMapper, statement.getLargeMaxRows()), payload);
             }
             long updateCount = statement.getLargeUpdateCount();
             if (updateCount >= 0) {

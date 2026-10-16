@@ -23,6 +23,8 @@ public final class AgentCursor implements AutoCloseable {
     private final String statementId;
     private final String arrayId;
     private final ObjectMapper objectMapper;
+    private final long maxRows;
+    private long emittedRows;
     private ArrayNode pendingRow;
     private boolean exhausted;
     private boolean closed;
@@ -34,6 +36,17 @@ public final class AgentCursor implements AutoCloseable {
             boolean closeStatement,
             String statementId,
             ObjectMapper objectMapper) throws SQLException {
+        this(statement, resultSet, closeStatement, statementId, objectMapper, 0L);
+    }
+
+    /** 创建具有每个结果集最大行数限制的游标；仅 Callable 路径显式传入限制。 */
+    public AgentCursor(
+            PreparedStatement statement,
+            ResultSet resultSet,
+            boolean closeStatement,
+            String statementId,
+            ObjectMapper objectMapper,
+            long maxRows) throws SQLException {
         this.statement = Objects.requireNonNull(statement, "statement");
         this.resultSet = Objects.requireNonNull(resultSet, "resultSet");
         this.metadata = resultSet.getMetaData();
@@ -41,6 +54,7 @@ public final class AgentCursor implements AutoCloseable {
         this.statementId = statementId;
         this.arrayId = null;
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.maxRows = maxRows;
         this.columns = columns(metadata);
     }
 
@@ -53,6 +67,7 @@ public final class AgentCursor implements AutoCloseable {
         this.statementId = null;
         this.arrayId = Objects.requireNonNull(arrayId, "arrayId");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.maxRows = 0L;
         this.columns = columns(metadata);
     }
 
@@ -115,6 +130,10 @@ public final class AgentCursor implements AutoCloseable {
             pendingRow = null;
             return row;
         }
+        // 部分驱动不会将 setLargeMaxRows 应用于过程返回的动态游标；协议边界逐游标执行限制。
+        if (maxRows > 0L && emittedRows >= maxRows) {
+            return null;
+        }
         if (!resultSet.next()) {
             return null;
         }
@@ -124,6 +143,9 @@ public final class AgentCursor implements AutoCloseable {
                     ? AgentValue.fromArrayElement(resultSet.getObject(index), metadata.getColumnType(index))
                     : AgentValue.fromResultSet(resultSet, metadata.getColumnType(index), index);
             row.add(objectMapper.valueToTree(value));
+        }
+        if (maxRows > 0L) {
+            emittedRows++;
         }
         return row;
     }

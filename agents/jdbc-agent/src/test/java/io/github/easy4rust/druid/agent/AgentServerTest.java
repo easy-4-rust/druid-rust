@@ -793,6 +793,15 @@ class AgentServerTest {
             assertTrue(call(requests, responses, 2411, "fetch_page", staleCursor).path("error").isObject());
             JsonNode done = call(requests, responses, 2408, "next_callable_result", next);
             assertEquals("done", done.at("/result/kind").asText(), done.toString());
+            execute.put("maxRows", 1);
+            assertEquals("update", call(requests, responses, 2412, "execute_callable", execute)
+                    .at("/result/kind").asText());
+            JsonNode boundedFirst = call(requests, responses, 2413, "next_callable_result", next);
+            assertEquals(7, boundedFirst.at("/result/rows/0/0/value").asInt(), boundedFirst.toString());
+            assertEquals(false, boundedFirst.at("/result/hasMore").asBoolean(), boundedFirst.toString());
+            JsonNode boundedSecond = call(requests, responses, 2414, "next_callable_result", next);
+            assertEquals(8, boundedSecond.at("/result/rows/0/0/value").asInt(), boundedSecond.toString());
+            assertEquals(false, boundedSecond.at("/result/hasMore").asBoolean(), boundedSecond.toString());
             call(requests, responses, 2409, "close_statement", next);
             call(requests, responses, 2410, "close_session", sessionOnly(sessionId));
             requests.close();

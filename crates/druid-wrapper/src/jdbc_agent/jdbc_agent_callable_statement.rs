@@ -279,6 +279,7 @@ impl PreparedStatement for JdbcAgentCallableStatement {
                     "inParameters": inputs,
                     "outParameters": outputs,
                     "queryTimeoutSeconds": self.state.query_timeout,
+                    "maxRows": self.state.max_rows,
                 }),
             )
             .await?;

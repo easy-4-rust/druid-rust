@@ -218,6 +218,10 @@ async fn hsqldb_callable_preserves_ordered_update_and_two_result_sets() {
         .exec("INSERT INTO callable_values VALUES(7)", Vec::new())
         .await
         .expect("row");
+    connection
+        .exec("INSERT INTO callable_values VALUES(9)", Vec::new())
+        .await
+        .expect("second row");
     connection.exec(
         "CREATE PROCEDURE two_results() READS SQL DATA DYNAMIC RESULT SETS 2 BEGIN ATOMIC \
          DECLARE first_result CURSOR WITH RETURN FOR SELECT value FROM callable_values FOR READ ONLY; \
@@ -229,6 +233,7 @@ async fn hsqldb_callable_preserves_ordered_update_and_two_result_sets() {
         .prepare_call("CALL two_results()", StatementOptions::default())
         .await
         .expect("callable");
+    callable.set_max_rows(1).expect("max rows");
     let mut results = callable.execute_prepared().await.expect("execute");
     assert_eq!(results.len(), 3);
     assert!(matches!(results.remove(0), ExecutionResult::UpdateCount(0)));
@@ -243,6 +248,10 @@ async fn hsqldb_callable_preserves_ordered_update_and_two_result_sets() {
         let mut current = callable.get_result_set().await.unwrap().unwrap();
         assert!(current.next().await.unwrap());
         assert_eq!(current.int(ColumnIndex::new(1).unwrap()).unwrap(), expected);
+        assert!(
+            !current.next().await.unwrap(),
+            "max rows applies to each result set"
+        );
     }
     assert!(!callable
         .get_more_results(CurrentResultDisposition::Default)

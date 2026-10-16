@@ -23,6 +23,11 @@ The Agent protocol SHALL preserve indexed versus named parameter selection, SQL 
 - **WHEN** a caller registers an OUT parameter, binds an IN value, executes and reads the result against a real JDBC database
 - **THEN** the value and null status match the driver, with the specified selector and SQL type retained
 
+#### Scenario: Standard max-rows property reaches each callable result set
+
+- **WHEN** a caller sets a positive `Statement::set_max_rows` limit before executing a call that returns multiple result sets
+- **THEN** the JDBC statement applies that limit to every result set, including results reached through `getMoreResults`, without discarding their order
+
 #### Scenario: Failure and retry
 
 - **WHEN** a call fails or is cancelled, then the statement is executed again
