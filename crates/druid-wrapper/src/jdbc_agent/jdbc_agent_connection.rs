@@ -1,3 +1,4 @@
+use super::jdbc_agent_array::JdbcAgentArray;
 use super::{AgentValue, JdbcAgentClient, JdbcAgentDatabaseMetaData, JdbcAgentOptions};
 use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
 use crate::standard_adapter_executor::{
@@ -466,7 +467,7 @@ impl JdbcAgentConnection {
         }
     }
 
-    fn protocol_error(message: impl Into<String>) -> RdbcError {
+    pub(super) fn protocol_error(message: impl Into<String>) -> RdbcError {
         RdbcError::SqlException(Box::new(
             druid_rdbc::error::SqlException::new(
                 0,
@@ -585,6 +586,38 @@ druid_rdbc::impl_standard_wrapper!(JdbcAgentConnection => Connection);
 
 #[async_trait::async_trait]
 impl druid_rdbc::connection::Connection for JdbcAgentConnection {
+    async fn create_array_of(
+        &mut self,
+        type_name: Option<&str>,
+        elements: Option<Vec<druid_rdbc::types::RdbcObject>>,
+    ) -> Result<Box<dyn druid_rdbc::resource::Array>, RdbcError> {
+        self.ensure_open()?;
+        let encoded = elements
+            .map(|values| {
+                values
+                    .into_iter()
+                    .map(AgentValue::from_object)
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()?;
+        let executor = self.standard_executor_core()?;
+        let response = executor
+            .connection_control(
+                "create_array",
+                json!({
+                    "typeName": type_name,
+                    "elements": encoded,
+                }),
+            )
+            .await?;
+        let array_id = response
+            .get("arrayId")
+            .and_then(JsonValue::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| Self::protocol_error("create_array returned no arrayId"))?;
+        Ok(Box::new(JdbcAgentArray::new(executor, array_id.to_owned())))
+    }
+
     fn auto_commit(&self) -> Result<bool, RdbcError> {
         self.ensure_open()?;
         Ok(self.auto_commit)
@@ -797,5 +830,158 @@ impl druid_rdbc::connection::Connection for JdbcAgentConnection {
 
     fn capabilities(&self) -> druid_rdbc::extensions::ConnectionCapabilities {
         self.capabilities
+    }
+}
+
+#[cfg(test)]
+mod array_tests {
+    use super::{JdbcAgentConnection, JdbcAgentTransport};
+    use druid_rdbc::connection::Connection;
+    use druid_rdbc::error::RdbcError;
+    use druid_rdbc::resource::ResourceOperations;
+    use druid_rdbc::statement::StatementOptions;
+    use druid_rdbc::types::{RdbcObject, RdbcTypeMap, Value};
+    use serde_json::{json, Value as JsonValue};
+    use std::sync::{Arc, Mutex};
+
+    struct ArrayTransport {
+        requests: Arc<Mutex<Vec<(String, JsonValue)>>>,
+        fail_first_free: bool,
+        free_attempts: usize,
+    }
+
+    #[async_trait::async_trait]
+    impl JdbcAgentTransport for ArrayTransport {
+        async fn request(
+            &mut self,
+            operation: &str,
+            payload: JsonValue,
+        ) -> Result<JsonValue, RdbcError> {
+            if operation == "free_array" {
+                self.free_attempts += 1;
+                if self.fail_first_free && self.free_attempts == 1 {
+                    return Err(RdbcError::DriverError(
+                        "injected Array free failure".to_owned(),
+                    ));
+                }
+            }
+            self.requests
+                .lock()
+                .expect("requests lock")
+                .push((operation.to_owned(), payload));
+            Ok(match operation {
+                "create_array" => json!({"arrayId":"array-1"}),
+                "array_metadata" => json!({"baseTypeName":"INTEGER","baseType":4}),
+                "array_values" => json!({"values":[{"kind":"integer","value":42},{"kind":"null"}]}),
+                "free_array" => json!({}),
+                _ => panic!("unexpected JDBC Agent operation {operation}"),
+            })
+        }
+
+        async fn close(&mut self) -> Result<(), RdbcError> {
+            Ok(())
+        }
+
+        fn is_unusable(&self) -> bool {
+            false
+        }
+    }
+
+    #[tokio::test]
+    async fn array_factory_uses_owned_executor_after_statement_creation() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = ArrayTransport {
+            requests: Arc::clone(&requests),
+            fail_first_free: false,
+            free_attempts: 0,
+        };
+        let mut connection =
+            JdbcAgentConnection::from_session(Box::new(transport), json!({"capabilities": {}}));
+        let _statement = connection
+            .create_statement(StatementOptions::default())
+            .await
+            .expect("statement");
+        let mut array = connection
+            .create_array_of(
+                Some("INTEGER"),
+                Some(vec![
+                    RdbcObject::Integer(42),
+                    RdbcObject::Scalar(Value::Null),
+                ]),
+            )
+            .await
+            .expect("array");
+        assert_eq!(array.base_type_name().await.expect("name"), "INTEGER");
+        assert_eq!(array.base_type().await.expect("type"), 4);
+        assert_eq!(
+            array.values_range(1, 2).await.expect("values"),
+            vec![RdbcObject::Integer(42), RdbcObject::Scalar(Value::Null),]
+        );
+        assert_eq!(
+            array.capabilities(),
+            ResourceOperations::READ | ResourceOperations::RANGE | ResourceOperations::FREE
+        );
+        let count_before_unsupported = requests.lock().expect("requests lock").len();
+        let unsupported = array
+            .values_with_type_map(&RdbcTypeMap::new())
+            .await
+            .expect_err("type-map overload must be rejected before driver call");
+        assert_eq!(
+            unsupported
+                .sql_exception()
+                .and_then(|error| error.sql_state()),
+            Some("0A000")
+        );
+        assert_eq!(
+            requests.lock().expect("requests lock").len(),
+            count_before_unsupported
+        );
+        array.free().await.expect("free");
+        array.free().await.expect("idempotent free");
+        assert!(array.values().await.is_err());
+        assert!(matches!(
+            array.values_with_type_map(&RdbcTypeMap::new()).await,
+            Err(RdbcError::ConnectionDiscarded)
+        ));
+        let recorded = requests.lock().expect("requests lock");
+        assert_eq!(recorded[0].0, "create_array");
+        assert_eq!(recorded[0].1["elements"][0]["kind"], "integer");
+        assert_eq!(recorded[0].1["elements"][1]["kind"], "null");
+        assert_eq!(
+            recorded
+                .iter()
+                .filter(|(operation, _)| operation == "free_array")
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn array_free_failure_remains_retryable_and_null_factory_arguments_survive() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = ArrayTransport {
+            requests: Arc::clone(&requests),
+            fail_first_free: true,
+            free_attempts: 0,
+        };
+        let mut connection =
+            JdbcAgentConnection::from_session(Box::new(transport), json!({"capabilities": {}}));
+        let mut array = connection
+            .create_array_of(None, None)
+            .await
+            .expect("null arguments forwarded");
+        assert!(array.free().await.is_err());
+        assert_eq!(
+            array
+                .values()
+                .await
+                .expect("failed free preserves handle")
+                .len(),
+            2
+        );
+        array.free().await.expect("retry free");
+        let recorded = requests.lock().expect("requests lock");
+        assert!(recorded[0].1["typeName"].is_null());
+        assert!(recorded[0].1["elements"].is_null());
     }
 }

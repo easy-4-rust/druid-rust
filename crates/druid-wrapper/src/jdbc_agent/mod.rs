@@ -6,6 +6,7 @@ mod agent_runtime;
 mod agent_runtime_manager;
 mod agent_value;
 mod jdbc_agent_client;
+mod jdbc_agent_array;
 mod jdbc_agent_connection;
 mod jdbc_agent_connection_factory;
 mod jdbc_agent_database_meta_data;
