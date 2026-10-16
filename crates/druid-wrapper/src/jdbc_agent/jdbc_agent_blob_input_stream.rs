@@ -1,3 +1,4 @@
+use super::jdbc_agent_blob_stream_permit::JdbcAgentBlobStreamPermit;
 use crate::standard_adapter_executor::StandardExecutor;
 use base64::Engine;
 use serde_json::{json, Value as JsonValue};
@@ -25,10 +26,12 @@ impl JdbcAgentBlobInputStream {
         stream_id: String,
         runtime: tokio::runtime::Handle,
     ) -> io::Result<Self> {
+        let permit = JdbcAgentBlobStreamPermit::acquire()?;
         let (commands, receiver) = mpsc::channel();
         std::thread::Builder::new()
             .name("druid-jdbc-blob-input".to_owned())
             .spawn(move || {
+                let _permit = permit;
                 while let Ok(command) = receiver.recv() {
                     match command {
                         StreamCommand::Read(max_bytes, reply) => {

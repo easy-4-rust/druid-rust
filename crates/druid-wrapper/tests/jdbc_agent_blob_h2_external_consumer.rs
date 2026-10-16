@@ -59,6 +59,7 @@ async fn h2_blob_byte_contract_through_standard_connection() {
     assert_eq!(
         blob.capabilities(),
         ResourceOperations::READ
+            | ResourceOperations::WRITE
             | ResourceOperations::STREAM
             | ResourceOperations::RANGE
             | ResourceOperations::FREE,
@@ -145,4 +146,58 @@ async fn h2_blob_input_stream_pages_and_parent_invalidation() {
         .await
         .expect("closed connection reader thread")
         .is_err());
+}
+
+/// 标准同步写入器必须将大写入拆成有界 Agent RPC，并等待远端关闭。
+#[tokio::test]
+async fn h2_blob_output_stream_pages_flush_close_and_parent_invalidation() {
+    let (Some(agent_jar), Some(driver_jar)) = (
+        std::env::var_os("DRUID_JDBC_AGENT_JAR"),
+        std::env::var_os("DRUID_JDBC_DRIVER_JAR"),
+    ) else {
+        return;
+    };
+    let options = JdbcAgentOptions::java(
+        "java",
+        [PathBuf::from(agent_jar), PathBuf::from(driver_jar)],
+    )
+    .expect("JDBC Agent classpath")
+    .runtime_identity("blob-output-contract", "local", "isolated");
+    let factory = JdbcAgentConnectionFactory::new(
+        "jdbc:h2:mem:druid_rust_blob_output;DB_CLOSE_DELAY=-1",
+        Some("SELECT 1".to_owned()),
+        options,
+    );
+    let mut connection = factory.create().await.expect("H2 JDBC connection");
+    let mut blob = connection.create_blob().await.expect("H2 Blob");
+    let source = vec![0x3cu8; 160 * 1024];
+    let output = blob.set_binary_stream(1).await.expect("open output");
+    tokio::task::spawn_blocking({
+        let source = source.clone();
+        move || {
+            let mut written = 0;
+            while written < source.len() {
+                written += output.write(&source[written..]).expect("bounded write");
+            }
+            output.flush().expect("flush remote stream");
+            output.close().expect("close remote stream");
+        }
+    })
+    .await
+    .expect("writer thread");
+    assert_eq!(blob.length().await.unwrap(), source.len() as i64);
+    assert_eq!(
+        blob.get_bytes(1, source.len() as i32).await.unwrap(),
+        source
+    );
+
+    let mut other = connection.create_blob().await.expect("second Blob");
+    let output = other.set_binary_stream(1).await.expect("second output");
+    other.free().await.expect("free parent with writer open");
+    assert!(tokio::task::spawn_blocking(move || output.write(&[1]))
+        .await
+        .expect("invalidated writer thread")
+        .is_err());
+    blob.free().await.expect("free first Blob");
+    connection.close().await.expect("close connection");
 }

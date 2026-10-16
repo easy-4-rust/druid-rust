@@ -1,4 +1,5 @@
 use super::jdbc_agent_blob_input_stream::JdbcAgentBlobInputStream;
+use super::jdbc_agent_blob_output_stream::JdbcAgentBlobOutputStream;
 use super::jdbc_agent_connection::JdbcAgentConnection;
 use crate::standard_adapter_executor::StandardExecutor;
 use base64::Engine;
@@ -82,6 +83,39 @@ impl JdbcAgentBlob {
             }
         }
     }
+
+    async fn open_output_stream(&self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
+        let runtime = tokio::runtime::Handle::try_current().map_err(|error| {
+            RdbcError::DriverError(format!("Blob stream requires a Tokio runtime: {error}"))
+        })?;
+        let response = self
+            .control(
+                "blob_open_output_stream",
+                json!({"blobId": self.blob_id, "position": position}),
+            )
+            .await?;
+        let stream_id = response
+            .get("streamId")
+            .and_then(JsonValue::as_str)
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| JdbcAgentConnection::protocol_error("Blob open returned no streamId"))?
+            .to_owned();
+        match JdbcAgentBlobOutputStream::new(Arc::clone(&self.executor), stream_id.clone(), runtime)
+        {
+            Ok((writer, mut closer)) => {
+                Ok(RdbcOutputStream::with_close(writer, move || closer.close()))
+            }
+            Err(error) => {
+                let _ = self
+                    .executor
+                    .connection_control("blob_close_stream", json!({"streamId": stream_id}))
+                    .await;
+                Err(RdbcError::DriverError(format!(
+                    "Blob stream worker could not start: {error}"
+                )))
+            }
+        }
+    }
 }
 
 impl std::fmt::Debug for JdbcAgentBlob {
@@ -97,8 +131,9 @@ impl std::fmt::Debug for JdbcAgentBlob {
 #[async_trait::async_trait]
 impl Blob for JdbcAgentBlob {
     fn capabilities(&self) -> ResourceOperations {
-        // SEARCH、TRUNCATE 在 H2 上会被驱动拒绝；写入流另行验证。
+        // SEARCH、TRUNCATE 在 H2 上会被驱动拒绝。
         ResourceOperations::READ
+            | ResourceOperations::WRITE
             | ResourceOperations::RANGE
             | ResourceOperations::STREAM
             | ResourceOperations::FREE
@@ -199,9 +234,8 @@ impl Blob for JdbcAgentBlob {
             .map_err(|error| JdbcAgentConnection::protocol_error(error.to_string()))
     }
 
-    async fn set_binary_stream(&mut self, _position: i64) -> Result<RdbcOutputStream, RdbcError> {
-        self.ensure_open()?;
-        Err(RdbcError::feature_not_supported("Blob#setBinaryStream"))
+    async fn set_binary_stream(&mut self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
+        self.open_output_stream(position).await
     }
 
     async fn truncate(&mut self, length: i64) -> Result<(), RdbcError> {
