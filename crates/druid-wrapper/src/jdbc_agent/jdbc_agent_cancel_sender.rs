@@ -2,7 +2,7 @@
 
 use super::AgentRuntime;
 use druid_rdbc::error::RdbcError;
-use serde_json::json;
+use serde_json::{json, Value as JsonValue};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -24,6 +24,18 @@ impl NativeJdbcAgentCancelSender {
     }
 }
 
+fn validate_cancel_response(response: &JsonValue) -> Result<(), RdbcError> {
+    match response.get("cancelled").and_then(JsonValue::as_bool) {
+        Some(true) => Ok(()),
+        Some(false) => Err(RdbcError::DriverError(
+            "JDBC Agent cancellation target is no longer active".to_owned(),
+        )),
+        None => Err(RdbcError::DriverError(
+            "JDBC Agent cancellation response has no cancelled flag".to_owned(),
+        )),
+    }
+}
+
 #[async_trait::async_trait]
 impl JdbcAgentCancelSender for NativeJdbcAgentCancelSender {
     async fn cancel_request(&self, session_id: &str, request_id: u64) -> Result<(), RdbcError> {
@@ -36,14 +48,18 @@ impl JdbcAgentCancelSender for NativeJdbcAgentCancelSender {
         )
         .await
         .map_err(|_| RdbcError::DriverError("JDBC Agent cancellation timed out".to_owned()))??;
-        match response
-            .get("cancelled")
-            .and_then(serde_json::Value::as_bool)
-        {
-            Some(_) => Ok(()),
-            None => Err(RdbcError::DriverError(
-                "JDBC Agent cancellation response has no cancelled flag".to_owned(),
-            )),
-        }
+        validate_cancel_response(&response)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stale_cancel_response_is_not_reported_as_success() {
+        assert!(validate_cancel_response(&json!({"cancelled": true})).is_ok());
+        assert!(validate_cancel_response(&json!({"cancelled": false})).is_err());
+        assert!(validate_cancel_response(&json!({})).is_err());
     }
 }
