@@ -321,3 +321,110 @@ impl ResultSet for JdbcAgentArrayResultSet {
         Ok(self.ensure_open().is_err())
     }
 }
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::JdbcAgentArrayResultSet;
+    use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore};
+    use crate::standard_query_result::StandardQueryResult;
+    use druid_rdbc::error::RdbcError;
+    use druid_rdbc::result_set::ColumnIndex;
+    use druid_rdbc::types::{RdbcObject, Value};
+    use serde_json::{json, Value as JsonValue};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use tokio::sync::Notify;
+
+    struct PausedArrayPage {
+        started: Arc<Notify>,
+        released: Arc<Notify>,
+        fetches: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl AdapterExecutionCore for PausedArrayPage {
+        async fn standard_connection_control_core(
+            &mut self,
+            operation: &str,
+            _payload: JsonValue,
+        ) -> Result<JsonValue, RdbcError> {
+            match operation {
+                "array_result_set" => Ok(json!({
+                    "columns": [{"label": "INDEX", "jdbcType": -5}, {"label": "VALUE", "jdbcType": 4}],
+                    "rows": [[{"kind": "int", "value": 1}, {"kind": "integer", "value": 7}]],
+                    "cursorId": "cursor-1", "hasMore": true,
+                })),
+                "fetch_page" => {
+                    self.fetches.fetch_add(1, Ordering::SeqCst);
+                    self.started.notify_one();
+                    self.released.notified().await;
+                    Ok(json!({
+                        "rows": [[{"kind": "int", "value": 2}, {"kind": "integer", "value": 9}]],
+                        "cursorId": null, "hasMore": false,
+                    }))
+                }
+                "close_cursor" => Ok(json!({})),
+                _ => Err(RdbcError::InvalidArgument(operation.to_owned())),
+            }
+        }
+
+        async fn standard_execute_update_core(
+            &mut self,
+            _sql: &str,
+            _values: Vec<Value>,
+        ) -> Result<i64, RdbcError> {
+            unreachable!("Array test never executes SQL")
+        }
+
+        async fn standard_execute_query_core(
+            &mut self,
+            _sql: &str,
+            _values: Vec<Value>,
+        ) -> Result<StandardQueryResult, RdbcError> {
+            unreachable!("Array test never executes SQL")
+        }
+
+        async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn cancelled_next_resumes_the_same_pending_remote_page() {
+        let started = Arc::new(Notify::new());
+        let released = Arc::new(Notify::new());
+        let fetches = Arc::new(AtomicUsize::new(0));
+        let executor = owned_executor(
+            PausedArrayPage {
+                started: Arc::clone(&started),
+                released: Arc::clone(&released),
+                fetches: Arc::clone(&fetches),
+            },
+            None,
+        );
+        let mut cursor = JdbcAgentArrayResultSet::open(
+            executor,
+            Arc::new(AtomicBool::new(true)),
+            "array-1",
+            None,
+        )
+        .await
+        .expect("open Array cursor");
+        assert!(cursor.next().await.expect("first row"));
+        tokio::select! {
+            result = cursor.next() => panic!("page unexpectedly completed: {result:?}"),
+            () = started.notified() => {},
+        }
+        released.notify_one();
+        assert!(cursor.next().await.expect("resume pending page"));
+        assert_eq!(
+            cursor
+                .object(ColumnIndex::new(2).expect("column"))
+                .expect("value"),
+            RdbcObject::Integer(9),
+        );
+        assert_eq!(fetches.load(Ordering::SeqCst), 1, "fetch is not replayed");
+        assert!(!cursor.next().await.expect("end of cursor"));
+        cursor.close().await.expect("close cursor");
+    }
+}
