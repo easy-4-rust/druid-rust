@@ -102,16 +102,17 @@ impl AgentValue {
         match self {
             Self::Null => Ok(Value::Null),
             Self::Bool(value) => Ok(Value::Bool(value)),
-            Self::Int(value) => Ok(Value::Int(value)),
+            Self::Int(value) | Self::Long(value) => Ok(Value::Int(value)),
             Self::Byte(value) => Ok(Value::Int(i64::from(value))),
             Self::Short(value) => Ok(Value::Int(i64::from(value))),
             Self::Integer(value) => Ok(Value::Int(i64::from(value))),
-            Self::Long(value) => Ok(Value::Int(value)),
-            Self::Float(value) if value.is_finite() => Ok(Value::Float(value)),
+            Self::Float(value) | Self::Double(value) if value.is_finite() => {
+                Ok(Value::Float(value))
+            }
             Self::Float32(value) if value.is_finite() => Ok(Value::Float(f64::from(value))),
-            Self::Double(value) if value.is_finite() => Ok(Value::Float(value)),
-            Self::Float32(_) | Self::Double(_) => Err(Self::invalid("non-finite float")),
-            Self::Float(_) => Err(Self::invalid("non-finite float")),
+            Self::Float32(_) | Self::Double(_) | Self::Float(_) => {
+                Err(Self::invalid("non-finite float"))
+            }
             Self::Decimal(value) => BigDecimal::from_str(&value)
                 .map(Value::Decimal)
                 .map_err(|error| Self::invalid(error.to_string())),
