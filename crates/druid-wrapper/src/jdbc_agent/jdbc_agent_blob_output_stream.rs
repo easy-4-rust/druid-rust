@@ -17,11 +17,13 @@ enum StreamCommand {
 /// 将同步写操作拆为有界 JDBC Agent RPC。对应 Java: Blob#setBinaryStream。
 pub(super) struct JdbcAgentBlobOutputStream {
     commands: Sender<StreamCommand>,
+    blocked_runtime_thread: Option<std::thread::ThreadId>,
 }
 
 /// 独立等待远端流关闭，失败时允许标准输出流重新关闭。
 pub(super) struct JdbcAgentBlobOutputStreamCloser {
     commands: Sender<StreamCommand>,
+    blocked_runtime_thread: Option<std::thread::ThreadId>,
 }
 
 impl JdbcAgentBlobOutputStream {
@@ -31,6 +33,9 @@ impl JdbcAgentBlobOutputStream {
         stream_id: String,
         runtime: tokio::runtime::Handle,
     ) -> io::Result<(Self, JdbcAgentBlobOutputStreamCloser)> {
+        let blocked_runtime_thread = (runtime.runtime_flavor()
+            == tokio::runtime::RuntimeFlavor::CurrentThread)
+            .then(|| std::thread::current().id());
         let permit = JdbcAgentBlobStreamPermit::acquire()?;
         let (commands, receiver) = mpsc::channel();
         std::thread::Builder::new()
@@ -107,8 +112,12 @@ impl JdbcAgentBlobOutputStream {
         Ok((
             Self {
                 commands: commands.clone(),
+                blocked_runtime_thread,
             },
-            JdbcAgentBlobOutputStreamCloser { commands },
+            JdbcAgentBlobOutputStreamCloser {
+                commands,
+                blocked_runtime_thread,
+            },
         ))
     }
 }
@@ -118,6 +127,7 @@ impl Write for JdbcAgentBlobOutputStream {
         if bytes.is_empty() {
             return Ok(0);
         }
+        self.ensure_not_runtime_thread()?;
         let bytes = bytes[..bytes.len().min(MAX_CHUNK_BYTES)].to_vec();
         let (reply, response) = mpsc::channel();
         self.commands
@@ -129,6 +139,7 @@ impl Write for JdbcAgentBlobOutputStream {
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        self.ensure_not_runtime_thread()?;
         let (reply, response) = mpsc::channel();
         self.commands
             .send(StreamCommand::Flush(reply))
@@ -139,9 +150,28 @@ impl Write for JdbcAgentBlobOutputStream {
     }
 }
 
+impl JdbcAgentBlobOutputStream {
+    fn ensure_not_runtime_thread(&self) -> io::Result<()> {
+        if self.blocked_runtime_thread == Some(std::thread::current().id()) {
+            Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "write JDBC Agent Blob stream with spawn_blocking",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
 impl JdbcAgentBlobOutputStreamCloser {
     /// 等待远端关闭确认；失败时保留通道供调用方重试。
     pub(super) fn close(&mut self) -> io::Result<()> {
+        if self.blocked_runtime_thread == Some(std::thread::current().id()) {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "close JDBC Agent Blob stream with spawn_blocking",
+            ));
+        }
         let (reply, response) = mpsc::channel();
         self.commands
             .send(StreamCommand::Close(reply))

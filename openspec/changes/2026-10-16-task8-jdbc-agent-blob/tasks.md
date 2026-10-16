@@ -18,7 +18,7 @@
 ## 4. Standard Rust adapter
 
 - [ ] 4.1 Add failing external-consumer tests for Blob factory, values, mutation, search, failure/retry, and capability bits; implement through the owned executor and pass focused Rust tests against H2.
-- [ ] 4.2 Add external-consumer stream and pooled-owner invalidation tests; implement the bounded stream bridge and pass H2 plus RDBC resource regressions.
+- [x] 4.2 Add external-consumer stream and pooled-owner invalidation tests; implement the bounded stream bridge and pass H2 plus RDBC resource regressions. Real H2 external-consumer 4/4 covers 160-KiB paged input/output, ranged read, flush/close, parent and pooled-owner invalidation, and current-thread fail-fast. `rdbc_blob_test` 2/2, RDBC resource contracts 32/32, resource-owner cancellation 118/118, strict wrapper Clippy, and direct rustfmt passed. Legacy output-stream flush-failure closure semantics remain unchanged; remote close failures retain the handle for retry.
 
 ## 5. Integration
 

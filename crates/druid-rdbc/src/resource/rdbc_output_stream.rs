@@ -110,6 +110,14 @@ impl RdbcOutputStream {
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state.close.is_none() {
+            let Some(mut writer) = state.writer.take() else {
+                return Ok(());
+            };
+            return writer.flush().map_err(|error| {
+                RdbcError::DriverError(format!("OutputStream close failed: {error}"))
+            });
+        }
         let Some(writer) = state.writer.as_mut() else {
             return Ok(());
         };

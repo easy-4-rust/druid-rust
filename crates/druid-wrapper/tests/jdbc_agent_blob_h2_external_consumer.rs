@@ -1,10 +1,13 @@
 #![cfg(feature = "jdbc-agent")]
 
 use druid::core::ConnectionFactory;
+use druid::pool::DruidPool;
+use druid_rdbc::data_source::PooledConnection;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::resource::ResourceOperations;
 use druid_wrapper::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// 真实 H2 驱动验证 Blob 工厂、字节操作、驱动错误及释放。
 #[tokio::test]
@@ -110,6 +113,10 @@ async fn h2_blob_input_stream_pages_and_parent_invalidation() {
         .await
         .expect("write source bytes");
     let stream = blob.get_binary_stream().await.expect("open remote input");
+    assert!(
+        stream.read(&mut [0; 1]).is_err(),
+        "sync read on the current-thread runtime must fail fast"
+    );
     let read = tokio::task::spawn_blocking(move || stream.read_to_end())
         .await
         .expect("reader thread")
@@ -172,6 +179,14 @@ async fn h2_blob_output_stream_pages_flush_close_and_parent_invalidation() {
     let mut blob = connection.create_blob().await.expect("H2 Blob");
     let source = vec![0x3cu8; 160 * 1024];
     let output = blob.set_binary_stream(1).await.expect("open output");
+    assert!(
+        output.write(&[1]).is_err(),
+        "sync write on the current-thread runtime must fail fast"
+    );
+    assert!(
+        output.close().is_err(),
+        "sync close on the current-thread runtime must fail fast"
+    );
     tokio::task::spawn_blocking({
         let source = source.clone();
         move || {
@@ -200,4 +215,65 @@ async fn h2_blob_output_stream_pages_flush_close_and_parent_invalidation() {
         .is_err());
     blob.free().await.expect("free first Blob");
     connection.close().await.expect("close connection");
+}
+
+/// 真实连接池 owner 关闭后，逻辑连接和 Blob 的两个子流都必须失效。
+#[tokio::test]
+async fn h2_blob_streams_are_invalidated_by_pooled_owner_close() {
+    let (Some(agent_jar), Some(driver_jar)) = (
+        std::env::var_os("DRUID_JDBC_AGENT_JAR"),
+        std::env::var_os("DRUID_JDBC_DRIVER_JAR"),
+    ) else {
+        return;
+    };
+    let options = JdbcAgentOptions::java(
+        "java",
+        [PathBuf::from(agent_jar), PathBuf::from(driver_jar)],
+    )
+    .expect("JDBC Agent classpath")
+    .runtime_identity("blob-pooled-owner-test", "local", "isolated");
+    let factory: Arc<dyn ConnectionFactory> = Arc::new(JdbcAgentConnectionFactory::new(
+        "jdbc:h2:mem:druid_rust_blob_owner;DB_CLOSE_DELAY=-1",
+        Some("SELECT 1".to_owned()),
+        options,
+    ));
+    let pool = DruidPool::builder()
+        .name("jdbc-agent-blob-owner")
+        .driver_name("h2")
+        .factory(factory)
+        .max_open(1)
+        .max_idle(1)
+        .build()
+        .await
+        .expect("pool builds");
+    let mut owner = pool
+        .get_pooled_connection_owner()
+        .await
+        .expect("pooled owner");
+    let mut logical = owner.connection().await.expect("logical connection");
+    let mut input_blob = logical.create_blob().await.expect("input Blob");
+    input_blob
+        .set_bytes(1, &[1, 2, 3])
+        .await
+        .expect("seed input");
+    let input = input_blob.get_binary_stream().await.expect("input stream");
+    let mut output_blob = logical.create_blob().await.expect("output Blob");
+    let output = output_blob
+        .set_binary_stream(1)
+        .await
+        .expect("output stream");
+    owner.close().await.expect("owner close");
+    assert_eq!(pool.state().active_count, 0);
+    assert!(tokio::task::spawn_blocking(move || input.read_to_end())
+        .await
+        .expect("reader thread")
+        .is_err());
+    assert!(tokio::task::spawn_blocking(move || output.write(&[7]))
+        .await
+        .expect("writer thread")
+        .is_err());
+    assert!(input_blob.length().await.is_err());
+    assert!(output_blob.length().await.is_err());
+    assert!(logical.is_closed().expect("logical state"));
+    pool.close().await;
 }

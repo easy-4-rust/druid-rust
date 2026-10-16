@@ -17,6 +17,7 @@ enum StreamCommand {
 /// 对应 Java: java.sql.Blob#getBinaryStream。
 pub(super) struct JdbcAgentBlobInputStream {
     commands: Sender<StreamCommand>,
+    blocked_runtime_thread: Option<std::thread::ThreadId>,
 }
 
 impl JdbcAgentBlobInputStream {
@@ -26,6 +27,9 @@ impl JdbcAgentBlobInputStream {
         stream_id: String,
         runtime: tokio::runtime::Handle,
     ) -> io::Result<Self> {
+        let blocked_runtime_thread = (runtime.runtime_flavor()
+            == tokio::runtime::RuntimeFlavor::CurrentThread)
+            .then(|| std::thread::current().id());
         let permit = JdbcAgentBlobStreamPermit::acquire()?;
         let (commands, receiver) = mpsc::channel();
         std::thread::Builder::new()
@@ -56,7 +60,10 @@ impl JdbcAgentBlobInputStream {
                     }
                 }
             })?;
-        Ok(Self { commands })
+        Ok(Self {
+            commands,
+            blocked_runtime_thread,
+        })
     }
 
     fn decode_page(response: &JsonValue, max_bytes: usize) -> io::Result<Vec<u8>> {
@@ -85,6 +92,12 @@ impl Read for JdbcAgentBlobInputStream {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         if buffer.is_empty() {
             return Ok(0);
+        }
+        if self.blocked_runtime_thread == Some(std::thread::current().id()) {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "read JDBC Agent Blob stream with spawn_blocking",
+            ));
         }
         let (reply, response) = mpsc::channel();
         self.commands
