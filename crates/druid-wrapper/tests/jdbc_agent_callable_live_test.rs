@@ -81,6 +81,32 @@ async fn h2_callable_function_round_trip_and_pooled_owner_close() {
         Value::Null
     );
     assert!(callable.was_null().unwrap());
+    callable
+        .set_parameter(PreparedParameter {
+            index: ParameterIndex::new(2).unwrap(),
+            value: Value::String("not-a-number".to_owned()),
+        })
+        .expect("invalid IN can be staged");
+    let failure = callable
+        .execute_prepared()
+        .await
+        .expect_err("invalid numeric IN must retain the JDBC error");
+    assert!(failure
+        .sql_exception()
+        .and_then(|error| error.sql_state())
+        .is_some());
+    assert!(callable.out_value(ParameterIndex::new(1).unwrap()).is_err());
+    callable
+        .set_parameter(PreparedParameter {
+            index: ParameterIndex::new(2).unwrap(),
+            value: Value::Int(-8),
+        })
+        .expect("retry IN");
+    callable.execute_prepared().await.expect("retry ABS");
+    assert_eq!(
+        callable.out_value(ParameterIndex::new(1).unwrap()).unwrap(),
+        Value::Int(8)
+    );
     owner.close().await.expect("pooled owner close");
     assert!(callable.out_value(ParameterIndex::new(1).unwrap()).is_err());
     pool.close().await;
