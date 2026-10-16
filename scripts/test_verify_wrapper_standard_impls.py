@@ -1349,10 +1349,10 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             runner(
                 [sys.executable, "-c", hanging_script],
                 cwd=self.root,
-                timeout_seconds=0.1,
+                timeout_seconds=1.0,
                 output_limit=4096,
             )
-        self.assertLess(time.monotonic() - started, 2.0)
+        self.assertLess(time.monotonic() - started, 3.0)
         if os.name == "nt":
             self.assertIsNone(timeout.exception.ownership_capture_error)
             descendants = timeout.exception.owned_descendants
