@@ -352,18 +352,26 @@ pub fn druid_wrapper::http_sql::HttpSqlConnectionFactory::name(&self) -> &str
 pub mod druid_wrapper::jdbc_agent
 pub enum druid_wrapper::jdbc_agent::AgentValue
 pub druid_wrapper::jdbc_agent::AgentValue::Bool(bool)
+pub druid_wrapper::jdbc_agent::AgentValue::Byte(i8)
 pub druid_wrapper::jdbc_agent::AgentValue::Bytes(alloc::string::String)
 pub druid_wrapper::jdbc_agent::AgentValue::Date(alloc::string::String)
 pub druid_wrapper::jdbc_agent::AgentValue::Decimal(alloc::string::String)
+pub druid_wrapper::jdbc_agent::AgentValue::Double(f64)
 pub druid_wrapper::jdbc_agent::AgentValue::Float(f64)
+pub druid_wrapper::jdbc_agent::AgentValue::Float32(f32)
 pub druid_wrapper::jdbc_agent::AgentValue::Int(i64)
+pub druid_wrapper::jdbc_agent::AgentValue::Integer(i32)
+pub druid_wrapper::jdbc_agent::AgentValue::Long(i64)
 pub druid_wrapper::jdbc_agent::AgentValue::Null
+pub druid_wrapper::jdbc_agent::AgentValue::Short(i16)
 pub druid_wrapper::jdbc_agent::AgentValue::String(alloc::string::String)
 pub druid_wrapper::jdbc_agent::AgentValue::Time(alloc::string::String)
 pub druid_wrapper::jdbc_agent::AgentValue::Timestamp(alloc::string::String)
 impl druid_wrapper::jdbc_agent::AgentValue
 pub fn druid_wrapper::jdbc_agent::AgentValue::from_druid(druid_rdbc::types::value::Value) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::jdbc_agent::AgentValue::from_object(druid_rdbc::types::rdbc_object::RdbcObject) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid_wrapper::jdbc_agent::AgentValue::into_druid(self) -> core::result::Result<druid_rdbc::types::value::Value, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::jdbc_agent::AgentValue::into_object(self) -> core::result::Result<druid_rdbc::types::rdbc_object::RdbcObject, druid_rdbc::error::rdbc_error::RdbcError>
 pub enum druid_wrapper::jdbc_agent::JdbcAgentOptionsError
 pub druid_wrapper::jdbc_agent::JdbcAgentOptionsError::ClassPath(std::env::JoinPathsError)
 pub druid_wrapper::jdbc_agent::JdbcAgentOptionsError::UnsafeJvmOption(alloc::string::String)
@@ -388,6 +396,7 @@ pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::capabilities(&self) -> dr
 pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::catalog(&self) -> core::result::Result<core::option::Option<alloc::string::String>, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::commit<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::create_array_of<'life0, 'life1, 'async_trait>(&'life0 mut self, core::option::Option<&'life1 str>, core::option::Option<alloc::vec::Vec<druid_rdbc::types::rdbc_object::RdbcObject>>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::resource::array::Array>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
 pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::create_statement<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::statement::Statement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::database_meta_data<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::metadata::database_meta_data::DatabaseMetaData>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::exec<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::value::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::statement::statement::ExecResult, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
