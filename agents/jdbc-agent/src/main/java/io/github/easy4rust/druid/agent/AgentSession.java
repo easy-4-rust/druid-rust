@@ -387,6 +387,18 @@ public final class AgentSession implements Closeable {
         return registerClobStream(clobId, Objects.requireNonNull(writer, "writer"));
     }
 
+    /** 注册 Clob 子 ASCII 输入流，并保留父资源身份。 */
+    public String registerClobInputStream(String clobId, InputStream input) throws SQLException {
+        clob(clobId);
+        return registerClobStream(clobId, Objects.requireNonNull(input, "input"));
+    }
+
+    /** 注册 Clob 子 ASCII 输出流，并保留父资源身份。 */
+    public String registerClobOutputStream(String clobId, OutputStream output) throws SQLException {
+        clob(clobId);
+        return registerClobStream(clobId, Objects.requireNonNull(output, "output"));
+    }
+
     private String registerClobStream(String clobId, Closeable stream) {
         String streamId = UUID.randomUUID().toString();
         clobStreams.put(streamId, new ClobStreamHandle(clobId, stream));
@@ -409,6 +421,24 @@ public final class AgentSession implements Closeable {
             throw new SQLException("JDBC Agent clob stream is not a writer: " + streamId);
         }
         return (Writer) handle.stream;
+    }
+
+    /** 获取仍在会话内且类型正确的 Clob ASCII 输入流。 */
+    public InputStream clobInputStream(String streamId) throws SQLException {
+        ClobStreamHandle handle = clobStream(streamId);
+        if (!(handle.stream instanceof InputStream)) {
+            throw new SQLException("JDBC Agent clob stream is not an input stream: " + streamId);
+        }
+        return (InputStream) handle.stream;
+    }
+
+    /** 获取仍在会话内且类型正确的 Clob ASCII 输出流。 */
+    public OutputStream clobOutputStream(String streamId) throws SQLException {
+        ClobStreamHandle handle = clobStream(streamId);
+        if (!(handle.stream instanceof OutputStream)) {
+            throw new SQLException("JDBC Agent clob stream is not an output stream: " + streamId);
+        }
+        return (OutputStream) handle.stream;
     }
 
     private ClobStreamHandle clobStream(String streamId) throws SQLException {

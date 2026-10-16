@@ -2,9 +2,15 @@ package io.github.easy4rust.druid.agent;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.FilterInputStream;
+import java.io.FilterOutputStream;
 import java.io.FilterReader;
 import java.io.FilterWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Reader;
 import java.io.StringReader;
 import java.io.StringWriter;
@@ -60,18 +66,36 @@ class AgentClobSessionTest {
                     throw new IOException("writer close failed");
                 }
             };
+            InputStream input = new FilterInputStream(new ByteArrayInputStream(new byte[] {65})) {
+                @Override
+                public void close() throws IOException {
+                    closeOrder.add("input");
+                    throw new IOException("input close failed");
+                }
+            };
+            OutputStream output = new FilterOutputStream(new ByteArrayOutputStream()) {
+                @Override
+                public void close() throws IOException {
+                    closeOrder.add("output");
+                    throw new IOException("output close failed");
+                }
+            };
             String readerId = session.registerClobReader(clobId, reader);
             String writerId = session.registerClobWriter(clobId, writer);
+            String inputId = session.registerClobInputStream(clobId, input);
+            String outputId = session.registerClobOutputStream(clobId, output);
 
             SQLException thrown = assertThrows(SQLException.class, () -> session.freeClob(clobId));
-            assertEquals(1, thrown.getSuppressed().length);
-            assertEquals(3, closeOrder.size());
-            assertEquals("clob", closeOrder.get(2));
+            assertEquals(3, thrown.getSuppressed().length);
+            assertEquals(5, closeOrder.size());
+            assertEquals("clob", closeOrder.get(4));
             assertThrows(SQLException.class, () -> session.clob(clobId));
             assertThrows(SQLException.class, () -> session.clobReader(readerId));
             assertThrows(SQLException.class, () -> session.clobWriter(writerId));
+            assertThrows(SQLException.class, () -> session.clobInputStream(inputId));
+            assertThrows(SQLException.class, () -> session.clobOutputStream(outputId));
             session.freeClob(clobId);
-            assertEquals(3, closeOrder.size());
+            assertEquals(5, closeOrder.size());
             session.close();
         }
     }
@@ -123,9 +147,19 @@ class AgentClobSessionTest {
             AgentSession session = new AgentSession(owner, null);
             AtomicInteger frees = new AtomicInteger();
             String id = session.registerClob(countingClob(session.connection().createClob(), frees, false));
+            AtomicInteger writerCloses = new AtomicInteger();
+            String writerId = session.registerClobWriter(id, new FilterWriter(new StringWriter()) {
+                @Override
+                public void close() throws IOException {
+                    writerCloses.incrementAndGet();
+                    super.close();
+                }
+            });
             session.closeLogicalConnection();
             assertEquals(1, frees.get());
+            assertEquals(1, writerCloses.get());
             assertThrows(SQLException.class, () -> session.clob(id));
+            assertThrows(SQLException.class, () -> session.clobWriter(writerId));
             session.reopenLogicalConnection();
             session.close();
             assertEquals(1, frees.get());
