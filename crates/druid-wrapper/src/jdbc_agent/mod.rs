@@ -11,6 +11,7 @@ mod jdbc_agent_blob;
 mod jdbc_agent_blob_input_stream;
 mod jdbc_agent_blob_output_stream;
 mod jdbc_agent_blob_stream_permit;
+mod jdbc_agent_clob_utf16;
 mod jdbc_agent_client;
 mod jdbc_agent_connection;
 mod jdbc_agent_connection_factory;
