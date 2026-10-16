@@ -24,6 +24,11 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.XAConnection;
 
@@ -33,6 +38,59 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** 验证 JDBC Clob 会话身份、释放重试及逻辑连接关闭。 */
 class AgentClobSessionTest {
+
+    @Test
+    void cancellingAnActiveClobReadClosesItsChildHandle() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:clob-read-cancel")) {
+            AgentSession session = new AgentSession(connection, null);
+            String clobId = session.registerClob(connection.createClob());
+            CountDownLatch reading = new CountDownLatch(1);
+            CountDownLatch closed = new CountDownLatch(1);
+            Reader blocked = new Reader() {
+                @Override
+                public int read(char[] buffer, int offset, int length) throws IOException {
+                    reading.countDown();
+                    try {
+                        if (!closed.await(5, TimeUnit.SECONDS)) {
+                            throw new IOException("read was not cancelled");
+                        }
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("read interrupted", exception);
+                    }
+                    throw new IOException("reader closed by cancellation");
+                }
+
+                @Override
+                public void close() {
+                    closed.countDown();
+                }
+            };
+            String streamId = session.registerClobReader(clobId, blocked);
+            ExecutorService worker = Executors.newSingleThreadExecutor();
+            try {
+                Future<?> pending = worker.submit(() -> {
+                    session.activateClobRead(77L, streamId);
+                    try {
+                        session.clobReader(streamId).read(new char[1]);
+                    } finally {
+                        session.finishClobRead(77L);
+                    }
+                    return null;
+                });
+                assertEquals(true, reading.await(5, TimeUnit.SECONDS));
+                assertEquals(true, session.cancel(77L));
+                assertThrows(SQLException.class, () -> session.clobReader(streamId));
+                assertThrows(java.util.concurrent.ExecutionException.class,
+                        () -> pending.get(5, TimeUnit.SECONDS));
+                assertEquals(false, session.cancel(77L));
+            } finally {
+                closed.countDown();
+                worker.shutdownNow();
+                session.close();
+            }
+        }
+    }
 
     @Test
     void childCloseFailuresAreAggregatedBeforeParentFree() throws Exception {

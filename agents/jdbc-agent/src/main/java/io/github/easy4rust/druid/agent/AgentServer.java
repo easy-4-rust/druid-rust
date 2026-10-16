@@ -293,7 +293,7 @@ public final class AgentServer implements Closeable {
                     "Clob#position(Clob,long) is not supported", "0A000");
             case "clob_truncate" -> clobTruncate(session, params);
             case "clob_open_reader" -> clobOpenReader(session, params);
-            case "clob_read_reader" -> clobReadReader(session, params);
+            case "clob_read_reader" -> clobReadReader(requestId, session, params);
             case "clob_close_stream" -> clobCloseStream(session, params);
             case "free_clob" -> freeClob(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);
@@ -748,18 +748,31 @@ public final class AgentServer implements Closeable {
     }
 
     /** 每次只读取至多 32K 个 UTF-16 单元，并显式报告 EOF。 */
-    private JsonNode clobReadReader(AgentSession session, JsonNode payload) throws SQLException {
-        Reader reader = session.clobReader(requiredText(payload, "streamId"));
+    private JsonNode clobReadReader(long requestId, AgentSession session, JsonNode payload)
+            throws SQLException {
+        String streamId = requiredText(payload, "streamId");
+        Reader reader = session.clobReader(streamId);
         int maxUnits = requiredInt(payload, "maxUnits");
         if (maxUnits < 1 || maxUnits > MAX_CLOB_STREAM_CHUNK_UNITS) {
             throw new IllegalArgumentException("maxUnits must be between 1 and 32768");
         }
         char[] buffer = new char[maxUnits];
-        int count;
+        int count = 0;
+        IOException readFailure = null;
+        boolean cancelled;
+        session.activateClobRead(requestId, streamId);
         try {
             count = reader.read(buffer);
         } catch (IOException exception) {
-            throw new SQLException("JDBC Agent clob reader failed", exception);
+            readFailure = exception;
+        } finally {
+            cancelled = session.finishClobRead(requestId);
+        }
+        if (cancelled) {
+            throw new SQLException("JDBC Agent clob reader cancelled", "HY008", readFailure);
+        }
+        if (Objects.nonNull(readFailure)) {
+            throw new SQLException("JDBC Agent clob reader failed", readFailure);
         }
         return JsonNodeFactory.instance.objectNode()
                 .put("utf16", encodeUtf16(count < 0 ? "" : new String(buffer, 0, count)))

@@ -13,6 +13,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.Reader;
 import java.io.OutputStreamWriter;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
@@ -1238,6 +1239,75 @@ class AgentServerTest {
             assertTrue(cancellation.at("/result/cancelled").asBoolean());
             assertEquals("HY008", readResult.at("/error/data/sqlState").asText());
             assertTrue(call(requests, responses, 603, "blob_read_input_stream", readRequest)
+                    .path("error").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            closed.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void cancelClosesActiveClobReaderAndReturnsCancellationSqlState() throws Exception {
+        CountDownLatch reading = new CountDownLatch(1);
+        CountDownLatch closed = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:clob-protocol-cancel");
+             PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            AgentSession session = new AgentSession(connection, null);
+            String clobId = session.registerClob(connection.createClob());
+            Reader blocked = new Reader() {
+                @Override
+                public int read(char[] buffer, int offset, int length) throws IOException {
+                    reading.countDown();
+                    try {
+                        if (!closed.await(5, TimeUnit.SECONDS)) {
+                            throw new IOException("read was not cancelled");
+                        }
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("read interrupted", exception);
+                    }
+                    throw new IOException("reader closed by cancellation");
+                }
+
+                @Override
+                public void close() {
+                    closed.countDown();
+                }
+            };
+            String streamId = session.registerClobReader(clobId, blocked);
+            Field sessionsField = AgentServer.class.getDeclaredField("sessions");
+            sessionsField.setAccessible(true);
+            ((Map<String, AgentSession>) sessionsField.get(server)).put("clob-cancel-session", session);
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            assertEquals("ready", read(responses).path("method").asText());
+            ObjectNode readRequest = sessionOnly("clob-cancel-session");
+            readRequest.put("streamId", streamId);
+            readRequest.put("maxUnits", 1);
+            write(requests, request(861, "clob_read_reader", readRequest));
+            assertTrue(reading.await(5, TimeUnit.SECONDS));
+            ObjectNode cancelRequest = sessionOnly("clob-cancel-session");
+            cancelRequest.put("targetRequestId", 861);
+            write(requests, request(862, "cancel", cancelRequest));
+            JsonNode first = read(responses);
+            JsonNode second = read(responses);
+            JsonNode cancellation = first.path("id").asLong() == 862 ? first : second;
+            JsonNode readResult = first.path("id").asLong() == 861 ? first : second;
+            assertTrue(cancellation.at("/result/cancelled").asBoolean());
+            assertEquals("HY008", readResult.at("/error/data/sqlState").asText());
+            assertTrue(call(requests, responses, 863, "clob_read_reader", readRequest)
                     .path("error").isObject());
             requests.close();
             serverTask.get();

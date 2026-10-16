@@ -44,6 +44,8 @@ public final class AgentSession implements Closeable {
     private final Map<Long, Statement> activeStatements = new ConcurrentHashMap<>();
     private final Map<Long, String> activeBlobReads = new HashMap<>();
     private final Set<Long> cancelledBlobReads = new HashSet<>();
+    private final Map<Long, String> activeClobReads = new HashMap<>();
+    private final Set<Long> cancelledClobReads = new HashSet<>();
     private final Map<String, Savepoint> savepoints = new ConcurrentHashMap<>();
 
     /** 创建拥有独占物理 JDBC 连接的会话。 */
@@ -504,7 +506,19 @@ public final class AgentSession implements Closeable {
         return cancelledBlobReads.remove(requestId);
     }
 
-    /** 取消目标请求正在执行的 JDBC Statement 或 Blob 输入流。 */
+    /** 登记正在读取的 Clob 子字符流，以便并行 cancel 关闭它。 */
+    public synchronized void activateClobRead(long requestId, String streamId) throws SQLException {
+        clobReader(streamId);
+        activeClobReads.put(requestId, streamId);
+    }
+
+    /** 原子地结束 Clob 字符读取并返回是否已接受 cancel。 */
+    public synchronized boolean finishClobRead(long requestId) {
+        activeClobReads.remove(requestId);
+        return cancelledClobReads.remove(requestId);
+    }
+
+    /** 取消目标请求正在执行的 JDBC Statement、Blob 或 Clob 读取流。 */
     public boolean cancel(long requestId) throws SQLException {
         Statement statement = activeStatements.get(requestId);
         if (Objects.nonNull(statement)) {
@@ -512,14 +526,26 @@ public final class AgentSession implements Closeable {
             return true;
         }
         String streamId;
+        boolean clobRead;
         synchronized (this) {
             streamId = activeBlobReads.get(requestId);
             if (Objects.isNull(streamId)) {
-                return false;
+                streamId = activeClobReads.get(requestId);
+                if (Objects.isNull(streamId)) {
+                    return false;
+                }
+                cancelledClobReads.add(requestId);
+                clobRead = true;
+            } else {
+                cancelledBlobReads.add(requestId);
+                clobRead = false;
             }
-            cancelledBlobReads.add(requestId);
         }
-        closeBlobStream(streamId);
+        if (clobRead) {
+            closeClobStream(streamId);
+        } else {
+            closeBlobStream(streamId);
+        }
         return true;
     }
 
