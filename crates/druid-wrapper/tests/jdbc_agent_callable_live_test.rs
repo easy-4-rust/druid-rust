@@ -6,8 +6,8 @@ use druid_rdbc::data_source::PooledConnection;
 use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::result_set::{ColumnIndex, ResultSetExt};
 use druid_rdbc::statement::{
-    CallableInputParameter, CallableOutParameter, CallableParameter, ExecutionResult,
-    ParameterIndex, PreparedParameter, StatementOptions,
+    CallableInputParameter, CallableOutParameter, CallableParameter, CurrentResultDisposition,
+    ExecutionResult, ParameterIndex, PreparedParameter, StatementOptions,
 };
 use druid_rdbc::types::Value;
 use druid_wrapper::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
@@ -232,13 +232,23 @@ async fn hsqldb_callable_preserves_ordered_update_and_two_result_sets() {
     let mut results = callable.execute_prepared().await.expect("execute");
     assert_eq!(results.len(), 3);
     assert!(matches!(results.remove(0), ExecutionResult::UpdateCount(0)));
+    assert!(matches!(results.remove(0), ExecutionResult::ResultSet(_)));
+    assert!(matches!(results.remove(0), ExecutionResult::ResultSet(_)));
+    assert_eq!(callable.get_update_count().unwrap(), Some(0));
     for expected in [7, 8] {
-        let ExecutionResult::ResultSet(mut rows) = results.remove(0) else {
-            panic!("ordered JDBC result set");
-        };
-        assert!(rows.next().await.unwrap());
-        assert_eq!(rows.int(ColumnIndex::new(1).unwrap()).unwrap(), expected);
+        assert!(callable
+            .get_more_results(CurrentResultDisposition::Default)
+            .await
+            .unwrap());
+        let mut current = callable.get_result_set().await.unwrap().unwrap();
+        assert!(current.next().await.unwrap());
+        assert_eq!(current.int(ColumnIndex::new(1).unwrap()).unwrap(), expected);
     }
+    assert!(!callable
+        .get_more_results(CurrentResultDisposition::Default)
+        .await
+        .unwrap());
+    assert_eq!(callable.get_update_count().unwrap(), None);
     callable.close().await.expect("close callable");
     owner.close().await.expect("close pooled owner");
     pool.close().await;
