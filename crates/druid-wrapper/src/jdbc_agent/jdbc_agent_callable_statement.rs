@@ -360,14 +360,21 @@ impl PreparedStatement for JdbcAgentCallableStatement {
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
         let results = self.execute_prepared().await?;
-        match results.first() {
-            Some(ExecutionResult::UpdateCount(count)) => Ok(*count),
-            _ => Err(Self::protocol_error("callable update returned rows")),
+        match results.as_slice() {
+            [ExecutionResult::UpdateCount(count)] => Ok(*count),
+            _ => Err(Self::protocol_error(
+                "callable update returned a mixed or non-update result sequence",
+            )),
         }
     }
 
     async fn execute_prepared_query(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         let mut results = self.execute_prepared().await?;
+        if results.len() != 1 {
+            return Err(Self::protocol_error(
+                "callable query returned a mixed or multiple result sequence",
+            ));
+        }
         match results.pop() {
             Some(ExecutionResult::ResultSet(result)) => Ok(result),
             _ => Err(Self::protocol_error("callable query returned update count")),

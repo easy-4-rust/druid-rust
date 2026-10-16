@@ -249,6 +249,8 @@ async fn hsqldb_callable_preserves_ordered_update_and_two_result_sets() {
         .await
         .unwrap());
     assert_eq!(callable.get_update_count().unwrap(), None);
+    assert!(callable.execute_prepared_query().await.is_err());
+    assert!(callable.execute_prepared_update().await.is_err());
     callable.close().await.expect("close callable");
     owner.close().await.expect("close pooled owner");
     pool.close().await;
