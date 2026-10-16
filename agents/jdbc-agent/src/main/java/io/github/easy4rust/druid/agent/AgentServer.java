@@ -18,6 +18,7 @@ import java.io.OutputStreamWriter;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
+import java.sql.Array;
 import java.sql.DatabaseMetaData;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -66,6 +67,7 @@ public final class AgentServer implements Closeable {
             "cancel",
             "remote-prepare",
             "native-prepared-batch",
+            "array-values",
             "xa-resource");
 
     private final InputStream input;
@@ -253,6 +255,10 @@ public final class AgentServer implements Closeable {
             case "list_catalogs" -> listCatalogs(session);
             case "list_schemas" -> listSchemas(session);
             case "database_metadata" -> databaseMetadata(session);
+            case "create_array" -> createArray(session, params);
+            case "array_metadata" -> arrayMetadata(session, params);
+            case "array_values" -> arrayValues(session, params);
+            case "free_array" -> freeArray(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);
             case "reopen_logical_connection" -> reopenLogicalConnection(session);
             case "xa_start" -> xaStart(session, params);
@@ -485,6 +491,73 @@ public final class AgentServer implements Closeable {
             throw new IllegalArgumentException(field + " must be an integer");
         }
         return value.intValue();
+    }
+
+    private long requiredLong(JsonNode payload, String field) {
+        JsonNode value = Objects.requireNonNull(payload.get(field), field);
+        if (!value.canConvertToLong()) {
+            throw new IllegalArgumentException(field + " must be a long integer");
+        }
+        return value.longValue();
+    }
+
+    /** 创建由当前 Agent session 独占的驱动 Array 句柄。 */
+    private JsonNode createArray(AgentSession session, JsonNode payload) throws SQLException, IOException {
+        JsonNode elements = payload.path("elements");
+        if (!elements.isArray()) {
+            throw new IllegalArgumentException("elements must be an array");
+        }
+        Object[] values = new Object[elements.size()];
+        for (int index = 0; index < elements.size(); index++) {
+            AgentValue value = objectMapper.treeToValue(elements.get(index), AgentValue.class);
+            values[index] = value.toJdbcObject();
+        }
+        Array array = session.connection().createArrayOf(requiredText(payload, "typeName"), values);
+        return JsonNodeFactory.instance.objectNode().put("arrayId", session.registerArray(array));
+    }
+
+    /** 从原驱动 Array 读取 SQL 基础类型，保留驱动异常。 */
+    private JsonNode arrayMetadata(AgentSession session, JsonNode payload) throws SQLException {
+        Array array = session.array(requiredText(payload, "arrayId"));
+        return JsonNodeFactory.instance.objectNode()
+                .put("baseTypeName", array.getBaseTypeName())
+                .put("baseType", array.getBaseType());
+    }
+
+    /** 按 JDBC 1-based 范围读取元素；未实现的 type map 重载明确拒绝。 */
+    private JsonNode arrayValues(AgentSession session, JsonNode payload) throws SQLException {
+        if (payload.has("typeMap")) {
+            throw new SQLFeatureNotSupportedException("Array#getArray(Map) is not supported", "0A000");
+        }
+        Array array = session.array(requiredText(payload, "arrayId"));
+        boolean hasIndex = payload.has("index");
+        boolean hasCount = payload.has("count");
+        if (hasIndex != hasCount) {
+            throw new IllegalArgumentException("index and count must be supplied together");
+        }
+        Object raw = hasIndex
+                ? array.getArray(requiredLong(payload, "index"), requiredInt(payload, "count"))
+                : array.getArray();
+        if (Objects.isNull(raw) || !raw.getClass().isArray()) {
+            throw new SQLException("JDBC Array#getArray returned a non-array value");
+        }
+        int size = java.lang.reflect.Array.getLength(raw);
+        if (size > MAX_PAGE_SIZE) {
+            throw new SQLException("JDBC Array response exceeds maximum element count; use index/count");
+        }
+        int baseType = array.getBaseType();
+        ArrayNode values = JsonNodeFactory.instance.arrayNode();
+        for (int index = 0; index < size; index++) {
+            values.add(objectMapper.valueToTree(AgentValue.fromArrayElement(
+                    java.lang.reflect.Array.get(raw, index), baseType)));
+        }
+        return JsonNodeFactory.instance.objectNode().set("values", values);
+    }
+
+    /** 释放远程 Array；失败保留会话句柄供下一次请求重试。 */
+    private JsonNode freeArray(AgentSession session, JsonNode payload) throws SQLException {
+        session.freeArray(requiredText(payload, "arrayId"));
+        return JsonNodeFactory.instance.objectNode();
     }
 
     private JsonNode executeUpdate(long requestId, AgentSession session, JsonNode payload)

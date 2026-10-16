@@ -254,6 +254,7 @@ class AgentServerTest {
             assertEquals(1, handshake.path("protocolVersion").asInt());
             assertEquals("test-h2", handshake.path("driverArtifactVersion").asText());
             assertEquals(true, contains(handshake.path("capabilities"), "native-prepared-batch"));
+            assertEquals(true, contains(handshake.path("capabilities"), "array-values"));
 
             write(requests, request(2, "open_session", connectPayload()));
             String firstSession = read(responses).at("/result/sessionId").asText();
@@ -367,6 +368,88 @@ class AgentServerTest {
             write(requests, request(20, "close_session", sessionOnly(firstSession)));
             read(responses);
             write(requests, request(21, "close_session", sessionOnly(secondSession)));
+            read(responses);
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void h2ArrayProtocolPreservesNullRangeOwnershipAndFree() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            read(responses);
+            write(requests, request(101, "handshake", handshakePayload()));
+            read(responses);
+            write(requests, request(102, "open_session", connectPayload()));
+            String owner = read(responses).at("/result/sessionId").asText();
+            write(requests, request(103, "open_session", connectPayload()));
+            String other = read(responses).at("/result/sessionId").asText();
+
+            ObjectNode create = sessionOnly(owner);
+            create.put("typeName", "INTEGER");
+            ArrayNode elements = create.putArray("elements");
+            elements.addObject().put("kind", "int").put("value", 11);
+            elements.addObject().put("kind", "null").putNull("value");
+            elements.addObject().put("kind", "int").put("value", 33);
+            write(requests, request(104, "create_array", create));
+            JsonNode created = read(responses);
+            assertTrue(created.path("result").isObject(), created.toString());
+            String arrayId = created.at("/result/arrayId").asText();
+
+            ObjectNode arrayRequest = sessionOnly(owner);
+            arrayRequest.put("arrayId", arrayId);
+            write(requests, request(105, "array_metadata", arrayRequest));
+            JsonNode metadata = read(responses).path("result");
+            // H2 从协议的 i64 值推断 BIGINT；返回实际驱动元数据而非请求的 typeName。
+            assertEquals("BIGINT", metadata.path("baseTypeName").asText());
+            assertEquals(java.sql.Types.BIGINT, metadata.path("baseType").asInt());
+
+            write(requests, request(106, "array_values", arrayRequest));
+            JsonNode values = read(responses).at("/result/values");
+            assertEquals(3, values.size());
+            assertEquals(11, values.get(0).path("value").asInt());
+            assertEquals("null", values.get(1).path("kind").asText());
+            assertEquals(33, values.get(2).path("value").asInt());
+
+            arrayRequest.put("index", 2L);
+            arrayRequest.put("count", 2);
+            write(requests, request(107, "array_values", arrayRequest));
+            JsonNode range = read(responses).at("/result/values");
+            assertEquals(2, range.size());
+            assertEquals("null", range.get(0).path("kind").asText());
+            assertEquals(33, range.get(1).path("value").asInt());
+
+            arrayRequest.set("typeMap", JsonNodeFactory.instance.objectNode());
+            write(requests, request(113, "array_values", arrayRequest));
+            JsonNode unsupportedMap = read(responses).path("error");
+            assertEquals("0A000", unsupportedMap.at("/data/sqlState").asText());
+            arrayRequest.remove("typeMap");
+
+            ObjectNode wrongSession = sessionOnly(other);
+            wrongSession.put("arrayId", arrayId);
+            write(requests, request(108, "array_values", wrongSession));
+            assertTrue(read(responses).path("error").isObject());
+
+            write(requests, request(109, "free_array", arrayRequest));
+            assertTrue(read(responses).path("result").isObject());
+            write(requests, request(110, "array_values", arrayRequest));
+            assertTrue(read(responses).path("error").isObject());
+            write(requests, request(111, "close_session", sessionOnly(owner)));
+            read(responses);
+            write(requests, request(112, "close_session", sessionOnly(other)));
             read(responses);
             requests.close();
             serverTask.get();
