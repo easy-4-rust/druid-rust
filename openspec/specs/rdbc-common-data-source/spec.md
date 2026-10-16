@@ -96,3 +96,43 @@
 #### Scenario: 错误或边界移动的凭据被拒绝
 - **WHEN** 调用方使用错误密码、错误用户名，或把分隔符从用户名移到密码使拼接字节看似相同
 - **THEN** 每次请求均返回 SQLState `28000`，不借出连接，也不在诊断中暴露凭据
+
+### Requirement: CD-06 Native Druid data source exposes the canonical acquisition contract
+
+An existing native Druid data source SHALL be usable as `druid-rdbc::DataSource` without constructing another pool. Standard acquisition SHALL return an owned logical connection with the same close and recycle behavior as the product entry. Canonical `Wrapper` inspection SHALL identify the same data source object. If the core data source cannot verify per-call credentials, the standard credential overload SHALL return feature-not-supported with SQLState `0A000` before borrowing a connection.
+
+#### Scenario: Standard consumer borrows and closes a pooled connection
+- **WHEN** an external consumer holds a native Druid data source through the canonical `DataSource` trait and requests a connection
+- **THEN** it receives a usable logical connection; closing that connection returns its holder to the same native pool
+
+#### Scenario: Canonical wrapper identity
+- **WHEN** a consumer asks the native data source whether it wraps the canonical `DataSource` interface and unwraps it
+- **THEN** both operations succeed and the unwrapped view identifies the same object
+
+#### Scenario: Unsupported per-call credentials
+- **WHEN** a consumer calls the canonical credential overload on a native data source without a credential verifier
+- **THEN** the call fails with SQLState `0A000` and does not borrow or create a connection
+
+### Requirement: CD-07 Wrapped ordinary data source exposes its implemented standard views
+
+An ordinary `DruidRdbcDataSource` SHALL report and unwrap canonical `DataSource` and `CommonDataSource` targets as views of the same object. Inspection SHALL NOT create another pool or borrow a connection.
+
+#### Scenario: Standard consumer inspects both interfaces
+- **WHEN** a consumer calls `is_wrapper_for` and `unwrap` for either canonical data-source interface
+- **THEN** inspection succeeds and the returned view has the original object's identity
+
+#### Scenario: Unsupported target
+- **WHEN** a consumer requests a canonical interface the ordinary data source does not implement
+- **THEN** `is_wrapper_for` returns false and `unwrap` returns feature-not-supported
+
+### Requirement: CD-08 Dynamic data source supports canonical acquisition
+
+An existing dynamic Druid data source SHALL implement the canonical RDBC `DataSource` and `CommonDataSource` contracts without creating another pool. A standard connection request SHALL use the currently selected data-source group, and connection close SHALL return the holder to its selected pool. Canonical unwrap SHALL expose the same object's standard data-source views. A per-call credential request without a verifier SHALL fail with SQLState `0A000` before borrowing a connection.
+
+#### Scenario: Group switches between standard borrows
+- **WHEN** a standard consumer borrows and closes a connection, then the dynamic group switches and the consumer borrows again
+- **THEN** the first holder is returned to the old group and the second connection comes from the new group
+
+#### Scenario: Standard inspection and unsupported credentials
+- **WHEN** the consumer inspects standard data-source views or requests per-call credentials
+- **THEN** inspection returns the same object, while the credential request fails with `0A000` without a borrow
