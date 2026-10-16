@@ -590,7 +590,9 @@ impl druid_rdbc::connection::Connection for JdbcAgentConnection {
     async fn create_clob(&mut self) -> Result<Box<dyn druid_rdbc::resource::Clob>, RdbcError> {
         self.ensure_open()?;
         let executor = self.standard_executor_core()?;
-        let response = executor.connection_control("create_clob", json!({})).await?;
+        let response = executor
+            .connection_control("create_clob", json!({}))
+            .await?;
         let clob_id = response
             .get("clobId")
             .and_then(JsonValue::as_str)

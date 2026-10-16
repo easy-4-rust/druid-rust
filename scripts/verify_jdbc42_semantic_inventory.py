@@ -130,6 +130,7 @@ CURRENT_DECLARATION_CORRECTIONS = {
 TASK4_ADAPTER_LIVE_ENTRIES = {
     "java.sql.Array",
     "java.sql.Blob",
+    "java.sql.Clob",
     "java.sql.Connection",
     "java.sql.DatabaseMetaData",
     "java.sql.ParameterMetaData",
