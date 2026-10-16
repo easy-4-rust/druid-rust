@@ -20,6 +20,7 @@ import java.io.Writer;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
+import java.sql.CallableStatement;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.Clob;
@@ -242,6 +243,8 @@ public final class AgentServer implements Closeable {
             case "execute_query" -> executeQuery(requestId, session, params);
             case "execute" -> execute(requestId, session, params);
             case "prepare" -> prepare(session, params);
+            case "prepare_call" -> prepareCall(session, params);
+            case "execute_callable" -> executeCallable(requestId, session, params);
             case "execute_prepared" -> executePrepared(requestId, session, params);
             case "execute_prepared_batch" -> executePreparedBatch(requestId, session, params);
             case "close_statement" -> closeStatement(session, params);
@@ -1197,6 +1200,117 @@ public final class AgentServer implements Closeable {
         return result;
     }
 
+    /** 创建会话独占的真实 JDBC CallableStatement，返回不可猜测的语句标识。 */
+    private JsonNode prepareCall(AgentSession session, JsonNode payload) throws SQLException {
+        String sql = requiredText(payload, "sql");
+        CallableStatement statement;
+        if (payload.has("resultSetType") || payload.has("concurrency") || payload.has("holdability")) {
+            statement = session.connection().prepareCall(
+                    sql,
+                    requiredInt(payload, "resultSetType"),
+                    requiredInt(payload, "concurrency"),
+                    requiredInt(payload, "holdability"));
+        } else {
+            statement = session.connection().prepareCall(sql);
+        }
+        return JsonNodeFactory.instance.objectNode()
+                .put("statementId", session.registerPreparedStatement(statement));
+    }
+
+    /** 一次执行中依次注册 OUT、绑定 IN，执行后才发布 OUT 和当前结果。 */
+    private JsonNode executeCallable(
+            long requestId, AgentSession session, JsonNode payload) throws SQLException, IOException {
+        String statementId = requiredText(payload, "statementId");
+        CallableStatement statement = session.callableStatement(statementId);
+        JsonNode inputs = payload.path("inParameters");
+        JsonNode outputs = payload.path("outParameters");
+        if (!inputs.isArray() || !outputs.isArray()) {
+            throw new IllegalArgumentException("callable parameters must be arrays");
+        }
+        session.closeCursorsForStatement(statementId);
+        statement.clearParameters();
+        statement.setQueryTimeout(Math.max(0, payload.path("queryTimeoutSeconds").asInt(0)));
+        for (JsonNode output : outputs) {
+            registerCallableOut(statement, output);
+        }
+        for (JsonNode input : inputs) {
+            bindCallableInput(statement, input);
+        }
+        session.activate(requestId, statement);
+        try {
+            boolean hasRows = statement.execute();
+            // 部分 JDBC 驱动在结果游标关闭后使 OUT 值失效；先取值，成功后再发布响应。
+            ArrayNode outValues = JsonNodeFactory.instance.arrayNode();
+            for (JsonNode output : outputs) {
+                int sqlType = requiredInt(output, "sqlType");
+                Object raw = output.has("index")
+                        ? statement.getObject(callableIndex(output))
+                        : statement.getObject(requiredText(output, "name"));
+                boolean wasNull = statement.wasNull();
+                ObjectNode item = outValues.addObject();
+                if (output.has("index")) {
+                    item.put("index", callableIndex(output));
+                } else {
+                    item.put("name", requiredText(output, "name"));
+                }
+                item.set("value", objectMapper.valueToTree(AgentValue.fromArrayElement(raw, sqlType)));
+                item.put("wasNull", wasNull);
+            }
+            ObjectNode result = hasRows
+                    ? firstPage(session, new AgentCursor(
+                            statement, statement.getResultSet(), false, statementId, objectMapper), payload)
+                    : updateResult(statement, Math.max(0, statement.getUpdateCount()), false);
+            result.set("outValues", outValues);
+            return result;
+        } finally {
+            session.deactivate(requestId);
+        }
+    }
+
+    /** 仅接受一个严格 1-based 索引，防止默认零索引误绑定驱动参数。 */
+    private int callableIndex(JsonNode parameter) {
+        int index = requiredInt(parameter, "index");
+        if (index < 1 || parameter.has("name")) {
+            throw new IllegalArgumentException("callable selector requires one positive index");
+        }
+        return index;
+    }
+
+    /** 保留 JDBC OUT SQL 类型、scale 或 typeName 重载身份。 */
+    private void registerCallableOut(CallableStatement statement, JsonNode output) throws SQLException {
+        int sqlType = requiredInt(output, "sqlType");
+        if (output.has("index")) {
+            int index = callableIndex(output);
+            if (output.has("scale")) {
+                statement.registerOutParameter(index, sqlType, requiredInt(output, "scale"));
+            } else if (output.has("typeName")) {
+                statement.registerOutParameter(index, sqlType, requiredText(output, "typeName"));
+            } else {
+                statement.registerOutParameter(index, sqlType);
+            }
+        } else {
+            String name = requiredText(output, "name");
+            if (output.has("scale")) {
+                statement.registerOutParameter(name, sqlType, requiredInt(output, "scale"));
+            } else if (output.has("typeName")) {
+                statement.registerOutParameter(name, sqlType, requiredText(output, "typeName"));
+            } else {
+                statement.registerOutParameter(name, sqlType);
+            }
+        }
+    }
+
+    /** 将 indexed/named IN 值传给同一个 CallableStatement。 */
+    private void bindCallableInput(CallableStatement statement, JsonNode input)
+            throws SQLException, IOException {
+        AgentValue value = objectMapper.treeToValue(input.path("value"), AgentValue.class);
+        if (input.has("index")) {
+            bindValue(statement, callableIndex(input), value);
+        } else {
+            statement.setObject(requiredText(input, "name"), value.toJdbcObject());
+        }
+    }
+
     private JsonNode executePrepared(
             long requestId,
             AgentSession session,
@@ -1280,7 +1394,7 @@ public final class AgentServer implements Closeable {
         return JsonNodeFactory.instance.objectNode();
     }
 
-    private JsonNode firstPage(AgentSession session, AgentCursor cursor, JsonNode payload)
+    private ObjectNode firstPage(AgentSession session, AgentCursor cursor, JsonNode payload)
             throws SQLException, IOException {
         String cursorId = UUID.randomUUID().toString();
         try {

@@ -550,6 +550,150 @@ class AgentServerTest {
     }
 
     @Test
+    void h2CallableProtocolPreservesOutValueNullAndSessionOwnership() throws Exception {
+        // 先证明测试 SQL 在真实驱动上可执行，避免协议测试被方言差异误导。
+        String sql = "{? = call ABS(?)}";
+        try (Connection direct = DriverManager.getConnection("jdbc:h2:mem:callable-direct");
+             java.sql.CallableStatement statement = direct.prepareCall(sql)) {
+            statement.registerOutParameter(1, java.sql.Types.INTEGER);
+            statement.setInt(2, -7);
+            statement.execute();
+            assertEquals(7, statement.getInt(1));
+        }
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            assertEquals("ready", read(responses).path("method").asText());
+            assertTrue(call(requests, responses, 2201, "handshake", handshakePayload()).path("result").isObject());
+            String owner = call(requests, responses, 2202, "open_session", connectPayload())
+                    .at("/result/sessionId").asText();
+            String other = call(requests, responses, 2203, "open_session", connectPayload())
+                    .at("/result/sessionId").asText();
+            ObjectNode prepare = sessionOnly(owner);
+            prepare.put("sql", sql);
+            JsonNode prepared = call(requests, responses, 2204, "prepare_call", prepare);
+            assertTrue(prepared.path("result").isObject(), prepared.toString());
+            String statementId = prepared.at("/result/statementId").asText();
+
+            ObjectNode execute = sessionOnly(owner);
+            execute.put("statementId", statementId);
+            ArrayNode input = execute.putArray("inParameters");
+            ObjectNode bound = input.addObject();
+            bound.put("index", 2);
+            bound.set("value", objectMapper.valueToTree(new AgentValue(
+                    "int", JsonNodeFactory.instance.numberNode(-7))));
+            ObjectNode out = execute.putArray("outParameters").addObject();
+            out.put("index", 1);
+            out.put("sqlType", java.sql.Types.INTEGER);
+            JsonNode executed = call(requests, responses, 2205, "execute_callable", execute);
+            assertEquals(7, executed.at("/result/outValues/0/value/value").asInt(), executed.toString());
+            assertEquals(false, executed.at("/result/outValues/0/wasNull").asBoolean());
+
+            ObjectNode nullExecute = execute.deepCopy();
+            ((ObjectNode) nullExecute.at("/inParameters/0"))
+                    .set("value", objectMapper.valueToTree(new AgentValue("null", null)));
+            JsonNode nullResult = call(requests, responses, 2211, "execute_callable", nullExecute);
+            assertEquals("null", nullResult.at("/result/outValues/0/value/kind").asText(), nullResult.toString());
+            assertEquals(true, nullResult.at("/result/outValues/0/wasNull").asBoolean());
+
+            ObjectNode invalid = execute.deepCopy();
+            ((ObjectNode) invalid.at("/outParameters/0")).put("index", 0);
+            assertTrue(call(requests, responses, 2212, "execute_callable", invalid).path("error").isObject());
+
+            ObjectNode foreign = execute.deepCopy();
+            foreign.put("sessionId", other);
+            assertTrue(call(requests, responses, 2206, "execute_callable", foreign).path("error").isObject());
+            ObjectNode close = sessionOnly(owner);
+            close.put("statementId", statementId);
+            assertTrue(call(requests, responses, 2207, "close_statement", close).path("result").isObject());
+            assertTrue(call(requests, responses, 2208, "execute_callable", execute).path("error").isObject());
+            assertTrue(call(requests, responses, 2209, "close_session", sessionOnly(owner)).path("result").isObject());
+            assertTrue(call(requests, responses, 2210, "close_session", sessionOnly(other)).path("result").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void hsqldbCallableProtocolPreservesProcedureOutParameter() throws Exception {
+        String procedure = "CREATE PROCEDURE absolute_value(IN p_input INT, OUT p_output INT) "
+                + "READS SQL DATA BEGIN ATOMIC SET p_output = ABS(p_input); END";
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:hsqldb:mem:callable-direct", "SA", "");
+             Statement setup = connection.createStatement()) {
+            setup.execute(procedure);
+            try (java.sql.CallableStatement statement = connection.prepareCall(
+                    "CALL absolute_value(?, ?)")) {
+                statement.setInt(1, -9);
+                statement.registerOutParameter(2, java.sql.Types.INTEGER);
+                statement.execute();
+                assertEquals(9, statement.getInt(2));
+            }
+        }
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            assertEquals("ready", read(responses).path("method").asText());
+            call(requests, responses, 2301, "handshake", handshakePayload());
+            ObjectNode connect = connectPayload();
+            connect.put("url", "jdbc:hsqldb:mem:callable-protocol");
+            connect.put("validationQuery", "VALUES (1)");
+            connect.with("properties").put("user", "SA").put("password", "");
+            String sessionId = call(requests, responses, 2302, "open_session", connect)
+                    .at("/result/sessionId").asText();
+            JsonNode created = call(requests, responses, 2303, "execute", sessionPayload(
+                    sessionId, sqlPayload(procedure, JsonNodeFactory.instance.arrayNode())));
+            assertTrue(created.path("result").isObject(), created.toString());
+            ObjectNode prepare = sessionOnly(sessionId);
+            prepare.put("sql", "CALL absolute_value(?, ?)");
+            String statementId = call(requests, responses, 2304, "prepare_call", prepare)
+                    .at("/result/statementId").asText();
+            ObjectNode execute = sessionOnly(sessionId);
+            execute.put("statementId", statementId);
+            ObjectNode input = execute.putArray("inParameters").addObject();
+            input.put("index", 1);
+            input.set("value", objectMapper.valueToTree(new AgentValue(
+                    "int", JsonNodeFactory.instance.numberNode(-11))));
+            ObjectNode output = execute.putArray("outParameters").addObject();
+            output.put("index", 2);
+            output.put("sqlType", java.sql.Types.INTEGER);
+            JsonNode result = call(requests, responses, 2305, "execute_callable", execute);
+            assertEquals(11, result.at("/result/outValues/0/value/value").asInt(), result.toString());
+            ObjectNode close = sessionOnly(sessionId);
+            close.put("statementId", statementId);
+            assertTrue(call(requests, responses, 2306, "close_statement", close).path("result").isObject());
+            assertTrue(call(requests, responses, 2307, "close_session", sessionOnly(sessionId))
+                    .path("result").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void h2BlobProtocolPreservesBytesPositionsDriverErrorsAndFree() throws Exception {
         SQLException expectedPositionError;
         try (Connection direct = DriverManager.getConnection("jdbc:h2:mem:agent-blob-direct")) {

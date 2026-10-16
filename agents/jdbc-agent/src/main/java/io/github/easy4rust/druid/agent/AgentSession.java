@@ -11,6 +11,7 @@ import java.sql.Blob;
 import java.sql.Clob;
 import java.sql.NClob;
 import java.sql.Connection;
+import java.sql.CallableStatement;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Savepoint;
@@ -147,6 +148,32 @@ public final class AgentSession implements Closeable {
             throw new SQLException("JDBC Agent prepared statement is not open: " + statementId);
         }
         return statement;
+    }
+
+    /** 仅在句柄仍归本会话且确为 CallableStatement 时返回驱动对象。 */
+    public CallableStatement callableStatement(String statementId) throws SQLException {
+        PreparedStatement statement = preparedStatement(statementId);
+        if (!(statement instanceof CallableStatement callable)) {
+            throw new SQLException("JDBC Agent statement is not callable: " + statementId);
+        }
+        return callable;
+    }
+
+    /** 重执行前使该语句的全部旧游标失效，关闭失败保留原 SQL 异常链。 */
+    public void closeCursorsForStatement(String statementId) throws SQLException {
+        SQLException failure = null;
+        for (Map.Entry<String, AgentCursor> entry : new ArrayList<>(cursors.entrySet())) {
+            if (entry.getValue().referencesStatement(statementId)) {
+                try {
+                    closeCursor(entry.getKey());
+                } catch (SQLException exception) {
+                    failure = appendFailure(failure, exception);
+                }
+            }
+        }
+        if (Objects.nonNull(failure)) {
+            throw failure;
+        }
     }
 
     /** 关闭远程预编译语句及引用它的游标；重复调用无副作用。 */
