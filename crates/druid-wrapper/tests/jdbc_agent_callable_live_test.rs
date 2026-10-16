@@ -5,7 +5,8 @@ use druid::pool::DruidPool;
 use druid_rdbc::data_source::PooledConnection;
 use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::statement::{
-    CallableOutParameter, CallableParameter, ParameterIndex, PreparedParameter, StatementOptions,
+    CallableInputParameter, CallableOutParameter, CallableParameter, ParameterIndex,
+    PreparedParameter, StatementOptions,
 };
 use druid_rdbc::types::Value;
 use druid_wrapper::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
@@ -156,5 +157,26 @@ async fn hsqldb_callable_procedure_round_trip_and_explicit_close() {
     );
     callable.close().await.expect("explicit close");
     assert!(callable.out_value(ParameterIndex::new(2).unwrap()).is_err());
+    let mut named = connection
+        .prepare_call("CALL absolute_value(?, ?)", StatementOptions::default())
+        .await
+        .expect("named HSQLDB call");
+    named
+        .register_out_parameter(
+            CallableParameter::by_name("p_output").unwrap(),
+            CallableOutParameter::new(4),
+        )
+        .expect("named OUT registration");
+    named
+        .set_named_parameter("p_input", CallableInputParameter::Int(-12))
+        .expect("named IN parameter");
+    named.execute_prepared().await.expect("execute named call");
+    assert_eq!(
+        named
+            .out_parameter(&CallableParameter::by_name("p_output").unwrap())
+            .unwrap(),
+        druid_rdbc::types::RdbcObject::Scalar(Value::Int(12))
+    );
+    named.close().await.expect("close named call");
     connection.close().await.expect("close HSQLDB session");
 }

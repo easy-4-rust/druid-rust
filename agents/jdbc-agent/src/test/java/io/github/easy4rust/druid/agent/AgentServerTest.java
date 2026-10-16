@@ -638,10 +638,10 @@ class AgentServerTest {
             setup.execute(procedure);
             try (java.sql.CallableStatement statement = connection.prepareCall(
                     "CALL absolute_value(?, ?)")) {
-                statement.setInt(1, -9);
-                statement.registerOutParameter(2, java.sql.Types.INTEGER);
+                statement.setInt("p_input", -9);
+                statement.registerOutParameter("p_output", java.sql.Types.INTEGER);
                 statement.execute();
-                assertEquals(9, statement.getInt(2));
+                assertEquals(9, statement.getInt("p_output"));
             }
         }
 
@@ -684,6 +684,20 @@ class AgentServerTest {
             output.put("sqlType", java.sql.Types.INTEGER);
             JsonNode result = call(requests, responses, 2305, "execute_callable", execute);
             assertEquals(11, result.at("/result/outValues/0/value/value").asInt(), result.toString());
+            ObjectNode named = sessionOnly(sessionId);
+            named.put("statementId", statementId);
+            ObjectNode namedInput = named.putArray("inParameters").addObject();
+            namedInput.put("name", "p_input");
+            namedInput.set("value", objectMapper.valueToTree(new AgentValue(
+                    "int", JsonNodeFactory.instance.numberNode(-13))));
+            ObjectNode namedOutput = named.putArray("outParameters").addObject();
+            namedOutput.put("name", "p_output");
+            namedOutput.put("sqlType", java.sql.Types.INTEGER);
+            JsonNode namedResult = call(requests, responses, 2308, "execute_callable", named);
+            assertEquals("p_output", namedResult.at("/result/outValues/0/name").asText());
+            assertEquals(13, namedResult.at("/result/outValues/0/value/value").asInt(), namedResult.toString());
+            namedOutput.put("name", "unknown_output");
+            assertTrue(call(requests, responses, 2309, "execute_callable", named).path("error").isObject());
             ObjectNode close = sessionOnly(sessionId);
             close.put("statementId", statementId);
             assertTrue(call(requests, responses, 2306, "close_statement", close).path("result").isObject());
