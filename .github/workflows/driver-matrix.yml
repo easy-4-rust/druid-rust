@@ -501,8 +501,10 @@ jobs:
           mkdir -p api/observed
           # cargo-semver-checks builds isolated temporary workspaces, so the root
           # manifest's SQLite compatibility patch must also be visible globally.
+          # DuckDB 1.10505.0 requires zip ^6, whose sole 6.0.0 registry release
+          # was yanked. Pin the upstream 6.0.0 source for this isolated API gate.
           mkdir -p "$HOME/.cargo"
-          printf '\n[patch.crates-io]\ntoasty-driver-sqlite = { path = "%s/vendor/toasty-driver-sqlite" }\n' "$GITHUB_WORKSPACE" >> "$HOME/.cargo/config.toml"
+          printf '\n[patch.crates-io]\ntoasty-driver-sqlite = { path = "%s/vendor/toasty-driver-sqlite" }\nzip = { git = "https://github.com/zip-rs/zip2.git", rev = "abfc23d19e5c6038cba27eb3a897bc34c6d5bf86" }\n' "$GITHUB_WORKSPACE" >> "$HOME/.cargo/config.toml"
           cargo semver-checks --version > api/observed/semver-tool-version.txt
           printf 'baseline=%s\n' "$SEMVER_BASELINE_REV" > api/observed/semver-baseline.txt
           set +e
