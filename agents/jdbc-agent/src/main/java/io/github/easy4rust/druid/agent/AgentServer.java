@@ -268,6 +268,8 @@ public final class AgentServer implements Closeable {
             case "blob_get_bytes" -> blobGetBytes(session, params);
             case "blob_set_bytes" -> blobSetBytes(session, params);
             case "blob_position_bytes" -> blobPositionBytes(session, params);
+            case "blob_position_blob" -> throw new SQLFeatureNotSupportedException(
+                    "Blob#position(Blob,long) is not supported", "0A000");
             case "blob_truncate" -> blobTruncate(session, params);
             case "free_blob" -> freeBlob(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);

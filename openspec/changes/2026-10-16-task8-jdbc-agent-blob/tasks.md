@@ -8,7 +8,7 @@
 ## 2. Driver byte operations
 
 - [ ] 2.1 Add real-H2 protocol tests for length, one-based reads/search, both byte-write overloads, truncation, and original SQL errors; implement the requests and pass `mvn verify`.
-- [ ] 2.2 Add a negative capability/error test for unsupported Blob operations, then make protocol advertisement and `0A000` behavior match it.
+- [x] 2.2 Add a negative capability/error test for unsupported Blob operations, then make protocol advertisement and `0A000` behavior match it. The protocol test first failed with a null SQLState, then passed with `SQLFeatureNotSupportedException/0A000` for `position(Blob,long)` and no matching ready/handshake capability; JDK 17 `mvn verify` passed.
 
 ## 3. Bounded streams
 

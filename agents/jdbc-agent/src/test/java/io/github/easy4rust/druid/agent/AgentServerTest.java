@@ -644,6 +644,50 @@ class AgentServerTest {
         }
     }
 
+    @Test
+    void unsupportedBlobSearchIsNotAdvertisedAndReturnsStandardSqlState() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            JsonNode ready = read(responses);
+            assertTrue(ready.at("/params/capabilities").isArray());
+            for (JsonNode capability : ready.at("/params/capabilities")) {
+                assertNotEquals("blob-position-blob", capability.asText());
+            }
+            JsonNode handshake = call(requests, responses, 301, "handshake", handshakePayload());
+            for (JsonNode capability : handshake.at("/result/capabilities")) {
+                assertNotEquals("blob-position-blob", capability.asText());
+            }
+            String sessionId = call(requests, responses, 302, "open_session", connectPayload())
+                    .at("/result/sessionId").asText();
+            String blobId = call(requests, responses, 303, "create_blob", sessionOnly(sessionId))
+                    .at("/result/blobId").asText();
+            ObjectNode search = sessionOnly(sessionId);
+            search.put("blobId", blobId);
+            search.put("patternBlobId", blobId);
+            search.put("start", 1L);
+            JsonNode error = call(requests, responses, 304, "blob_position_blob", search).path("error");
+            assertEquals("0A000", error.at("/data/sqlState").asText());
+            assertEquals("java.sql.SQLFeatureNotSupportedException", error.at("/data/exceptionClass").asText());
+            assertTrue(call(requests, responses, 305, "free_blob", search).path("result").isObject());
+            assertTrue(call(requests, responses, 306, "close_session", sessionOnly(sessionId))
+                    .path("result").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private JsonNode call(BufferedWriter requests, BufferedReader responses, long id,
             String method, ObjectNode params) throws Exception {
         write(requests, request(id, method, params));
