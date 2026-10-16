@@ -1,4 +1,5 @@
 use super::jdbc_agent_array::JdbcAgentArray;
+use super::jdbc_agent_blob::JdbcAgentBlob;
 use super::{AgentValue, JdbcAgentClient, JdbcAgentDatabaseMetaData, JdbcAgentOptions};
 use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
 use crate::standard_adapter_executor::{
@@ -586,6 +587,20 @@ druid_rdbc::impl_standard_wrapper!(JdbcAgentConnection => Connection);
 
 #[async_trait::async_trait]
 impl druid_rdbc::connection::Connection for JdbcAgentConnection {
+    async fn create_blob(&mut self) -> Result<Box<dyn druid_rdbc::resource::Blob>, RdbcError> {
+        self.ensure_open()?;
+        let executor = self.standard_executor_core()?;
+        let response = executor
+            .connection_control("create_blob", json!({}))
+            .await?;
+        let blob_id = response
+            .get("blobId")
+            .and_then(JsonValue::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| Self::protocol_error("create_blob returned no blobId"))?;
+        Ok(Box::new(JdbcAgentBlob::new(executor, blob_id.to_owned())))
+    }
+
     async fn create_array_of(
         &mut self,
         type_name: Option<&str>,

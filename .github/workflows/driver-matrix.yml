@@ -39,7 +39,9 @@ jobs:
         env:
           DRUID_JDBC_AGENT_JAR: ${{ github.workspace }}/agents/jdbc-agent/target/druid-jdbc-agent.jar
           DRUID_JDBC_DRIVER_JAR: ${{ github.workspace }}/agents/jdbc-agent/target/driver-libs/h2-2.3.232.jar
-        run: cargo test -p druid-wrapper --features jdbc-agent --test task6_jdbc_agent_h2_contract_test_parity
+        run: |
+          cargo test -p druid-wrapper --features jdbc-agent --test task6_jdbc_agent_h2_contract_test_parity
+          cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_blob_h2_external_consumer
 
   jdbc-agent-hsqldb:
     name: JDBC Agent HSQLDB (${{ matrix.os }}, JDK ${{ matrix.java }})
