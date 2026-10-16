@@ -1,10 +1,14 @@
 #![cfg(feature = "jdbc-agent")]
 
 use druid::core::ConnectionFactory;
+use druid::pool::DruidPool;
+use druid_rdbc::data_source::PooledConnection;
 use druid_rdbc::error::RdbcError;
+use druid_rdbc::resource::ResourceOperations;
 use druid_rdbc::types::RdbcString;
 use druid_wrapper::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 fn configured(
     driver_env: &str,
@@ -40,6 +44,14 @@ async fn h2_standard_clob_preserves_utf16_and_driver_errors() {
     };
     let mut connection = factory.create().await.expect("H2 connection");
     let mut clob = connection.create_clob().await.expect("standard Clob");
+    assert_eq!(
+        clob.capabilities(),
+        ResourceOperations::READ
+            | ResourceOperations::WRITE
+            | ResourceOperations::RANGE
+            | ResourceOperations::STREAM
+            | ResourceOperations::FREE
+    );
     let source = RdbcString::from_utf16(vec![0x0041, 0xd83d, 0xde00, 0xd800, 0x0042]);
     assert_eq!(clob.set_string(1, &source).await.expect("set UTF-16"), 5);
     assert_eq!(clob.length().await.expect("UTF-16 length"), 5);
@@ -115,6 +127,14 @@ async fn hsqldb_standard_clob_writer_ascii_and_search() {
         .await
         .expect("HSQLDB connection");
     let mut clob = connection.create_clob().await.expect("standard Clob");
+    assert_eq!(
+        clob.capabilities(),
+        ResourceOperations::READ
+            | ResourceOperations::WRITE
+            | ResourceOperations::RANGE
+            | ResourceOperations::STREAM
+            | ResourceOperations::FREE
+    );
     let writer = clob
         .set_character_stream(1)
         .await
@@ -193,4 +213,88 @@ async fn hsqldb_standard_clob_writer_ascii_and_search() {
         .is_err());
     clob.free().await.expect("free");
     connection.close().await.expect("close");
+}
+
+async fn assert_pooled_owner_invalidates_clob_children(
+    factory: JdbcAgentConnectionFactory,
+    pool_name: &str,
+    driver_name: &str,
+) {
+    let factory: Arc<dyn ConnectionFactory> = Arc::new(factory);
+    let pool = DruidPool::builder()
+        .name(pool_name)
+        .driver_name(driver_name)
+        .factory(factory)
+        .max_open(1)
+        .max_idle(1)
+        .build()
+        .await
+        .expect("pool builds");
+    let mut owner = pool
+        .get_pooled_connection_owner()
+        .await
+        .expect("pooled owner");
+    let mut logical = owner.connection().await.expect("logical connection");
+    let mut clob = logical.create_clob().await.expect("owned Clob");
+    clob.set_string(1, &RdbcString::from("owner test"))
+        .await
+        .expect("seed Clob");
+    let reader = clob.get_character_stream().await.expect("reader child");
+    let ascii = clob.get_ascii_stream().await.expect("ASCII child");
+    let mut writer_clob = logical.create_clob().await.expect("writer Clob");
+    let writer = writer_clob
+        .set_character_stream(1)
+        .await
+        .expect("writer child");
+    owner.close().await.expect("owner close");
+    assert_eq!(pool.state().active_count, 0);
+    assert!(
+        tokio::task::spawn_blocking(move || reader.read_to_end_utf16())
+            .await
+            .unwrap()
+            .is_err()
+    );
+    assert!(tokio::task::spawn_blocking(move || ascii.read_to_end())
+        .await
+        .unwrap()
+        .is_err());
+    assert!(tokio::task::spawn_blocking(move || writer.write_str("x"))
+        .await
+        .unwrap()
+        .is_err());
+    assert!(clob.length().await.is_err());
+    assert!(writer_clob.length().await.is_err());
+    assert!(logical.is_closed().expect("logical closed"));
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn h2_pooled_owner_close_invalidates_standard_clob_children() {
+    let Some(factory) = configured(
+        "DRUID_JDBC_DRIVER_JAR",
+        "clob-h2-owner",
+        "jdbc:h2:mem:druid_rust_clob_h2_owner;DB_CLOSE_DELAY=-1",
+        "SELECT 1",
+    ) else {
+        return;
+    };
+    assert_pooled_owner_invalidates_clob_children(factory, "jdbc-agent-clob-h2-owner", "h2").await;
+}
+
+#[tokio::test]
+async fn hsqldb_pooled_owner_close_invalidates_standard_clob_children() {
+    let Some(factory) = configured(
+        "DRUID_HSQLDB_DRIVER_JAR",
+        "clob-hsqldb-owner",
+        "jdbc:hsqldb:mem:druid_rust_clob_hsqldb_owner",
+        "VALUES (1)",
+    ) else {
+        return;
+    };
+    assert_pooled_owner_invalidates_clob_children(
+        factory.user_name("SA").password(""),
+        "jdbc-agent-clob-hsqldb-owner",
+        "hsqldb",
+    )
+    .await;
 }
