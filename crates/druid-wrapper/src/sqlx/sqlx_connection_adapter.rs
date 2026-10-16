@@ -1765,9 +1765,14 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
     }
 
     fn capabilities(&self) -> druid_rdbc::extensions::ConnectionCapabilities {
+        // 仅原生后端拥有已验证的事务和保存点合同；Any 回退不继承其能力声明。
+        let verified_transactions = matches!(
+            self.standard_backend_key_core(),
+            "sqlite" | "mysql" | "postgresql"
+        );
         druid_rdbc::extensions::ConnectionCapabilities {
-            transactions: true,
-            savepoints: true,
+            transactions: verified_transactions,
+            savepoints: verified_transactions,
             catalogs: false,
             schemas: false,
             callable_statements: false,
@@ -1867,7 +1872,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn any_backend_cancellation_is_exactly_not_supported() {
+    async fn any_backend_capabilities_and_cancellation_are_conservative() {
         sqlx::any::install_default_drivers();
         let options = "sqlite::memory:"
             .parse::<AnyConnectOptions>()
@@ -1887,10 +1892,13 @@ mod tests {
             standard_actor: None,
             runtime_trace: None,
         };
+        let conservative = druid_rdbc::extensions::ConnectionCapabilities::default();
+        assert_eq!(adapter.capabilities(), conservative);
         let mut statement = adapter
             .create_statement(StatementOptions::default())
             .await
             .expect("Any-backed statement should be created");
+        assert_eq!(adapter.capabilities(), conservative);
         let error = match statement.cancellation_control() {
             Ok(_) => panic!("Any fallback must not advertise SQLite-native cancellation"),
             Err(error) => error,

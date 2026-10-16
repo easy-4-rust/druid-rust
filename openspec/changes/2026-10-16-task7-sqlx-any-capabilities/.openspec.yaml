@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-16
+goal: Advertise transaction and savepoint capabilities only for verified SQLx
+  native backends
