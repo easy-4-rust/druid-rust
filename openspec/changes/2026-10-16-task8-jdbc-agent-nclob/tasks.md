@@ -11,5 +11,5 @@
 
 ## 3. Evidence and integration
 
-- [ ] 3.1 Advance only the source-bound NClob inventory row after the live adapter tests pass; verify the semantic inventory, coverage/source identity, and verifier self-tests.
+- [x] 3.1 Advance only the source-bound NClob inventory row after the live adapter tests pass; verify the semantic inventory, coverage/source identity, and verifier self-tests. The adapter-live semantic gate passed with `java.sql=52`, `javax.sql=17`, `UNKNOWN=0`, frozen SHA-256 `afe4824599b8843f769440afa5c805a822985b9fb8d9ef46e7f8739bf7fa5c26`, and live SHA-256 `4b271b2d3ec98784c82859e2dcb014cdbd2b26af7b34e34dba2c2f0a988a7fc4`; 112 semantic, standard, and wrapper verifier tests passed locally (one platform skip).
 - [ ] 3.2 Run Java verification, Rust resource and wrapper regressions, formatter, Clippy, API/SemVer, OpenSpec strict validation, and the H2/HSQLDB cross-platform CI matrix; record the actual results, then sync and archive the change.
