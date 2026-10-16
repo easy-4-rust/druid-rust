@@ -382,6 +382,17 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
         after = verifier.normalized_phase_digest(rows, "planned", set(), set())
         self.assertEqual(after, before)
 
+    def test_driver_manager_live_capability_preserves_frozen_phase_hash(self) -> None:
+        """已验证的进程级服务能力不改变 Java 来源与目标映射摘要。"""
+        import verify_jdbc42_semantic_inventory as verifier
+
+        rows, _, _ = self.real_source_bound_inputs()
+        manager = next(row for row in rows if row[1] == "java.sql.DriverManager")
+        before = verifier.normalized_phase_digest(rows, "logical-live", verifier.TASK4_ADAPTER_LIVE_ENTRIES, verifier.TASK5_LOGICAL_LIVE_ENTRIES)
+        manager[16:18] = ["V1_LIVE", "LIVE"]
+        after = verifier.normalized_phase_digest(rows, "logical-live", verifier.TASK4_ADAPTER_LIVE_ENTRIES, verifier.TASK5_LOGICAL_LIVE_ENTRIES)
+        self.assertEqual(after, before)
+
     def test_final_state_policy_rejects_each_planned_column(self) -> None:
         """每一计划态列独立暴露失败，避免被别列或 digest 错误遮蔽。"""
         for index, value in [(6, "PLANNED_TARGET"), (13, "PLANNED"), (15, "PLANNED"), (17, "PLANNED")]:

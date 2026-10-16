@@ -1,5 +1,6 @@
 use druid::sql::DriverManager;
 use druid_rdbc::connection::Connection;
+use druid_rdbc::driver::DriverManager as StandardDriverManager;
 use druid_rdbc::driver::{
     ConnectionProperties, Driver, DriverAction, DriverExtensionDescriptor, DriverRegistry,
 };
@@ -301,4 +302,35 @@ fn driver_callback_can_register_without_registry_lock_reentrancy() {
     assert!(DriverManager::deregister_driver(&registered));
     assert!(result.is_err());
     assert_eq!(completed.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn standard_and_druid_manager_paths_share_registry_callback_and_settings() {
+    let driver: Arc<dyn Driver> = Arc::new(AcceptingButRefusingDriver);
+    let notifications = Arc::new(AtomicUsize::new(0));
+    StandardDriverManager::register_driver_with_action(
+        Arc::clone(&driver),
+        Some(Arc::new(CountingAction(Arc::clone(&notifications)))),
+    );
+    let found = DriverManager::get_driver("rdbc:refusing-redaction-test://localhost/db")
+        .expect("Druid path must see standard registration");
+    assert!(Arc::ptr_eq(&found, &driver));
+
+    StandardDriverManager::set_login_timeout(7);
+    assert_eq!(DriverManager::get_login_timeout(), 7);
+    DriverManager::set_login_timeout(0);
+    assert_eq!(StandardDriverManager::get_login_timeout(), 0);
+
+    let writer: druid_rdbc::data_source::RdbcLogWriter = Arc::new(parking_lot::Mutex::new(
+        Box::new(std::io::sink()) as Box<dyn std::io::Write + Send>,
+    ));
+    DriverManager::set_log_writer(Some(Arc::clone(&writer)));
+    let observed = StandardDriverManager::get_log_writer().expect("shared writer");
+    assert!(Arc::ptr_eq(&writer, &observed));
+    StandardDriverManager::set_log_writer(None);
+    assert!(DriverManager::get_log_writer().is_none());
+
+    assert!(DriverManager::deregister_driver(&driver));
+    assert!(!StandardDriverManager::deregister_driver(&driver));
+    assert_eq!(notifications.load(Ordering::SeqCst), 1);
 }

@@ -56,7 +56,7 @@ TASK3_STANDARD_ENTRIES = {
     "java.sql.Date": "druid_rdbc::types::Date",
     "java.sql.Driver": "druid_rdbc::driver::Driver",
     "java.sql.DriverAction": "druid_rdbc::driver::DriverAction",
-    "java.sql.DriverManager": "druid_rdbc::driver::DriverRegistry",
+    "java.sql.DriverManager": "druid_rdbc::driver::DriverManager",
     "java.sql.DriverPropertyInfo": "druid_rdbc::driver::DriverPropertyInfo",
     "java.sql.JDBCType": "druid_rdbc::types::JdbcType",
     "java.sql.NClob": "druid_rdbc::resource::NClob",
@@ -152,6 +152,7 @@ TASK5_LOGICAL_LIVE_ENTRIES = {
     "java.sql.Statement",
     "java.sql.Wrapper",
 }
+TASK6_SERVICE_LIVE_ENTRIES = {"java.sql.DriverManager"}
 PHASES = {"planned", "adapter-live", "logical-live"}
 ORACLE_KEYS = {
     "schema_version",
@@ -401,6 +402,10 @@ def normalized_phase_digest(
         if correction:
             row[3] = correction[0]
             row[5] = TASK3_STANDARD_ENTRIES[row[1]]
+        if row[1] in TASK6_SERVICE_LIVE_ENTRIES and row[17] == "LIVE":
+            # 服务能力已由跨 crate 运行测试证明；来源摘要仍表示原计划态。
+            row[16] = "V0_STATIC"
+            row[17] = "PLANNED"
         if row[17] == "NOT_APPLICABLE" and is_static_capability_not_applicable(row):
             # 仅证据分类前进；冻结的 Java 来源与既有语义映射摘要保持不变。
             row[17] = "PLANNED"
@@ -671,6 +676,11 @@ def verify_inventory(
             and phase in {"adapter-live", "logical-live"}
             and logical_state == "LIVE"
         )
+        service_live = (
+            fqcn in TASK6_SERVICE_LIVE_ENTRIES
+            and phase == "logical-live"
+            and capability_state == "LIVE"
+        )
         if (
             phase == "logical-live"
             and fqcn in logical_live_entries
@@ -692,8 +702,10 @@ def verify_inventory(
                 fail(
                     f"semantic row {line_number} claims an implementation outside its phase"
                 )
-            if not logical_live and evidence_level != "V0_STATIC":
+            if not logical_live and not service_live and evidence_level != "V0_STATIC":
                 fail(f"semantic row {line_number} overstates evidence {evidence_level}")
+        if service_live and evidence_level != "V1_LIVE":
+            fail(f"semantic row {line_number} lacks service capability evidence")
         if logical_live:
             if logical_state != "LIVE" or logical_implementation == "-":
                 fail(f"semantic row {line_number} lacks Task 5 logical LIVE evidence")
@@ -713,6 +725,7 @@ def verify_inventory(
         if (
             not adapter_live
             and not logical_live
+            and not service_live
             and capability_state not in CAPABILITY_STATES
         ):
             fail(f"semantic row {line_number} has unknown capability state")

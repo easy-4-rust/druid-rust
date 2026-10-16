@@ -9,6 +9,7 @@ mod connection_factory_provider;
 mod driver;
 mod driver_action;
 mod driver_extension_descriptor;
+mod driver_manager;
 mod driver_registry;
 
 pub use connection_factory::ConnectionFactory;
@@ -16,4 +17,5 @@ pub use connection_factory_provider::ConnectionFactoryProvider;
 pub use driver::{ConnectionProperties, Driver, DriverPropertyInfo};
 pub use driver_action::DriverAction;
 pub use driver_extension_descriptor::DriverExtensionDescriptor;
+pub use driver_manager::DriverManager;
 pub use driver_registry::DriverRegistry;

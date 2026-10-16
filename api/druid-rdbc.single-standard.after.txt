@@ -291,6 +291,24 @@ pub fn druid_rdbc::driver::DriverExtensionDescriptor::name(&self) -> &str
 pub fn druid_rdbc::driver::DriverExtensionDescriptor::new(impl core::convert::Into<alloc::string::String>, alloc::sync::Arc<dyn druid_rdbc::driver::Driver>, core::option::Option<alloc::sync::Arc<dyn druid_rdbc::driver::ConnectionFactory>>) -> Self
 impl core::fmt::Debug for druid_rdbc::driver::DriverExtensionDescriptor
 pub fn druid_rdbc::driver::DriverExtensionDescriptor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::driver::DriverManager
+impl druid_rdbc::driver::DriverManager
+pub fn druid_rdbc::driver::DriverManager::deregister_driver(&alloc::sync::Arc<dyn druid_rdbc::driver::Driver>) -> bool
+pub fn druid_rdbc::driver::DriverManager::drivers() -> alloc::vec::Vec<alloc::sync::Arc<dyn druid_rdbc::driver::Driver>>
+pub async fn druid_rdbc::driver::DriverManager::get_connection(&str) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::driver::DriverManager::get_connection_with_credentials(&str, &str, &str) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::driver::DriverManager::get_connection_with_properties(&str, &std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::driver::DriverManager::get_driver(&str) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::driver::Driver>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::driver::DriverManager::get_drivers() -> alloc::vec::Vec<alloc::sync::Arc<dyn druid_rdbc::driver::Driver>>
+pub fn druid_rdbc::driver::DriverManager::get_log_writer() -> core::option::Option<druid_rdbc::data_source::RdbcLogWriter>
+pub fn druid_rdbc::driver::DriverManager::get_login_timeout() -> u64
+pub fn druid_rdbc::driver::DriverManager::log_writer() -> core::option::Option<druid_rdbc::data_source::RdbcLogWriter>
+pub fn druid_rdbc::driver::DriverManager::login_timeout() -> u64
+pub fn druid_rdbc::driver::DriverManager::println(&str) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::driver::DriverManager::register_driver(alloc::sync::Arc<dyn druid_rdbc::driver::Driver>)
+pub fn druid_rdbc::driver::DriverManager::register_driver_with_action(alloc::sync::Arc<dyn druid_rdbc::driver::Driver>, core::option::Option<alloc::sync::Arc<dyn druid_rdbc::driver::DriverAction>>)
+pub fn druid_rdbc::driver::DriverManager::set_log_writer(core::option::Option<druid_rdbc::data_source::RdbcLogWriter>)
+pub fn druid_rdbc::driver::DriverManager::set_login_timeout(u64)
 pub struct druid_rdbc::driver::DriverPropertyInfo
 pub druid_rdbc::driver::DriverPropertyInfo::choices: alloc::vec::Vec<alloc::string::String>
 pub druid_rdbc::driver::DriverPropertyInfo::description: core::option::Option<alloc::string::String>

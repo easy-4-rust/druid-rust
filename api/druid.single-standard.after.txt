@@ -9346,6 +9346,7 @@ pub use druid::sql::DataTruncation
 pub use druid::sql::Date
 pub use druid::sql::Driver
 pub use druid::sql::DriverAction
+pub use druid::sql::DriverManager
 pub use druid::sql::DriverPropertyInfo
 pub use druid::sql::NClob
 pub use druid::sql::PseudoColumnUsage
@@ -9949,24 +9950,7 @@ pub use druid::sql::driver::Driver
 pub mod druid::sql::driver_action
 pub use druid::sql::driver_action::DriverAction
 pub mod druid::sql::driver_manager
-pub struct druid::sql::driver_manager::DriverManager
-impl druid::sql::driver_manager::DriverManager
-pub fn druid::sql::driver_manager::DriverManager::deregister_driver(&alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>) -> bool
-pub fn druid::sql::driver_manager::DriverManager::drivers() -> alloc::vec::Vec<alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>>
-pub async fn druid::sql::driver_manager::DriverManager::get_connection(&str) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>
-pub async fn druid::sql::driver_manager::DriverManager::get_connection_with_credentials(&str, &str, &str) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>
-pub async fn druid::sql::driver_manager::DriverManager::get_connection_with_properties(&str, &std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>
-pub fn druid::sql::driver_manager::DriverManager::get_driver(&str) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>, druid_rdbc::error::rdbc_error::RdbcError>
-pub fn druid::sql::driver_manager::DriverManager::get_drivers() -> alloc::vec::Vec<alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>>
-pub fn druid::sql::driver_manager::DriverManager::get_log_writer() -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
-pub fn druid::sql::driver_manager::DriverManager::get_login_timeout() -> u64
-pub fn druid::sql::driver_manager::DriverManager::log_writer() -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
-pub fn druid::sql::driver_manager::DriverManager::login_timeout() -> u64
-pub fn druid::sql::driver_manager::DriverManager::println(&str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
-pub fn druid::sql::driver_manager::DriverManager::register_driver(alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>)
-pub fn druid::sql::driver_manager::DriverManager::register_driver_with_action(alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>, core::option::Option<alloc::sync::Arc<dyn druid_rdbc::driver::driver_action::DriverAction>>)
-pub fn druid::sql::driver_manager::DriverManager::set_log_writer(core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>)
-pub fn druid::sql::driver_manager::DriverManager::set_login_timeout(u64)
+pub use druid::sql::driver_manager::DriverManager
 pub mod druid::sql::driver_property_info
 pub use druid::sql::driver_property_info::DriverPropertyInfo
 pub mod druid::sql::eof_parser_exception
@@ -13040,24 +13024,6 @@ pub fn druid::sql::dialect_feature::DialectFeature::with_enabled(bool, core::opt
 pub fn druid::sql::dialect_feature::DialectFeature::with_lists(core::option::Option<&[druid::sql::dialect_feature::DialectFeatureValue]>, core::option::Option<&[druid::sql::dialect_feature::DialectFeatureValue]>) -> Self
 impl core::default::Default for druid::sql::dialect_feature::DialectFeature
 pub fn druid::sql::dialect_feature::DialectFeature::default() -> Self
-pub struct druid::sql::DriverManager
-impl druid::sql::driver_manager::DriverManager
-pub fn druid::sql::driver_manager::DriverManager::deregister_driver(&alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>) -> bool
-pub fn druid::sql::driver_manager::DriverManager::drivers() -> alloc::vec::Vec<alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>>
-pub async fn druid::sql::driver_manager::DriverManager::get_connection(&str) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>
-pub async fn druid::sql::driver_manager::DriverManager::get_connection_with_credentials(&str, &str, &str) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>
-pub async fn druid::sql::driver_manager::DriverManager::get_connection_with_properties(&str, &std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>
-pub fn druid::sql::driver_manager::DriverManager::get_driver(&str) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>, druid_rdbc::error::rdbc_error::RdbcError>
-pub fn druid::sql::driver_manager::DriverManager::get_drivers() -> alloc::vec::Vec<alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>>
-pub fn druid::sql::driver_manager::DriverManager::get_log_writer() -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
-pub fn druid::sql::driver_manager::DriverManager::get_login_timeout() -> u64
-pub fn druid::sql::driver_manager::DriverManager::log_writer() -> core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>
-pub fn druid::sql::driver_manager::DriverManager::login_timeout() -> u64
-pub fn druid::sql::driver_manager::DriverManager::println(&str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
-pub fn druid::sql::driver_manager::DriverManager::register_driver(alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>)
-pub fn druid::sql::driver_manager::DriverManager::register_driver_with_action(alloc::sync::Arc<dyn druid_rdbc::driver::driver::Driver>, core::option::Option<alloc::sync::Arc<dyn druid_rdbc::driver::driver_action::DriverAction>>)
-pub fn druid::sql::driver_manager::DriverManager::set_log_writer(core::option::Option<druid_rdbc::data_source::common_data_source::RdbcLogWriter>)
-pub fn druid::sql::driver_manager::DriverManager::set_login_timeout(u64)
 pub struct druid::sql::EofParserException
 impl druid::sql::eof_parser_exception::EofParserException
 pub fn druid::sql::eof_parser_exception::EofParserException::new() -> Self
