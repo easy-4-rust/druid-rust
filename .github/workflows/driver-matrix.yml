@@ -70,7 +70,9 @@ jobs:
         env:
           DRUID_JDBC_AGENT_JAR: ${{ github.workspace }}/agents/jdbc-agent/target/druid-jdbc-agent.jar
           DRUID_HSQLDB_DRIVER_JAR: ${{ github.workspace }}/agents/jdbc-agent/target/driver-libs/hsqldb-2.7.4.jar
-        run: cargo test -p druid-wrapper --features jdbc-agent --test task6_jdbc_agent_hsqldb_contract_test_parity
+        run: |
+          cargo test -p druid-wrapper --features jdbc-agent --test task6_jdbc_agent_hsqldb_contract_test_parity
+          cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_blob_hsqldb_external_consumer
 
   rust-contracts:
     runs-on: ubuntu-latest

@@ -196,3 +196,79 @@ impl Blob for JdbcAgentBlob {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::JdbcAgentBlob;
+    use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore};
+    use crate::standard_query_result::StandardQueryResult;
+    use druid_rdbc::error::RdbcError;
+    use druid_rdbc::resource::Blob;
+    use druid_rdbc::types::Value;
+    use serde_json::{json, Value as JsonValue};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    struct FreeFailsOnce {
+        attempts: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl AdapterExecutionCore for FreeFailsOnce {
+        async fn standard_connection_control_core(
+            &mut self,
+            operation: &str,
+            _payload: JsonValue,
+        ) -> Result<JsonValue, RdbcError> {
+            match operation {
+                "blob_length" => Ok(json!({"length": 4})),
+                "free_blob" => {
+                    if self.attempts.fetch_add(1, Ordering::SeqCst) == 0 {
+                        Err(RdbcError::DriverError("driver free failed once".into()))
+                    } else {
+                        Ok(json!({}))
+                    }
+                }
+                _ => Err(RdbcError::InvalidArgument(operation.to_owned())),
+            }
+        }
+
+        async fn standard_execute_update_core(
+            &mut self,
+            _sql: &str,
+            _values: Vec<Value>,
+        ) -> Result<i64, RdbcError> {
+            unreachable!("Blob test never executes SQL")
+        }
+
+        async fn standard_execute_query_core(
+            &mut self,
+            _sql: &str,
+            _values: Vec<Value>,
+        ) -> Result<StandardQueryResult, RdbcError> {
+            unreachable!("Blob test never executes SQL")
+        }
+
+        async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_driver_free_keeps_blob_handle_retryable() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let executor = owned_executor(
+            FreeFailsOnce {
+                attempts: Arc::clone(&attempts),
+            },
+            None,
+        );
+        let mut blob = JdbcAgentBlob::new(executor, "owned-blob".into());
+        assert!(blob.free().await.is_err());
+        assert_eq!(blob.length().await.expect("handle retained"), 4);
+        blob.free().await.expect("retry succeeds");
+        blob.free().await.expect("duplicate release is inert");
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert!(blob.length().await.is_err());
+    }
+}
