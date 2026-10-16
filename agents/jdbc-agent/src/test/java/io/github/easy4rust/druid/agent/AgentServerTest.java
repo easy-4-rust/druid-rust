@@ -24,11 +24,13 @@ import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.SQLTransientConnectionException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import javax.sql.XAConnection;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -379,6 +381,15 @@ class AgentServerTest {
 
     @Test
     void h2ArrayProtocolPreservesNullRangeOwnershipAndFree() throws Exception {
+        String nullElementsDriverFailure = null;
+        try (Connection direct = DriverManager.getConnection("jdbc:h2:mem:agent;DB_CLOSE_DELAY=-1")) {
+            try {
+                java.sql.Array directArray = direct.createArrayOf("INTEGER", null);
+                directArray.free();
+            } catch (SQLException | RuntimeException exception) {
+                nullElementsDriverFailure = exception.getClass().getName();
+            }
+        }
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try (PipedInputStream serverInput = new PipedInputStream();
              PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
@@ -409,6 +420,22 @@ class AgentServerTest {
             JsonNode created = read(responses);
             assertTrue(created.path("result").isObject(), created.toString());
             String arrayId = created.at("/result/arrayId").asText();
+
+            ObjectNode nullCreate = sessionOnly(owner);
+            nullCreate.put("typeName", "INTEGER");
+            nullCreate.putNull("elements");
+            write(requests, request(119, "create_array", nullCreate));
+            JsonNode nullElementsResponse = read(responses);
+            if (Objects.isNull(nullElementsDriverFailure)) {
+                assertTrue(nullElementsResponse.path("result").isObject(), nullElementsResponse.toString());
+                ObjectNode freeNullArray = sessionOnly(owner);
+                freeNullArray.put("arrayId", nullElementsResponse.at("/result/arrayId").asText());
+                write(requests, request(120, "free_array", freeNullArray));
+                read(responses);
+            } else {
+                assertEquals(nullElementsDriverFailure,
+                        nullElementsResponse.at("/error/data/exceptionClass").asText());
+            }
 
             ObjectNode arrayRequest = sessionOnly(owner);
             arrayRequest.put("arrayId", arrayId);

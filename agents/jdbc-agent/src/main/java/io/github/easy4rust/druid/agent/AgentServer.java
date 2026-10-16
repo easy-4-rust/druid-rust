@@ -505,16 +505,19 @@ public final class AgentServer implements Closeable {
 
     /** 创建由当前 Agent session 独占的驱动 Array 句柄。 */
     private JsonNode createArray(AgentSession session, JsonNode payload) throws SQLException, IOException {
-        JsonNode elements = payload.path("elements");
-        if (!elements.isArray()) {
-            throw new IllegalArgumentException("elements must be an array");
+        JsonNode elements = payload.get("elements");
+        Object[] values = null;
+        if (Objects.nonNull(elements) && !elements.isNull()) {
+            if (!elements.isArray()) {
+                throw new IllegalArgumentException("elements must be an array or null");
+            }
+            values = new Object[elements.size()];
+            for (int index = 0; index < elements.size(); index++) {
+                AgentValue value = objectMapper.treeToValue(elements.get(index), AgentValue.class);
+                values[index] = value.toJdbcObject();
+            }
         }
-        Object[] values = new Object[elements.size()];
-        for (int index = 0; index < elements.size(); index++) {
-            AgentValue value = objectMapper.treeToValue(elements.get(index), AgentValue.class);
-            values[index] = value.toJdbcObject();
-        }
-        Array array = session.connection().createArrayOf(requiredText(payload, "typeName"), values);
+        Array array = session.connection().createArrayOf(nullableText(payload, "typeName"), values);
         return JsonNodeFactory.instance.objectNode().put("arrayId", session.registerArray(array));
     }
 
