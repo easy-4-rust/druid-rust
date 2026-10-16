@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.Array;
 import java.sql.Blob;
+import java.sql.Clob;
 import java.sql.DatabaseMetaData;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -59,6 +60,7 @@ public final class AgentServer implements Closeable {
     private static final int DEFAULT_PAGE_SIZE = 500;
     private static final int MAX_PAGE_SIZE = 10_000;
     private static final int MAX_BLOB_BYTES = 8 * 1024 * 1024;
+    private static final int MAX_CLOB_UNITS = 4 * 1024 * 1024;
     private static final int MAX_BLOB_STREAM_CHUNK_BYTES = 64 * 1024;
     private static final int DEFAULT_RESPONSE_BYTES = 8 * 1024 * 1024;
     private static final int MIN_RESPONSE_BYTES = 1024;
@@ -280,6 +282,11 @@ public final class AgentServer implements Closeable {
             case "blob_flush_stream" -> blobFlushStream(session, params);
             case "blob_close_stream" -> blobCloseStream(session, params);
             case "free_blob" -> freeBlob(session, params);
+            case "create_clob" -> createClob(session);
+            case "clob_length" -> clobLength(session, params);
+            case "clob_get_sub_string" -> clobGetSubString(session, params);
+            case "clob_set_string" -> clobSetString(session, params);
+            case "free_clob" -> freeClob(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);
             case "reopen_logical_connection" -> reopenLogicalConnection(session);
             case "xa_start" -> xaStart(session, params);
@@ -643,6 +650,80 @@ public final class AgentServer implements Closeable {
     private JsonNode freeBlob(AgentSession session, JsonNode payload) throws SQLException {
         session.freeBlob(requiredText(payload, "blobId"));
         return JsonNodeFactory.instance.objectNode();
+    }
+
+    /** 创建由当前 Agent session 独占的驱动 Clob 句柄。 */
+    private JsonNode createClob(AgentSession session) throws SQLException {
+        Clob clob = session.connection().createClob();
+        return JsonNodeFactory.instance.objectNode().put("clobId", session.registerClob(clob));
+    }
+
+    /** 返回以 Java UTF-16 code unit 计数的驱动 Clob 长度。 */
+    private JsonNode clobLength(AgentSession session, JsonNode payload) throws SQLException {
+        return JsonNodeFactory.instance.objectNode()
+                .put("length", session.clob(requiredText(payload, "clobId")).length());
+    }
+
+    /** 按 JDBC 1-based 位置读取有界字符范围，使用原始 UTF-16 code unit 编码。 */
+    private JsonNode clobGetSubString(AgentSession session, JsonNode payload) throws SQLException {
+        Clob clob = session.clob(requiredText(payload, "clobId"));
+        int length = requiredInt(payload, "length");
+        if (length > MAX_CLOB_UNITS) {
+            throw new IllegalArgumentException("Clob read length exceeds maximum request size");
+        }
+        String value = clob.getSubString(requiredLong(payload, "position"), length);
+        if (value.length() > MAX_CLOB_UNITS) {
+            throw new SQLException("JDBC Clob#getSubString returned too many characters");
+        }
+        return JsonNodeFactory.instance.objectNode().put("utf16", encodeUtf16(value));
+    }
+
+    /** 委托两种 Clob#setString 重载；输入 offset/length 均按 UTF-16 unit 计数。 */
+    private JsonNode clobSetString(AgentSession session, JsonNode payload) throws SQLException {
+        Clob clob = session.clob(requiredText(payload, "clobId"));
+        String value = decodeUtf16(payload, "utf16");
+        boolean hasOffset = payload.has("offset");
+        boolean hasLength = payload.has("length");
+        if (hasOffset != hasLength) {
+            throw new IllegalArgumentException("offset and length must be supplied together");
+        }
+        long position = requiredLong(payload, "position");
+        int written = hasOffset
+                ? clob.setString(position, value, requiredInt(payload, "offset"), requiredInt(payload, "length"))
+                : clob.setString(position, value);
+        return JsonNodeFactory.instance.objectNode().put("written", written);
+    }
+
+    /** 释放远程 Clob；失败时会话保留句柄供重试。 */
+    private JsonNode freeClob(AgentSession session, JsonNode payload) throws SQLException {
+        session.freeClob(requiredText(payload, "clobId"));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private String decodeUtf16(JsonNode payload, String field) {
+        JsonNode node = Objects.requireNonNull(payload.get(field), field);
+        if (!node.isTextual()) {
+            throw new IllegalArgumentException(field + " must be base64 UTF-16 text");
+        }
+        byte[] bytes = Base64.getDecoder().decode(node.asText());
+        if ((bytes.length & 1) != 0 || bytes.length / 2 > MAX_CLOB_UNITS) {
+            throw new IllegalArgumentException(field + " must contain bounded UTF-16 units");
+        }
+        char[] units = new char[bytes.length / 2];
+        for (int index = 0; index < units.length; index++) {
+            units[index] = (char) (((bytes[index * 2] & 0xff) << 8) | (bytes[index * 2 + 1] & 0xff));
+        }
+        return new String(units);
+    }
+
+    private String encodeUtf16(String value) {
+        byte[] bytes = new byte[value.length() * 2];
+        for (int index = 0; index < value.length(); index++) {
+            char unit = value.charAt(index);
+            bytes[index * 2] = (byte) (unit >>> 8);
+            bytes[index * 2 + 1] = (byte) unit;
+        }
+        return Base64.getEncoder().encodeToString(bytes);
     }
 
     /** 打开 Blob 的完整或 JDBC 1-based 范围输入流，注册到父 Blob 资源域。 */

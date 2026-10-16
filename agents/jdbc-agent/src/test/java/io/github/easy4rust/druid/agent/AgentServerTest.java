@@ -649,6 +649,73 @@ class AgentServerTest {
     }
 
     @Test
+    void h2ClobProtocolPreservesUtf16LengthAndOneBasedRead() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            assertEquals("ready", read(responses).path("method").asText());
+            assertTrue(call(requests, responses, 801, "handshake", handshakePayload()).path("result").isObject());
+            String sessionId = call(requests, responses, 802, "open_session", connectPayload())
+                    .at("/result/sessionId").asText();
+            String clobId = call(requests, responses, 803, "create_clob", sessionOnly(sessionId))
+                    .at("/result/clobId").asText();
+            ObjectNode clob = sessionOnly(sessionId);
+            clob.put("clobId", clobId);
+            assertEquals(0, call(requests, responses, 804, "clob_length", clob)
+                    .at("/result/length").asLong());
+
+            ObjectNode write = clob.deepCopy();
+            write.put("position", 1L);
+            write.put("utf16", encodeUtf16("A😀Z"));
+            assertEquals(4, call(requests, responses, 805, "clob_set_string", write)
+                    .at("/result/written").asInt());
+            assertEquals(4, call(requests, responses, 806, "clob_length", clob)
+                    .at("/result/length").asLong());
+            ObjectNode range = clob.deepCopy();
+            range.put("position", 2L);
+            range.put("length", 2);
+            assertEquals("😀", decodeUtf16(call(requests, responses, 807, "clob_get_sub_string", range)
+                    .at("/result/utf16").asText()));
+            assertTrue(call(requests, responses, 808, "free_clob", clob).path("result").isObject());
+            assertTrue(call(requests, responses, 809, "clob_length", clob).path("error").isObject());
+            assertTrue(call(requests, responses, 810, "close_session", sessionOnly(sessionId))
+                    .path("result").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private String encodeUtf16(String value) {
+        byte[] bytes = new byte[value.length() * 2];
+        for (int index = 0; index < value.length(); index++) {
+            char unit = value.charAt(index);
+            bytes[index * 2] = (byte) (unit >>> 8);
+            bytes[index * 2 + 1] = (byte) unit;
+        }
+        return Base64.getEncoder().encodeToString(bytes);
+    }
+
+    private String decodeUtf16(String encoded) {
+        byte[] bytes = Base64.getDecoder().decode(encoded);
+        char[] units = new char[bytes.length / 2];
+        for (int index = 0; index < units.length; index++) {
+            units[index] = (char) (((bytes[index * 2] & 0xff) << 8) | (bytes[index * 2 + 1] & 0xff));
+        }
+        return new String(units);
+    }
+
+    @Test
     void hsqldbBlobProtocolSearchesAndTruncatesSuccessfully() throws Exception {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try (PipedInputStream serverInput = new PipedInputStream();
