@@ -421,6 +421,23 @@ class AgentServerTest {
             assertTrue(created.path("result").isObject(), created.toString());
             String arrayId = created.at("/result/arrayId").asText();
 
+            ObjectNode typedCreate = sessionOnly(owner);
+            typedCreate.put("typeName", "INTEGER");
+            typedCreate.putArray("elements").addObject().put("kind", "integer").put("value", 42);
+            write(requests, request(121, "create_array", typedCreate));
+            JsonNode typedCreated = read(responses);
+            assertTrue(typedCreated.path("result").isObject(), typedCreated.toString());
+            ObjectNode typedArray = sessionOnly(owner);
+            typedArray.put("arrayId", typedCreated.at("/result/arrayId").asText());
+            write(requests, request(122, "array_metadata", typedArray));
+            assertEquals("INTEGER", read(responses).at("/result/baseTypeName").asText());
+            write(requests, request(123, "array_values", typedArray));
+            JsonNode typedValue = read(responses).at("/result/values/0");
+            assertEquals("integer", typedValue.path("kind").asText());
+            assertEquals(42, typedValue.path("value").asInt());
+            write(requests, request(124, "free_array", typedArray));
+            read(responses);
+
             ObjectNode nullCreate = sessionOnly(owner);
             nullCreate.put("typeName", "INTEGER");
             nullCreate.putNull("elements");

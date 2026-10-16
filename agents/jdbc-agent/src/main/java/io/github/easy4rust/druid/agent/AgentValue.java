@@ -74,7 +74,13 @@ public record AgentValue(String kind, JsonNode value) {
             case "null" -> null;
             case "bool" -> value.booleanValue();
             case "int" -> value.longValue();
+            case "byte" -> (byte) checkedInteger(Byte.MIN_VALUE, Byte.MAX_VALUE);
+            case "short" -> (short) checkedInteger(Short.MIN_VALUE, Short.MAX_VALUE);
+            case "integer" -> (int) checkedInteger(Integer.MIN_VALUE, Integer.MAX_VALUE);
+            case "long" -> value.longValue();
             case "float" -> value.doubleValue();
+            case "float32" -> value.floatValue();
+            case "double" -> value.doubleValue();
             case "decimal" -> new BigDecimal(value.asText());
             case "date" -> Date.valueOf(LocalDate.parse(value.asText()));
             case "time" -> Time.valueOf(LocalTime.parse(value.asText()));
@@ -96,9 +102,9 @@ public record AgentValue(String kind, JsonNode value) {
             case Types.BOOLEAN, Types.BIT ->
                     new AgentValue("bool", nodes.booleanNode((Boolean) raw));
             case Types.TINYINT, Types.SMALLINT, Types.INTEGER, Types.BIGINT ->
-                    new AgentValue("int", nodes.numberNode(((Number) raw).longValue()));
+                    integerArrayElement(raw, nodes);
             case Types.FLOAT, Types.REAL, Types.DOUBLE ->
-                    new AgentValue("float", nodes.numberNode(((Number) raw).doubleValue()));
+                    floatingArrayElement(raw, nodes);
             case Types.NUMERIC, Types.DECIMAL ->
                     new AgentValue("decimal", nodes.textNode(((BigDecimal) raw).toPlainString()));
             case Types.DATE -> new AgentValue("date", nodes.textNode(((Date) raw).toLocalDate().toString()));
@@ -112,5 +118,39 @@ public record AgentValue(String kind, JsonNode value) {
             default -> throw new SQLFeatureNotSupportedException(
                     "JDBC Agent Array element SQL type " + jdbcType + " is not supported", "0A000");
         };
+    }
+
+    private long checkedInteger(long minimum, long maximum) throws SQLException {
+        if (!value.isIntegralNumber() || !value.canConvertToLong()
+                || value.longValue() < minimum || value.longValue() > maximum) {
+            throw new SQLException("JDBC Agent array integer element is outside its declared range");
+        }
+        return value.longValue();
+    }
+
+    private static AgentValue integerArrayElement(Object raw, JsonNodeFactory nodes) throws SQLException {
+        if (raw instanceof Byte number) {
+            return new AgentValue("byte", nodes.numberNode(number));
+        }
+        if (raw instanceof Short number) {
+            return new AgentValue("short", nodes.numberNode(number));
+        }
+        if (raw instanceof Integer number) {
+            return new AgentValue("integer", nodes.numberNode(number));
+        }
+        if (raw instanceof Long number) {
+            return new AgentValue("long", nodes.numberNode(number));
+        }
+        throw new SQLException("JDBC Agent Array returned an unexpected integer element type");
+    }
+
+    private static AgentValue floatingArrayElement(Object raw, JsonNodeFactory nodes) throws SQLException {
+        if (raw instanceof Float number) {
+            return new AgentValue("float32", nodes.numberNode(number));
+        }
+        if (raw instanceof Double number) {
+            return new AgentValue("double", nodes.numberNode(number));
+        }
+        throw new SQLException("JDBC Agent Array returned an unexpected floating element type");
     }
 }
