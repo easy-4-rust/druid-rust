@@ -1,0 +1,5 @@
+# Tasks
+
+- [x] 1. Add a failing verifier test that the parent does not preempt bounded Task 6 method parity. The focused test failed on the existing `timeout=1800` call.
+- [x] 2. Apply the narrow timeout composition fix and pass verifier self-tests and OpenSpec validation. All 11 verifier self-tests and strict OpenSpec validation passed.
+- [x] 3. Run the full final gate, record the result, then sync/archive and commit/push the verified feature. With `CARGO_NET_OFFLINE=true` and Cargo target/temp on D:, `python scripts/verify_no_physical_standard.py` exited 0: 828 production Rust files scanned; public, production, and rustdoc Physical names all 0; 79 migration identities, 11 newly discovered identities, 75 transitional consumer identities, 1,283 deleted-test function migrations, and 128 public config/wire breaks closed; active transitional consumers 0. The first online attempt exposed a TLS failure in nested temporary Cargo projects; the exact external-consumer test passed 3/3 when rerun offline. This closure is for the no-physical-standard gate, not the remaining Task 8 semantic inventory or production-readiness gates.
