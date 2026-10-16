@@ -919,7 +919,10 @@ mod array_tests {
         );
         assert_eq!(
             array.capabilities(),
-            ResourceOperations::READ | ResourceOperations::RANGE | ResourceOperations::FREE
+            ResourceOperations::READ
+                | ResourceOperations::RANGE
+                | ResourceOperations::RESULT_SET
+                | ResourceOperations::FREE
         );
         let count_before_unsupported = requests.lock().expect("requests lock").len();
         let unsupported = array

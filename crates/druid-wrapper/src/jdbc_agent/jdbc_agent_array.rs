@@ -1,4 +1,5 @@
 use super::agent_value::AgentValue;
+use super::jdbc_agent_array_result_set::JdbcAgentArrayResultSet;
 use super::jdbc_agent_connection::JdbcAgentConnection;
 use crate::standard_adapter_executor::StandardExecutor;
 use druid_rdbc::error::RdbcError;
@@ -6,6 +7,7 @@ use druid_rdbc::resource::{Array, ResourceOperations};
 use druid_rdbc::result_set::ResultSet;
 use druid_rdbc::types::{RdbcObject, RdbcTypeMap};
 use serde_json::{json, Value as JsonValue};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 /// 由单个 JDBC Agent session 拥有的远程 SQL Array。对应 Java: java.sql.Array。
@@ -13,6 +15,7 @@ pub(super) struct JdbcAgentArray {
     executor: Arc<dyn StandardExecutor>,
     array_id: String,
     freed: bool,
+    active: Arc<AtomicBool>,
 }
 
 impl JdbcAgentArray {
@@ -22,6 +25,7 @@ impl JdbcAgentArray {
             executor,
             array_id,
             freed: false,
+            active: Arc::new(AtomicBool::new(true)),
         }
     }
 
@@ -74,7 +78,10 @@ impl std::fmt::Debug for JdbcAgentArray {
 #[async_trait::async_trait]
 impl Array for JdbcAgentArray {
     fn capabilities(&self) -> ResourceOperations {
-        ResourceOperations::READ | ResourceOperations::RANGE | ResourceOperations::FREE
+        ResourceOperations::READ
+            | ResourceOperations::RANGE
+            | ResourceOperations::RESULT_SET
+            | ResourceOperations::FREE
     }
 
     async fn base_type_name(&mut self) -> Result<String, RdbcError> {
@@ -129,7 +136,13 @@ impl Array for JdbcAgentArray {
 
     async fn result_set(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.ensure_open()?;
-        Err(RdbcError::feature_not_supported("Array#getResultSet"))
+        JdbcAgentArrayResultSet::open(
+            Arc::clone(&self.executor),
+            Arc::clone(&self.active),
+            &self.array_id,
+            None,
+        )
+        .await
     }
 
     async fn result_set_with_type_map(
@@ -146,9 +159,13 @@ impl Array for JdbcAgentArray {
         _count: i32,
     ) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.ensure_open()?;
-        Err(RdbcError::feature_not_supported(
-            "Array#getResultSet(long,int)",
-        ))
+        JdbcAgentArrayResultSet::open(
+            Arc::clone(&self.executor),
+            Arc::clone(&self.active),
+            &self.array_id,
+            Some((_index, _count)),
+        )
+        .await
     }
 
     async fn result_set_range_with_type_map(
@@ -172,6 +189,7 @@ impl Array for JdbcAgentArray {
             .connection_control("free_array", json!({"arrayId": self.array_id}))
             .await?;
         self.freed = true;
+        self.active.store(false, Ordering::Release);
         Ok(())
     }
 }

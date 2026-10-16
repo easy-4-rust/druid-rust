@@ -5,6 +5,7 @@
 - [x] 2b. Add Agent Array result-set cursor operations, owner cleanup, and H2 protocol tests.
 - [x] 2c. Preserve byte, short, integer, long, float and double Java wrapper identity across the Rust/Java Array element protocol; verify H2 INTEGER metadata and roundtrip.
 - [x] 3a. Connect `Connection#create_array_of` and the Rust Array metadata, value/range, free and retry methods through the owned executor; verify with fake transport and real H2, while advertising only READ/RANGE/FREE.
-- [ ] 3b. Expose Array result-set cursors in Rust without eager materialization, then verify parent/pooled-owner close and cancellation semantics before advertising RESULT_SET.
+- [x] 3b1. Expose a forward-only Array ResultSet through the owned executor with bounded 8-row pages, typed values, metadata and remote close; verify the page boundary and parent `free()` invalidation against real H2 before advertising RESULT_SET.
+- [ ] 3b2. Verify pooled-owner close, cancellation and large-array (>500 elements) behavior. A parallel real-H2 503-element trial timed out at the Agent's 30-second request limit; after consolidating the shared-runtime tests into one session, the 9-element page-boundary trial passed twice. Recheck large arrays in an isolated session before claiming complete cursor lifecycle coverage.
 - [ ] 4. Run Java and Rust real-H2 tests, resource contract regressions, and Task 8 semantic verifier; update only proven inventory states.
 - [ ] 5. Validate OpenSpec, review compatibility and resource failure behavior, then sync/archive after complete implementation.
