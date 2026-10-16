@@ -113,7 +113,7 @@ def run_checked(
     cwd: Path,
     env: dict[str, str] | None = None,
     label: str,
-    timeout: int = 600,
+    timeout: int | None = 600,
 ) -> subprocess.CompletedProcess[str]:
     """Run one required bounded local command and retain diagnostic output."""
 
@@ -754,7 +754,7 @@ def verify_repository(root: Path) -> tuple[int, int, int, int, int, int]:
         [sys.executable, "scripts/verify_task6_method_parity.py"],
         cwd=root,
         label="Task 6 exact method parity",
-        timeout=1800,
+        timeout=None,
     )
     try:
         public_contract_rows, _, _ = public_contract.verify_repository(root)

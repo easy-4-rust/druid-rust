@@ -133,6 +133,32 @@ class NoPhysicalVerifierTest(unittest.TestCase):
             )
         self.assertEqual(run.call_args.kwargs["timeout"], 1800)
 
+    def test_nested_parity_runner_waits_for_child_and_propagates_failure(self) -> None:
+        success = subprocess.CompletedProcess([], 0, stdout="complete", stderr="")
+        with patch("subprocess.run", return_value=success) as run:
+            self.assertEqual(
+                verifier.run_checked(
+                    ["python", "parity.py"],
+                    cwd=self.root,
+                    label="Task 6 exact method parity",
+                    timeout=None,
+                ).stdout,
+                "complete",
+            )
+        self.assertIsNone(run.call_args.kwargs["timeout"])
+
+        failure = subprocess.CompletedProcess([], 7, stdout="", stderr="child failed")
+        with patch("subprocess.run", return_value=failure):
+            self.assert_rejected(
+                "Task 6 exact method parity failed: child failed",
+                lambda: verifier.run_checked(
+                    ["python", "parity.py"],
+                    cwd=self.root,
+                    label="Task 6 exact method parity",
+                    timeout=None,
+                ),
+            )
+
     def test_discovers_every_package_source_instead_of_a_fixed_file_list(self) -> None:
         self.fixture.write(
             "crates/druid/src/unlisted/deep.rs",
@@ -313,7 +339,7 @@ class NoPhysicalVerifierTest(unittest.TestCase):
         source = inspect.getsource(verifier.verify_repository)
         self.assertIn("verify_task6_method_parity.py", source)
         self.assertIn("sys.executable", source)
-        self.assertIn("timeout=1800", source)
+        self.assertIn("timeout=None", source)
         self.assertIn("verify_handoff_ledgers", source)
         self.assertIn("deleted_test_parity.execute_targets", source)
         self.assertIn("public_contract.verify_repository", source)
