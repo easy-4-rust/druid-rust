@@ -2,6 +2,7 @@ package io.github.easy4rust.druid.agent;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -26,6 +27,7 @@ public final class AgentSession implements Closeable {
     private final ReentrantLock operationLock = new ReentrantLock();
     private final Map<String, PreparedStatement> preparedStatements = new ConcurrentHashMap<>();
     private final Map<String, AgentCursor> cursors = new ConcurrentHashMap<>();
+    private final Map<String, Array> arrays = new ConcurrentHashMap<>();
     private final Map<Long, Statement> activeStatements = new ConcurrentHashMap<>();
     private final Map<String, Savepoint> savepoints = new ConcurrentHashMap<>();
 
@@ -175,6 +177,31 @@ public final class AgentSession implements Closeable {
         }
     }
 
+    /** 将驱动 Array 注册到当前逻辑连接资源域并返回不可猜测句柄。 */
+    public String registerArray(Array array) {
+        String arrayId = UUID.randomUUID().toString();
+        arrays.put(arrayId, Objects.requireNonNull(array, "array"));
+        return arrayId;
+    }
+
+    /** 按当前会话句柄取得仍有效的驱动 Array。 */
+    public Array array(String arrayId) throws SQLException {
+        Array array = arrays.get(arrayId);
+        if (Objects.isNull(array)) {
+            throw new SQLException("JDBC Agent array is not open: " + arrayId);
+        }
+        return array;
+    }
+
+    /** 释放驱动 Array；失败时保留句柄以允许重试，成功后重复释放无副作用。 */
+    public void freeArray(String arrayId) throws SQLException {
+        Array array = arrays.get(arrayId);
+        if (Objects.nonNull(array)) {
+            array.free();
+            arrays.remove(arrayId, array);
+        }
+    }
+
     /** 将正在 JDBC 驱动中执行的语句关联到协议请求 ID。 */
     public void activate(long requestId, Statement statement) {
         activeStatements.put(requestId, Objects.requireNonNull(statement, "statement"));
@@ -275,6 +302,13 @@ public final class AgentSession implements Closeable {
         for (String statementId : new ArrayList<>(preparedStatements.keySet())) {
             try {
                 closePreparedStatement(statementId);
+            } catch (SQLException exception) {
+                failure = appendFailure(failure, exception);
+            }
+        }
+        for (String arrayId : new ArrayList<>(arrays.keySet())) {
+            try {
+                freeArray(arrayId);
             } catch (SQLException exception) {
                 failure = appendFailure(failure, exception);
             }
