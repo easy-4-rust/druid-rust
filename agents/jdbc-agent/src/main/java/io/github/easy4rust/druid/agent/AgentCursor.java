@@ -120,8 +120,10 @@ public final class AgentCursor implements AutoCloseable {
         }
         ArrayNode row = JsonNodeFactory.instance.arrayNode();
         for (int index = 1; index <= metadata.getColumnCount(); index++) {
-            row.add(objectMapper.valueToTree(AgentValue.fromResultSet(
-                    resultSet, metadata.getColumnType(index), index)));
+            AgentValue value = Objects.nonNull(arrayId) && index == 2
+                    ? AgentValue.fromArrayElement(resultSet.getObject(index), metadata.getColumnType(index))
+                    : AgentValue.fromResultSet(resultSet, metadata.getColumnType(index), index);
+            row.add(objectMapper.valueToTree(value));
         }
         return row;
     }

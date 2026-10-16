@@ -435,6 +435,10 @@ class AgentServerTest {
             JsonNode typedValue = read(responses).at("/result/values/0");
             assertEquals("integer", typedValue.path("kind").asText());
             assertEquals(42, typedValue.path("value").asInt());
+            write(requests, request(125, "array_result_set", typedArray));
+            JsonNode typedCursorValue = read(responses).at("/result/rows/0/1");
+            assertEquals("integer", typedCursorValue.path("kind").asText());
+            assertEquals(42, typedCursorValue.path("value").asInt());
             write(requests, request(124, "free_array", typedArray));
             read(responses);
 
