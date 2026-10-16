@@ -26,6 +26,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Base64;
 import javax.sql.XAConnection;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
@@ -541,6 +542,114 @@ class AgentServerTest {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void h2BlobProtocolPreservesBytesPositionsDriverErrorsAndFree() throws Exception {
+        SQLException expectedPositionError;
+        try (Connection direct = DriverManager.getConnection("jdbc:h2:mem:agent-blob-direct")) {
+            java.sql.Blob blob = direct.createBlob();
+            expectedPositionError = assertThrows(SQLException.class, () -> blob.getBytes(1, -1));
+            blob.free();
+        }
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            assertEquals("ready", read(responses).path("method").asText());
+            assertTrue(call(requests, responses, 201, "handshake", handshakePayload()).path("result").isObject());
+            String sessionId = call(requests, responses, 202, "open_session", connectPayload())
+                    .at("/result/sessionId").asText();
+            String blobId = call(requests, responses, 203, "create_blob", sessionOnly(sessionId))
+                    .at("/result/blobId").asText();
+            ObjectNode blobRequest = sessionOnly(sessionId);
+            blobRequest.put("blobId", blobId);
+            assertEquals(0, call(requests, responses, 204, "blob_length", blobRequest)
+                    .at("/result/length").asLong());
+
+            ObjectNode write = blobRequest.deepCopy();
+            write.put("position", 1L);
+            write.put("bytes", Base64.getEncoder().encodeToString(new byte[] {10, 20, 30, 40}));
+            assertEquals(4, call(requests, responses, 205, "blob_set_bytes", write)
+                    .at("/result/written").asInt());
+            ObjectNode read = blobRequest.deepCopy();
+            read.put("position", 2L);
+            read.put("length", 2);
+            byte[] range = Base64.getDecoder().decode(call(requests, responses, 206, "blob_get_bytes", read)
+                    .at("/result/bytes").asText());
+            assertTrue(Arrays.equals(new byte[] {20, 30}, range));
+
+            ObjectNode rangedWrite = blobRequest.deepCopy();
+            rangedWrite.put("position", 3L);
+            rangedWrite.put("bytes", Base64.getEncoder().encodeToString(new byte[] {1, 2, 3, 4}));
+            rangedWrite.put("offset", 1);
+            rangedWrite.put("length", 2);
+            JsonNode rangedResponse = call(requests, responses, 207, "blob_set_bytes", rangedWrite);
+            assertEquals("HYC00", rangedResponse.at("/error/data/sqlState").asText());
+            assertEquals(50100, rangedResponse.at("/error/data/vendorCode").asInt());
+            ObjectNode search = blobRequest.deepCopy();
+            search.put("pattern", Base64.getEncoder().encodeToString(new byte[] {20, 30}));
+            search.put("start", 1L);
+            JsonNode searchResponse = call(requests, responses, 208, "blob_position_bytes", search);
+            assertEquals("HYC00", searchResponse.at("/error/data/sqlState").asText());
+            assertEquals(50100, searchResponse.at("/error/data/vendorCode").asInt());
+            ObjectNode truncate = blobRequest.deepCopy();
+            truncate.put("length", 3L);
+            JsonNode truncateResponse = call(requests, responses, 209, "blob_truncate", truncate);
+            assertEquals("HYC00", truncateResponse.at("/error/data/sqlState").asText());
+            assertEquals(50100, truncateResponse.at("/error/data/vendorCode").asInt());
+            assertEquals(4, call(requests, responses, 210, "blob_length", blobRequest)
+                    .at("/result/length").asLong());
+            ObjectNode invalid = blobRequest.deepCopy();
+            invalid.put("position", 1L);
+            invalid.put("length", -1);
+            JsonNode error = call(requests, responses, 211, "blob_get_bytes", invalid).path("error");
+            assertEquals(expectedPositionError.getSQLState(), error.at("/data/sqlState").asText());
+            assertEquals(expectedPositionError.getErrorCode(), error.at("/data/vendorCode").asInt());
+
+            assertTrue(call(requests, responses, 212, "free_blob", blobRequest).path("result").isObject());
+            assertTrue(call(requests, responses, 213, "blob_length", blobRequest).path("error").isObject());
+            String rangedBlobId = call(requests, responses, 215, "create_blob", sessionOnly(sessionId))
+                    .at("/result/blobId").asText();
+            ObjectNode initialRangedWrite = sessionOnly(sessionId);
+            initialRangedWrite.put("blobId", rangedBlobId);
+            initialRangedWrite.put("position", 1L);
+            initialRangedWrite.put("bytes", Base64.getEncoder().encodeToString(new byte[] {7, 8, 9, 10}));
+            initialRangedWrite.put("offset", 1);
+            initialRangedWrite.put("length", 2);
+            JsonNode initialRangedResponse = call(requests, responses, 216, "blob_set_bytes", initialRangedWrite);
+            assertEquals(2, initialRangedResponse.at("/result/written").asInt(), initialRangedResponse.toString());
+            ObjectNode rangedRead = sessionOnly(sessionId);
+            rangedRead.put("blobId", rangedBlobId);
+            rangedRead.put("position", 1L);
+            rangedRead.put("length", 2);
+            assertTrue(Arrays.equals(new byte[] {8, 9}, Base64.getDecoder().decode(
+                    call(requests, responses, 217, "blob_get_bytes", rangedRead)
+                            .at("/result/bytes").asText())));
+            assertTrue(call(requests, responses, 218, "free_blob", rangedRead).path("result").isObject());
+            assertTrue(call(requests, responses, 214, "close_session", sessionOnly(sessionId))
+                    .path("result").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private JsonNode call(BufferedWriter requests, BufferedReader responses, long id,
+            String method, ObjectNode params) throws Exception {
+        write(requests, request(id, method, params));
+        JsonNode response = read(responses);
+        assertEquals(id, response.path("id").asLong());
+        return response;
     }
 
     private ObjectNode request(long id, String method, JsonNode params) {

@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.Array;
+import java.sql.Blob;
 import java.sql.DatabaseMetaData;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -56,6 +57,7 @@ public final class AgentServer implements Closeable {
     private static final int MAX_FRAME_BYTES = 16 * 1024 * 1024;
     private static final int DEFAULT_PAGE_SIZE = 500;
     private static final int MAX_PAGE_SIZE = 10_000;
+    private static final int MAX_BLOB_BYTES = 8 * 1024 * 1024;
     private static final int DEFAULT_RESPONSE_BYTES = 8 * 1024 * 1024;
     private static final int MIN_RESPONSE_BYTES = 1024;
     private static final List<String> AGENT_CAPABILITIES = List.of(
@@ -261,6 +263,13 @@ public final class AgentServer implements Closeable {
             case "array_values" -> arrayValues(session, params);
             case "array_result_set" -> arrayResultSet(session, params);
             case "free_array" -> freeArray(session, params);
+            case "create_blob" -> createBlob(session);
+            case "blob_length" -> blobLength(session, params);
+            case "blob_get_bytes" -> blobGetBytes(session, params);
+            case "blob_set_bytes" -> blobSetBytes(session, params);
+            case "blob_position_bytes" -> blobPositionBytes(session, params);
+            case "blob_truncate" -> blobTruncate(session, params);
+            case "free_blob" -> freeBlob(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);
             case "reopen_logical_connection" -> reopenLogicalConnection(session);
             case "xa_start" -> xaStart(session, params);
@@ -563,6 +572,79 @@ public final class AgentServer implements Closeable {
     private JsonNode freeArray(AgentSession session, JsonNode payload) throws SQLException {
         session.freeArray(requiredText(payload, "arrayId"));
         return JsonNodeFactory.instance.objectNode();
+    }
+
+    /** 创建由当前 Agent session 独占的驱动 Blob 句柄。 */
+    private JsonNode createBlob(AgentSession session) throws SQLException {
+        Blob blob = session.connection().createBlob();
+        return JsonNodeFactory.instance.objectNode().put("blobId", session.registerBlob(blob));
+    }
+
+    /** 返回驱动 Blob 的实际字节长度。 */
+    private JsonNode blobLength(AgentSession session, JsonNode payload) throws SQLException {
+        return JsonNodeFactory.instance.objectNode()
+                .put("length", session.blob(requiredText(payload, "blobId")).length());
+    }
+
+    /** 按 JDBC 的 1-based 位置读取有界字节范围，保留驱动异常。 */
+    private JsonNode blobGetBytes(AgentSession session, JsonNode payload) throws SQLException {
+        Blob blob = session.blob(requiredText(payload, "blobId"));
+        int length = requiredInt(payload, "length");
+        if (length > MAX_BLOB_BYTES) {
+            throw new IllegalArgumentException("Blob read length exceeds maximum request size");
+        }
+        byte[] bytes = blob.getBytes(requiredLong(payload, "position"), length);
+        if (bytes.length > MAX_BLOB_BYTES) {
+            throw new SQLException("JDBC Blob#getBytes returned too many bytes");
+        }
+        return JsonNodeFactory.instance.objectNode().put("bytes", Base64.getEncoder().encodeToString(bytes));
+    }
+
+    /** 委托两种 Blob#setBytes 重载；offset 和 length 必须成对提供。 */
+    private JsonNode blobSetBytes(AgentSession session, JsonNode payload) throws SQLException {
+        Blob blob = session.blob(requiredText(payload, "blobId"));
+        byte[] bytes = blobRequestBytes(payload, "bytes");
+        boolean hasOffset = payload.has("offset");
+        boolean hasLength = payload.has("length");
+        if (hasOffset != hasLength) {
+            throw new IllegalArgumentException("offset and length must be supplied together");
+        }
+        long position = requiredLong(payload, "position");
+        int written = hasOffset
+                ? blob.setBytes(position, bytes, requiredInt(payload, "offset"), requiredInt(payload, "length"))
+                : blob.setBytes(position, bytes);
+        return JsonNodeFactory.instance.objectNode().put("written", written);
+    }
+
+    /** 用字节模式搜索 Blob，直接返回 JDBC 的 1-based 位置或 -1。 */
+    private JsonNode blobPositionBytes(AgentSession session, JsonNode payload) throws SQLException {
+        Blob blob = session.blob(requiredText(payload, "blobId"));
+        return JsonNodeFactory.instance.objectNode().put("position",
+                blob.position(blobRequestBytes(payload, "pattern"), requiredLong(payload, "start")));
+    }
+
+    /** 将 Blob 截断到驱动指定长度。 */
+    private JsonNode blobTruncate(AgentSession session, JsonNode payload) throws SQLException {
+        session.blob(requiredText(payload, "blobId")).truncate(requiredLong(payload, "length"));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    /** 释放远程 Blob；失败时会话保留句柄供重试。 */
+    private JsonNode freeBlob(AgentSession session, JsonNode payload) throws SQLException {
+        session.freeBlob(requiredText(payload, "blobId"));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private byte[] blobRequestBytes(JsonNode payload, String field) {
+        String encoded = requiredText(payload, field);
+        if (encoded.length() > ((MAX_BLOB_BYTES + 2L) / 3L) * 4L) {
+            throw new IllegalArgumentException(field + " exceeds maximum request size");
+        }
+        byte[] bytes = Base64.getDecoder().decode(encoded);
+        if (bytes.length > MAX_BLOB_BYTES) {
+            throw new IllegalArgumentException(field + " exceeds maximum request size");
+        }
+        return bytes;
     }
 
     /** 将驱动 Array#getResultSet 作为独立子游标分页输出。 */
