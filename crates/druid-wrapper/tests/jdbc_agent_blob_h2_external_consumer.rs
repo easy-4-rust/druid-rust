@@ -58,7 +58,10 @@ async fn h2_blob_byte_contract_through_standard_connection() {
         if sql.sql_state() == Some("HYC00") && sql.error_code() == 50100));
     assert_eq!(
         blob.capabilities(),
-        ResourceOperations::READ | ResourceOperations::RANGE | ResourceOperations::FREE,
+        ResourceOperations::READ
+            | ResourceOperations::STREAM
+            | ResourceOperations::RANGE
+            | ResourceOperations::FREE,
     );
     blob.free().await.expect("free");
     blob.free().await.expect("idempotent free");
@@ -77,4 +80,69 @@ async fn h2_blob_byte_contract_through_standard_connection() {
     );
     ranged.free().await.expect("free second Blob");
     connection.close().await.expect("close connection");
+}
+
+/// 输入流由同步 RDBC 消费者在线程池读取，远端每次 RPC 不得超过 64 KiB。
+#[tokio::test]
+async fn h2_blob_input_stream_pages_and_parent_invalidation() {
+    let (Some(agent_jar), Some(driver_jar)) = (
+        std::env::var_os("DRUID_JDBC_AGENT_JAR"),
+        std::env::var_os("DRUID_JDBC_DRIVER_JAR"),
+    ) else {
+        return;
+    };
+    let options = JdbcAgentOptions::java(
+        "java",
+        [PathBuf::from(agent_jar), PathBuf::from(driver_jar)],
+    )
+    .expect("JDBC Agent classpath")
+    .runtime_identity("blob-stream-contract", "local", "isolated");
+    let factory = JdbcAgentConnectionFactory::new(
+        "jdbc:h2:mem:druid_rust_blob_stream;DB_CLOSE_DELAY=-1",
+        Some("SELECT 1".to_owned()),
+        options,
+    );
+    let mut connection = factory.create().await.expect("H2 JDBC connection");
+    let mut blob = connection.create_blob().await.expect("H2 Blob");
+    let source = vec![0x5au8; 160 * 1024];
+    blob.set_bytes(1, &source)
+        .await
+        .expect("write source bytes");
+    let stream = blob.get_binary_stream().await.expect("open remote input");
+    let read = tokio::task::spawn_blocking(move || stream.read_to_end())
+        .await
+        .expect("reader thread")
+        .expect("read all pages");
+    assert_eq!(read, source);
+
+    let ranged = blob
+        .get_binary_stream_range(1024, 70000)
+        .await
+        .expect("open ranged input");
+    let read = tokio::task::spawn_blocking(move || ranged.read_to_end())
+        .await
+        .expect("ranged reader thread")
+        .expect("read ranged pages");
+    assert_eq!(read, source[1023..71023]);
+
+    let child = blob.get_binary_stream().await.expect("second input");
+    blob.free().await.expect("free parent with child open");
+    assert!(tokio::task::spawn_blocking(move || child.read_to_end())
+        .await
+        .expect("invalidated reader thread")
+        .is_err());
+    let mut other = connection.create_blob().await.expect("another H2 Blob");
+    other
+        .set_bytes(1, &[1, 2, 3])
+        .await
+        .expect("write child source");
+    let child = other
+        .get_binary_stream()
+        .await
+        .expect("open child before close");
+    connection.close().await.expect("close connection");
+    assert!(tokio::task::spawn_blocking(move || child.read_to_end())
+        .await
+        .expect("closed connection reader thread")
+        .is_err());
 }

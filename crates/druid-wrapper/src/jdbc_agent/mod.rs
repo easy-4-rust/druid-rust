@@ -8,6 +8,7 @@ mod agent_value;
 mod jdbc_agent_array;
 mod jdbc_agent_array_result_set;
 mod jdbc_agent_blob;
+mod jdbc_agent_blob_input_stream;
 mod jdbc_agent_client;
 mod jdbc_agent_connection;
 mod jdbc_agent_connection_factory;

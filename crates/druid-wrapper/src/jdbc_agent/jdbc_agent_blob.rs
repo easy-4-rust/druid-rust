@@ -1,3 +1,4 @@
+use super::jdbc_agent_blob_input_stream::JdbcAgentBlobInputStream;
 use super::jdbc_agent_connection::JdbcAgentConnection;
 use crate::standard_adapter_executor::StandardExecutor;
 use base64::Engine;
@@ -46,6 +47,41 @@ impl JdbcAgentBlob {
                 JdbcAgentConnection::protocol_error(format!("{operation} returned no {field}"))
             })
     }
+
+    async fn open_input_stream(
+        &self,
+        range: Option<(i64, i64)>,
+    ) -> Result<RdbcInputStream, RdbcError> {
+        let runtime = tokio::runtime::Handle::try_current().map_err(|error| {
+            RdbcError::DriverError(format!("Blob stream requires a Tokio runtime: {error}"))
+        })?;
+        let payload = match range {
+            Some((position, length)) => {
+                json!({"blobId": self.blob_id, "position": position, "length": length})
+            }
+            None => json!({"blobId": self.blob_id}),
+        };
+        let response = self.control("blob_open_input_stream", payload).await?;
+        let stream_id = response
+            .get("streamId")
+            .and_then(JsonValue::as_str)
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| JdbcAgentConnection::protocol_error("Blob open returned no streamId"))?
+            .to_owned();
+        match JdbcAgentBlobInputStream::new(Arc::clone(&self.executor), stream_id.clone(), runtime)
+        {
+            Ok(stream) => Ok(RdbcInputStream::new(stream)),
+            Err(error) => {
+                let _ = self
+                    .executor
+                    .connection_control("blob_close_stream", json!({"streamId": stream_id}))
+                    .await;
+                Err(RdbcError::DriverError(format!(
+                    "Blob stream worker could not start: {error}"
+                )))
+            }
+        }
+    }
 }
 
 impl std::fmt::Debug for JdbcAgentBlob {
@@ -61,8 +97,11 @@ impl std::fmt::Debug for JdbcAgentBlob {
 #[async_trait::async_trait]
 impl Blob for JdbcAgentBlob {
     fn capabilities(&self) -> ResourceOperations {
-        // SEARCH、TRUNCATE 在 H2 上会被驱动拒绝；STREAM 等待同步流桥接验证。
-        ResourceOperations::READ | ResourceOperations::RANGE | ResourceOperations::FREE
+        // SEARCH、TRUNCATE 在 H2 上会被驱动拒绝；写入流另行验证。
+        ResourceOperations::READ
+            | ResourceOperations::RANGE
+            | ResourceOperations::STREAM
+            | ResourceOperations::FREE
     }
 
     async fn length(&mut self) -> Result<i64, RdbcError> {
@@ -91,8 +130,7 @@ impl Blob for JdbcAgentBlob {
     }
 
     async fn get_binary_stream(&mut self) -> Result<RdbcInputStream, RdbcError> {
-        self.ensure_open()?;
-        Err(RdbcError::feature_not_supported("Blob#getBinaryStream"))
+        self.open_input_stream(None).await
     }
 
     async fn position_bytes(
@@ -187,13 +225,10 @@ impl Blob for JdbcAgentBlob {
 
     async fn get_binary_stream_range(
         &mut self,
-        _position: i64,
-        _length: i64,
+        position: i64,
+        length: i64,
     ) -> Result<RdbcInputStream, RdbcError> {
-        self.ensure_open()?;
-        Err(RdbcError::feature_not_supported(
-            "Blob#getBinaryStream(long,long)",
-        ))
+        self.open_input_stream(Some((position, length))).await
     }
 }
 
