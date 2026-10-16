@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.sql.Array;
 import java.sql.Blob;
+import java.sql.Clob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -35,6 +36,7 @@ public final class AgentSession implements Closeable {
     private final Map<String, AgentCursor> cursors = new ConcurrentHashMap<>();
     private final Map<String, Array> arrays = new ConcurrentHashMap<>();
     private final Map<String, Blob> blobs = new ConcurrentHashMap<>();
+    private final Map<String, Clob> clobs = new ConcurrentHashMap<>();
     private final Map<String, BlobStreamHandle> blobStreams = new ConcurrentHashMap<>();
     private final Map<Long, Statement> activeStatements = new ConcurrentHashMap<>();
     private final Map<Long, String> activeBlobReads = new HashMap<>();
@@ -328,6 +330,31 @@ public final class AgentSession implements Closeable {
         }
     }
 
+    /** 将驱动 Clob 注册到当前逻辑连接资源域，返回不可猜测句柄。 */
+    public String registerClob(Clob clob) {
+        String clobId = UUID.randomUUID().toString();
+        clobs.put(clobId, Objects.requireNonNull(clob, "clob"));
+        return clobId;
+    }
+
+    /** 按当前会话句柄取得仍有效的驱动 Clob。 */
+    public Clob clob(String clobId) throws SQLException {
+        Clob clob = clobs.get(clobId);
+        if (Objects.isNull(clob)) {
+            throw new SQLException("JDBC Agent clob is not open: " + clobId);
+        }
+        return clob;
+    }
+
+    /** 释放驱动 Clob；失败时保留句柄以允许重试，成功后重复释放无副作用。 */
+    public void freeClob(String clobId) throws SQLException {
+        Clob clob = clobs.get(clobId);
+        if (Objects.nonNull(clob)) {
+            clob.free();
+            clobs.remove(clobId, clob);
+        }
+    }
+
     private static final class BlobStreamHandle {
         private final String blobId;
         private final Closeable stream;
@@ -473,6 +500,13 @@ public final class AgentSession implements Closeable {
         for (String blobId : new ArrayList<>(blobs.keySet())) {
             try {
                 freeBlob(blobId);
+            } catch (SQLException exception) {
+                failure = appendFailure(failure, exception);
+            }
+        }
+        for (String clobId : new ArrayList<>(clobs.keySet())) {
+            try {
+                freeClob(clobId);
             } catch (SQLException exception) {
                 failure = appendFailure(failure, exception);
             }
