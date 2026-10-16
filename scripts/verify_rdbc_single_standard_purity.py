@@ -56,7 +56,15 @@ ALLOWED_EXTERNAL_IMPORT_ROOTS = {
     "usize",
     "uuid",
 }
-ALLOWED_BARE_PRELUDE_MACROS = {"format", "format_args", "matches", "writeln"}
+ALLOWED_BARE_PRELUDE_MACROS = {
+    "assert",
+    "assert_eq",
+    "format",
+    "format_args",
+    "matches",
+    "vec",
+    "writeln",
+}
 ALLOWED_QUALIFIED_MACRO_ROOTS = {"alloc", "core", "std"}
 CANONICAL_CRATE_MACRO_SCOPES = {
     "impl_standard_wrapper": ("wrapper", "wrapper"),

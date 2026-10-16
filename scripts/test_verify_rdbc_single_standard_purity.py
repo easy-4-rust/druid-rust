@@ -404,6 +404,46 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "matches|shadow"):
             verify_tree(self.root, phase="final")
 
+    def test_final_phase_proves_standard_assert_and_vec_macro_provenance(self) -> None:
+        """Ordinary prelude macros pass only before a local textual shadow appears."""
+
+        source = self.root / "connection/contract.rs"
+        invocations = {
+            "assert": "assert!(true);",
+            "assert_eq": "assert_eq!(1, 1);",
+            "vec": "let _ = vec![1u8];",
+        }
+        self.install_final_resource_module()
+        for name, invocation in invocations.items():
+            with self.subTest(name=name):
+                source.write_text(
+                    f"pub fn probe() {{ {invocation} }}\npub trait Contract: Send {{}}\n",
+                    encoding="utf-8",
+                )
+                verify_tree(self.root, phase="final")
+                source.write_text(
+                    f"macro_rules! {name} {{ ($($tokens:tt)*) => {{ () }}; }}\n"
+                    f"pub fn probe() {{ {invocation} }}\npub trait Contract: Send {{}}\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(VerificationError, f"{name}|shadow"):
+                    verify_tree(self.root, phase="final")
+
+    def test_final_phase_rejects_imported_assert_macro_shadow(self) -> None:
+        """A private import named assert cannot impersonate the standard prelude macro."""
+
+        self.install_final_resource_module()
+        self.install_private_macro_alias_module()
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::evil::assert;\n"
+            "pub fn probe() { assert!(true); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "assert|shadow|provenance"):
+            verify_tree(self.root, phase="final")
+
     def test_allows_tokio_dependency_without_local_alias_spoofing(self) -> None:
         """Async standard contracts may use Tokio only through real external provenance."""
 

@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-16
+goal: Let final purity verification accept canonical standard Rust macros while
+  rejecting local or imported shadows
