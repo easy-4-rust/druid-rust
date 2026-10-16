@@ -16,6 +16,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Reader;
+import java.io.Writer;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -294,6 +295,9 @@ public final class AgentServer implements Closeable {
             case "clob_truncate" -> clobTruncate(session, params);
             case "clob_open_reader" -> clobOpenReader(session, params);
             case "clob_read_reader" -> clobReadReader(requestId, session, params);
+            case "clob_open_writer" -> clobOpenWriter(session, params);
+            case "clob_write_writer" -> clobWriteWriter(session, params);
+            case "clob_flush_writer" -> clobFlushWriter(session, params);
             case "clob_close_stream" -> clobCloseStream(session, params);
             case "free_clob" -> freeClob(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);
@@ -777,6 +781,49 @@ public final class AgentServer implements Closeable {
         return JsonNodeFactory.instance.objectNode()
                 .put("utf16", encodeUtf16(count < 0 ? "" : new String(buffer, 0, count)))
                 .put("eof", count < 0);
+    }
+
+    /** 在 JDBC 1-based 位置打开 Clob 子字符写入器。 */
+    private JsonNode clobOpenWriter(AgentSession session, JsonNode payload) throws SQLException {
+        String clobId = requiredText(payload, "clobId");
+        Writer writer = session.clob(clobId).setCharacterStream(requiredLong(payload, "position"));
+        try {
+            return JsonNodeFactory.instance.objectNode()
+                    .put("streamId", session.registerClobWriter(clobId, writer));
+        } catch (SQLException exception) {
+            try {
+                writer.close();
+            } catch (IOException closeFailure) {
+                exception.addSuppressed(closeFailure);
+            }
+            throw exception;
+        }
+    }
+
+    /** 单次向驱动 Clob Writer 写入至多 32K 个 UTF-16 单元。 */
+    private JsonNode clobWriteWriter(AgentSession session, JsonNode payload) throws SQLException {
+        Writer writer = session.clobWriter(requiredText(payload, "streamId"));
+        String value = decodeUtf16(payload, "utf16");
+        if (value.length() > MAX_CLOB_STREAM_CHUNK_UNITS) {
+            throw new IllegalArgumentException("Clob write length exceeds maximum stream chunk size");
+        }
+        try {
+            writer.write(value);
+        } catch (IOException exception) {
+            throw new SQLException("JDBC Agent clob writer failed", exception);
+        }
+        return JsonNodeFactory.instance.objectNode().put("written", value.length());
+    }
+
+    /** 将 Clob Writer 缓冲的字符刷新到底层驱动。 */
+    private JsonNode clobFlushWriter(AgentSession session, JsonNode payload) throws SQLException {
+        Writer writer = session.clobWriter(requiredText(payload, "streamId"));
+        try {
+            writer.flush();
+        } catch (IOException exception) {
+            throw new SQLException("JDBC Agent clob writer flush failed", exception);
+        }
+        return JsonNodeFactory.instance.objectNode();
     }
 
     /** 关闭 Clob 子流句柄；父 Clob 释放后的重复关闭无副作用。 */
