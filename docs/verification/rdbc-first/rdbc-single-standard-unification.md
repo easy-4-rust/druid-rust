@@ -2,6 +2,8 @@
 
 核验日期：2026-10-08。**整体结论：INCOMPLETE；Task6 FIX_REQUIRED，Task7/Task8 未完成。** 本报告是正式 Task8 指定的证据交付物，随真实终态更新，不构成新规格或完成批准。所有未完成义务继续保留。
 
+2026-10-16 SemVer 证据刷新：在生产源码提交 `e55a9cb49f35cae8543e700f9f591c8c14ebb41e` 的 [CI run 38903137139](https://github.com/easy-4-rust/druid-rust/actions/runs/38903137139) 中，`cargo-semver-checks 0.51.0` 对冻结基线 `2c421efa6caf8bfc983633529fc3775c251f9492` 分别运行 `druid-rdbc`、`druid`、`druid-wrapper` 的 `--release-type patch --all-features --verbose`，三个退出码均为 100。以该运行上传的原始报告替换 `api/*.semver-checks.txt` 后，本地精确 allowlist 核验通过 **29 个批准的预发布破坏类别**。这只关闭当前三包 SemVer 报告的新鲜度缺口，不替代 P04 Task7 资源迁移、完整 Task8 和 P05–P07 门禁。
+
 2026-10-15 当前补证：在 `bbec42d` 上使用已批准的 `cargo-semver-checks 0.51.0`，对冻结基线 `2c421efa6caf8bfc983633529fc3775c251f9492` 分别执行 `druid-rdbc`、`druid`、`druid-wrapper` 的 `--release-type patch --all-features --verbose`。三个工具退出码均为 100（预发布破坏），[原始 RDBC 报告](../../../api/druid-rdbc.semver-checks.txt)、[原始 Druid 报告](../../../api/druid.semver-checks.txt)、[原始 Wrapper 报告](../../../api/druid-wrapper.semver-checks.txt) 与既有 allowlist、模块/结构体/方法参数及逐方法迁移账本通过精确验证：28 个批准类别，无 extra/missing。未指定 `--release-type` 的试运行跳过了 260 项检查，不计为证据。此项仅证明 SemVer 迁移门禁；最终 public API、69 行语义清单、Task7 资源迁移和完整 Task8 仍未关闭。
 
 ## 1. 权威要求与证据范围

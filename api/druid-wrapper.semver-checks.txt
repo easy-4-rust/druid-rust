@@ -1,808 +1,1488 @@
-     Cloning 2c421efa6caf8bfc983633529fc3775c251f9492
-     Locking 683 packages to latest compatible versions
-    Building druid-wrapper v0.0.0-design (current)
-   Compiling serde_core v1.0.229
-   Compiling serde v1.0.229
-   Compiling getrandom v0.4.3
-   Compiling cfg-if v1.0.5
-   Compiling rand_core v0.10.1
-    Checking typenum v1.20.1
-    Checking windows-sys v0.61.2
-    Checking lock_api v0.4.14
-   Compiling num-traits v0.2.19
-    Checking log v0.4.34
-    Checking futures-sink v0.3.34
-    Checking stable_deref_trait v1.2.1
-    Checking foldhash v0.2.0
-   Compiling zerocopy v0.8.63
-   Compiling getrandom v0.3.4
-   Compiling pkg-config v0.3.34
-    Checking writeable v0.6.4
-    Checking tracing-core v0.1.36
-   Compiling zerocopy-derive v0.8.63
-    Checking zerofrom v0.1.8
-    Checking litemap v0.8.3
-    Checking cpufeatures v0.3.1
-   Compiling windows_x86_64_msvc v0.52.6
-   Compiling serde_json v1.0.154
-    Checking write16 v1.0.0
-    Checking futures-channel v0.3.34
-    Checking byteorder v1.5.0
-    Checking hashbrown v0.17.1
-    Checking utf16_iter v1.0.5
-    Checking sha1_smol v1.0.1
-   Compiling bigdecimal v0.4.11
-    Checking chacha20 v0.10.2
-    Checking yoke v0.8.3
-   Compiling crc32fast v1.5.2
-    Checking aho-corasick v1.1.5
-    Checking cpufeatures v0.2.17
-    Checking futures-util v0.3.34
-    Checking tracing v0.1.44
-   Compiling memchr v2.8.3
-    Checking spin v0.9.9
-    Checking generic-array v0.14.7
-   Compiling ahash v0.8.12
-    Checking indexmap v2.14.2
-   Compiling thiserror v2.0.21
-   Compiling thiserror-impl v2.0.21
-   Compiling uncased v0.9.10
-    Checking zerovec v0.11.8
-    Checking zerotrie v0.2.5
-   Compiling jobserver v0.1.35
-    Checking rand v0.10.3
-   Compiling vcpkg v0.2.15
-    Checking regex-automata v0.4.18
-   Compiling either v1.19.0
-    Checking lazy_static v1.5.1
-    Checking crypto-common v0.1.7
-    Checking block-buffer v0.10.4
-   Compiling winapi v0.3.9
-   Compiling cc v1.8.0
-    Checking windows-targets v0.52.6
-    Checking siphasher v1.0.4
-    Checking num-conv v0.2.2
-    Checking powerfmt v0.2.1
-    Checking num-integer v0.1.47
-    Checking time-core v0.1.9
-   Compiling allocator-api2 v0.2.21
-    Checking fnv v1.0.7
-    Checking tinystr v0.8.4
-    Checking potential_utf v0.1.6
-   Compiling heck v0.5.0
-   Compiling windows-link v0.2.1
-   Compiling crunchy v0.2.4
-    Checking digest v0.10.7
-   Compiling semver v1.0.28
-   Compiling strsim v0.11.1
-   Compiling anyhow v1.0.104
-   Compiling ident_case v1.0.1
-   Compiling zstd-safe v7.3.0
-   Compiling itertools v0.12.1
-    Checking num-bigint v0.4.8
-    Checking icu_collections v2.3.0
-    Checking icu_locale_core v2.3.0
-   Compiling darling_core v0.24.1
-    Checking hybrid-array v0.4.15
-    Checking ownedbytes v0.9.0
-   Compiling rustc_version v0.4.1
-   Compiling glob v0.3.4
-   Compiling typeid v1.0.3
-    Checking fallible-iterator v0.3.0
-    Checking bitflags v2.13.2
-    Checking uuid v1.28.0
-    Checking deranged v0.5.9
-   Compiling crossbeam-deque v0.8.8
-   Compiling prettyplease v0.3.0
-   Compiling icu_locale_fallback_data v2.3.0
-   Compiling regex-syntax v0.8.11
-    Checking bitpacking v0.9.3
-   Compiling clang-sys v1.9.1
-    Checking icu_provider v2.3.1
-    Checking inout v0.1.4
-    Checking smallvec v1.16.3
-    Checking bytes v1.12.1
-    Checking chrono v0.4.45
-    Checking regex v1.13.1
-   Compiling prettyplease v0.2.37
-    Checking tinyvec v1.13.3
-    Checking icu_properties v2.3.0
-    Checking utf8-ranges v1.0.5
-   Compiling erased-serde v0.4.10
-   Compiling rustix v0.38.44
-   Compiling rayon-core v1.13.0
-    Checking cmov v0.5.4
-   Compiling libc v0.2.190
-   Compiling ring v0.17.14
-    Checking time v0.3.55
-   Compiling zstd-sys v2.1.1+zstd.1.5.7
-    Checking parking_lot_core v0.9.12
-    Checking icu_normalizer v2.3.0
-    Checking itertools v0.14.0
-    Checking socket2 v0.6.5
-    Checking mio v1.2.4
-    Checking ctutils v0.4.3
-    Checking tantivy-fst v0.5.0
-    Checking unicode-normalization v0.1.25
-    Checking parking_lot v0.12.5
-    Checking http v1.5.0
-   Compiling errno v0.3.14
-    Checking cipher v0.4.4
-   Compiling windows-sys v0.59.0
-    Checking tantivy-bitpacker v0.10.0
-    Checking ppv-lite86 v0.2.21
-    Checking half v2.7.1
-    Checking tokio v1.53.3
-    Checking idna_adapter v1.2.2
-    Checking arrow-schema v58.4.0
-    Checking block-buffer v0.12.1
-    Checking crypto-common v0.2.2
-    Checking universal-hash v0.5.1
-   Compiling bytemuck_derive v1.12.1
-   Compiling memoffset v0.9.1
-   Compiling darling_macro v0.24.1
-   Compiling icu_locale_data v2.3.0
-    Checking unicode-bidi v0.3.18
-   Compiling typetag v0.2.23
-    Checking unicode-properties v0.1.4
-    Checking minimal-lexical v0.2.1
-    Checking tantivy-common v0.11.0
-    Checking murmurhash32 v0.3.1
-    Checking hex v0.4.3
-    Checking opaque-debug v0.3.1
-    Checking idna v1.1.0
-    Checking const-oid v0.10.2
-    Checking arrow-buffer v58.4.0
-   Compiling icu_collator_data v2.3.0
-    Checking foldhash v0.1.5
-    Checking polyval v0.6.2
-    Checking stringprep v0.1.5
-    Checking url v2.5.8
-    Checking hashbrown v0.15.5
-   Compiling nom v7.1.3
-    Checking icu_locale_fallback v2.3.0
-    Checking nu-ansi-term v0.50.3
-   Compiling aegis v0.9.20
-    Checking digest v0.11.3
-   Compiling darling v0.24.1
-    Checking tantivy-stacker v0.7.0
-   Compiling simsimd v6.5.16
-   Compiling home v0.5.12
-    Checking matchers v0.2.0
-    Checking arrow-data v58.4.0
-   Compiling crc32c v0.6.8
-   Compiling branches v0.4.6
-   Compiling strum_macros v0.26.4
-    Checking bytemuck v1.25.2
-    Checking sha2 v0.10.9
-   Compiling libloading v0.8.9
-    Checking twox-hash v2.1.5
-    Checking ordered-float v5.5.0
-    Checking num-complex v0.4.6
-    Checking sharded-slab v0.1.7
-    Checking rand_core v0.9.5
-    Checking tracing-log v0.2.0
-    Checking hashbrown v0.16.1
-   Compiling bon-macros v3.10.2
-   Compiling turso_macros v0.7.2
-   Compiling typetag-impl v0.2.23
-   Compiling miette-derive v7.6.0
-    Checking thread_local v1.1.10
-   Compiling turso_ext v0.7.2
-   Compiling cfg_aliases v0.2.2
-   Compiling bindgen v0.69.5
-    Checking fastdivide v0.4.2
-    Checking downcast-rs v2.0.2
-   Compiling zeroize v1.9.1
-    Checking unicode-width v0.1.14
-   Compiling turso_core v0.7.2
-    Checking rand_chacha v0.9.0
-    Checking arrow-array v58.4.0
-    Checking tracing-subscriber v0.3.23
-   Compiling rustls-pki-types v1.15.1
-    Checking lru v0.16.4
-    Checking fs4 v0.13.1
-   Compiling rustls v0.23.46
-    Checking tantivy-query-grammar v0.26.0
-   Compiling which v4.4.2
-    Checking rayon v1.12.0
-   Compiling cexpr v0.6.0
-    Checking miette v7.6.0
-    Checking ghash v0.5.1
-    Checking hashbrown v0.14.5
-    Checking ctr v0.9.2
-    Checking strum v0.26.3
-    Checking aes v0.8.4
-    Checking tokio-stream v0.1.19
-    Checking tokio-util v0.7.20
-    Checking schannel v0.1.29
-    Checking tempfile v3.27.0
-    Checking sketches-ddsketch v0.4.1
-    Checking rust-stemmers v1.2.0
-    Checking tantivy-tokenizer-api v0.7.0
-    Checking aead v0.5.2
-    Checking measure_time v0.9.0
-   Compiling getrandom v0.2.17
-    Checking crossbeam-queue v0.3.14
-   Compiling aristo-macros v0.4.1
-    Checking datasketches v0.2.0
-    Checking levenshtein_automata v0.2.1
-    Checking memmap2 v0.9.11
-    Checking softaes v0.1.7
-   Compiling shlex v1.3.0
-    Checking lz4_flex v0.13.1
-    Checking htmlescape v0.3.1
-   Compiling simd-adler32 v0.3.10
-    Checking census v0.4.2
-    Checking lexical-util v1.0.7
-   Compiling untrusted v0.9.0
-   Compiling httparse v1.10.1
-   Compiling itoa v1.0.18
-   Compiling lazycell v1.3.0
-    Checking rustc-hash v2.1.3
-    Checking bit-vec v0.10.1
-    Checking oneshot v0.1.13
-   Compiling rustc-hash v1.1.0
-    Checking turso_parser v0.7.2
-    Checking aes-gcm v0.10.3
-    Checking icu_locale v2.3.1
-    Checking rustls-webpki v0.103.15
-    Checking icu_collator v2.3.1
-    Checking aristo v0.4.1
-    Checking intrusive-collections v0.9.7
-    Checking bit-set v0.11.1
-    Checking rand v0.9.5
-    Checking roaring v0.11.5
-    Checking pack1 v1.1.0
-    Checking rand_chacha v0.3.1
-   Compiling libz-sys v1.1.30
-   Compiling libsqlite3-sys v0.30.1
-    Checking futures-executor v0.3.34
-    Checking fastbloom v0.14.1
-    Checking atoi v2.0.0
-    Checking rapidhash v4.5.1
-    Checking allocator-api2 v0.4.0
-   Compiling rand_core v0.6.4
-   Compiling adler2 v2.0.1
-   Compiling pastey v0.2.3
-    Checking cfg_block v0.1.1
-   Compiling windows_x86_64_msvc v0.48.5
-    Checking bumpalo v3.20.3
-   Compiling miniz_oxide v0.9.1
-   Compiling rand v0.8.8
-    Checking toasty-core v0.9.0
-   Compiling phf_shared v0.11.3
-    Checking hashlink v0.10.0
-    Checking sha2 v0.11.1
-    Checking md-5 v0.11.0
-    Checking hmac v0.13.0
-    Checking http-body v1.1.0
-   Compiling libmimalloc-sys v0.1.49
-    Checking sha1 v0.10.7
-    Checking windows-sys v0.52.0
-    Checking env_filter v2.0.0
-   Compiling base64 v0.23.1
-    Checking fallible-iterator v0.2.0
-   Compiling prost-derive v0.14.4
-    Checking symlink v0.1.0
-   Compiling subtle v2.6.1
-   Compiling native-tls v0.2.18
-   Compiling zlib-rs v0.6.8
-   Compiling pin-project-lite v0.2.17
-    Checking zstd v0.13.3
-    Checking genawaiter-macro v0.99.1
-    Checking crc-catalog v2.5.0
-    Checking bon v3.10.2
-   Compiling zopfli v0.8.4
-    Checking genawaiter v0.99.1
-    Checking tracing-appender v0.2.5
-    Checking crc v3.4.0
-    Checking env_logger v0.11.11
-    Checking tantivy-sstable v0.7.0
-    Checking postgres-protocol v0.6.12
-   Compiling toml_edit v0.19.15
-   Compiling ureq-proto v0.6.4
-   Compiling phf_generator v0.11.3
-    Checking lexical-parse-integer v1.0.6
-    Checking lexical-write-integer v1.0.6
-    Checking arrow-select v58.4.0
-   Compiling webpki-roots v1.0.9
-    Checking futures-intrusive v0.5.0
-    Checking crossterm_winapi v0.9.1
-    Checking http v0.2.12
-    Checking tokio-rustls v0.26.6
-    Checking num-iter v0.1.46
-    Checking phf_shared v0.13.1
-    Checking rustls-pemfile v2.2.0
-   Compiling filetime v0.2.29
-   Compiling turso_sdk_kit_macros v0.7.2
-   Compiling zmij v1.0.23
-   Compiling percent-encoding v2.3.2
-   Compiling mysql_common v0.37.3
-    Checking array-init v2.1.0
-   Compiling rustls v0.22.4
-    Checking tantivy-columnar v0.7.0
-   Compiling utf8-zero v0.8.1
-   Compiling tar v0.4.46
-    Checking rustix v1.1.5
-    Checking phf v0.13.1
-    Checking sqlx-core v0.8.6
-    Checking postgres-types v0.2.14
-    Checking num-bigint-dig v0.8.6
-    Checking lexical-write-float v1.0.6
-    Checking crossterm v0.28.1
-    Checking flate2 v1.1.10
-    Checking lexical-parse-float v1.0.6
-   Compiling phf_codegen v0.11.3
-    Checking windows-targets v0.48.5
-    Checking toasty-sql v0.9.0
-    Checking prost v0.14.4
-    Checking spawns-compat v0.2.2
-    Checking polling v3.11.0
-    Checking futures v0.3.34
-    Checking rustls-webpki v0.102.8
-    Checking signature v2.2.0
-    Checking hmac v0.12.1
-   Compiling proc-macro-crate v1.3.1
-    Checking btoi v0.5.0
-    Checking lru v0.18.5
-    Checking whoami v2.1.3
-    Checking tantivy v0.26.2
-    Checking saturating v0.1.0
-    Checking unicode-width v0.2.2
-    Checking fallible-streaming-iterator v0.1.9
-   Compiling futures-core v0.3.34
-    Checking unicode-segmentation v1.13.3
-    Checking hkdf v0.12.4
-    Checking async-io v2.6.0
-    Checking rsa v0.9.10
-    Checking tokio-postgres v0.7.18
-    Checking lexical-core v1.0.6
-    Checking tokio-native-tls v0.3.1
-    Checking spawns v0.2.6
-   Compiling libsql-sqlite3-parser v0.13.0
-    Checking mimalloc v0.1.52
-    Checking windows-sys v0.48.0
-    Checking arrow-ord v58.4.0
-    Checking http-body v0.4.6
-    Checking h2 v0.3.27
-    Checking comfy-table v7.1.4
-    Checking socket2 v0.5.10
-    Checking hyper v1.12.0
-    Checking hashlink v0.9.1
-   Compiling zip v6.0.0
-   Compiling prost-derive v0.12.6
-    Checking serde_urlencoded v0.7.1
-    Checking md-5 v0.10.6
-    Checking keyed_priority_queue v0.4.2
-    Checking pem v3.0.6
-   Compiling pin-project-internal v1.1.13
-    Checking httpdate v1.0.3
-   Compiling toasty-macros v0.9.0
-    Checking dotenvy v0.15.7
-    Checking whoami v1.6.1
-    Checking asyncs v0.4.0
-    Checking arrow-cast v58.4.0
-    Checking phf v0.11.3
-    Checking rusqlite v0.32.1
-    Checking tower v0.5.3
-    Checking async-net v2.0.0
-    Checking arrow-string v58.4.0
-    Checking rustls-native-certs v0.7.3
-    Checking webpki-roots v0.26.11
-   Compiling num_enum_derive v0.5.11
-    Checking rustls-platform-verifier v0.7.1
-    Checking hyper-util v0.1.21
-    Checking etcetera v0.8.0
-    Checking arrow-row v58.4.0
-   Compiling ureq v3.4.2
-    Checking arrow-arith v58.4.0
-    Checking hashlink v0.8.4
-   Compiling turso_sdk_kit v0.7.2
-    Checking deadpool-runtime v0.3.1
-   Compiling pluralizer v0.5.0
-   Compiling strum_macros v0.27.2
-    Checking flume v0.11.1
-    Checking tokio-postgres-rustls v0.14.0
-   Compiling async-stream-impl v0.3.6
-    Checking tokio-rustls v0.25.0
-    Checking base64 v0.21.7
-   Compiling toasty v0.9.0
-    Checking moka v0.12.16
-    Checking sqlx-sqlite v0.8.6
-    Checking toasty-driver-postgresql v0.9.0
-    Checking pin-project v1.1.13
-    Checking deadpool v0.13.1
-    Checking sqlparser v0.52.0
-    Checking sqlx-postgres v0.8.6
-    Checking toasty-driver-sqlite v0.9.0 (E:\workspaces\workspace-github-easy-4-rust\druid-rust\vendor\toasty-driver-sqlite)
-    Checking tower-http v0.6.11
-    Checking prost v0.12.6
-    Checking mysql_async v0.37.1
-    Checking num_enum v0.5.11
-    Checking tower v0.4.13
-    Checking arrow v58.4.0
-    Checking async-stream v0.3.6
-    Checking sqlx-mysql v0.8.6
-    Checking java-properties v2.0.0
-    Checking druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc)
-    Checking hyper-rustls v0.27.10
-    Checking fastdate v0.3.36
-    Checking http-body-util v0.1.5
-    Checking zookeeper-client v0.11.2
-    Checking dashmap v6.2.1
-    Checking deadpool-runtime v0.1.4
-    Checking libsql-hrana v0.9.30
-    Checking lru v0.14.0
-    Checking quick-xml v0.41.0
-    Checking rbs v4.8.4
-    Checking serde_bytes v0.11.19
-    Checking by_address v1.2.1
-    Checking cast v0.3.0
-    Checking index_vec v0.1.4
-    Checking num_cpus v1.17.0
-    Checking reqwest v0.12.28
-    Checking bb8 v0.8.6
-    Checking fs2 v0.4.3
-    Checking deadpool v0.12.3
-    Checking rbdc v4.9.10
-   Compiling libduckdb-sys v1.10505.0
-    Checking hyper v0.14.32
-    Checking strum v0.27.2
-    Checking sqlx v0.8.6
-    Checking toasty-driver-mysql v0.9.0
-    Checking hyper-rustls v0.25.0
-    Checking libsql v0.9.30
-    Checking druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
-    Checking turso_sync_engine v0.7.2
-    Checking turso_sync_sdk_kit v0.7.2
-    Checking turso v0.7.2
-    Checking toasty-driver-turso v0.9.0
-    Checking duckdb v1.10505.0
- Documenting druid-wrapper v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 30s
-       Built [  90.561s] (current)
-     Parsing druid-wrapper v0.0.0-design (current)
-      Parsed [   0.053s] (current)
-     Locking 674 packages to latest compatible versions
-    Building druid-wrapper v0.0.0-design (baseline)
-    Checking hyper v0.14.32
-    Checking druid-rdbc v0.0.0-design (D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-rdbc)
-    Checking druid v0.0.0-design (D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid)
-    Checking libsql v0.9.30
- Documenting druid-wrapper v0.0.0-design (D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.09s
-       Built [  10.267s] (baseline)
-     Parsing druid-wrapper v0.0.0-design (baseline)
-      Parsed [   0.045s] (baseline)
-    Checking druid-wrapper v0.0.0-design -> v0.0.0-design (assume patch change)
-    Starting 229 checks, 31 unnecessary on 24 threads
-        PASS [   0.005s]       major        attribute_proc_macro_missing
-        FAIL [   0.021s]       major        auto_trait_impl_removed
-        PASS [   0.007s]       major        constructible_struct_adds_field
-        PASS [   0.010s]       major        constructible_struct_adds_private_field
-        PASS [   0.000s]       major        constructible_struct_changed_type
-        PASS [   0.013s]       major        copy_impl_added
-        PASS [   0.000s]       major        declarative_macro_missing
-        PASS [   0.005s]       major        derive_helper_attr_removed
-        PASS [   0.000s]       major        derive_proc_macro_missing
-        PASS [   0.016s]       major        derive_trait_impl_removed
-        PASS [   0.001s]       major        enum_changed_kind
-        PASS [   0.001s]       major        enum_discriminants_undefined_non_exhaustive_variant
-        PASS [   0.001s]       major        enum_discriminants_undefined_non_unit_variant
-        PASS [   0.000s]       major        enum_marked_non_exhaustive
-        PASS [   0.006s]       major        enum_missing
-        PASS [   0.000s]       minor        enum_must_use_added
-        PASS [   0.001s]       major        enum_no_repr_variant_discriminant_changed
-        PASS [   0.000s]       major        enum_non_exhaustive_tuple_variant_changed_kind
-        PASS [   0.000s]       major        enum_now_doc_hidden
-        PASS [   0.000s]       major        enum_repr_int_changed
-        PASS [   0.000s]       major        enum_repr_int_removed
-        PASS [   0.000s]       major        enum_repr_transparent_removed
-        PASS [   0.001s]       major        enum_repr_variant_discriminant_changed
-        PASS [   0.000s]       major        enum_struct_variant_changed_kind
-        PASS [   0.000s]       major        enum_struct_variant_field_added
-        PASS [   0.000s]       minor        enum_struct_variant_field_marked_deprecated
-        PASS [   0.000s]       major        enum_struct_variant_field_missing
-        PASS [   0.000s]       major        enum_struct_variant_field_now_doc_hidden
-        PASS [   0.006s]       major        enum_tuple_variant_changed_kind
-        PASS [   0.001s]       major        enum_tuple_variant_field_added
-        PASS [   0.001s]       minor        enum_tuple_variant_field_marked_deprecated
-        PASS [   0.002s]       major        enum_tuple_variant_field_missing
-        PASS [   0.001s]       major        enum_tuple_variant_field_now_doc_hidden
-        PASS [   0.000s]       major        enum_unit_variant_changed_kind
-        PASS [   0.001s]       major        enum_variant_added
-        PASS [   0.006s]       minor        enum_variant_marked_deprecated
-        PASS [   0.001s]       major        enum_variant_marked_non_exhaustive
-        PASS [   0.001s]       major        enum_variant_missing
-        PASS [   0.000s]       major        exported_function_abi_no_longer_unwind
-        PASS [   0.000s]       major        exported_function_abi_now_unwind
-        PASS [   0.000s]       major        exported_function_changed_abi
-        PASS [   0.000s]       major        exported_function_now_returns_unit
-        PASS [   0.005s]       major        exported_function_parameter_count_changed
-        PASS [   0.000s]       major        exported_function_requires_more_target_features
-        PASS [   0.000s]       major        exported_function_return_value_added
-        PASS [   0.005s]       major        exported_function_target_feature_added
-        PASS [   0.000s]       major        feature_missing
-        PASS [   0.006s]       major        feature_no_longer_enables_feature
-        FAIL [   0.000s]       major        feature_not_enabled_by_default
-        PASS [   0.005s]       major        function_abi_no_longer_unwind
-        PASS [   0.000s]       major        function_abi_now_unwind
-        PASS [   0.000s]       major        function_changed_abi
-        PASS [   0.000s]       major        function_const_generic_reordered
-        PASS [   0.000s]       major        function_const_removed
-        PASS [   0.002s]       major        function_export_name_changed
-        PASS [   0.000s]       major        function_generic_type_reordered
-        PASS [   0.000s]       major        function_like_proc_macro_missing
-        PASS [   0.005s]       minor        function_marked_deprecated
-        FAIL [   0.001s]       major        function_missing
-        PASS [   0.000s]       minor        function_must_use_added
-        PASS [   0.000s]       major        function_no_longer_variadic
-        PASS [   0.000s]       major        function_now_doc_hidden
-        PASS [   0.000s]       major        function_now_returns_unit
-        PASS [   0.000s]       major        function_now_variadic
-        PASS [   0.006s]       major        function_parameter_count_changed
-        PASS [   0.000s]       major        function_requires_different_const_generic_params
-        PASS [   0.000s]       major        function_requires_different_generic_type_params
-        PASS [   0.000s]       major        function_unsafe_added
-        PASS [   0.000s]       minor        global_value_marked_deprecated
-        PASS [   0.003s]       major        inherent_associated_const_now_doc_hidden
-        PASS [   0.005s]       major        inherent_associated_pub_const_missing
-        PASS [   0.010s]       major        inherent_method_changed_abi
-        PASS [   0.002s]       major        inherent_method_const_generic_reordered
-        PASS [   0.002s]       major        inherent_method_const_removed
-        PASS [   0.005s]       major        inherent_method_generic_type_reordered
-        PASS [   0.005s]       major        inherent_method_missing
-        PASS [   0.005s]       minor        inherent_method_must_use_added
-        PASS [   0.001s]       major        inherent_method_no_longer_unwind
-        PASS [   0.002s]       major        inherent_method_no_longer_variadic
-        PASS [   0.004s]       major        inherent_method_now_doc_hidden
-        PASS [   0.004s]       major        inherent_method_now_returns_unit
-        PASS [   0.005s]       major        inherent_method_now_unwind
-        PASS [   0.015s]       major        inherent_method_now_variadic
-        PASS [   0.007s]       major        inherent_method_unsafe_added
-        PASS [   0.000s]       minor        macro_marked_deprecated
-        PASS [   0.005s]       major        macro_no_longer_exported
-        PASS [   0.000s]       major        macro_now_doc_hidden
-        PASS [   0.001s]       major        method_export_name_changed
-        PASS [   0.008s]       major        method_no_longer_has_receiver
-        PASS [   0.011s]       major        method_parameter_count_changed
-        PASS [   0.001s]       major        method_receiver_mut_ref_became_owned
-        PASS [   0.004s]       major        method_receiver_ref_became_mut
-        PASS [   0.003s]       major        method_receiver_ref_became_owned
-        PASS [   0.004s]       major        method_receiver_type_changed
-        PASS [   0.008s]       major        method_requires_different_const_generic_params
-        PASS [   0.009s]       major        method_requires_different_generic_type_params
-        FAIL [   0.001s]       major        module_missing
-        PASS [   0.000s]       major        non_exhaustive_struct_changed_type
-        PASS [   0.001s]       major        partial_ord_enum_struct_variant_fields_reordered
-        PASS [   0.001s]       major        partial_ord_enum_variants_reordered
-        PASS [   0.003s]       major        partial_ord_struct_fields_reordered
-        PASS [   0.000s]       minor        proc_macro_marked_deprecated
-        PASS [   0.000s]       major        proc_macro_now_doc_hidden
-        PASS [   0.000s]       minor        pub_api_sealed_trait_became_unconditionally_sealed
-        PASS [   0.000s]       minor        pub_api_sealed_trait_became_unsealed
-        PASS [   0.000s]       major        pub_api_sealed_trait_method_receiver_added
-        PASS [   0.000s]       major        pub_api_sealed_trait_method_receiver_mut_ref_became_ref
-        PASS [   0.000s]       major        pub_api_sealed_trait_method_return_value_added
-        PASS [   0.000s]       major        pub_api_sealed_trait_method_target_feature_removed
-        PASS [   0.000s]       major        pub_module_level_const_missing
-        PASS [   0.000s]       major        pub_module_level_const_now_doc_hidden
-        PASS [   0.000s]       major        pub_static_missing
-        PASS [   0.000s]       major        pub_static_mut_now_immutable
-        PASS [   0.000s]       major        pub_static_now_doc_hidden
-        PASS [   0.005s]       major        pub_static_now_mutable
-        PASS [   0.005s]       major        repr_align_added
-        PASS [   0.000s]       major        repr_align_changed
-        PASS [   0.005s]       major        repr_align_removed
-        PASS [   0.000s]       major        repr_c_enum_struct_variant_fields_reordered
-        PASS [   0.005s]       major        repr_c_plain_struct_fields_reordered
-        PASS [   0.000s]       major        repr_c_removed
-        PASS [   0.005s]       major        repr_packed_added
-        PASS [   0.001s]       major        repr_packed_changed
-        PASS [   0.000s]       major        repr_packed_removed
-        PASS [   0.000s]       minor        repr_transparent_added
-        PASS [   0.000s]       major        safe_function_requires_more_target_features
-        PASS [   0.000s]       major        safe_function_target_feature_added
-        PASS [   0.001s]       major        safe_inherent_method_requires_more_target_features
-        PASS [   0.007s]       major        safe_inherent_method_target_feature_added
-        PASS [   0.012s]       major        sized_impl_removed
-        PASS [   0.000s]       major        static_became_unsafe
-        PASS [   0.001s]       minor        struct_field_marked_deprecated
-        PASS [   0.000s]       major        struct_marked_non_exhaustive
-        FAIL [   0.001s]       major        struct_missing
-        PASS [   0.000s]       minor        struct_must_use_added
-        PASS [   0.001s]       major        struct_now_doc_hidden
-        PASS [   0.002s]       major        struct_pub_field_missing
-        PASS [   0.001s]       major        struct_pub_field_now_doc_hidden
-        PASS [   0.000s]       major        struct_repr_transparent_removed
-        PASS [   0.001s]       major        struct_with_no_pub_fields_changed_type
-        PASS [   0.000s]       major        struct_with_pub_fields_changed_type
-        PASS [   0.000s]       major        trait_added_supertrait
-        PASS [   0.006s]       major        trait_allows_fewer_const_generic_params
-        PASS [   0.000s]       major        trait_allows_fewer_generic_type_params
-        PASS [   0.000s]       major        trait_associated_const_added
-        PASS [   0.000s]       major        trait_associated_const_default_removed
-        PASS [   0.000s]       minor        trait_associated_const_marked_deprecated
-        PASS [   0.000s]       major        trait_associated_const_now_doc_hidden
-        PASS [   0.000s]       major        trait_associated_type_added
-        PASS [   0.000s]       major        trait_associated_type_default_removed
-        PASS [   0.000s]       minor        trait_associated_type_marked_deprecated
-        PASS [   0.000s]       major        trait_associated_type_now_doc_hidden
-        PASS [   0.000s]       major        trait_changed_kind
-        PASS [   0.000s]       major        trait_const_generic_reordered
-        PASS [   0.000s]       major        trait_generic_type_reordered
-        PASS [   0.000s]       minor        trait_marked_deprecated
-        PASS [   0.000s]       major        trait_method_added
-        PASS [   0.000s]       major        trait_method_changed_abi
-        PASS [   0.000s]       major        trait_method_const_generic_reordered
-        PASS [   0.000s]       major        trait_method_default_impl_removed
-        PASS [   0.000s]       major        trait_method_generic_type_reordered
-        PASS [   0.000s]       minor        trait_method_marked_deprecated
-        PASS [   0.000s]       major        trait_method_missing
-        PASS [   0.000s]       major        trait_method_no_longer_has_receiver
-        PASS [   0.000s]       major        trait_method_no_longer_unwind
-        PASS [   0.000s]       major        trait_method_no_longer_variadic
-        PASS [   0.000s]       major        trait_method_now_doc_hidden
-        PASS [   0.000s]       major        trait_method_now_returns_unit
-        PASS [   0.000s]       major        trait_method_now_unwind
-        PASS [   0.000s]       major        trait_method_now_variadic
-        PASS [   0.000s]       major        trait_method_parameter_count_changed
-        PASS [   0.005s]       major        trait_method_receiver_added
-        PASS [   0.001s]       major        trait_method_receiver_mut_ref_became_owned
-        PASS [   0.000s]       major        trait_method_receiver_mut_ref_became_ref
-        PASS [   0.000s]       major        trait_method_receiver_owned_became_mut_ref
-        PASS [   0.000s]       major        trait_method_receiver_owned_became_ref
-        PASS [   0.000s]       major        trait_method_receiver_ref_became_mut
-        PASS [   0.000s]       major        trait_method_receiver_ref_became_owned
-        PASS [   0.000s]       major        trait_method_receiver_type_changed
-        PASS [   0.000s]       major        trait_method_requires_different_const_generic_params
-        PASS [   0.000s]       major        trait_method_requires_different_generic_type_params
-        PASS [   0.000s]       major        trait_method_return_value_added
-        PASS [   0.000s]       major        trait_method_target_feature_removed
-        PASS [   0.000s]       major        trait_method_unsafe_added
-        PASS [   0.000s]       major        trait_method_unsafe_removed
-        PASS [   0.000s]       major        trait_mismatched_generic_lifetimes
-        PASS [   0.000s]       major        trait_missing
-        PASS [   0.000s]       minor        trait_must_use_added
-        PASS [   0.000s]       major        trait_newly_sealed
-        PASS [   0.000s]       major        trait_no_longer_dyn_compatible
-        PASS [   0.000s]       major        trait_now_doc_hidden
-        PASS [   0.000s]       major        trait_removed_associated_constant
-        PASS [   0.000s]       major        trait_removed_associated_type
-        PASS [   0.000s]       major        trait_removed_supertrait
-        PASS [   0.001s]       major        trait_requires_more_const_generic_params
-        PASS [   0.001s]       major        trait_requires_more_generic_type_params
-        PASS [   0.000s]       major        trait_unsafe_added
-        PASS [   0.000s]       major        trait_unsafe_removed
-        PASS [   0.000s]       major        tuple_struct_to_plain_struct
-        PASS [   0.001s]       major        type_allows_fewer_const_generic_params
-        PASS [   0.001s]       major        type_allows_fewer_generic_type_params
-        PASS [   0.001s]       minor        type_associated_const_marked_deprecated
-        PASS [   0.001s]       major        type_const_generic_reordered
-        PASS [   0.001s]       major        type_generic_type_reordered
-        PASS [   0.000s]       minor        type_marked_deprecated
-        PASS [   0.005s]       minor        type_method_marked_deprecated
-        FAIL [   0.004s]       major        type_mismatched_generic_lifetimes
-        PASS [   0.002s]       major        type_requires_more_const_generic_params
-        PASS [   0.001s]       major        type_requires_more_generic_type_params
-        PASS [   0.000s]       minor        unconditionally_sealed_trait_became_pub_api_sealed
-        PASS [   0.000s]       minor        unconditionally_sealed_trait_became_unsealed
-        PASS [   0.000s]       major        union_changed_kind
-        PASS [   0.000s]       major        union_changed_to_incompatible_struct
-        PASS [   0.000s]       major        union_field_added_with_all_pub_fields
-        PASS [   0.000s]       major        union_field_added_with_non_pub_fields
-        PASS [   0.000s]       minor        union_field_marked_deprecated
-        PASS [   0.000s]       major        union_field_missing
-        PASS [   0.000s]       major        union_missing
-        PASS [   0.000s]       minor        union_must_use_added
-        PASS [   0.000s]       major        union_now_doc_hidden
-        PASS [   0.000s]       major        union_pub_field_now_doc_hidden
-        PASS [   0.000s]       major        union_with_multiple_pub_fields_changed_to_struct
-        PASS [   0.000s]       major        unit_struct_changed_kind
-        PASS [   0.001s]       major        unsafe_function_requires_more_target_features
-        PASS [   0.000s]       major        unsafe_function_target_feature_added
-        PASS [   0.001s]       major        unsafe_inherent_method_requires_more_target_features
-        PASS [   0.001s]       major        unsafe_inherent_method_target_feature_added
-        PASS [   0.000s]       major        unsafe_trait_method_requires_more_target_features
-        PASS [   0.000s]       major        unsafe_trait_method_target_feature_added
-     Checked [   0.028s] 229 checks: 223 pass, 6 fail, 0 warn, 31 skip
+[1m[32m     Cloning[0m 2c421efa6caf8bfc983633529fc3775c251f9492
+[1m[92m    Updating[0m git repository `https://github.com/zip-rs/zip2.git`
+[1m[92m    Updating[0m crates.io index
+[1m[92m     Locking[0m 683 packages to latest compatible versions
+[1m[92m      Adding[0m comfy-table v7.1.4 [1m[33m(available: v7.2.2)[0m
+[1m[92m      Adding[0m duckdb v1.10505.0 [1m[33m(available: v1.10506.0)[0m
+[1m[92m      Adding[0m generic-array v0.14.7 [1m[33m(available: v0.14.9)[0m
+[1m[92m      Adding[0m libduckdb-sys v1.10505.0 [1m[33m(available: v1.10506.0)[0m
+[1m[32m    Building[0m druid-wrapper v0.0.0-design (current)
+[1m[92m   Compiling[0m proc-macro2 v1.0.107
+[1m[92m   Compiling[0m quote v1.0.47
+[1m[92m   Compiling[0m unicode-ident v1.0.27
+[1m[92m   Compiling[0m libc v0.2.190
+[1m[92m    Checking[0m cfg-if v1.0.5
+[1m[92m   Compiling[0m serde_core v1.0.229
+[1m[92m   Compiling[0m serde v1.0.229
+[1m[92m   Compiling[0m syn v3.0.9
+[1m[92m   Compiling[0m syn v2.0.119
+[1m[92m   Compiling[0m jobserver v0.1.35
+[1m[92m   Compiling[0m find-msvc-tools v0.1.14
+[1m[92m   Compiling[0m shlex v2.0.1
+[1m[92m   Compiling[0m cc v1.8.0
+[1m[92m   Compiling[0m version_check v0.9.5
+[1m[92m    Checking[0m pin-project-lite v0.2.17
+[1m[92m    Checking[0m scopeguard v1.2.0
+[1m[92m    Checking[0m lock_api v0.4.14
+[1m[92m   Compiling[0m autocfg v1.5.1
+[1m[92m    Checking[0m memchr v2.8.3
+[1m[92m   Compiling[0m parking_lot_core v0.9.12
+[1m[92m    Checking[0m once_cell v1.21.4
+[1m[92m    Checking[0m futures-core v0.3.34
+[1m[92m    Checking[0m getrandom v0.2.17
+[1m[92m   Compiling[0m libm v0.2.16
+[1m[92m    Checking[0m allocator-api2 v0.2.21
+[1m[92m   Compiling[0m num-traits v0.2.19
+[1m[92m    Checking[0m bitflags v2.13.2
+[1m[92m    Checking[0m typenum v1.20.1
+[1m[92m    Checking[0m log v0.4.34
+[1m[92m    Checking[0m equivalent v1.0.3
+[1m[92m    Checking[0m errno v0.3.14
+[1m[92m    Checking[0m futures-io v0.3.34
+[1m[92m    Checking[0m signal-hook-registry v1.4.8
+[1m[92m    Checking[0m mio v1.2.4
+[1m[92m    Checking[0m socket2 v0.6.5
+[1m[92m    Checking[0m foldhash v0.2.0
+[1m[92m    Checking[0m futures-sink v0.3.34
+[1m[92m    Checking[0m stable_deref_trait v1.2.1
+[1m[92m   Compiling[0m pkg-config v0.3.34
+[1m[92m    Checking[0m slab v0.4.12
+[1m[92m   Compiling[0m zerocopy v0.8.63
+[1m[92m    Checking[0m itoa v1.0.18
+[1m[92m   Compiling[0m zerocopy-derive v0.8.63
+[1m[92m   Compiling[0m serde_derive v1.0.229
+[1m[92m   Compiling[0m tokio-macros v2.7.2
+[1m[92m   Compiling[0m futures-macro v0.3.34
+[1m[92m    Checking[0m futures-channel v0.3.34
+[1m[92m   Compiling[0m synstructure v0.14.0
+[1m[92m    Checking[0m futures-task v0.3.34
+[1m[92m    Checking[0m subtle v2.6.1
+[1m[92m    Checking[0m futures-util v0.3.34
+[1m[92m    Checking[0m num-integer v0.1.47
+[1m[92m   Compiling[0m zerofrom-derive v0.1.8
+[1m[92m   Compiling[0m generic-array v0.14.7
+[1m[92m    Checking[0m zerofrom v0.1.8
+[1m[92m   Compiling[0m yoke-derive v0.8.4
+[1m[92m    Checking[0m smallvec v1.16.3
+[1m[92m    Checking[0m bytes v1.12.1
+[1m[92m    Checking[0m rand_core v0.6.4
+[1m[92m    Checking[0m parking_lot v0.12.5
+[1m[92m   Compiling[0m getrandom v0.4.3
+[1m[92m    Checking[0m yoke v0.8.3
+[1m[92m    Checking[0m tokio v1.53.3
+[1m[92m    Checking[0m num-bigint v0.4.8
+[1m[92m   Compiling[0m zerovec-derive v0.11.6
+[1m[92m   Compiling[0m getrandom v0.3.4
+[1m[92m   Compiling[0m displaydoc v0.2.7
+[1m[92m    Checking[0m zerovec v0.11.8
+[1m[92m   Compiling[0m tracing-attributes v0.1.31
+[1m[92m    Checking[0m hashbrown v0.17.1
+[1m[92m   Compiling[0m zmij v1.0.23
+[1m[92m   Compiling[0m crossbeam-utils v0.8.23
+[1m[92m    Checking[0m crypto-common v0.1.7
+[1m[92m    Checking[0m writeable v0.6.4
+[1m[92m    Checking[0m tracing-core v0.1.36
+[1m[92m    Checking[0m rand_core v0.10.1
+[1m[92m    Checking[0m tinystr v0.8.4
+[1m[92m    Checking[0m litemap v0.8.3
+[1m[92m    Checking[0m zeroize v1.9.1
+[1m[92m    Checking[0m tracing v0.1.44
+[1m[92m    Checking[0m icu_locale_core v2.3.0
+[1m[92m    Checking[0m potential_utf v0.1.6
+[1m[92m    Checking[0m zerotrie v0.2.5
+[1m[92m    Checking[0m cpufeatures v0.3.1
+[1m[92m    Checking[0m utf8_iter v1.0.4
+[1m[92m    Checking[0m icu_collections v2.3.0
+[1m[92m    Checking[0m chacha20 v0.10.2
+[1m[92m   Compiling[0m ring v0.17.14
+[1m[92m   Compiling[0m icu_normalizer_data v2.3.0
+[1m[92m    Checking[0m base64 v0.22.1
+[1m[92m   Compiling[0m vcpkg v0.2.15
+[1m[92m    Checking[0m icu_provider v2.3.1
+[1m[92m   Compiling[0m rustversion v1.0.23
+[1m[92m   Compiling[0m icu_properties_data v2.3.0
+[1m[92m    Checking[0m rand v0.10.3
+[1m[92m   Compiling[0m async-trait v0.1.92
+[1m[92m   Compiling[0m serde_json v1.0.154
+[1m[92m    Checking[0m utf16_iter v1.0.5
+[1m[92m    Checking[0m const-oid v0.9.6
+[1m[92m    Checking[0m byteorder v1.5.0
+[1m[92m    Checking[0m iana-time-zone v0.1.65
+[1m[92m    Checking[0m write16 v1.0.0
+[1m[92m    Checking[0m icu_normalizer v2.3.0
+[1m[92m    Checking[0m chrono v0.4.45
+[1m[92m    Checking[0m icu_properties v2.3.0
+[1m[92m    Checking[0m regex-syntax v0.8.11
+[1m[92m    Checking[0m sha1_smol v1.0.1
+[1m[92m    Checking[0m uuid v1.28.0
+[1m[92m    Checking[0m indexmap v2.14.2
+[1m[92m   Compiling[0m bigdecimal v0.4.11
+[1m[92m   Compiling[0m crc32fast v1.5.2
+[1m[92m    Checking[0m percent-encoding v2.3.2
+[1m[92m    Checking[0m aho-corasick v1.1.5
+[1m[92m    Checking[0m cpufeatures v0.2.17
+[1m[92m    Checking[0m spin v0.9.9
+[1m[92m   Compiling[0m ahash v0.8.12
+[1m[92m   Compiling[0m thiserror v2.0.21
+[1m[92m    Checking[0m regex-automata v0.4.18
+[1m[92m    Checking[0m rustls-pki-types v1.15.1
+[1m[92m    Checking[0m either v1.19.0
+[1m[92m   Compiling[0m thiserror-impl v2.0.21
+[1m[92m   Compiling[0m uncased v0.9.10
+[1m[92m    Checking[0m block-buffer v0.10.4
+[1m[92m    Checking[0m digest v0.10.7
+[1m[92m    Checking[0m lazy_static v1.5.1
+[1m[92m    Checking[0m form_urlencoded v1.2.2
+[1m[92m    Checking[0m idna_adapter v1.2.2
+[1m[92m    Checking[0m ppv-lite86 v0.2.21
+[1m[92m    Checking[0m siphasher v1.0.4
+[1m[92m   Compiling[0m rustix v1.1.5
+[1m[92m    Checking[0m ryu v1.0.23
+[1m[92m    Checking[0m idna v1.1.0
+[1m[92m    Checking[0m deranged v0.5.9
+[1m[92m    Checking[0m time-core v0.1.9
+[1m[92m    Checking[0m linux-raw-sys v0.12.1
+[1m[92m    Checking[0m fastrand v2.5.0
+[1m[92m    Checking[0m num-conv v0.2.2
+[1m[92m    Checking[0m parking v2.2.1
+[1m[92m    Checking[0m regex v1.13.1
+[1m[92m    Checking[0m powerfmt v0.2.1
+[1m[92m    Checking[0m url v2.5.8
+[1m[92m    Checking[0m time v0.3.55
+[1m[92m   Compiling[0m zstd-sys v2.1.1+zstd.1.5.7
+[1m[92m   Compiling[0m crossbeam-epoch v0.9.21
+[1m[92m   Compiling[0m heck v0.5.0
+[1m[92m    Checking[0m untrusted v0.9.0
+[1m[92m    Checking[0m fnv v1.0.7
+[1m[92m   Compiling[0m crunchy v0.2.4
+[1m[92m   Compiling[0m semver v1.0.28
+[1m[92m   Compiling[0m rustc_version v0.4.1
+[1m[92m    Checking[0m event-listener v5.4.2
+[1m[92m    Checking[0m base64ct v1.8.3
+[1m[92m   Compiling[0m anyhow v1.0.104
+[1m[92m   Compiling[0m ident_case v1.0.1
+[1m[92m   Compiling[0m strsim v0.11.1
+[1m[92m    Checking[0m jiff-core v0.1.1
+[1m[92m   Compiling[0m zstd-safe v7.3.0
+[1m[92m   Compiling[0m darling_core v0.24.1
+[1m[92m    Checking[0m jiff v0.2.38
+[1m[92m    Checking[0m pem-rfc7468 v0.7.0
+[1m[92m   Compiling[0m itertools v0.12.1
+[1m[92m    Checking[0m tokio-stream v0.1.19
+[1m[92m    Checking[0m http v1.5.0
+[1m[92m   Compiling[0m der_derive v0.7.3
+[1m[92m    Checking[0m ownedbytes v0.9.0
+[1m[92m    Checking[0m hybrid-array v0.4.15
+[1m[92m   Compiling[0m icu_locale_fallback_data v2.3.0
+[1m[92m    Checking[0m flagset v0.4.7
+[1m[92m   Compiling[0m crossbeam-deque v0.8.8
+[1m[92m   Compiling[0m prettyplease v0.3.0
+[1m[92m   Compiling[0m glob v0.3.4
+[1m[92m   Compiling[0m typeid v1.0.3
+[1m[92m    Checking[0m fallible-iterator v0.3.0
+[1m[92m   Compiling[0m clang-sys v1.9.1
+[1m[92m    Checking[0m der v0.7.10
+[1m[92m    Checking[0m tantivy-common v0.11.0
+[1m[92m   Compiling[0m darling_macro v0.24.1
+[1m[92m    Checking[0m bitpacking v0.9.3
+[1m[92m    Checking[0m polling v3.11.0
+[1m[92m    Checking[0m arc-swap v1.9.2
+[1m[92m    Checking[0m crossbeam-channel v0.5.17
+[1m[92m    Checking[0m half v2.7.1
+[1m[92m    Checking[0m inout v0.1.4
+[1m[92m   Compiling[0m rayon-core v1.13.0
+[1m[92m   Compiling[0m erased-serde v0.4.10
+[1m[92m    Checking[0m cmov v0.5.4
+[1m[92m   Compiling[0m prettyplease v0.2.37
+[1m[92m    Checking[0m tinyvec v1.13.3
+[1m[92m   Compiling[0m rustix v0.38.44
+[1m[92m    Checking[0m utf8-ranges v1.0.5
+[1m[92m    Checking[0m unicode-normalization v0.1.25
+[1m[92m    Checking[0m tantivy-fst v0.5.0
+[1m[92m    Checking[0m ctutils v0.4.3
+[1m[92m    Checking[0m cipher v0.4.4
+[1m[92m    Checking[0m arrow-buffer v58.4.0
+[1m[92m    Checking[0m spki v0.7.3
+[1m[92m    Checking[0m tantivy-bitpacker v0.10.0
+[1m[92m   Compiling[0m darling v0.24.1
+[1m[92m    Checking[0m block-buffer v0.12.1
+[1m[92m    Checking[0m crypto-common v0.2.2
+[1m[92m    Checking[0m zstd v0.13.3
+[1m[92m    Checking[0m itertools v0.14.0
+[1m[92m   Compiling[0m openssl-sys v0.9.117
+[1m[92m    Checking[0m tokio-util v0.7.20
+[1m[92m    Checking[0m universal-hash v0.5.1
+[1m[92m   Compiling[0m bytemuck_derive v1.12.1
+[1m[92m    Checking[0m arrow-schema v58.4.0
+[1m[92m   Compiling[0m memoffset v0.9.1
+[1m[92m    Checking[0m opaque-debug v0.3.1
+[1m[92m    Checking[0m minimal-lexical v0.2.1
+[1m[92m   Compiling[0m icu_locale_data v2.3.0
+[1m[92m    Checking[0m hex v0.4.3
+[1m[92m    Checking[0m unicode-bidi v0.3.18
+[1m[92m   Compiling[0m icu_collator_data v2.3.0
+[1m[92m    Checking[0m const-oid v0.10.2
+[1m[92m   Compiling[0m typetag v0.2.23
+[1m[92m    Checking[0m unicode-properties v0.1.4
+[1m[92m    Checking[0m murmurhash32 v0.3.1
+[1m[92m   Compiling[0m linux-raw-sys v0.4.15
+[1m[92m    Checking[0m foldhash v0.1.5
+[1m[92m    Checking[0m inventory v0.3.25
+[1m[92m    Checking[0m hashbrown v0.15.5
+[1m[92m    Checking[0m stringprep v0.1.5
+[1m[92m    Checking[0m bytemuck v1.25.2
+[1m[92m    Checking[0m tantivy-stacker v0.7.0
+[1m[92m    Checking[0m digest v0.11.3
+[1m[92m   Compiling[0m nom v7.1.3
+[1m[92m    Checking[0m tantivy-sstable v0.7.0
+[1m[92m    Checking[0m arrow-data v58.4.0
+[1m[92m    Checking[0m polyval v0.6.2
+[1m[92m   Compiling[0m bon-macros v3.10.2
+[1m[92m    Checking[0m icu_locale_fallback v2.3.0
+[1m[92m   Compiling[0m crc32c v0.6.8
+[1m[92m   Compiling[0m branches v0.4.6
+[1m[92m   Compiling[0m strum_macros v0.26.4
+[1m[92m    Checking[0m matchers v0.2.0
+[1m[92m    Checking[0m sha2 v0.10.9
+[1m[92m    Checking[0m sharded-slab v0.1.7
+[1m[92m    Checking[0m twox-hash v2.1.5
+[1m[92m    Checking[0m tracing-log v0.2.0
+[1m[92m   Compiling[0m libloading v0.8.9
+[1m[92m    Checking[0m rand_core v0.9.5
+[1m[92m   Compiling[0m typetag-impl v0.2.23
+[1m[92m   Compiling[0m turso_macros v0.7.2
+[1m[92m   Compiling[0m miette-derive v7.6.0
+[1m[92m    Checking[0m hashbrown v0.16.1
+[1m[92m    Checking[0m ordered-float v5.5.0
+[1m[92m    Checking[0m num-complex v0.4.6
+[1m[92m   Compiling[0m simsimd v6.5.16
+[1m[92m   Compiling[0m aegis v0.9.20
+[1m[92m    Checking[0m thread_local v1.1.10
+[1m[92m    Checking[0m tower-service v0.3.3
+[1m[92m   Compiling[0m io-uring v0.7.15
+[1m[92m   Compiling[0m turso_ext v0.7.2
+[1m[92m    Checking[0m downcast-rs v2.0.2
+[1m[92m    Checking[0m unicode-width v0.1.14
+[1m[92m   Compiling[0m linkme-impl v0.3.37
+[1m[92m   Compiling[0m cfg_aliases v0.2.2
+[1m[92m    Checking[0m nu-ansi-term v0.50.3
+[1m[92m   Compiling[0m httparse v1.10.1
+[1m[92m   Compiling[0m rustls v0.23.46
+[1m[92m   Compiling[0m home v0.5.12
+[1m[92m    Checking[0m fastdivide v0.4.2
+[1m[92m   Compiling[0m bindgen v0.69.5
+[1m[92m    Checking[0m atomic-waker v1.1.2
+[1m[92m    Checking[0m tantivy-columnar v0.7.0
+[1m[92m   Compiling[0m which v4.4.2
+[1m[92m    Checking[0m bon v3.10.2
+[1m[92m    Checking[0m tracing-subscriber v0.3.23
+[1m[92m    Checking[0m miette v7.6.0
+[1m[92m   Compiling[0m turso_core v0.7.2
+[1m[92m    Checking[0m arrow-array v58.4.0
+[1m[92m    Checking[0m tantivy-query-grammar v0.26.0
+[1m[92m    Checking[0m lru v0.16.4
+[1m[92m    Checking[0m strum v0.26.3
+[1m[92m    Checking[0m rand_chacha v0.9.0
+[1m[92m    Checking[0m rayon v1.12.0
+[1m[92m   Compiling[0m cexpr v0.6.0
+[1m[92m    Checking[0m ghash v0.5.1
+[1m[92m    Checking[0m aes v0.8.4
+[1m[92m    Checking[0m ctr v0.9.2
+[1m[92m    Checking[0m fs4 v0.13.1
+[1m[92m    Checking[0m tempfile v3.27.0
+[1m[92m    Checking[0m rustls-webpki v0.103.15
+[1m[92m    Checking[0m hashbrown v0.14.5
+[1m[92m    Checking[0m crossbeam-queue v0.3.14
+[1m[92m    Checking[0m aead v0.5.2
+[1m[92m    Checking[0m sketches-ddsketch v0.4.1
+[1m[92m    Checking[0m rust-stemmers v1.2.0
+[1m[92m    Checking[0m tantivy-tokenizer-api v0.7.0
+[1m[92m   Compiling[0m aristo-macros v0.4.1
+[1m[92m    Checking[0m measure_time v0.9.0
+[1m[92m    Checking[0m memmap2 v0.9.11
+[1m[92m    Checking[0m lexical-util v1.0.7
+[1m[92m    Checking[0m softaes v0.1.7
+[1m[92m    Checking[0m rustc-hash v2.1.3
+[1m[92m   Compiling[0m linkme v0.3.37
+[1m[92m    Checking[0m levenshtein_automata v0.2.1
+[1m[92m   Compiling[0m syn v1.0.109
+[1m[92m   Compiling[0m lazycell v1.3.0
+[1m[92m    Checking[0m lz4_flex v0.13.1
+[1m[92m    Checking[0m datasketches v0.2.0
+[1m[92m   Compiling[0m simd-adler32 v0.3.10
+[1m[92m   Compiling[0m shlex v1.3.0
+[1m[92m   Compiling[0m rustc-hash v1.1.0
+[1m[92m    Checking[0m bit-vec v0.10.1
+[1m[92m    Checking[0m openssl-probe v0.2.1
+[1m[92m    Checking[0m census v0.4.2
+[1m[92m    Checking[0m oneshot v0.1.13
+[1m[92m    Checking[0m htmlescape v0.3.1
+[1m[92m    Checking[0m try-lock v0.2.5
+[1m[92m    Checking[0m want v0.3.2
+[1m[92m    Checking[0m tantivy v0.26.2
+[1m[92m    Checking[0m bit-set v0.11.1
+[1m[92m    Checking[0m aristo v0.4.1
+[1m[92m    Checking[0m aes-gcm v0.10.3
+[1m[92m    Checking[0m icu_collator v2.3.1
+[1m[92m    Checking[0m icu_locale v2.3.1
+[1m[92m    Checking[0m intrusive-collections v0.9.7
+[1m[92m    Checking[0m rand v0.9.5
+[1m[92m    Checking[0m turso_parser v0.7.2
+[1m[92m    Checking[0m roaring v0.11.5
+[1m[92m    Checking[0m pack1 v1.1.0
+[1m[92m    Checking[0m event-listener-strategy v0.5.4
+[1m[92m    Checking[0m rand_chacha v0.3.1
+[1m[92m    Checking[0m fastbloom v0.14.1
+[1m[92m    Checking[0m rapidhash v4.5.1
+[1m[92m   Compiling[0m libsqlite3-sys v0.30.1
+[1m[92m   Compiling[0m libz-sys v1.1.30
+[1m[92m    Checking[0m futures-executor v0.3.34
+[1m[92m    Checking[0m atoi v2.0.0
+[1m[92m    Checking[0m allocator-api2 v0.4.0
+[1m[92m    Checking[0m bumpalo v3.20.3
+[1m[92m   Compiling[0m adler2 v2.0.1
+[1m[92m   Compiling[0m openssl v0.10.81
+[1m[92m    Checking[0m cfg_block v0.1.1
+[1m[92m    Checking[0m foreign-types-shared v0.1.1
+[1m[92m   Compiling[0m pastey v0.2.3
+[1m[92m   Compiling[0m prost-derive v0.14.4
+[1m[92m    Checking[0m foreign-types v0.3.2
+[1m[92m   Compiling[0m phf_shared v0.11.3
+[1m[92m    Checking[0m toasty-core v0.9.0
+[1m[92m   Compiling[0m rand v0.8.8
+[1m[92m   Compiling[0m miniz_oxide v0.9.1
+[1m[92m   Compiling[0m turso_sdk_kit v0.7.2
+[1m[92m    Checking[0m hashlink v0.10.0
+[1m[92m    Checking[0m sha2 v0.11.1
+[1m[92m    Checking[0m md-5 v0.11.0
+[1m[92m    Checking[0m hmac v0.13.0
+[1m[92m    Checking[0m http-body v1.1.0
+[1m[92m    Checking[0m sha1 v0.10.7
+[1m[92m    Checking[0m concurrent-queue v2.5.0
+[1m[92m   Compiling[0m openssl-macros v0.1.1
+[1m[92m    Checking[0m env_filter v2.0.0
+[1m[92m   Compiling[0m libmimalloc-sys v0.1.49
+[1m[92m    Checking[0m fallible-iterator v0.2.0
+[1m[92m   Compiling[0m winnow v0.5.40
+[1m[92m   Compiling[0m base64 v0.23.1
+[1m[92m    Checking[0m genawaiter-macro v0.99.1
+[1m[92m   Compiling[0m toml_datetime v0.6.11
+[1m[92m    Checking[0m crc-catalog v2.5.0
+[1m[92m   Compiling[0m num-bigint-dig v0.8.6
+[1m[92m    Checking[0m symlink v0.1.0
+[1m[92m   Compiling[0m zlib-rs v0.6.8
+[1m[92m   Compiling[0m native-tls v0.2.18
+[1m[92m   Compiling[0m zopfli v0.8.4
+[1m[92m   Compiling[0m flate2 v1.1.10
+[1m[92m   Compiling[0m toml_edit v0.19.15
+[1m[92m    Checking[0m tracing-appender v0.2.5
+[1m[92m    Checking[0m crc v3.4.0
+[1m[92m    Checking[0m genawaiter v0.99.1
+[1m[92m   Compiling[0m ureq-proto v0.6.4
+[1m[92m    Checking[0m postgres-protocol v0.6.12
+[1m[92m    Checking[0m env_logger v0.11.11
+[1m[92m    Checking[0m toasty-sql v0.9.0
+[1m[92m    Checking[0m spawns-core v1.1.2
+[1m[92m   Compiling[0m phf_generator v0.11.3
+[1m[92m   Compiling[0m xattr v1.6.1
+[1m[92m    Checking[0m prost v0.14.4
+[1m[92m    Checking[0m tokio-rustls v0.26.6
+[1m[92m    Checking[0m lexical-write-integer v1.0.6
+[1m[92m    Checking[0m lexical-parse-integer v1.0.6
+[1m[92m    Checking[0m arrow-select v58.4.0
+[1m[92m   Compiling[0m webpki-roots v1.0.9
+[1m[92m    Checking[0m pkcs8 v0.10.2
+[1m[92m    Checking[0m http v0.2.12
+[1m[92m    Checking[0m futures-lite v2.6.1
+[1m[92m    Checking[0m phf_shared v0.13.1
+[1m[92m    Checking[0m rustls-pemfile v2.2.0
+[1m[92m   Compiling[0m filetime v0.2.29
+[1m[92m    Checking[0m futures-intrusive v0.5.0
+[1m[92m    Checking[0m num-iter v0.1.46
+[1m[92m   Compiling[0m turso_sdk_kit_macros v0.7.2
+[1m[92m   Compiling[0m async-io v2.6.0
+[1m[92m   Compiling[0m ahash v0.7.8
+[1m[92m   Compiling[0m mysql_common v0.37.3
+[1m[92m   Compiling[0m utf8-zero v0.8.1
+[1m[92m    Checking[0m tower-layer v0.3.3
+[1m[92m   Compiling[0m unicode-segmentation v1.13.3
+[1m[92m    Checking[0m array-init v2.1.0
+[1m[92m   Compiling[0m rustls v0.22.4
+[1m[92m   Compiling[0m thiserror v1.0.69
+[1m[92m    Checking[0m postgres-types v0.2.14
+[1m[92m   Compiling[0m ureq v3.4.2
+[1m[92m   Compiling[0m heck v0.3.3
+[1m[92m    Checking[0m sqlx-core v0.8.6
+[1m[92m   Compiling[0m tar v0.4.46
+[1m[92m    Checking[0m phf v0.13.1
+[1m[92m    Checking[0m pkcs1 v0.7.5
+[1m[92m    Checking[0m lexical-write-float v1.0.6
+[1m[92m    Checking[0m lexical-parse-float v1.0.6
+[1m[92m   Compiling[0m phf_codegen v0.11.3
+[1m[92m    Checking[0m spawns-compat v0.2.2
+[1m[92m    Checking[0m crossterm v0.28.1
+[1m[92m   Compiling[0m proc-macro-crate v1.3.1
+[1m[92m   Compiling[0m zip v6.0.0 (https://github.com/zip-rs/zip2.git?rev=abfc23d19e5c6038cba27eb3a897bc34c6d5bf86#abfc23d1)
+[1m[92m    Checking[0m async-channel v2.5.0
+[1m[92m    Checking[0m futures v0.3.34
+[1m[92m    Checking[0m piper v0.2.5
+[1m[92m    Checking[0m x509-cert v0.2.5
+[1m[92m    Checking[0m rustls-webpki v0.102.8
+[1m[92m    Checking[0m signature v2.2.0
+[1m[92m    Checking[0m hmac v0.12.1
+[1m[92m   Compiling[0m encoding_rs v0.8.42
+[1m[92m    Checking[0m lru v0.18.5
+[1m[92m   Compiling[0m async-select-proc-macros v0.3.0
+[1m[92m   Compiling[0m thiserror-impl v1.0.69
+[1m[92m    Checking[0m btoi v0.5.0
+[1m[92m    Checking[0m whoami v2.1.3
+[1m[92m    Checking[0m fallible-streaming-iterator v0.1.9
+[1m[92m    Checking[0m konst_macro_rules v0.2.19
+[1m[92m    Checking[0m unicode-width v0.2.2
+[1m[92m    Checking[0m saturating v0.1.0
+[1m[92m   Compiling[0m unicode-xid v0.2.6
+[1m[92m    Checking[0m async-task v4.7.1
+[1m[92m   Compiling[0m portable-atomic v1.15.0
+[1m[92m    Checking[0m blocking v1.7.0
+[1m[92m   Compiling[0m const_format_proc_macros v0.2.34
+[1m[92m    Checking[0m comfy-table v7.1.4
+[1m[92m    Checking[0m konst v0.2.20
+[1m[92m    Checking[0m tokio-postgres v0.7.18
+[1m[92m    Checking[0m async-select v0.3.0
+[1m[92m    Checking[0m hkdf v0.12.4
+[1m[92m    Checking[0m rsa v0.9.10
+[1m[92m   Compiling[0m libduckdb-sys v1.10505.0
+[1m[92m   Compiling[0m num_enum_derive v0.5.11
+[1m[92m    Checking[0m turso_sync_engine v0.7.2
+[1m[92m    Checking[0m spawns v0.2.6
+[1m[92m    Checking[0m lexical-core v1.0.6
+[1m[92m   Compiling[0m libsql-sqlite3-parser v0.13.0
+[1m[92m    Checking[0m mimalloc v0.1.52
+[1m[92m    Checking[0m tokio-native-tls v0.3.1
+[1m[92m   Compiling[0m strum_macros v0.23.1
+[1m[92m    Checking[0m arrow-ord v58.4.0
+[1m[92m    Checking[0m h2 v0.3.27
+[1m[92m    Checking[0m http-body v0.4.6
+[1m[92m    Checking[0m hyper v1.12.0
+[1m[92m    Checking[0m rustls-native-certs v0.8.5
+[1m[92m    Checking[0m hashlink v0.9.1
+[1m[92m   Compiling[0m prost-derive v0.12.6
+[1m[92m    Checking[0m serde_urlencoded v0.7.1
+[1m[92m    Checking[0m md-5 v0.10.6
+[1m[92m    Checking[0m keyed_priority_queue v0.4.2
+[1m[92m    Checking[0m castaway v0.2.4
+[1m[92m    Checking[0m pem v3.0.6
+[1m[92m   Compiling[0m pin-project-internal v1.1.13
+[1m[92m    Checking[0m sync_wrapper v1.0.2
+[1m[92m    Checking[0m socket2 v0.5.10
+[1m[92m    Checking[0m dotenvy v0.15.7
+[1m[92m    Checking[0m openssl-probe v0.1.6
+[1m[92m    Checking[0m asyncs-sync v0.4.0
+[1m[92m   Compiling[0m toasty-macros v0.9.0
+[1m[92m    Checking[0m simdutf8 v0.1.5
+[1m[92m    Checking[0m ipnet v2.12.2
+[1m[92m    Checking[0m core_detect v1.0.0
+[1m[92m    Checking[0m whoami v1.6.1
+[1m[92m   Compiling[0m multiversion_no_op v1.0.0
+[1m[92m    Checking[0m httpdate v1.0.3
+[1m[92m    Checking[0m hyper-util v0.1.21
+[1m[92m    Checking[0m hyper v0.14.32
+[1m[92m    Checking[0m asyncs v0.4.0
+[1m[92m    Checking[0m rustls-native-certs v0.7.3
+[1m[92m    Checking[0m pin-project v1.1.13
+[1m[92m    Checking[0m turso_sync_sdk_kit v0.7.2
+[1m[92m    Checking[0m tower v0.5.3
+[1m[92m    Checking[0m prost v0.12.6
+[1m[92m    Checking[0m mysql_async v0.37.1
+[1m[92m    Checking[0m compact_str v0.4.1
+[1m[92m    Checking[0m turso v0.7.2
+[1m[92m    Checking[0m phf v0.11.3
+[1m[92m    Checking[0m rusqlite v0.32.1
+[1m[92m    Checking[0m rustls-platform-verifier v0.7.1
+[1m[92m    Checking[0m strum v0.23.0
+[1m[92m    Checking[0m arrow-cast v58.4.0
+[1m[92m    Checking[0m async-net v2.0.0
+[1m[92m    Checking[0m hashbrown v0.12.3
+[1m[92m    Checking[0m num_enum v0.5.11
+[1m[92m    Checking[0m tokio-rustls v0.25.0
+[1m[92m    Checking[0m tokio-postgres-rustls v0.14.0
+[1m[92m    Checking[0m const_format v0.2.36
+[1m[92m    Checking[0m webpki-roots v0.26.11
+[1m[92m    Checking[0m arrow-string v58.4.0
+[1m[92m    Checking[0m async-lock v3.4.2
+[1m[92m    Checking[0m hashlink v0.8.4
+[1m[92m    Checking[0m arrow-arith v58.4.0
+[1m[92m    Checking[0m arrow-row v58.4.0
+[1m[92m   Compiling[0m pluralizer v0.5.0
+[1m[92m   Compiling[0m strum_macros v0.27.2
+[1m[92m    Checking[0m flume v0.11.1
+[1m[92m    Checking[0m deadpool-runtime v0.3.1
+[1m[92m   Compiling[0m derive-where v1.7.0
+[1m[92m   Compiling[0m async-stream-impl v0.3.6
+[1m[92m   Compiling[0m sqlparser_derive v0.2.2
+[1m[92m    Checking[0m base64 v0.21.7
+[1m[92m    Checking[0m static_assertions v1.1.0
+[1m[92m   Compiling[0m toasty v0.9.0
+[1m[92m    Checking[0m ignore-result v0.2.0
+[1m[92m    Checking[0m tagptr v0.2.0
+[1m[92m    Checking[0m libsql-hrana v0.9.30
+[1m[92m    Checking[0m moka v0.12.16
+[1m[92m    Checking[0m zookeeper-client v0.11.2
+[1m[92m    Checking[0m sqlparser v0.52.0
+[1m[92m    Checking[0m async-stream v0.3.6
+[1m[92m    Checking[0m sqlx-postgres v0.8.6
+[1m[92m    Checking[0m strum v0.27.2
+[1m[92m    Checking[0m deadpool v0.13.1
+[1m[92m    Checking[0m sqlx-sqlite v0.8.6
+[1m[92m    Checking[0m arrow v58.4.0
+[1m[92m    Checking[0m toasty-driver-mysql v0.9.0
+[1m[92m    Checking[0m hyper-rustls v0.25.0
+[1m[92m    Checking[0m toasty-driver-postgresql v0.9.0
+[1m[92m    Checking[0m toasty-driver-sqlite v0.9.0 (/home/runner/work/druid-rust/druid-rust/vendor/toasty-driver-sqlite)
+[1m[92m    Checking[0m toasty-driver-turso v0.9.0
+[1m[92m    Checking[0m tower-http v0.6.11
+[1m[92m    Checking[0m tower v0.4.13
+[1m[92m    Checking[0m hyper-rustls v0.27.10
+[1m[92m    Checking[0m java-properties v2.0.0
+[1m[92m    Checking[0m sqlx-mysql v0.8.6
+[1m[92m    Checking[0m druid-rdbc v0.0.0-design (/home/runner/work/druid-rust/druid-rust/crates/druid-rdbc)
+[1m[92m    Checking[0m http-body-util v0.1.5
+[1m[92m    Checking[0m dashmap v6.2.1
+[1m[92m    Checking[0m lru v0.14.0
+[1m[92m    Checking[0m fastdate v0.3.36
+[1m[92m    Checking[0m rbs v4.8.4
+[1m[92m    Checking[0m deadpool-runtime v0.1.4
+[1m[92m    Checking[0m quick-xml v0.41.0
+[1m[92m    Checking[0m serde_bytes v0.11.19
+[1m[92m    Checking[0m num_cpus v1.17.0
+[1m[92m    Checking[0m by_address v1.2.1
+[1m[92m    Checking[0m xxhash-rust v0.8.19
+[1m[92m    Checking[0m cast v0.3.0
+[1m[92m    Checking[0m index_vec v0.1.4
+[1m[92m    Checking[0m druid v0.0.0-design (/home/runner/work/druid-rust/druid-rust/crates/druid)
+[1m[92m    Checking[0m deadpool v0.12.3
+[1m[92m    Checking[0m rbdc v4.9.10
+[1m[92m    Checking[0m reqwest v0.12.28
+[1m[92m    Checking[0m sqlx v0.8.6
+[1m[92m    Checking[0m libsql v0.9.30
+[1m[92m    Checking[0m bb8 v0.8.6
+[1m[92m    Checking[0m fs2 v0.4.3
+[1m[92m    Checking[0m duckdb v1.10505.0
+[1m[92m Documenting[0m druid-wrapper v0.0.0-design (/home/runner/work/druid-rust/druid-rust/crates/druid-wrapper)
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 8m 23s
+[1m[32m       Built[0m [ 503.239s] (current)
+[1m[32m     Parsing[0m druid-wrapper v0.0.0-design (current)
+[1m[32m      Parsed[0m [   0.077s] (current)
+[1m[92m    Updating[0m git repository `https://github.com/zip-rs/zip2.git`
+[1m[92m    Updating[0m crates.io index
+[1m[92m     Locking[0m 674 packages to latest compatible versions
+[1m[92m      Adding[0m comfy-table v7.1.4 [1m[33m(available: v7.2.2)[0m
+[1m[92m      Adding[0m duckdb v1.10505.0 [1m[33m(available: v1.10506.0)[0m
+[1m[92m      Adding[0m generic-array v0.14.7 [1m[33m(available: v0.14.9)[0m
+[1m[92m      Adding[0m libduckdb-sys v1.10505.0 [1m[33m(available: v1.10506.0)[0m
+[1m[32m    Building[0m druid-wrapper v0.0.0-design (baseline)
+[1m[92m   Compiling[0m proc-macro2 v1.0.107
+[1m[92m   Compiling[0m quote v1.0.47
+[1m[92m   Compiling[0m unicode-ident v1.0.27
+[1m[92m   Compiling[0m libc v0.2.190
+[1m[92m    Checking[0m cfg-if v1.0.5
+[1m[92m   Compiling[0m serde_core v1.0.229
+[1m[92m   Compiling[0m serde v1.0.229
+[1m[92m   Compiling[0m syn v3.0.9
+[1m[92m   Compiling[0m syn v2.0.119
+[1m[92m   Compiling[0m jobserver v0.1.35
+[1m[92m   Compiling[0m shlex v2.0.1
+[1m[92m   Compiling[0m find-msvc-tools v0.1.14
+[1m[92m   Compiling[0m version_check v0.9.5
+[1m[92m   Compiling[0m cc v1.8.0
+[1m[92m    Checking[0m pin-project-lite v0.2.17
+[1m[92m    Checking[0m scopeguard v1.2.0
+[1m[92m    Checking[0m lock_api v0.4.14
+[1m[92m   Compiling[0m autocfg v1.5.1
+[1m[92m    Checking[0m memchr v2.8.3
+[1m[92m   Compiling[0m parking_lot_core v0.9.12
+[1m[92m    Checking[0m once_cell v1.21.4
+[1m[92m    Checking[0m futures-core v0.3.34
+[1m[92m   Compiling[0m libm v0.2.16
+[1m[92m   Compiling[0m num-traits v0.2.19
+[1m[92m    Checking[0m allocator-api2 v0.2.21
+[1m[92m    Checking[0m getrandom v0.2.17
+[1m[92m    Checking[0m bitflags v2.13.2
+[1m[92m    Checking[0m typenum v1.20.1
+[1m[92m    Checking[0m equivalent v1.0.3
+[1m[92m    Checking[0m log v0.4.34
+[1m[92m    Checking[0m errno v0.3.14
+[1m[92m    Checking[0m stable_deref_trait v1.2.1
+[1m[92m   Compiling[0m pkg-config v0.3.34
+[1m[92m    Checking[0m futures-io v0.3.34
+[1m[92m    Checking[0m signal-hook-registry v1.4.8
+[1m[92m    Checking[0m socket2 v0.6.5
+[1m[92m    Checking[0m mio v1.2.4
+[1m[92m    Checking[0m foldhash v0.2.0
+[1m[92m    Checking[0m itoa v1.0.18
+[1m[92m   Compiling[0m zerocopy v0.8.63
+[1m[92m    Checking[0m futures-sink v0.3.34
+[1m[92m   Compiling[0m zerocopy-derive v0.8.63
+[1m[92m   Compiling[0m synstructure v0.14.0
+[1m[92m   Compiling[0m serde_derive v1.0.229
+[1m[92m   Compiling[0m tokio-macros v2.7.2
+[1m[92m    Checking[0m slab v0.4.12
+[1m[92m    Checking[0m num-integer v0.1.47
+[1m[92m   Compiling[0m zerofrom-derive v0.1.8
+[1m[92m   Compiling[0m futures-macro v0.3.34
+[1m[92m    Checking[0m futures-channel v0.3.34
+[1m[92m   Compiling[0m generic-array v0.14.7
+[1m[92m    Checking[0m futures-task v0.3.34
+[1m[92m    Checking[0m futures-util v0.3.34
+[1m[92m    Checking[0m zerofrom v0.1.8
+[1m[92m   Compiling[0m yoke-derive v0.8.4
+[1m[92m    Checking[0m rand_core v0.6.4
+[1m[92m   Compiling[0m getrandom v0.4.3
+[1m[92m    Checking[0m yoke v0.8.3
+[1m[92m    Checking[0m smallvec v1.16.3
+[1m[92m    Checking[0m bytes v1.12.1
+[1m[92m    Checking[0m parking_lot v0.12.5
+[1m[92m    Checking[0m subtle v2.6.1
+[1m[92m    Checking[0m num-bigint v0.4.8
+[1m[92m    Checking[0m tokio v1.53.3
+[1m[92m   Compiling[0m zerovec-derive v0.11.6
+[1m[92m   Compiling[0m getrandom v0.3.4
+[1m[92m   Compiling[0m zmij v1.0.23
+[1m[92m    Checking[0m zerovec v0.11.8
+[1m[92m   Compiling[0m displaydoc v0.2.7
+[1m[92m   Compiling[0m crossbeam-utils v0.8.23
+[1m[92m    Checking[0m crypto-common v0.1.7
+[1m[92m    Checking[0m hashbrown v0.17.1
+[1m[92m   Compiling[0m tracing-attributes v0.1.31
+[1m[92m    Checking[0m writeable v0.6.4
+[1m[92m    Checking[0m rand_core v0.10.1
+[1m[92m    Checking[0m tinystr v0.8.4
+[1m[92m    Checking[0m tracing-core v0.1.36
+[1m[92m    Checking[0m litemap v0.8.3
+[1m[92m    Checking[0m icu_locale_core v2.3.0
+[1m[92m    Checking[0m potential_utf v0.1.6
+[1m[92m    Checking[0m zerotrie v0.2.5
+[1m[92m    Checking[0m cpufeatures v0.3.1
+[1m[92m    Checking[0m tracing v0.1.44
+[1m[92m    Checking[0m utf8_iter v1.0.4
+[1m[92m    Checking[0m chacha20 v0.10.2
+[1m[92m    Checking[0m icu_collections v2.3.0
+[1m[92m   Compiling[0m vcpkg v0.2.15
+[1m[92m    Checking[0m icu_provider v2.3.1
+[1m[92m   Compiling[0m serde_json v1.0.154
+[1m[92m    Checking[0m base64 v0.22.1
+[1m[92m   Compiling[0m icu_normalizer_data v2.3.0
+[1m[92m   Compiling[0m rustversion v1.0.23
+[1m[92m   Compiling[0m icu_properties_data v2.3.0
+[1m[92m    Checking[0m rand v0.10.3
+[1m[92m   Compiling[0m async-trait v0.1.92
+[1m[92m    Checking[0m utf16_iter v1.0.5
+[1m[92m    Checking[0m const-oid v0.9.6
+[1m[92m    Checking[0m write16 v1.0.0
+[1m[92m    Checking[0m iana-time-zone v0.1.65
+[1m[92m    Checking[0m byteorder v1.5.0
+[1m[92m    Checking[0m chrono v0.4.45
+[1m[92m    Checking[0m icu_normalizer v2.3.0
+[1m[92m    Checking[0m icu_properties v2.3.0
+[1m[92m    Checking[0m sha1_smol v1.0.1
+[1m[92m    Checking[0m regex-syntax v0.8.11
+[1m[92m    Checking[0m uuid v1.28.0
+[1m[92m    Checking[0m zeroize v1.9.1
+[1m[92m   Compiling[0m bigdecimal v0.4.11
+[1m[92m    Checking[0m percent-encoding v2.3.2
+[1m[92m   Compiling[0m crc32fast v1.5.2
+[1m[92m    Checking[0m indexmap v2.14.2
+[1m[92m   Compiling[0m ring v0.17.14
+[1m[92m    Checking[0m aho-corasick v1.1.5
+[1m[92m    Checking[0m cpufeatures v0.2.17
+[1m[92m    Checking[0m regex-automata v0.4.18
+[1m[92m    Checking[0m spin v0.9.9
+[1m[92m   Compiling[0m ahash v0.8.12
+[1m[92m   Compiling[0m thiserror v2.0.21
+[1m[92m    Checking[0m either v1.19.0
+[1m[92m   Compiling[0m thiserror-impl v2.0.21
+[1m[92m   Compiling[0m uncased v0.9.10
+[1m[92m    Checking[0m block-buffer v0.10.4
+[1m[92m    Checking[0m digest v0.10.7
+[1m[92m    Checking[0m lazy_static v1.5.1
+[1m[92m    Checking[0m idna_adapter v1.2.2
+[1m[92m    Checking[0m form_urlencoded v1.2.2
+[1m[92m    Checking[0m ppv-lite86 v0.2.21
+[1m[92m   Compiling[0m rustix v1.1.5
+[1m[92m    Checking[0m ryu v1.0.23
+[1m[92m    Checking[0m siphasher v1.0.4
+[1m[92m    Checking[0m regex v1.13.1
+[1m[92m    Checking[0m idna v1.1.0
+[1m[92m    Checking[0m deranged v0.5.9
+[1m[92m    Checking[0m linux-raw-sys v0.12.1
+[1m[92m    Checking[0m time-core v0.1.9
+[1m[92m    Checking[0m powerfmt v0.2.1
+[1m[92m    Checking[0m parking v2.2.1
+[1m[92m    Checking[0m fastrand v2.5.0
+[1m[92m    Checking[0m num-conv v0.2.2
+[1m[92m    Checking[0m url v2.5.8
+[1m[92m   Compiling[0m zstd-sys v2.1.1+zstd.1.5.7
+[1m[92m    Checking[0m time v0.3.55
+[1m[92m   Compiling[0m heck v0.5.0
+[1m[92m   Compiling[0m crossbeam-epoch v0.9.21
+[1m[92m   Compiling[0m crunchy v0.2.4
+[1m[92m    Checking[0m fnv v1.0.7
+[1m[92m   Compiling[0m semver v1.0.28
+[1m[92m   Compiling[0m rustc_version v0.4.1
+[1m[92m    Checking[0m event-listener v5.4.2
+[1m[92m   Compiling[0m zstd-safe v7.3.0
+[1m[92m   Compiling[0m anyhow v1.0.104
+[1m[92m    Checking[0m base64ct v1.8.3
+[1m[92m   Compiling[0m ident_case v1.0.1
+[1m[92m   Compiling[0m strsim v0.11.1
+[1m[92m    Checking[0m jiff-core v0.1.1
+[1m[92m   Compiling[0m darling_core v0.24.1
+[1m[92m    Checking[0m jiff v0.2.38
+[1m[92m    Checking[0m pem-rfc7468 v0.7.0
+[1m[92m   Compiling[0m itertools v0.12.1
+[1m[92m    Checking[0m rustls-pki-types v1.15.1
+[1m[92m    Checking[0m tokio-stream v0.1.19
+[1m[92m    Checking[0m http v1.5.0
+[1m[92m   Compiling[0m der_derive v0.7.3
+[1m[92m    Checking[0m hybrid-array v0.4.15
+[1m[92m    Checking[0m ownedbytes v0.9.0
+[1m[92m   Compiling[0m crossbeam-deque v0.8.8
+[1m[92m    Checking[0m flagset v0.4.7
+[1m[92m    Checking[0m fallible-iterator v0.3.0
+[1m[92m   Compiling[0m prettyplease v0.3.0
+[1m[92m   Compiling[0m icu_locale_fallback_data v2.3.0
+[1m[92m   Compiling[0m typeid v1.0.3
+[1m[92m   Compiling[0m glob v0.3.4
+[1m[92m    Checking[0m der v0.7.10
+[1m[92m   Compiling[0m clang-sys v1.9.1
+[1m[92m    Checking[0m tantivy-common v0.11.0
+[1m[92m   Compiling[0m darling_macro v0.24.1
+[1m[92m    Checking[0m polling v3.11.0
+[1m[92m    Checking[0m bitpacking v0.9.3
+[1m[92m    Checking[0m arc-swap v1.9.2
+[1m[92m    Checking[0m crossbeam-channel v0.5.17
+[1m[92m    Checking[0m half v2.7.1
+[1m[92m    Checking[0m inout v0.1.4
+[1m[92m    Checking[0m cmov v0.5.4
+[1m[92m    Checking[0m tinyvec v1.13.3
+[1m[92m   Compiling[0m prettyplease v0.2.37
+[1m[92m    Checking[0m utf8-ranges v1.0.5
+[1m[92m   Compiling[0m erased-serde v0.4.10
+[1m[92m   Compiling[0m rayon-core v1.13.0
+[1m[92m   Compiling[0m rustix v0.38.44
+[1m[92m    Checking[0m unicode-normalization v0.1.25
+[1m[92m    Checking[0m tantivy-fst v0.5.0
+[1m[92m    Checking[0m ctutils v0.4.3
+[1m[92m    Checking[0m arrow-buffer v58.4.0
+[1m[92m    Checking[0m cipher v0.4.4
+[1m[92m    Checking[0m tantivy-bitpacker v0.10.0
+[1m[92m   Compiling[0m darling v0.24.1
+[1m[92m    Checking[0m spki v0.7.3
+[1m[92m    Checking[0m zstd v0.13.3
+[1m[92m    Checking[0m block-buffer v0.12.1
+[1m[92m    Checking[0m crypto-common v0.2.2
+[1m[92m    Checking[0m itertools v0.14.0
+[1m[92m   Compiling[0m openssl-sys v0.9.117
+[1m[92m    Checking[0m universal-hash v0.5.1
+[1m[92m   Compiling[0m bytemuck_derive v1.12.1
+[1m[92m    Checking[0m arrow-schema v58.4.0
+[1m[92m   Compiling[0m memoffset v0.9.1
+[1m[92m    Checking[0m inventory v0.3.25
+[1m[92m    Checking[0m untrusted v0.9.0
+[1m[92m    Checking[0m unicode-properties v0.1.4
+[1m[92m   Compiling[0m icu_locale_data v2.3.0
+[1m[92m   Compiling[0m typetag v0.2.23
+[1m[92m    Checking[0m opaque-debug v0.3.1
+[1m[92m    Checking[0m murmurhash32 v0.3.1
+[1m[92m    Checking[0m hex v0.4.3
+[1m[92m   Compiling[0m minimal-lexical v0.2.1
+[1m[92m    Checking[0m unicode-bidi v0.3.18
+[1m[92m    Checking[0m const-oid v0.10.2
+[1m[92m   Compiling[0m linux-raw-sys v0.4.15
+[1m[92m   Compiling[0m icu_collator_data v2.3.0
+[1m[92m    Checking[0m foldhash v0.1.5
+[1m[92m    Checking[0m bytemuck v1.25.2
+[1m[92m    Checking[0m nom v7.1.3
+[1m[92m    Checking[0m hashbrown v0.15.5
+[1m[92m    Checking[0m stringprep v0.1.5
+[1m[92m    Checking[0m digest v0.11.3
+[1m[92m    Checking[0m tantivy-stacker v0.7.0
+[1m[92m    Checking[0m polyval v0.6.2
+[1m[92m    Checking[0m tantivy-sstable v0.7.0
+[1m[92m    Checking[0m arrow-data v58.4.0
+[1m[92m   Compiling[0m bon-macros v3.10.2
+[1m[92m    Checking[0m icu_locale_fallback v2.3.0
+[1m[92m   Compiling[0m branches v0.4.6
+[1m[92m   Compiling[0m crc32c v0.6.8
+[1m[92m   Compiling[0m strum_macros v0.26.4
+[1m[92m    Checking[0m matchers v0.2.0
+[1m[92m    Checking[0m sharded-slab v0.1.7
+[1m[92m    Checking[0m sha2 v0.10.9
+[1m[92m    Checking[0m twox-hash v2.1.5
+[1m[92m    Checking[0m tokio-util v0.7.20
+[1m[92m    Checking[0m tracing-log v0.2.0
+[1m[92m   Compiling[0m libloading v0.8.9
+[1m[92m    Checking[0m rand_core v0.9.5
+[1m[92m   Compiling[0m typetag-impl v0.2.23
+[1m[92m    Checking[0m hashbrown v0.16.1
+[1m[92m   Compiling[0m miette-derive v7.6.0
+[1m[92m   Compiling[0m turso_macros v0.7.2
+[1m[92m    Checking[0m ordered-float v5.5.0
+[1m[92m    Checking[0m num-complex v0.4.6
+[1m[92m   Compiling[0m simsimd v6.5.16
+[1m[92m   Compiling[0m aegis v0.9.20
+[1m[92m    Checking[0m thread_local v1.1.10
+[1m[92m    Checking[0m unicode-width v0.1.14
+[1m[92m   Compiling[0m bindgen v0.69.5
+[1m[92m    Checking[0m downcast-rs v2.0.2
+[1m[92m    Checking[0m nu-ansi-term v0.50.3
+[1m[92m   Compiling[0m io-uring v0.7.15
+[1m[92m   Compiling[0m home v0.5.12
+[1m[92m   Compiling[0m cfg_aliases v0.2.2
+[1m[92m   Compiling[0m rustls v0.23.46
+[1m[92m    Checking[0m fastdivide v0.4.2
+[1m[92m   Compiling[0m linkme-impl v0.3.37
+[1m[92m    Checking[0m atomic-waker v1.1.2
+[1m[92m   Compiling[0m turso_ext v0.7.2
+[1m[92m    Checking[0m tantivy-columnar v0.7.0
+[1m[92m    Checking[0m bon v3.10.2
+[1m[92m   Compiling[0m turso_core v0.7.2
+[1m[92m   Compiling[0m which v4.4.2
+[1m[92m    Checking[0m tracing-subscriber v0.3.23
+[1m[92m    Checking[0m miette v7.6.0
+[1m[92m    Checking[0m arrow-array v58.4.0
+[1m[92m    Checking[0m tantivy-query-grammar v0.26.0
+[1m[92m    Checking[0m strum v0.26.3
+[1m[92m    Checking[0m lru v0.16.4
+[1m[92m    Checking[0m rand_chacha v0.9.0
+[1m[92m    Checking[0m rustls-webpki v0.103.15
+[1m[92m    Checking[0m rayon v1.12.0
+[1m[92m   Compiling[0m cexpr v0.6.0
+[1m[92m    Checking[0m ghash v0.5.1
+[1m[92m    Checking[0m aes v0.8.4
+[1m[92m    Checking[0m ctr v0.9.2
+[1m[92m    Checking[0m tempfile v3.27.0
+[1m[92m    Checking[0m fs4 v0.13.1
+[1m[92m    Checking[0m hashbrown v0.14.5
+[1m[92m    Checking[0m crossbeam-queue v0.3.14
+[1m[92m    Checking[0m aead v0.5.2
+[1m[92m    Checking[0m sketches-ddsketch v0.4.1
+[1m[92m    Checking[0m rust-stemmers v1.2.0
+[1m[92m    Checking[0m tantivy-tokenizer-api v0.7.0
+[1m[92m   Compiling[0m aristo-macros v0.4.1
+[1m[92m    Checking[0m measure_time v0.9.0
+[1m[92m    Checking[0m memmap2 v0.9.11
+[1m[92m    Checking[0m lexical-util v1.0.7
+[1m[92m   Compiling[0m simd-adler32 v0.3.10
+[1m[92m   Compiling[0m shlex v1.3.0
+[1m[92m   Compiling[0m linkme v0.3.37
+[1m[92m    Checking[0m openssl-probe v0.2.1
+[1m[92m   Compiling[0m httparse v1.10.1
+[1m[92m   Compiling[0m syn v1.0.109
+[1m[92m    Checking[0m bit-vec v0.10.1
+[1m[92m    Checking[0m levenshtein_automata v0.2.1
+[1m[92m    Checking[0m softaes v0.1.7
+[1m[92m    Checking[0m tower-service v0.3.3
+[1m[92m    Checking[0m htmlescape v0.3.1
+[1m[92m   Compiling[0m lazycell v1.3.0
+[1m[92m    Checking[0m rustc-hash v2.1.3
+[1m[92m    Checking[0m oneshot v0.1.13
+[1m[92m    Checking[0m lz4_flex v0.13.1
+[1m[92m    Checking[0m datasketches v0.2.0
+[1m[92m   Compiling[0m rustc-hash v1.1.0
+[1m[92m    Checking[0m census v0.4.2
+[1m[92m    Checking[0m tantivy v0.26.2
+[1m[92m    Checking[0m bit-set v0.11.1
+[1m[92m    Checking[0m aristo v0.4.1
+[1m[92m    Checking[0m aes-gcm v0.10.3
+[1m[92m    Checking[0m icu_collator v2.3.1
+[1m[92m    Checking[0m icu_locale v2.3.1
+[1m[92m    Checking[0m intrusive-collections v0.9.7
+[1m[92m    Checking[0m rand v0.9.5
+[1m[92m    Checking[0m turso_parser v0.7.2
+[1m[92m    Checking[0m pack1 v1.1.0
+[1m[92m    Checking[0m roaring v0.11.5
+[1m[92m    Checking[0m event-listener-strategy v0.5.4
+[1m[92m    Checking[0m fastbloom v0.14.1
+[1m[92m    Checking[0m rand_chacha v0.3.1
+[1m[92m    Checking[0m rapidhash v4.5.1
+[1m[92m   Compiling[0m libz-sys v1.1.30
+[1m[92m   Compiling[0m libsqlite3-sys v0.30.1
+[1m[92m    Checking[0m atoi v2.0.0
+[1m[92m    Checking[0m bumpalo v3.20.3
+[1m[92m    Checking[0m try-lock v0.2.5
+[1m[92m    Checking[0m allocator-api2 v0.4.0
+[1m[92m   Compiling[0m adler2 v2.0.1
+[1m[92m   Compiling[0m pastey v0.2.3
+[1m[92m    Checking[0m foreign-types-shared v0.1.1
+[1m[92m    Checking[0m cfg_block v0.1.1
+[1m[92m   Compiling[0m openssl v0.10.81
+[1m[92m   Compiling[0m rand v0.8.8
+[1m[92m    Checking[0m foreign-types v0.3.2
+[1m[92m   Compiling[0m phf_shared v0.11.3
+[1m[92m    Checking[0m toasty-core v0.9.0
+[1m[92m   Compiling[0m prost-derive v0.14.4
+[1m[92m   Compiling[0m miniz_oxide v0.9.1
+[1m[92m    Checking[0m want v0.3.2
+[1m[92m   Compiling[0m turso_sdk_kit v0.7.2
+[1m[92m    Checking[0m hashlink v0.10.0
+[1m[92m    Checking[0m sha2 v0.11.1
+[1m[92m    Checking[0m md-5 v0.11.0
+[1m[92m    Checking[0m hmac v0.13.0
+[1m[92m    Checking[0m http-body v1.1.0
+[1m[92m    Checking[0m sha1 v0.10.7
+[1m[92m    Checking[0m concurrent-queue v2.5.0
+[1m[92m    Checking[0m futures-executor v0.3.34
+[1m[92m   Compiling[0m openssl-macros v0.1.1
+[1m[92m    Checking[0m env_filter v2.0.0
+[1m[92m   Compiling[0m libmimalloc-sys v0.1.49
+[1m[92m    Checking[0m crc-catalog v2.5.0
+[1m[92m   Compiling[0m base64 v0.23.1
+[1m[92m   Compiling[0m zlib-rs v0.6.8
+[1m[92m   Compiling[0m thiserror v1.0.69
+[1m[92m    Checking[0m fallible-iterator v0.2.0
+[1m[92m   Compiling[0m toml_datetime v0.6.11
+[1m[92m   Compiling[0m num-bigint-dig v0.8.6
+[1m[92m   Compiling[0m native-tls v0.2.18
+[1m[92m    Checking[0m symlink v0.1.0
+[1m[92m   Compiling[0m winnow v0.5.40
+[1m[92m    Checking[0m genawaiter-macro v0.99.1
+[1m[92m    Checking[0m genawaiter v0.99.1
+[1m[92m   Compiling[0m toml_edit v0.19.15
+[1m[92m   Compiling[0m flate2 v1.1.10
+[1m[92m    Checking[0m tracing-appender v0.2.5
+[1m[92m   Compiling[0m zopfli v0.8.4
+[1m[92m    Checking[0m postgres-protocol v0.6.12
+[1m[92m   Compiling[0m ureq-proto v0.6.4
+[1m[92m    Checking[0m crc v3.4.0
+[1m[92m    Checking[0m env_logger v0.11.11
+[1m[92m    Checking[0m spawns-core v1.1.2
+[1m[92m    Checking[0m toasty-sql v0.9.0
+[1m[92m    Checking[0m prost v0.14.4
+[1m[92m   Compiling[0m xattr v1.6.1
+[1m[92m   Compiling[0m phf_generator v0.11.3
+[1m[92m    Checking[0m tokio-rustls v0.26.6
+[1m[92m    Checking[0m lexical-write-integer v1.0.6
+[1m[92m    Checking[0m lexical-parse-integer v1.0.6
+[1m[92m    Checking[0m arrow-select v58.4.0
+[1m[92m   Compiling[0m webpki-roots v1.0.9
+[1m[92m    Checking[0m pkcs8 v0.10.2
+[1m[92m    Checking[0m futures-lite v2.6.1
+[1m[92m    Checking[0m phf_shared v0.13.1
+[1m[92m   Compiling[0m filetime v0.2.29
+[1m[92m    Checking[0m futures-intrusive v0.5.0
+[1m[92m    Checking[0m num-iter v0.1.46
+[1m[92m   Compiling[0m thiserror-impl v1.0.69
+[1m[92m   Compiling[0m turso_sdk_kit_macros v0.7.2
+[1m[92m   Compiling[0m async-io v2.6.0
+[1m[92m   Compiling[0m ahash v0.7.8
+[1m[92m   Compiling[0m utf8-zero v0.8.1
+[1m[92m   Compiling[0m mysql_common v0.37.3
+[1m[92m    Checking[0m tower-layer v0.3.3
+[1m[92m   Compiling[0m unicode-segmentation v1.13.3
+[1m[92m    Checking[0m array-init v2.1.0
+[1m[92m    Checking[0m postgres-types v0.2.14
+[1m[92m   Compiling[0m heck v0.3.3
+[1m[92m   Compiling[0m ureq v3.4.2
+[1m[92m    Checking[0m sqlx-core v0.8.6
+[1m[92m   Compiling[0m tar v0.4.46
+[1m[92m    Checking[0m phf v0.13.1
+[1m[92m    Checking[0m pkcs1 v0.7.5
+[1m[92m    Checking[0m lexical-parse-float v1.0.6
+[1m[92m    Checking[0m lexical-write-float v1.0.6
+[1m[92m   Compiling[0m phf_codegen v0.11.3
+[1m[92m    Checking[0m spawns-compat v0.2.2
+[1m[92m   Compiling[0m zip v6.0.0 (https://github.com/zip-rs/zip2.git?rev=abfc23d19e5c6038cba27eb3a897bc34c6d5bf86#abfc23d1)
+[1m[92m   Compiling[0m proc-macro-crate v1.3.1
+[1m[92m    Checking[0m crossterm v0.28.1
+[1m[92m    Checking[0m async-channel v2.5.0
+[1m[92m    Checking[0m piper v0.2.5
+[1m[92m    Checking[0m x509-cert v0.2.5
+[1m[92m    Checking[0m http v0.2.12
+[1m[92m    Checking[0m hmac v0.12.1
+[1m[92m    Checking[0m signature v2.2.0
+[1m[92m   Compiling[0m encoding_rs v0.8.42
+[1m[92m    Checking[0m lru v0.18.5
+[1m[92m   Compiling[0m async-select-proc-macros v0.3.0
+[1m[92m    Checking[0m btoi v0.5.0
+[1m[92m    Checking[0m whoami v2.1.3
+[1m[92m    Checking[0m async-task v4.7.1
+[1m[92m   Compiling[0m unicode-xid v0.2.6
+[1m[92m   Compiling[0m portable-atomic v1.15.0
+[1m[92m    Checking[0m fallible-streaming-iterator v0.1.9
+[1m[92m    Checking[0m saturating v0.1.0
+[1m[92m    Checking[0m konst_macro_rules v0.2.19
+[1m[92m    Checking[0m unicode-width v0.2.2
+[1m[92m    Checking[0m konst v0.2.20
+[1m[92m    Checking[0m comfy-table v7.1.4
+[1m[92m    Checking[0m async-select v0.3.0
+[1m[92m   Compiling[0m const_format_proc_macros v0.2.34
+[1m[92m    Checking[0m blocking v1.7.0
+[1m[92m    Checking[0m tokio-postgres v0.7.18
+[1m[92m    Checking[0m rsa v0.9.10
+[1m[92m    Checking[0m hkdf v0.12.4
+[1m[92m   Compiling[0m libduckdb-sys v1.10505.0
+[1m[92m   Compiling[0m num_enum_derive v0.5.11
+[1m[92m    Checking[0m mimalloc v0.1.52
+[1m[92m    Checking[0m spawns v0.2.6
+[1m[92m   Compiling[0m libsql-sqlite3-parser v0.13.0
+[1m[92m    Checking[0m tokio-native-tls v0.3.1
+[1m[92m    Checking[0m lexical-core v1.0.6
+[1m[92m   Compiling[0m strum_macros v0.23.1
+[1m[92m    Checking[0m arrow-ord v58.4.0
+[1m[92m    Checking[0m futures v0.3.34
+[1m[92m    Checking[0m hyper v1.12.0
+[1m[92m    Checking[0m rustls-native-certs v0.8.5
+[1m[92m    Checking[0m hashlink v0.9.1
+[1m[92m   Compiling[0m prost-derive v0.12.6
+[1m[92m    Checking[0m turso_sync_engine v0.7.2
+[1m[92m    Checking[0m serde_urlencoded v0.7.1
+[1m[92m    Checking[0m md-5 v0.10.6
+[1m[92m    Checking[0m keyed_priority_queue v0.4.2
+[1m[92m    Checking[0m castaway v0.2.4
+[1m[92m    Checking[0m pem v3.0.6
+[1m[92m   Compiling[0m pin-project-internal v1.1.13
+[1m[92m    Checking[0m sync_wrapper v1.0.2
+[1m[92m    Checking[0m ipnet v2.12.2
+[1m[92m    Checking[0m dotenvy v0.15.7
+[1m[92m    Checking[0m whoami v1.6.1
+[1m[92m    Checking[0m core_detect v1.0.0
+[1m[92m   Compiling[0m multiversion_no_op v1.0.0
+[1m[92m    Checking[0m asyncs-sync v0.4.0
+[1m[92m    Checking[0m simdutf8 v0.1.5
+[1m[92m   Compiling[0m toasty-macros v0.9.0
+[1m[92m    Checking[0m pin-project v1.1.13
+[1m[92m    Checking[0m asyncs v0.4.0
+[1m[92m    Checking[0m prost v0.12.6
+[1m[92m    Checking[0m hyper-util v0.1.21
+[1m[92m    Checking[0m tower v0.5.3
+[1m[92m    Checking[0m mysql_async v0.37.1
+[1m[92m    Checking[0m compact_str v0.4.1
+[1m[92m    Checking[0m strum v0.23.0
+[1m[92m    Checking[0m phf v0.11.3
+[1m[92m    Checking[0m rusqlite v0.32.1
+[1m[92m    Checking[0m rustls-platform-verifier v0.7.1
+[1m[92m    Checking[0m arrow-cast v58.4.0
+[1m[92m    Checking[0m async-net v2.0.0
+[1m[92m    Checking[0m hashbrown v0.12.3
+[1m[92m    Checking[0m num_enum v0.5.11
+[1m[92m    Checking[0m tokio-postgres-rustls v0.14.0
+[1m[92m    Checking[0m turso_sync_sdk_kit v0.7.2
+[1m[92m    Checking[0m const_format v0.2.36
+[1m[92m    Checking[0m turso v0.7.2
+[1m[92m    Checking[0m h2 v0.3.27
+[1m[92m    Checking[0m http-body v0.4.6
+[1m[92m    Checking[0m arrow-string v58.4.0
+[1m[92m    Checking[0m async-lock v3.4.2
+[1m[92m    Checking[0m hashlink v0.8.4
+[1m[92m    Checking[0m arrow-arith v58.4.0
+[1m[92m    Checking[0m arrow-row v58.4.0
+[1m[92m   Compiling[0m pluralizer v0.5.0
+[1m[92m    Checking[0m rustls-pemfile v2.2.0
+[1m[92m   Compiling[0m strum_macros v0.27.2
+[1m[92m    Checking[0m flume v0.11.1
+[1m[92m    Checking[0m deadpool-runtime v0.3.1
+[1m[92m   Compiling[0m derive-where v1.7.0
+[1m[92m   Compiling[0m sqlparser_derive v0.2.2
+[1m[92m   Compiling[0m async-stream-impl v0.3.6
+[1m[92m    Checking[0m socket2 v0.5.10
+[1m[92m    Checking[0m base64 v0.21.7
+[1m[92m   Compiling[0m toasty v0.9.0
+[1m[92m    Checking[0m httpdate v1.0.3
+[1m[92m    Checking[0m static_assertions v1.1.0
+[1m[92m    Checking[0m ignore-result v0.2.0
+[1m[92m    Checking[0m tagptr v0.2.0
+[1m[92m    Checking[0m strum v0.27.2
+[1m[92m    Checking[0m zookeeper-client v0.11.2
+[1m[92m    Checking[0m sqlx-postgres v0.8.6
+[1m[92m    Checking[0m moka v0.12.16
+[1m[92m    Checking[0m hyper v0.14.32
+[1m[92m    Checking[0m libsql-hrana v0.9.30
+[1m[92m    Checking[0m async-stream v0.3.6
+[1m[92m    Checking[0m sqlparser v0.52.0
+[1m[92m    Checking[0m deadpool v0.13.1
+[1m[92m    Checking[0m sqlx-sqlite v0.8.6
+[1m[92m    Checking[0m hyper-rustls v0.27.10
+[1m[92m    Checking[0m toasty-driver-postgresql v0.9.0
+[1m[92m    Checking[0m arrow v58.4.0
+[1m[92m    Checking[0m toasty-driver-turso v0.9.0
+[1m[92m    Checking[0m toasty-driver-mysql v0.9.0
+[1m[92m    Checking[0m toasty-driver-sqlite v0.9.0 (/home/runner/work/druid-rust/druid-rust/vendor/toasty-driver-sqlite)
+[1m[92m    Checking[0m java-properties v2.0.0
+[1m[92m    Checking[0m tower-http v0.6.11
+[1m[92m    Checking[0m tower v0.4.13
+[1m[92m    Checking[0m sqlx-mysql v0.8.6
+[1m[92m    Checking[0m druid-rdbc v0.0.0-design (/home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-rdbc)
+[1m[92m    Checking[0m http-body-util v0.1.5
+[1m[92m    Checking[0m dashmap v6.2.1
+[1m[92m    Checking[0m lru v0.14.0
+[1m[92m    Checking[0m fastdate v0.3.36
+[1m[92m    Checking[0m rbs v4.8.4
+[1m[92m    Checking[0m deadpool-runtime v0.1.4
+[1m[92m    Checking[0m quick-xml v0.41.0
+[1m[92m    Checking[0m serde_bytes v0.11.19
+[1m[92m    Checking[0m num_cpus v1.17.0
+[1m[92m    Checking[0m cast v0.3.0
+[1m[92m    Checking[0m by_address v1.2.1
+[1m[92m    Checking[0m index_vec v0.1.4
+[1m[92m    Checking[0m xxhash-rust v0.8.19
+[1m[92m    Checking[0m deadpool v0.12.3
+[1m[92m    Checking[0m rbdc v4.9.10
+[1m[92m    Checking[0m druid v0.0.0-design (/home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid)
+[1m[92m    Checking[0m sqlx v0.8.6
+[1m[92m    Checking[0m reqwest v0.12.28
+[1m[92m    Checking[0m libsql v0.9.30
+[1m[92m    Checking[0m bb8 v0.8.6
+[1m[92m    Checking[0m fs2 v0.4.3
+[1m[92m    Checking[0m duckdb v1.10505.0
+[1m[92m Documenting[0m druid-wrapper v0.0.0-design (/home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper)
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 8m 40s
+[1m[32m       Built[0m [ 520.164s] (baseline)
+[1m[32m     Parsing[0m druid-wrapper v0.0.0-design (baseline)
+[1m[32m      Parsed[0m [   0.061s] (baseline)
+[1m[32m    Checking[0m druid-wrapper v0.0.0-design -> v0.0.0-design (assume patch change)
+[1m[32m    Starting[0m 229 checks, 31 unnecessary on 4 threads
+[1m[32m        PASS[0m [   0.005s]       major        attribute_proc_macro_missing
+[1m[31m        FAIL[0m [   0.092s]       major        auto_trait_impl_removed
+[1m[32m        PASS[0m [   0.009s]       major        constructible_struct_adds_field
+[1m[32m        PASS[0m [   0.028s]       major        constructible_struct_adds_private_field
+[1m[32m        PASS[0m [   0.002s]       major        constructible_struct_changed_type
+[1m[32m        PASS[0m [   0.086s]       major        copy_impl_added
+[1m[32m        PASS[0m [   0.001s]       major        declarative_macro_missing
+[1m[32m        PASS[0m [   0.000s]       major        derive_helper_attr_removed
+[1m[32m        PASS[0m [   0.000s]       major        derive_proc_macro_missing
+[1m[32m        PASS[0m [   0.089s]       major        derive_trait_impl_removed
+[1m[32m        PASS[0m [   0.000s]       major        enum_changed_kind
+[1m[32m        PASS[0m [   0.001s]       major        enum_discriminants_undefined_non_exhaustive_variant
+[1m[32m        PASS[0m [   0.000s]       major        enum_discriminants_undefined_non_unit_variant
+[1m[32m        PASS[0m [   0.000s]       major        enum_marked_non_exhaustive
+[1m[32m        PASS[0m [   0.001s]       major        enum_missing
+[1m[32m        PASS[0m [   0.001s]       minor        enum_must_use_added
+[1m[32m        PASS[0m [   0.003s]       major        enum_no_repr_variant_discriminant_changed
+[1m[32m        PASS[0m [   0.001s]       major        enum_non_exhaustive_tuple_variant_changed_kind
+[1m[32m        PASS[0m [   0.001s]       major        enum_now_doc_hidden
+[1m[32m        PASS[0m [   0.001s]       major        enum_repr_int_changed
+[1m[32m        PASS[0m [   0.001s]       major        enum_repr_int_removed
+[1m[32m        PASS[0m [   0.001s]       major        enum_repr_transparent_removed
+[1m[32m        PASS[0m [   0.002s]       major        enum_repr_variant_discriminant_changed
+[1m[32m        PASS[0m [   0.001s]       major        enum_struct_variant_changed_kind
+[1m[32m        PASS[0m [   0.001s]       major        enum_struct_variant_field_added
+[1m[32m        PASS[0m [   0.002s]       minor        enum_struct_variant_field_marked_deprecated
+[1m[32m        PASS[0m [   0.002s]       major        enum_struct_variant_field_missing
+[1m[32m        PASS[0m [   0.001s]       major        enum_struct_variant_field_now_doc_hidden
+[1m[32m        PASS[0m [   0.002s]       major        enum_tuple_variant_changed_kind
+[1m[32m        PASS[0m [   0.003s]       major        enum_tuple_variant_field_added
+[1m[32m        PASS[0m [   0.004s]       minor        enum_tuple_variant_field_marked_deprecated
+[1m[32m        PASS[0m [   0.004s]       major        enum_tuple_variant_field_missing
+[1m[32m        PASS[0m [   0.003s]       major        enum_tuple_variant_field_now_doc_hidden
+[1m[32m        PASS[0m [   0.002s]       major        enum_unit_variant_changed_kind
+[1m[31m        FAIL[0m [   0.005s]       major        enum_variant_added
+[1m[32m        PASS[0m [   0.001s]       minor        enum_variant_marked_deprecated
+[1m[32m        PASS[0m [   0.004s]       major        enum_variant_marked_non_exhaustive
+[1m[32m        PASS[0m [   0.004s]       major        enum_variant_missing
+[1m[32m        PASS[0m [   0.001s]       major        exported_function_abi_no_longer_unwind
+[1m[32m        PASS[0m [   0.001s]       major        exported_function_abi_now_unwind
+[1m[32m        PASS[0m [   0.000s]       major        exported_function_changed_abi
+[1m[32m        PASS[0m [   0.000s]       major        exported_function_now_returns_unit
+[1m[32m        PASS[0m [   0.000s]       major        exported_function_parameter_count_changed
+[1m[32m        PASS[0m [   0.001s]       major        exported_function_requires_more_target_features
+[1m[32m        PASS[0m [   0.000s]       major        exported_function_return_value_added
+[1m[32m        PASS[0m [   0.001s]       major        exported_function_target_feature_added
+[1m[32m        PASS[0m [   0.002s]       major        feature_missing
+[1m[32m        PASS[0m [   0.004s]       major        feature_no_longer_enables_feature
+[1m[31m        FAIL[0m [   0.001s]       major        feature_not_enabled_by_default
+[1m[32m        PASS[0m [   0.001s]       major        function_abi_no_longer_unwind
+[1m[32m        PASS[0m [   0.001s]       major        function_abi_now_unwind
+[1m[32m        PASS[0m [   0.001s]       major        function_changed_abi
+[1m[32m        PASS[0m [   0.001s]       major        function_const_generic_reordered
+[1m[32m        PASS[0m [   0.000s]       major        function_const_removed
+[1m[32m        PASS[0m [   0.007s]       major        function_export_name_changed
+[1m[32m        PASS[0m [   0.001s]       major        function_generic_type_reordered
+[1m[32m        PASS[0m [   0.000s]       major        function_like_proc_macro_missing
+[1m[32m        PASS[0m [   0.005s]       minor        function_marked_deprecated
+[1m[31m        FAIL[0m [   0.001s]       major        function_missing
+[1m[32m        PASS[0m [   0.001s]       minor        function_must_use_added
+[1m[32m        PASS[0m [   0.001s]       major        function_no_longer_variadic
+[1m[32m        PASS[0m [   0.000s]       major        function_now_doc_hidden
+[1m[32m        PASS[0m [   0.001s]       major        function_now_returns_unit
+[1m[32m        PASS[0m [   0.001s]       major        function_now_variadic
+[1m[32m        PASS[0m [   0.001s]       major        function_parameter_count_changed
+[1m[32m        PASS[0m [   0.001s]       major        function_requires_different_const_generic_params
+[1m[32m        PASS[0m [   0.001s]       major        function_requires_different_generic_type_params
+[1m[32m        PASS[0m [   0.001s]       major        function_unsafe_added
+[1m[32m        PASS[0m [   0.001s]       minor        global_value_marked_deprecated
+[1m[32m        PASS[0m [   0.016s]       major        inherent_associated_const_now_doc_hidden
+[1m[32m        PASS[0m [   0.010s]       major        inherent_associated_pub_const_missing
+[1m[32m        PASS[0m [   0.025s]       major        inherent_method_changed_abi
+[1m[32m        PASS[0m [   0.010s]       major        inherent_method_const_generic_reordered
+[1m[32m        PASS[0m [   0.012s]       major        inherent_method_const_removed
+[1m[32m        PASS[0m [   0.022s]       major        inherent_method_generic_type_reordered
+[1m[32m        PASS[0m [   0.024s]       major        inherent_method_missing
+[1m[32m        PASS[0m [   0.020s]       minor        inherent_method_must_use_added
+[1m[32m        PASS[0m [   0.006s]       major        inherent_method_no_longer_unwind
+[1m[32m        PASS[0m [   0.007s]       major        inherent_method_no_longer_variadic
+[1m[32m        PASS[0m [   0.021s]       major        inherent_method_now_doc_hidden
+[1m[32m        PASS[0m [   0.021s]       major        inherent_method_now_returns_unit
+[1m[32m        PASS[0m [   0.025s]       major        inherent_method_now_unwind
+[1m[32m        PASS[0m [   0.097s]       major        inherent_method_now_variadic
+[1m[32m        PASS[0m [   0.039s]       major        inherent_method_unsafe_added
+[1m[32m        PASS[0m [   0.000s]       minor        macro_marked_deprecated
+[1m[32m        PASS[0m [   0.001s]       major        macro_no_longer_exported
+[1m[32m        PASS[0m [   0.000s]       major        macro_now_doc_hidden
+[1m[32m        PASS[0m [   0.003s]       major        method_export_name_changed
+[1m[32m        PASS[0m [   0.033s]       major        method_no_longer_has_receiver
+[1m[32m        PASS[0m [   0.054s]       major        method_parameter_count_changed
+[1m[32m        PASS[0m [   0.005s]       major        method_receiver_mut_ref_became_owned
+[1m[32m        PASS[0m [   0.014s]       major        method_receiver_ref_became_mut
+[1m[32m        PASS[0m [   0.014s]       major        method_receiver_ref_became_owned
+[1m[32m        PASS[0m [   0.023s]       major        method_receiver_type_changed
+[1m[32m        PASS[0m [   0.039s]       major        method_requires_different_const_generic_params
+[1m[32m        PASS[0m [   0.011s]       major        method_requires_different_generic_type_params
+[1m[31m        FAIL[0m [   0.000s]       major        module_missing
+[1m[32m        PASS[0m [   0.001s]       major        non_exhaustive_struct_changed_type
+[1m[32m        PASS[0m [   0.003s]       major        partial_ord_enum_struct_variant_fields_reordered
+[1m[32m        PASS[0m [   0.004s]       major        partial_ord_enum_variants_reordered
+[1m[32m        PASS[0m [   0.018s]       major        partial_ord_struct_fields_reordered
+[1m[32m        PASS[0m [   0.000s]       minor        proc_macro_marked_deprecated
+[1m[32m        PASS[0m [   0.000s]       major        proc_macro_now_doc_hidden
+[1m[32m        PASS[0m [   0.001s]       minor        pub_api_sealed_trait_became_unconditionally_sealed
+[1m[32m        PASS[0m [   0.000s]       minor        pub_api_sealed_trait_became_unsealed
+[1m[32m        PASS[0m [   0.001s]       major        pub_api_sealed_trait_method_receiver_added
+[1m[32m        PASS[0m [   0.001s]       major        pub_api_sealed_trait_method_receiver_mut_ref_became_ref
+[1m[32m        PASS[0m [   0.001s]       major        pub_api_sealed_trait_method_return_value_added
+[1m[32m        PASS[0m [   0.001s]       major        pub_api_sealed_trait_method_target_feature_removed
+[1m[32m        PASS[0m [   0.000s]       major        pub_module_level_const_missing
+[1m[32m        PASS[0m [   0.000s]       major        pub_module_level_const_now_doc_hidden
+[1m[32m        PASS[0m [   0.000s]       major        pub_static_missing
+[1m[32m        PASS[0m [   0.000s]       major        pub_static_mut_now_immutable
+[1m[32m        PASS[0m [   0.000s]       major        pub_static_now_doc_hidden
+[1m[32m        PASS[0m [   0.005s]       major        pub_static_now_mutable
+[1m[32m        PASS[0m [   0.001s]       major        repr_align_added
+[1m[32m        PASS[0m [   0.001s]       major        repr_align_changed
+[1m[32m        PASS[0m [   0.001s]       major        repr_align_removed
+[1m[32m        PASS[0m [   0.001s]       major        repr_c_enum_struct_variant_fields_reordered
+[1m[32m        PASS[0m [   0.001s]       major        repr_c_plain_struct_fields_reordered
+[1m[32m        PASS[0m [   0.001s]       major        repr_c_removed
+[1m[32m        PASS[0m [   0.001s]       major        repr_packed_added
+[1m[32m        PASS[0m [   0.001s]       major        repr_packed_changed
+[1m[32m        PASS[0m [   0.001s]       major        repr_packed_removed
+[1m[32m        PASS[0m [   0.001s]       minor        repr_transparent_added
+[1m[32m        PASS[0m [   0.001s]       major        safe_function_requires_more_target_features
+[1m[32m        PASS[0m [   0.001s]       major        safe_function_target_feature_added
+[1m[32m        PASS[0m [   0.007s]       major        safe_inherent_method_requires_more_target_features
+[1m[32m        PASS[0m [   0.007s]       major        safe_inherent_method_target_feature_added
+[1m[32m        PASS[0m [   0.037s]       major        sized_impl_removed
+[1m[32m        PASS[0m [   0.000s]       major        static_became_unsafe
+[1m[32m        PASS[0m [   0.006s]       minor        struct_field_marked_deprecated
+[1m[32m        PASS[0m [   0.001s]       major        struct_marked_non_exhaustive
+[1m[31m        FAIL[0m [   0.005s]       major        struct_missing
+[1m[32m        PASS[0m [   0.002s]       minor        struct_must_use_added
+[1m[32m        PASS[0m [   0.004s]       major        struct_now_doc_hidden
+[1m[32m        PASS[0m [   0.006s]       major        struct_pub_field_missing
+[1m[32m        PASS[0m [   0.007s]       major        struct_pub_field_now_doc_hidden
+[1m[32m        PASS[0m [   0.002s]       major        struct_repr_transparent_removed
+[1m[32m        PASS[0m [   0.005s]       major        struct_with_no_pub_fields_changed_type
+[1m[32m        PASS[0m [   0.002s]       major        struct_with_pub_fields_changed_type
+[1m[32m        PASS[0m [   0.001s]       major        trait_added_supertrait
+[1m[32m        PASS[0m [   0.001s]       major        trait_allows_fewer_const_generic_params
+[1m[32m        PASS[0m [   0.001s]       major        trait_allows_fewer_generic_type_params
+[1m[32m        PASS[0m [   0.001s]       major        trait_associated_const_added
+[1m[32m        PASS[0m [   0.001s]       major        trait_associated_const_default_removed
+[1m[32m        PASS[0m [   0.001s]       minor        trait_associated_const_marked_deprecated
+[1m[32m        PASS[0m [   0.001s]       major        trait_associated_const_now_doc_hidden
+[1m[32m        PASS[0m [   0.001s]       major        trait_associated_type_added
+[1m[32m        PASS[0m [   0.001s]       major        trait_associated_type_default_removed
+[1m[32m        PASS[0m [   0.001s]       minor        trait_associated_type_marked_deprecated
+[1m[32m        PASS[0m [   0.001s]       major        trait_associated_type_now_doc_hidden
+[1m[32m        PASS[0m [   0.001s]       major        trait_changed_kind
+[1m[32m        PASS[0m [   0.001s]       major        trait_const_generic_reordered
+[1m[32m        PASS[0m [   0.001s]       major        trait_generic_type_reordered
+[1m[32m        PASS[0m [   0.001s]       minor        trait_marked_deprecated
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_added
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_changed_abi
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_const_generic_reordered
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_default_impl_removed
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_generic_type_reordered
+[1m[32m        PASS[0m [   0.001s]       minor        trait_method_marked_deprecated
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_missing
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_no_longer_has_receiver
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_no_longer_unwind
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_no_longer_variadic
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_now_doc_hidden
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_now_returns_unit
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_now_unwind
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_now_variadic
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_parameter_count_changed
+[1m[32m        PASS[0m [   0.005s]       major        trait_method_receiver_added
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_receiver_mut_ref_became_owned
+[1m[32m        PASS[0m [   0.000s]       major        trait_method_receiver_mut_ref_became_ref
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_receiver_owned_became_mut_ref
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_receiver_owned_became_ref
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_receiver_ref_became_mut
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_receiver_ref_became_owned
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_receiver_type_changed
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_requires_different_const_generic_params
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_requires_different_generic_type_params
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_return_value_added
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_target_feature_removed
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_unsafe_added
+[1m[32m        PASS[0m [   0.001s]       major        trait_method_unsafe_removed
+[1m[32m        PASS[0m [   0.001s]       major        trait_mismatched_generic_lifetimes
+[1m[32m        PASS[0m [   0.001s]       major        trait_missing
+[1m[32m        PASS[0m [   0.001s]       minor        trait_must_use_added
+[1m[32m        PASS[0m [   0.001s]       major        trait_newly_sealed
+[1m[32m        PASS[0m [   0.001s]       major        trait_no_longer_dyn_compatible
+[1m[32m        PASS[0m [   0.001s]       major        trait_now_doc_hidden
+[1m[32m        PASS[0m [   0.001s]       major        trait_removed_associated_constant
+[1m[32m        PASS[0m [   0.001s]       major        trait_removed_associated_type
+[1m[32m        PASS[0m [   0.001s]       major        trait_removed_supertrait
+[1m[32m        PASS[0m [   0.007s]       major        trait_requires_more_const_generic_params
+[1m[32m        PASS[0m [   0.008s]       major        trait_requires_more_generic_type_params
+[1m[32m        PASS[0m [   0.001s]       major        trait_unsafe_added
+[1m[32m        PASS[0m [   0.001s]       major        trait_unsafe_removed
+[1m[32m        PASS[0m [   0.001s]       major        tuple_struct_to_plain_struct
+[1m[32m        PASS[0m [   0.006s]       major        type_allows_fewer_const_generic_params
+[1m[32m        PASS[0m [   0.007s]       major        type_allows_fewer_generic_type_params
+[1m[32m        PASS[0m [   0.002s]       minor        type_associated_const_marked_deprecated
+[1m[32m        PASS[0m [   0.003s]       major        type_const_generic_reordered
+[1m[32m        PASS[0m [   0.003s]       major        type_generic_type_reordered
+[1m[32m        PASS[0m [   0.001s]       minor        type_marked_deprecated
+[1m[32m        PASS[0m [   0.004s]       minor        type_method_marked_deprecated
+[1m[31m        FAIL[0m [   0.007s]       major        type_mismatched_generic_lifetimes
+[1m[32m        PASS[0m [   0.007s]       major        type_requires_more_const_generic_params
+[1m[32m        PASS[0m [   0.007s]       major        type_requires_more_generic_type_params
+[1m[32m        PASS[0m [   0.001s]       minor        unconditionally_sealed_trait_became_pub_api_sealed
+[1m[32m        PASS[0m [   0.001s]       minor        unconditionally_sealed_trait_became_unsealed
+[1m[32m        PASS[0m [   0.000s]       major        union_changed_kind
+[1m[32m        PASS[0m [   0.001s]       major        union_changed_to_incompatible_struct
+[1m[32m        PASS[0m [   0.001s]       major        union_field_added_with_all_pub_fields
+[1m[32m        PASS[0m [   0.001s]       major        union_field_added_with_non_pub_fields
+[1m[32m        PASS[0m [   0.001s]       minor        union_field_marked_deprecated
+[1m[32m        PASS[0m [   0.001s]       major        union_field_missing
+[1m[32m        PASS[0m [   0.001s]       major        union_missing
+[1m[32m        PASS[0m [   0.001s]       minor        union_must_use_added
+[1m[32m        PASS[0m [   0.000s]       major        union_now_doc_hidden
+[1m[32m        PASS[0m [   0.001s]       major        union_pub_field_now_doc_hidden
+[1m[32m        PASS[0m [   0.001s]       major        union_with_multiple_pub_fields_changed_to_struct
+[1m[32m        PASS[0m [   0.001s]       major        unit_struct_changed_kind
+[1m[32m        PASS[0m [   0.001s]       major        unsafe_function_requires_more_target_features
+[1m[32m        PASS[0m [   0.001s]       major        unsafe_function_target_feature_added
+[1m[32m        PASS[0m [   0.006s]       major        unsafe_inherent_method_requires_more_target_features
+[1m[32m        PASS[0m [   0.008s]       major        unsafe_inherent_method_target_feature_added
+[1m[32m        PASS[0m [   0.001s]       major        unsafe_trait_method_requires_more_target_features
+[1m[32m        PASS[0m [   0.001s]       major        unsafe_trait_method_target_feature_added
+[1m[31m     Checked[0m [   0.314s] 229 checks: 222 pass, 7 fail, 0 warn, 31 skip
 
 --- failure auto_trait_impl_removed: auto trait no longer implemented ---
 
-Description:
+[1mDescription:[0m
 A public type has stopped implementing one or more auto traits. This can break downstream code that depends on the traits being implemented.
         ref: https://doc.rust-lang.org/reference/special-types-and-traits.html#auto-traits
        impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/auto_trait_impl_removed.ron
 
-Failed in:
-  type DuckDbConnectionFactory is no longer UnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\duckdb\duckdb_connection_factory.rs:15
-  type DuckDbConnectionFactory is no longer RefUnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\duckdb\duckdb_connection_factory.rs:15
-  type SqlxDeadpoolConnectionManager is no longer UnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\deadpool\sqlx_deadpool_connection_manager.rs:14
-  type SqlxDeadpoolConnectionManager is no longer RefUnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\deadpool\sqlx_deadpool_connection_manager.rs:14
-  type SqlxDeadpoolConnectionManager is no longer UnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\deadpool\sqlx_deadpool_connection_manager.rs:14
-  type SqlxDeadpoolConnectionManager is no longer RefUnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\deadpool\sqlx_deadpool_connection_manager.rs:14
-  type SqlxBb8ConnectionManager is no longer UnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\bb8\sqlx_bb8_connection_manager.rs:12
-  type SqlxBb8ConnectionManager is no longer RefUnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\bb8\sqlx_bb8_connection_manager.rs:12
-  type SqlxBb8ConnectionManager is no longer UnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\bb8\sqlx_bb8_connection_manager.rs:12
-  type SqlxBb8ConnectionManager is no longer RefUnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\bb8\sqlx_bb8_connection_manager.rs:12
-  type JdbcAgentConnectionFactory is no longer UnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\jdbc_agent\jdbc_agent_connection_factory.rs:12
-  type JdbcAgentConnectionFactory is no longer RefUnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\jdbc_agent\jdbc_agent_connection_factory.rs:12
-  type LibSqlConnectionFactory is no longer UnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\libsql\libsql_connection_factory.rs:15
-  type LibSqlConnectionFactory is no longer RefUnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\libsql\libsql_connection_factory.rs:15
-  type HttpSqlConnectionFactory is no longer UnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\http_sql\http_sql_connection_factory.rs:12
-  type HttpSqlConnectionFactory is no longer RefUnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\http_sql\http_sql_connection_factory.rs:12
-  type SqlxConnectionFactory is no longer UnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\sqlx_connection_factory.rs:12
-  type SqlxConnectionFactory is no longer RefUnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\sqlx_connection_factory.rs:12
-  type SqlxConnectionFactory is no longer UnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\sqlx_connection_factory.rs:12
-  type SqlxConnectionFactory is no longer RefUnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\sqlx_connection_factory.rs:12
-  type JdbcAgentConnection is no longer Sync, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\jdbc_agent\jdbc_agent_connection.rs:76
-  type JdbcAgentConnection is no longer UnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\jdbc_agent\jdbc_agent_connection.rs:76
-  type JdbcAgentConnection is no longer RefUnwindSafe, in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\jdbc_agent\jdbc_agent_connection.rs:76
+[1mFailed in:[0m
+  type DuckDbConnectionFactory is no longer UnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/duckdb/duckdb_connection_factory.rs:15
+  type DuckDbConnectionFactory is no longer RefUnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/duckdb/duckdb_connection_factory.rs:15
+  type SqlxDeadpoolConnectionManager is no longer UnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/deadpool/sqlx_deadpool_connection_manager.rs:14
+  type SqlxDeadpoolConnectionManager is no longer RefUnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/deadpool/sqlx_deadpool_connection_manager.rs:14
+  type SqlxDeadpoolConnectionManager is no longer UnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/deadpool/sqlx_deadpool_connection_manager.rs:14
+  type SqlxDeadpoolConnectionManager is no longer RefUnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/deadpool/sqlx_deadpool_connection_manager.rs:14
+  type SqlxBb8ConnectionManager is no longer UnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/bb8/sqlx_bb8_connection_manager.rs:12
+  type SqlxBb8ConnectionManager is no longer RefUnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/bb8/sqlx_bb8_connection_manager.rs:12
+  type SqlxBb8ConnectionManager is no longer UnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/bb8/sqlx_bb8_connection_manager.rs:12
+  type SqlxBb8ConnectionManager is no longer RefUnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/bb8/sqlx_bb8_connection_manager.rs:12
+  type JdbcAgentConnectionFactory is no longer UnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection_factory.rs:12
+  type JdbcAgentConnectionFactory is no longer RefUnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection_factory.rs:12
+  type LibSqlConnectionFactory is no longer UnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/libsql/libsql_connection_factory.rs:15
+  type LibSqlConnectionFactory is no longer RefUnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/libsql/libsql_connection_factory.rs:15
+  type HttpSqlConnectionFactory is no longer UnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/http_sql/http_sql_connection_factory.rs:12
+  type HttpSqlConnectionFactory is no longer RefUnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/http_sql/http_sql_connection_factory.rs:12
+  type SqlxConnectionFactory is no longer UnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/sqlx_connection_factory.rs:12
+  type SqlxConnectionFactory is no longer RefUnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/sqlx_connection_factory.rs:12
+  type SqlxConnectionFactory is no longer UnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/sqlx_connection_factory.rs:12
+  type SqlxConnectionFactory is no longer RefUnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/sqlx_connection_factory.rs:12
+  type JdbcAgentConnection is no longer Sync, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs:78
+  type JdbcAgentConnection is no longer UnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs:78
+  type JdbcAgentConnection is no longer RefUnwindSafe, in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs:78
+
+--- failure enum_variant_added: enum variant added on exhaustive enum ---
+
+[1mDescription:[0m
+A publicly-visible enum without #[non_exhaustive] has a new variant.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#enum-variant-new
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/enum_variant_added.ron
+
+[1mFailed in:[0m
+  variant AgentValue:Byte in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/jdbc_agent/agent_value.rs:17
+  variant AgentValue:Short in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/jdbc_agent/agent_value.rs:18
+  variant AgentValue:Integer in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/jdbc_agent/agent_value.rs:19
+  variant AgentValue:Long in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/jdbc_agent/agent_value.rs:20
+  variant AgentValue:Float32 in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/jdbc_agent/agent_value.rs:22
+  variant AgentValue:Double in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/jdbc_agent/agent_value.rs:23
 
 --- failure feature_not_enabled_by_default: package feature is not enabled by default ---
 
-Description:
+[1mDescription:[0m
 A feature is no longer enabled by default for this package. This will break downstream crates which rely on the package's default features and require the functionality of this feature.
         ref: https://doc.rust-lang.org/cargo/reference/semver.html#cargo-feature-remove-another
        impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/feature_not_enabled_by_default.ron
 
-Failed in:
+[1mFailed in:[0m
   feature sqlite in the package's Cargo.toml
 
 --- failure function_missing: pub fn removed or renamed ---
 
-Description:
+[1mDescription:[0m
 A publicly-visible function cannot be imported by its prior path. A `pub use` may have been removed, or the function itself may have been renamed or removed entirely.
         ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
        impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/function_missing.ron
 
-Failed in:
-  function druid_wrapper::init_driver_extensions, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\lib.rs:54
+[1mFailed in:[0m
+  function druid_wrapper::init_driver_extensions, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/lib.rs:54
 
 --- failure module_missing: pub module removed or renamed ---
 
-Description:
+[1mDescription:[0m
 A publicly-visible module cannot be imported by its prior path. A `pub use` may have been removed, or the module may have been renamed, removed, or made non-public.
         ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
        impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/module_missing.ron
 
-Failed in:
-  mod druid_wrapper::toasty::toasty_prepared_statement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\toasty\toasty_prepared_statement.rs:1
-  mod druid_wrapper::rbdc::rbdc_prepared_statement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\rbdc\rbdc_prepared_statement.rs:1
+[1mFailed in:[0m
+  mod druid_wrapper::toasty::toasty_prepared_statement, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/toasty/toasty_prepared_statement.rs:1
+  mod druid_wrapper::rbdc::rbdc_prepared_statement, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/rbdc/rbdc_prepared_statement.rs:1
 
 --- failure struct_missing: pub struct removed or renamed ---
 
-Description:
+[1mDescription:[0m
 A publicly-visible struct cannot be imported by its prior path. A `pub use` may have been removed, or the struct itself may have been renamed or removed entirely.
         ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
        impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/struct_missing.ron
 
-Failed in:
-  struct druid_wrapper::libsql::LibSqlDatabaseMetaData, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\libsql\libsql_database_meta_data.rs:5
-  struct druid_wrapper::rbdc::rbdc_prepared_statement::RbdcPreparedStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\rbdc\rbdc_prepared_statement.rs:17
-  struct druid_wrapper::rbdc::RbdcPreparedStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\rbdc\rbdc_prepared_statement.rs:17
-  struct druid_wrapper::libsql::LibSqlPreparedStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\libsql\libsql_prepared_statement.rs:21
-  struct druid_wrapper::http_sql::HttpSqlPreparedStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\http_sql\http_sql_prepared_statement.rs:21
-  struct druid_wrapper::toasty::toasty_prepared_statement::ToastyPreparedStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\toasty\toasty_prepared_statement.rs:42
-  struct druid_wrapper::toasty::ToastyPreparedStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\toasty\toasty_prepared_statement.rs:42
-  struct druid_wrapper::http_sql::HttpSqlDatabaseMetaData, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\http_sql\http_sql_database_meta_data.rs:6
-  struct druid_wrapper::duckdb::DuckDbPreparedStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\duckdb\duckdb_prepared_statement.rs:16
-  struct druid_wrapper::duckdb::DuckDbDatabaseMetaData, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\duckdb\duckdb_database_meta_data.rs:13
-  struct druid_wrapper::jdbc_agent::JdbcAgentPreparedStatement, previously in file D:\druid-rust-task8-target\semver-checks\git-2c421efa6caf8bfc983633529fc3775c251f9492\962e4f8dc8362968b397f757e9f049a34ccd133d\crates\druid-wrapper\src\jdbc_agent\jdbc_agent_prepared_statement.rs:12
+[1mFailed in:[0m
+  struct druid_wrapper::libsql::LibSqlDatabaseMetaData, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/libsql/libsql_database_meta_data.rs:5
+  struct druid_wrapper::rbdc::rbdc_prepared_statement::RbdcPreparedStatement, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/rbdc/rbdc_prepared_statement.rs:17
+  struct druid_wrapper::rbdc::RbdcPreparedStatement, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/rbdc/rbdc_prepared_statement.rs:17
+  struct druid_wrapper::libsql::LibSqlPreparedStatement, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/libsql/libsql_prepared_statement.rs:21
+  struct druid_wrapper::http_sql::HttpSqlPreparedStatement, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/http_sql/http_sql_prepared_statement.rs:21
+  struct druid_wrapper::toasty::toasty_prepared_statement::ToastyPreparedStatement, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/toasty/toasty_prepared_statement.rs:42
+  struct druid_wrapper::toasty::ToastyPreparedStatement, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/toasty/toasty_prepared_statement.rs:42
+  struct druid_wrapper::http_sql::HttpSqlDatabaseMetaData, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/http_sql/http_sql_database_meta_data.rs:6
+  struct druid_wrapper::duckdb::DuckDbPreparedStatement, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/duckdb/duckdb_prepared_statement.rs:16
+  struct druid_wrapper::duckdb::DuckDbDatabaseMetaData, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/duckdb/duckdb_database_meta_data.rs:13
+  struct druid_wrapper::jdbc_agent::JdbcAgentPreparedStatement, previously in file /home/runner/work/druid-rust/druid-rust/target/semver-checks/git-2c421efa6caf8bfc983633529fc3775c251f9492/962e4f8dc8362968b397f757e9f049a34ccd133d/crates/druid-wrapper/src/jdbc_agent/jdbc_agent_prepared_statement.rs:12
 
 --- failure type_mismatched_generic_lifetimes: type now takes a different number of generic lifetimes ---
 
-Description:
+[1mDescription:[0m
 A type now takes a different number of generic lifetime parameters. Uses of this type that name the previous number of parameters will be broken.
        impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/type_mismatched_generic_lifetimes.ron
-Failed in:
-  Struct RbdcDatabaseMetaData (1 -> 0 lifetime params) in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\rbdc\rbdc_database_meta_data.rs:5
-  Struct RbdcDatabaseMetaData (1 -> 0 lifetime params) in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\rbdc\rbdc_database_meta_data.rs:5
-  Struct SqlxDatabaseMetaData (1 -> 0 lifetime params) in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\sqlx_database_meta_data.rs:14
-  Struct SqlxDatabaseMetaData (1 -> 0 lifetime params) in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\sqlx\sqlx_database_meta_data.rs:14
-  Struct ToastyDatabaseMetaData (1 -> 0 lifetime params) in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\toasty\toasty_database_meta_data.rs:8
-  Struct ToastyDatabaseMetaData (1 -> 0 lifetime params) in E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper\src\toasty\toasty_database_meta_data.rs:8
+[1mFailed in:[0m
+  Struct RbdcDatabaseMetaData (1 -> 0 lifetime params) in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/rbdc/rbdc_database_meta_data.rs:5
+  Struct RbdcDatabaseMetaData (1 -> 0 lifetime params) in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/rbdc/rbdc_database_meta_data.rs:5
+  Struct SqlxDatabaseMetaData (1 -> 0 lifetime params) in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs:14
+  Struct SqlxDatabaseMetaData (1 -> 0 lifetime params) in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs:14
+  Struct ToastyDatabaseMetaData (1 -> 0 lifetime params) in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/toasty/toasty_database_meta_data.rs:8
+  Struct ToastyDatabaseMetaData (1 -> 0 lifetime params) in /home/runner/work/druid-rust/druid-rust/crates/druid-wrapper/src/toasty/toasty_database_meta_data.rs:8
 
-     Summary semver requires new major version: 6 major and 0 minor checks failed
-    Finished [ 106.214s] druid-wrapper
+[1m[31m     Summary[0m semver requires new major version: 7 major and 0 minor checks failed
+[1m[32m    Finished[0m [1027.452s] druid-wrapper
