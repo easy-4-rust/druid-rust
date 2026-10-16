@@ -48,7 +48,7 @@ async fn task6_jdbc_agent_hsqldb_contract_test_jdbc_agent_hsqldb_contract_when_c
     assert!(capabilities.savepoints);
     assert!(capabilities.catalogs);
     assert!(capabilities.schemas);
-    assert!(!capabilities.callable_statements);
+    assert!(capabilities.callable_statements);
 
     let catalog = connection
         .catalog()

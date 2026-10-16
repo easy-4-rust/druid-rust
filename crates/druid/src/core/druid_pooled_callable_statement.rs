@@ -23,6 +23,7 @@ use druid_rdbc::statement::{
     PreparedInputParameter, PreparedParameter, PreparedStatement, Statement,
 };
 use druid_rdbc::types::Value;
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -328,6 +329,7 @@ impl Statement for CallableStatementView {
 
 struct CallableStatementState {
     parameters: Vec<Option<PreparedInputParameter>>,
+    out_indexes: BTreeSet<usize>,
     batch_parameter_sets: Vec<Vec<PreparedInputParameter>>,
 }
 
@@ -422,6 +424,7 @@ impl DruidPooledCallableStatement {
             initial_properties,
             state: Mutex::new(CallableStatementState {
                 parameters: Vec::new(),
+                out_indexes: BTreeSet::new(),
                 batch_parameter_sets: Vec::new(),
             }),
             close_lock: tokio::sync::Mutex::new(()),
@@ -541,20 +544,32 @@ impl DruidPooledCallableStatement {
     }
 
     fn parameter_snapshot(&self) -> Result<Vec<PreparedInputParameter>, RdbcError> {
-        self.shared
+        let state = self
+            .shared
             .state
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state
             .parameters
             .iter()
             .enumerate()
             .map(|(index, parameter)| {
-                parameter.clone().ok_or_else(|| {
-                    RdbcError::InvalidArgument(format!(
-                        "parameter {} has not been bound",
-                        index + 1
-                    ))
-                })
+                // 纯 OUT 参数无需绑定 IN。此占位仅供 Filter 的位置快照使用，
+                // 实际执行调用持有原始 OUT/IN 描述符的 driver statement。
+                parameter
+                    .clone()
+                    .or_else(|| {
+                        state
+                            .out_indexes
+                            .contains(&(index + 1))
+                            .then_some(PreparedInputParameter::RustValue(Value::Null))
+                    })
+                    .ok_or_else(|| {
+                        RdbcError::InvalidArgument(format!(
+                            "parameter {} has not been bound",
+                            index + 1
+                        ))
+                    })
             })
             .collect()
     }
@@ -1063,6 +1078,10 @@ impl CallableStatement for DruidPooledCallableStatement {
         out_parameter: CallableOutParameter,
     ) -> Result<(), RdbcError> {
         self.ensure_open()?;
+        let out_index = match &parameter {
+            CallableParameter::Index(index) => Some(index.get()),
+            CallableParameter::Name(_) => None,
+        };
         let result = self
             .shared
             .resource
@@ -1072,7 +1091,19 @@ impl CallableStatement for DruidPooledCallableStatement {
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .register_out_parameter(parameter, out_parameter);
-        self.classify_statement_mutation(result)
+        self.classify_statement_mutation(result)?;
+        if let Some(index) = out_index {
+            let mut state = self
+                .shared
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.out_indexes.insert(index);
+            if state.parameters.len() < index {
+                state.parameters.resize_with(index, || None);
+            }
+        }
+        Ok(())
     }
 
     fn set_named_parameter(

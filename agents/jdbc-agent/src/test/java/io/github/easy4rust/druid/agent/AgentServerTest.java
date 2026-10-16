@@ -575,8 +575,10 @@ class AgentServerTest {
             });
             assertEquals("ready", read(responses).path("method").asText());
             assertTrue(call(requests, responses, 2201, "handshake", handshakePayload()).path("result").isObject());
-            String owner = call(requests, responses, 2202, "open_session", connectPayload())
-                    .at("/result/sessionId").asText();
+            JsonNode opened = call(requests, responses, 2202, "open_session", connectPayload());
+            // H2 能准备函数调用，但明确不声明完整 stored procedure 能力。
+            assertEquals(false, opened.at("/result/capabilities/callableStatements").asBoolean(), opened.toString());
+            String owner = opened.at("/result/sessionId").asText();
             String other = call(requests, responses, 2203, "open_session", connectPayload())
                     .at("/result/sessionId").asText();
             ObjectNode prepare = sessionOnly(owner);
@@ -661,8 +663,9 @@ class AgentServerTest {
             connect.put("url", "jdbc:hsqldb:mem:callable-protocol");
             connect.put("validationQuery", "VALUES (1)");
             connect.with("properties").put("user", "SA").put("password", "");
-            String sessionId = call(requests, responses, 2302, "open_session", connect)
-                    .at("/result/sessionId").asText();
+            JsonNode opened = call(requests, responses, 2302, "open_session", connect);
+            assertTrue(opened.at("/result/capabilities/callableStatements").asBoolean(), opened.toString());
+            String sessionId = opened.at("/result/sessionId").asText();
             JsonNode created = call(requests, responses, 2303, "execute", sessionPayload(
                     sessionId, sqlPayload(procedure, JsonNodeFactory.instance.arrayNode())));
             assertTrue(created.path("result").isObject(), created.toString());

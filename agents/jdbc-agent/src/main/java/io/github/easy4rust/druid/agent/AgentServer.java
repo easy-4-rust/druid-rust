@@ -426,6 +426,7 @@ public final class AgentServer implements Closeable {
             capabilities.put("transactionIsolation", true);
             capabilities.put("catalog", supportsCatalog(metadata));
             capabilities.put("schema", supportsSchema(metadata));
+            capabilities.put("callableStatements", metadata.supportsStoredProcedures());
             capabilities.put("xa", session.supportsXa());
             return result;
         } catch (SQLException | RuntimeException exception) {

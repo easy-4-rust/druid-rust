@@ -41,6 +41,7 @@ jobs:
           DRUID_JDBC_DRIVER_JAR: ${{ github.workspace }}/agents/jdbc-agent/target/driver-libs/h2-2.3.232.jar
         run: |
           cargo test -p druid-wrapper --features jdbc-agent --test task6_jdbc_agent_h2_contract_test_parity
+          cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_callable_live_test
           cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_blob_h2_external_consumer
           cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_clob_external_consumer
           cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_nclob_external_consumer
@@ -74,6 +75,7 @@ jobs:
           DRUID_HSQLDB_DRIVER_JAR: ${{ github.workspace }}/agents/jdbc-agent/target/driver-libs/hsqldb-2.7.4.jar
         run: |
           cargo test -p druid-wrapper --features jdbc-agent --test task6_jdbc_agent_hsqldb_contract_test_parity
+          cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_callable_live_test
           cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_blob_hsqldb_external_consumer
           cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_clob_external_consumer
           cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_nclob_external_consumer

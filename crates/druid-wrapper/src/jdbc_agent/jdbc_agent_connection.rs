@@ -1,5 +1,6 @@
 use super::jdbc_agent_array::JdbcAgentArray;
 use super::jdbc_agent_blob::JdbcAgentBlob;
+use super::jdbc_agent_callable_statement::JdbcAgentCallableStatement;
 use super::{AgentValue, JdbcAgentClient, JdbcAgentDatabaseMetaData, JdbcAgentOptions};
 use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
 use crate::standard_adapter_executor::{
@@ -158,9 +159,7 @@ impl JdbcAgentConnection {
                 savepoints: supports_transactions && capability("savepoints"),
                 catalogs: capability("catalog"),
                 schemas: capability("schema"),
-                // Agent 协议尚未提供 prepare_call；不能把 JDBC 驱动本身的能力
-                // 误报为当前 Rust 适配器可调用的能力。
-                callable_statements: false,
+                callable_statements: capability("callableStatements"),
             },
             auto_commit: session
                 .get("autoCommit")
@@ -837,6 +836,36 @@ impl druid_rdbc::connection::Connection for JdbcAgentConnection {
         )))
     }
 
+    async fn prepare_call(
+        &mut self,
+        sql: &str,
+        options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::CallableStatement>, RdbcError> {
+        let executor = self.standard_executor_core()?;
+        let payload = if options == druid_rdbc::statement::StatementOptions::default() {
+            json!({"sql": sql})
+        } else {
+            json!({
+                "sql": sql,
+                "resultSetType": options.result_set_type().rdbc_code(),
+                "concurrency": options.concurrency().rdbc_code(),
+                "holdability": options.holdability().rdbc_code(),
+            })
+        };
+        let response = executor.connection_control("prepare_call", payload).await?;
+        let statement_id = response
+            .get("statementId")
+            .and_then(JsonValue::as_str)
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| Self::protocol_error("prepare_call returned no statementId"))?;
+        Ok(Box::new(JdbcAgentCallableStatement::new(
+            sql.to_owned(),
+            statement_id.to_owned(),
+            options,
+            executor,
+        )))
+    }
+
     async fn database_meta_data(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
@@ -879,6 +908,98 @@ impl druid_rdbc::connection::Connection for JdbcAgentConnection {
 
     fn capabilities(&self) -> druid_rdbc::extensions::ConnectionCapabilities {
         self.capabilities
+    }
+}
+
+#[cfg(test)]
+mod callable_tests {
+    use super::{JdbcAgentConnection, JdbcAgentTransport};
+    use druid_rdbc::connection::Connection;
+    use druid_rdbc::error::RdbcError;
+    use druid_rdbc::statement::{
+        CallableOutParameter, CallableParameter, ParameterIndex, PreparedParameter,
+        StatementOptions,
+    };
+    use druid_rdbc::types::Value;
+    use serde_json::{json, Value as JsonValue};
+    use std::sync::{Arc, Mutex};
+
+    struct CallableTransport(Arc<Mutex<Vec<(String, JsonValue)>>>);
+
+    #[async_trait::async_trait]
+    impl JdbcAgentTransport for CallableTransport {
+        async fn request(
+            &mut self,
+            operation: &str,
+            payload: JsonValue,
+        ) -> Result<JsonValue, RdbcError> {
+            self.0
+                .lock()
+                .expect("request lock")
+                .push((operation.to_owned(), payload));
+            Ok(match operation {
+                "prepare_call" => json!({"statementId":"call-1"}),
+                "execute_callable" => json!({"kind":"update","rowsAffected":0,
+                    "outValues":[{"index":1,"value":{"kind":"integer","value":7},"wasNull":false}]}),
+                "close_statement" => json!({}),
+                _ => panic!("unexpected operation {operation}"),
+            })
+        }
+
+        async fn close(&mut self) -> Result<(), RdbcError> {
+            Ok(())
+        }
+
+        fn is_unusable(&self) -> bool {
+            false
+        }
+    }
+
+    #[tokio::test]
+    async fn callable_uses_one_owned_agent_session_for_prepare_execute_and_close() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let mut connection = JdbcAgentConnection::from_session(
+            Box::new(CallableTransport(Arc::clone(&calls))),
+            json!({"capabilities":{"callableStatements":true}}),
+        );
+        assert!(connection.capabilities().callable_statements);
+        let mut callable = connection
+            .prepare_call("{? = call ABS(?)}", StatementOptions::default())
+            .await
+            .expect("supported callable preparation");
+        callable
+            .register_out_parameter(
+                CallableParameter::by_index(1).expect("OUT index"),
+                CallableOutParameter::new(4),
+            )
+            .expect("register OUT");
+        callable
+            .set_parameter(PreparedParameter {
+                index: ParameterIndex::new(2).expect("IN index"),
+                value: Value::Int(-7),
+            })
+            .expect("bind IN");
+        callable.execute_prepared().await.expect("execute call");
+        assert_eq!(
+            callable
+                .out_value(ParameterIndex::new(1).expect("OUT index"))
+                .expect("OUT value"),
+            Value::Int(7)
+        );
+        assert!(!callable.was_null().expect("OUT null status"));
+        callable.close().await.expect("close callable");
+        assert!(callable.out_value(ParameterIndex::new(1).unwrap()).is_err());
+        let calls = calls.lock().expect("request lock");
+        assert_eq!(
+            calls
+                .iter()
+                .map(|(method, _)| method.as_str())
+                .collect::<Vec<_>>(),
+            ["prepare_call", "execute_callable", "close_statement"]
+        );
+        assert_eq!(calls[1].1["statementId"], "call-1");
+        assert_eq!(calls[1].1["inParameters"][0]["index"], 2);
+        assert_eq!(calls[1].1["outParameters"][0]["sqlType"], 4);
     }
 }
 
