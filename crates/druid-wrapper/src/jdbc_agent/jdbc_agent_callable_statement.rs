@@ -318,27 +318,43 @@ impl PreparedStatement for JdbcAgentCallableStatement {
             }
             values.push((selector.clone(), value));
         }
-        let results = match payload.get("kind").and_then(JsonValue::as_str) {
-            Some("update") => {
-                let count = payload
-                    .get("rowsAffected")
-                    .and_then(JsonValue::as_i64)
-                    .ok_or_else(|| Self::protocol_error("callable update has no rowsAffected"))?;
-                self.state.last_update_count = Some(count);
-                vec![ExecutionResult::UpdateCount(count)]
+        let mut results = Vec::new();
+        let mut current_payload = payload;
+        loop {
+            match current_payload.get("kind").and_then(JsonValue::as_str) {
+                Some("done") => break,
+                Some("none") => {}
+                Some("update") => {
+                    let count = current_payload
+                        .get("rowsAffected")
+                        .and_then(JsonValue::as_i64)
+                        .ok_or_else(|| {
+                            Self::protocol_error("callable update has no rowsAffected")
+                        })?;
+                    if results.is_empty() {
+                        self.state.last_update_count = Some(count);
+                    }
+                    results.push(ExecutionResult::UpdateCount(count));
+                }
+                Some("result_set") => {
+                    let result = Self::collect_rows(&executor, current_payload).await?;
+                    results.push(ExecutionResult::ResultSet(Box::new(
+                        StandardAdapterResultSet::new(result, Arc::clone(&executor)),
+                    )));
+                }
+                _ => {
+                    return Err(Self::protocol_error(
+                        "callable response has no supported kind",
+                    ))
+                }
             }
-            Some("result_set") => {
-                let result = Self::collect_rows(&executor, payload).await?;
-                vec![ExecutionResult::ResultSet(Box::new(
-                    StandardAdapterResultSet::new(result, executor),
-                ))]
-            }
-            _ => {
-                return Err(Self::protocol_error(
-                    "callable response has no supported kind",
-                ))
-            }
-        };
+            current_payload = executor
+                .connection_control(
+                    "next_callable_result",
+                    json!({"statementId": self.statement_id}),
+                )
+                .await?;
+        }
         self.out_values = values;
         Ok(results)
     }

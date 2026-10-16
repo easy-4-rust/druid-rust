@@ -711,6 +711,90 @@ class AgentServerTest {
     }
 
     @Test
+    void hsqldbCallableReturnsTwoOrderedResultSets() throws Exception {
+        String procedure = "CREATE PROCEDURE two_results() READS SQL DATA DYNAMIC RESULT SETS 2 "
+                + "BEGIN ATOMIC "
+                + "DECLARE first_result CURSOR WITH RETURN FOR SELECT value FROM callable_values FOR READ ONLY; "
+                + "DECLARE second_result CURSOR WITH RETURN FOR SELECT value + 1 FROM callable_values FOR READ ONLY; "
+                + "OPEN first_result; OPEN second_result; END";
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:hsqldb:mem:callable-multi-direct", "SA", "");
+             Statement setup = connection.createStatement()) {
+            setup.execute("CREATE TABLE callable_values(value INTEGER)");
+            setup.execute("INSERT INTO callable_values VALUES(7)");
+            setup.execute(procedure);
+            try (java.sql.CallableStatement statement = connection.prepareCall("CALL two_results()")) {
+                assertEquals(false, statement.execute());
+                assertTrue(statement.getMoreResults());
+                try (ResultSet first = statement.getResultSet()) {
+                    assertTrue(first.next());
+                    assertEquals(7, first.getInt(1));
+                }
+                assertTrue(statement.getMoreResults());
+                try (ResultSet second = statement.getResultSet()) {
+                    assertTrue(second.next());
+                    assertEquals(8, second.getInt(1));
+                }
+                assertEquals(false, statement.getMoreResults());
+            }
+        }
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            assertEquals("ready", read(responses).path("method").asText());
+            call(requests, responses, 2401, "handshake", handshakePayload());
+            ObjectNode connect = connectPayload();
+            connect.put("url", "jdbc:hsqldb:mem:callable-multi-protocol");
+            connect.put("validationQuery", "VALUES (1)");
+            connect.with("properties").put("user", "SA").put("password", "");
+            String sessionId = call(requests, responses, 2402, "open_session", connect)
+                    .at("/result/sessionId").asText();
+            for (String sql : new String[] {
+                    "CREATE TABLE callable_values(value INTEGER)",
+                    "INSERT INTO callable_values VALUES(7)", procedure}) {
+                assertTrue(call(requests, responses, 2403, "execute", sessionPayload(
+                        sessionId, sqlPayload(sql, JsonNodeFactory.instance.arrayNode())))
+                        .path("result").isObject());
+            }
+            ObjectNode prepare = sessionOnly(sessionId);
+            prepare.put("sql", "CALL two_results()");
+            String statementId = call(requests, responses, 2404, "prepare_call", prepare)
+                    .at("/result/statementId").asText();
+            ObjectNode execute = sessionOnly(sessionId);
+            execute.put("statementId", statementId);
+            execute.putArray("inParameters");
+            execute.putArray("outParameters");
+            JsonNode first = call(requests, responses, 2405, "execute_callable", execute);
+            assertEquals("update", first.at("/result/kind").asText(), first.toString());
+            ObjectNode next = sessionOnly(sessionId);
+            next.put("statementId", statementId);
+            JsonNode firstRows = call(requests, responses, 2406, "next_callable_result", next);
+            assertEquals("result_set", firstRows.at("/result/kind").asText(), firstRows.toString());
+            assertEquals(7, firstRows.at("/result/rows/0/0/value").asInt(), firstRows.toString());
+            JsonNode secondRows = call(requests, responses, 2407, "next_callable_result", next);
+            assertEquals("result_set", secondRows.at("/result/kind").asText(), secondRows.toString());
+            assertEquals(8, secondRows.at("/result/rows/0/0/value").asInt(), secondRows.toString());
+            JsonNode done = call(requests, responses, 2408, "next_callable_result", next);
+            assertEquals("done", done.at("/result/kind").asText(), done.toString());
+            call(requests, responses, 2409, "close_statement", next);
+            call(requests, responses, 2410, "close_session", sessionOnly(sessionId));
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void h2BlobProtocolPreservesBytesPositionsDriverErrorsAndFree() throws Exception {
         SQLException expectedPositionError;
         try (Connection direct = DriverManager.getConnection("jdbc:h2:mem:agent-blob-direct")) {

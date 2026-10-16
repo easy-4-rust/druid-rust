@@ -941,6 +941,7 @@ mod callable_tests {
                 "prepare_call" => json!({"statementId":"call-1"}),
                 "execute_callable" => json!({"kind":"update","rowsAffected":0,
                     "outValues":[{"index":1,"value":{"kind":"integer","value":7},"wasNull":false}]}),
+                "next_callable_result" => json!({"kind":"done"}),
                 "close_statement" => json!({}),
                 _ => panic!("unexpected operation {operation}"),
             })
@@ -995,7 +996,12 @@ mod callable_tests {
                 .iter()
                 .map(|(method, _)| method.as_str())
                 .collect::<Vec<_>>(),
-            ["prepare_call", "execute_callable", "close_statement"]
+            [
+                "prepare_call",
+                "execute_callable",
+                "next_callable_result",
+                "close_statement"
+            ]
         );
         assert_eq!(calls[1].1["statementId"], "call-1");
         assert_eq!(calls[1].1["inParameters"][0]["index"], 2);

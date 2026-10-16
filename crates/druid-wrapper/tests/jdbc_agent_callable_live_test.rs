@@ -4,9 +4,10 @@
 use druid::pool::DruidPool;
 use druid_rdbc::data_source::PooledConnection;
 use druid_rdbc::driver::ConnectionFactory;
+use druid_rdbc::result_set::{ColumnIndex, ResultSetExt};
 use druid_rdbc::statement::{
-    CallableInputParameter, CallableOutParameter, CallableParameter, ParameterIndex,
-    PreparedParameter, StatementOptions,
+    CallableInputParameter, CallableOutParameter, CallableParameter, ExecutionResult,
+    ParameterIndex, PreparedParameter, StatementOptions,
 };
 use druid_rdbc::types::Value;
 use druid_wrapper::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
@@ -179,4 +180,66 @@ async fn hsqldb_callable_procedure_round_trip_and_explicit_close() {
     );
     named.close().await.expect("close named call");
     connection.close().await.expect("close HSQLDB session");
+}
+
+#[tokio::test]
+async fn hsqldb_callable_preserves_ordered_update_and_two_result_sets() {
+    let Some(options) = options("DRUID_HSQLDB_DRIVER_JAR") else {
+        return;
+    };
+    let factory: Arc<dyn ConnectionFactory> = Arc::new(
+        JdbcAgentConnectionFactory::new(
+            "jdbc:hsqldb:mem:callable_multi_rust",
+            Some("VALUES (1)".to_owned()),
+            options.runtime_identity("callable-multi-hsqldb", "local", "isolated"),
+        )
+        .user_name("SA")
+        .password(""),
+    );
+    let pool = DruidPool::builder()
+        .name("callable-multi-hsqldb")
+        .driver_name("hsqldb")
+        .factory(factory)
+        .max_open(1)
+        .max_idle(1)
+        .build()
+        .await
+        .expect("HSQLDB pool");
+    let mut owner = pool
+        .get_pooled_connection_owner()
+        .await
+        .expect("pooled owner");
+    let mut connection = owner.connection().await.expect("logical connection");
+    connection
+        .exec("CREATE TABLE callable_values(value INTEGER)", Vec::new())
+        .await
+        .expect("table");
+    connection
+        .exec("INSERT INTO callable_values VALUES(7)", Vec::new())
+        .await
+        .expect("row");
+    connection.exec(
+        "CREATE PROCEDURE two_results() READS SQL DATA DYNAMIC RESULT SETS 2 BEGIN ATOMIC \
+         DECLARE first_result CURSOR WITH RETURN FOR SELECT value FROM callable_values FOR READ ONLY; \
+         DECLARE second_result CURSOR WITH RETURN FOR SELECT value + 1 FROM callable_values FOR READ ONLY; \
+         OPEN first_result; OPEN second_result; END",
+        Vec::new(),
+    ).await.expect("two-result procedure");
+    let mut callable = connection
+        .prepare_call("CALL two_results()", StatementOptions::default())
+        .await
+        .expect("callable");
+    let mut results = callable.execute_prepared().await.expect("execute");
+    assert_eq!(results.len(), 3);
+    assert!(matches!(results.remove(0), ExecutionResult::UpdateCount(0)));
+    for expected in [7, 8] {
+        let ExecutionResult::ResultSet(mut rows) = results.remove(0) else {
+            panic!("ordered JDBC result set");
+        };
+        assert!(rows.next().await.unwrap());
+        assert_eq!(rows.int(ColumnIndex::new(1).unwrap()).unwrap(), expected);
+    }
+    callable.close().await.expect("close callable");
+    owner.close().await.expect("close pooled owner");
+    pool.close().await;
 }

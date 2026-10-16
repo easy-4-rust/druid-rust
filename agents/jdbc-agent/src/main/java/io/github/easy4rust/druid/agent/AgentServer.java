@@ -245,6 +245,7 @@ public final class AgentServer implements Closeable {
             case "prepare" -> prepare(session, params);
             case "prepare_call" -> prepareCall(session, params);
             case "execute_callable" -> executeCallable(requestId, session, params);
+            case "next_callable_result" -> nextCallableResult(requestId, session, params);
             case "execute_prepared" -> executePrepared(requestId, session, params);
             case "execute_prepared_batch" -> executePreparedBatch(requestId, session, params);
             case "close_statement" -> closeStatement(session, params);
@@ -1257,12 +1258,37 @@ public final class AgentServer implements Closeable {
                 item.set("value", objectMapper.valueToTree(AgentValue.fromArrayElement(raw, sqlType)));
                 item.put("wasNull", wasNull);
             }
+            long updateCount = hasRows ? -1 : statement.getLargeUpdateCount();
             ObjectNode result = hasRows
                     ? firstPage(session, new AgentCursor(
                             statement, statement.getResultSet(), false, statementId, objectMapper), payload)
-                    : updateResult(statement, Math.max(0, statement.getUpdateCount()), false);
+                    : updateCount >= 0
+                            ? updateResult(statement, updateCount, false)
+                            : JsonNodeFactory.instance.objectNode().put("kind", "none");
             result.set("outValues", outValues);
             return result;
+        } finally {
+            session.deactivate(requestId);
+        }
+    }
+
+    /** 按 JDBC 原始顺序推进 callable 的结果；-1 更新计数标记整个序列结束。 */
+    private JsonNode nextCallableResult(
+            long requestId, AgentSession session, JsonNode payload) throws SQLException, IOException {
+        String statementId = requiredText(payload, "statementId");
+        CallableStatement statement = session.callableStatement(statementId);
+        session.closeCursorsForStatement(statementId);
+        session.activate(requestId, statement);
+        try {
+            if (statement.getMoreResults(Statement.CLOSE_CURRENT_RESULT)) {
+                return firstPage(session, new AgentCursor(
+                        statement, statement.getResultSet(), false, statementId, objectMapper), payload);
+            }
+            long updateCount = statement.getLargeUpdateCount();
+            if (updateCount >= 0) {
+                return updateResult(statement, updateCount, false);
+            }
+            return JsonNodeFactory.instance.objectNode().put("kind", "done");
         } finally {
             session.deactivate(requestId);
         }
