@@ -21,6 +21,7 @@ public final class AgentCursor implements AutoCloseable {
     private final ArrayNode columns;
     private final boolean closeStatement;
     private final String statementId;
+    private final String arrayId;
     private final ObjectMapper objectMapper;
     private ArrayNode pendingRow;
     private boolean exhausted;
@@ -38,11 +39,24 @@ public final class AgentCursor implements AutoCloseable {
         this.metadata = resultSet.getMetaData();
         this.closeStatement = closeStatement;
         this.statementId = statementId;
+        this.arrayId = null;
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.columns = columns(metadata);
     }
 
-    /** 返回底层 Statement，供 requestId 取消表关联。 */
+    /** 创建由 Array owner 持有、没有 JDBC Statement 的结果集游标。 */
+    public AgentCursor(ResultSet resultSet, String arrayId, ObjectMapper objectMapper) throws SQLException {
+        this.statement = null;
+        this.resultSet = Objects.requireNonNull(resultSet, "resultSet");
+        this.metadata = resultSet.getMetaData();
+        this.closeStatement = false;
+        this.statementId = null;
+        this.arrayId = Objects.requireNonNull(arrayId, "arrayId");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.columns = columns(metadata);
+    }
+
+    /** 返回底层 Statement，供 requestId 取消表关联；Array 游标没有 Statement。 */
     public PreparedStatement statement() {
         return statement;
     }
@@ -50,6 +64,11 @@ public final class AgentCursor implements AutoCloseable {
     /** 判断游标是否引用指定远程预编译语句。 */
     public boolean referencesStatement(String candidateStatementId) {
         return Objects.equals(statementId, candidateStatementId);
+    }
+
+    /** 判断游标是否属于指定 Array 资源。 */
+    public boolean referencesArray(String candidateArrayId) {
+        return Objects.equals(arrayId, candidateArrayId);
     }
 
     /** 读取一页结果，并保证序列化主体不超过调用方给出的字节预算。 */

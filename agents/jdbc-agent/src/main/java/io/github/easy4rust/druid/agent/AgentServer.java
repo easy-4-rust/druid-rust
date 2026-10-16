@@ -68,6 +68,7 @@ public final class AgentServer implements Closeable {
             "remote-prepare",
             "native-prepared-batch",
             "array-values",
+            "array-result-set",
             "xa-resource");
 
     private final InputStream input;
@@ -258,6 +259,7 @@ public final class AgentServer implements Closeable {
             case "create_array" -> createArray(session, params);
             case "array_metadata" -> arrayMetadata(session, params);
             case "array_values" -> arrayValues(session, params);
+            case "array_result_set" -> arrayResultSet(session, params);
             case "free_array" -> freeArray(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);
             case "reopen_logical_connection" -> reopenLogicalConnection(session);
@@ -560,6 +562,36 @@ public final class AgentServer implements Closeable {
         return JsonNodeFactory.instance.objectNode();
     }
 
+    /** 将驱动 Array#getResultSet 作为独立子游标分页输出。 */
+    private JsonNode arrayResultSet(AgentSession session, JsonNode payload)
+            throws SQLException, IOException {
+        if (payload.has("typeMap")) {
+            throw new SQLFeatureNotSupportedException("Array#getResultSet(Map) is not supported", "0A000");
+        }
+        String arrayId = requiredText(payload, "arrayId");
+        Array array = session.array(arrayId);
+        boolean hasIndex = payload.has("index");
+        boolean hasCount = payload.has("count");
+        if (hasIndex != hasCount) {
+            throw new IllegalArgumentException("index and count must be supplied together");
+        }
+        ResultSet resultSet = hasIndex
+                ? array.getResultSet(requiredLong(payload, "index"), requiredInt(payload, "count"))
+                : array.getResultSet();
+        AgentCursor cursor;
+        try {
+            cursor = new AgentCursor(resultSet, arrayId, objectMapper);
+        } catch (SQLException | RuntimeException exception) {
+            try {
+                resultSet.close();
+            } catch (SQLException closeFailure) {
+                exception.addSuppressed(closeFailure);
+            }
+            throw exception;
+        }
+        return firstPage(session, cursor, payload);
+    }
+
     private JsonNode executeUpdate(long requestId, AgentSession session, JsonNode payload)
             throws SQLException, IOException {
         try (PreparedStatement statement = session.connection().prepareStatement(
@@ -734,7 +766,9 @@ public final class AgentServer implements Closeable {
             throws SQLException, IOException {
         String cursorId = requiredText(payload, "cursorId");
         AgentCursor cursor = session.cursor(cursorId);
-        session.activate(requestId, cursor.statement());
+        if (Objects.nonNull(cursor.statement())) {
+            session.activate(requestId, cursor.statement());
+        }
         try {
             ObjectNode page = cursor.fetchPage(
                     cursorId, pageSize(payload), responseBytes(payload));

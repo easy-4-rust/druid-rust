@@ -255,6 +255,7 @@ class AgentServerTest {
             assertEquals("test-h2", handshake.path("driverArtifactVersion").asText());
             assertEquals(true, contains(handshake.path("capabilities"), "native-prepared-batch"));
             assertEquals(true, contains(handshake.path("capabilities"), "array-values"));
+            assertEquals(true, contains(handshake.path("capabilities"), "array-result-set"));
 
             write(requests, request(2, "open_session", connectPayload()));
             String firstSession = read(responses).at("/result/sessionId").asText();
@@ -438,6 +439,38 @@ class AgentServerTest {
             assertEquals("0A000", unsupportedMap.at("/data/sqlState").asText());
             arrayRequest.remove("typeMap");
 
+            ObjectNode cursorRequest = sessionOnly(owner);
+            cursorRequest.put("arrayId", arrayId);
+            cursorRequest.put("pageSize", 2);
+            write(requests, request(114, "array_result_set", cursorRequest));
+            JsonNode firstArrayPage = read(responses).path("result");
+            assertEquals(2, firstArrayPage.path("rows").size());
+            assertEquals(1, firstArrayPage.at("/rows/0/0/value").asInt());
+            assertEquals("null", firstArrayPage.at("/rows/1/1/kind").asText());
+            String arrayCursorId = firstArrayPage.path("cursorId").asText();
+            ObjectNode fetchArrayPage = sessionOnly(owner);
+            fetchArrayPage.put("cursorId", arrayCursorId);
+            write(requests, request(115, "fetch_page", fetchArrayPage));
+            JsonNode finalArrayPage = read(responses).path("result");
+            assertEquals(1, finalArrayPage.path("rows").size());
+            assertEquals(3, finalArrayPage.at("/rows/0/0/value").asInt());
+
+            cursorRequest.put("index", 2L);
+            cursorRequest.put("count", 2);
+            write(requests, request(118, "array_result_set", cursorRequest));
+            JsonNode rangedCursor = read(responses).path("result");
+            assertEquals(2, rangedCursor.path("rows").size());
+            assertEquals(2, rangedCursor.at("/rows/0/0/value").asInt());
+            assertEquals(3, rangedCursor.at("/rows/1/0/value").asInt());
+            cursorRequest.remove("index");
+            cursorRequest.remove("count");
+
+            cursorRequest.put("pageSize", 1);
+            write(requests, request(116, "array_result_set", cursorRequest));
+            JsonNode ownedCursor = read(responses).path("result");
+            String ownedCursorId = ownedCursor.path("cursorId").asText();
+            assertTrue(ownedCursor.path("hasMore").asBoolean());
+
             ObjectNode wrongSession = sessionOnly(other);
             wrongSession.put("arrayId", arrayId);
             write(requests, request(108, "array_values", wrongSession));
@@ -445,6 +478,9 @@ class AgentServerTest {
 
             write(requests, request(109, "free_array", arrayRequest));
             assertTrue(read(responses).path("result").isObject());
+            fetchArrayPage.put("cursorId", ownedCursorId);
+            write(requests, request(117, "fetch_page", fetchArrayPage));
+            assertTrue(read(responses).path("error").isObject());
             write(requests, request(110, "array_values", arrayRequest));
             assertTrue(read(responses).path("error").isObject());
             write(requests, request(111, "close_session", sessionOnly(owner)));

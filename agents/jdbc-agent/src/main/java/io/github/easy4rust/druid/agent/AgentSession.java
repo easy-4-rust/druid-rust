@@ -197,8 +197,25 @@ public final class AgentSession implements Closeable {
     public void freeArray(String arrayId) throws SQLException {
         Array array = arrays.get(arrayId);
         if (Objects.nonNull(array)) {
-            array.free();
-            arrays.remove(arrayId, array);
+            SQLException failure = null;
+            for (Map.Entry<String, AgentCursor> entry : new ArrayList<>(cursors.entrySet())) {
+                if (entry.getValue().referencesArray(arrayId)) {
+                    try {
+                        closeCursor(entry.getKey());
+                    } catch (SQLException exception) {
+                        failure = appendFailure(failure, exception);
+                    }
+                }
+            }
+            try {
+                array.free();
+                arrays.remove(arrayId, array);
+            } catch (SQLException exception) {
+                failure = appendFailure(failure, exception);
+            }
+            if (Objects.nonNull(failure)) {
+                throw failure;
+            }
         }
     }
 
