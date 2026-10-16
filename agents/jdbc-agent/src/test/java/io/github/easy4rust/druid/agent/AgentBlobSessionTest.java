@@ -18,15 +18,74 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.XAConnection;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** 验证 JDBC Blob 会话身份、释放重试以及逻辑连接关闭清理。 */
 class AgentBlobSessionTest {
+
+    @Test
+    void cancellingAnActiveBlobReadClosesItsChildHandle() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:blob-read-cancel")) {
+            AgentSession session = new AgentSession(connection, null);
+            String blobId = session.registerBlob(connection.createBlob());
+            CountDownLatch reading = new CountDownLatch(1);
+            CountDownLatch closed = new CountDownLatch(1);
+            InputStream blocked = new InputStream() {
+                @Override
+                public int read() throws IOException {
+                    reading.countDown();
+                    try {
+                        if (!closed.await(5, TimeUnit.SECONDS)) {
+                            throw new IOException("read was not cancelled");
+                        }
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("read interrupted", exception);
+                    }
+                    throw new IOException("read closed by cancellation");
+                }
+
+                @Override
+                public void close() {
+                    closed.countDown();
+                }
+            };
+            String streamId = session.registerBlobInputStream(blobId, blocked);
+            ExecutorService worker = Executors.newSingleThreadExecutor();
+            try {
+                Future<?> pending = worker.submit(() -> {
+                    session.activateBlobRead(77L, streamId);
+                    try {
+                        session.blobInputStream(streamId).read();
+                    } finally {
+                        session.finishBlobRead(77L);
+                    }
+                    return null;
+                });
+                assertTrue(reading.await(5, TimeUnit.SECONDS));
+                assertTrue(session.cancel(77L));
+                assertThrows(SQLException.class, () -> session.blobInputStream(streamId));
+                assertThrows(java.util.concurrent.ExecutionException.class,
+                        () -> pending.get(5, TimeUnit.SECONDS));
+                assertTrue(!session.cancel(77L));
+            } finally {
+                closed.countDown();
+                worker.shutdownNow();
+                session.close();
+            }
+        }
+    }
 
     @Test
     void childStreamCloseFailuresAreAggregatedBeforeParentFree() throws Exception {

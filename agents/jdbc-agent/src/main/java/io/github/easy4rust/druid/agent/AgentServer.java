@@ -274,7 +274,7 @@ public final class AgentServer implements Closeable {
                     "Blob#position(Blob,long) is not supported", "0A000");
             case "blob_truncate" -> blobTruncate(session, params);
             case "blob_open_input_stream" -> blobOpenInputStream(session, params);
-            case "blob_read_input_stream" -> blobReadInputStream(session, params);
+            case "blob_read_input_stream" -> blobReadInputStream(requestId, session, params);
             case "blob_open_output_stream" -> blobOpenOutputStream(session, params);
             case "blob_write_output_stream" -> blobWriteOutputStream(session, params);
             case "blob_flush_stream" -> blobFlushStream(session, params);
@@ -671,18 +671,31 @@ public final class AgentServer implements Closeable {
     }
 
     /** 单次只读取至多 64 KiB，并显式返回 EOF 状态。 */
-    private JsonNode blobReadInputStream(AgentSession session, JsonNode payload) throws SQLException {
-        InputStream input = session.blobInputStream(requiredText(payload, "streamId"));
+    private JsonNode blobReadInputStream(long requestId, AgentSession session, JsonNode payload)
+            throws SQLException {
+        String streamId = requiredText(payload, "streamId");
+        InputStream input = session.blobInputStream(streamId);
         int maxBytes = requiredInt(payload, "maxBytes");
         if (maxBytes < 1 || maxBytes > MAX_BLOB_STREAM_CHUNK_BYTES) {
             throw new IllegalArgumentException("maxBytes must be between 1 and 65536");
         }
         byte[] buffer = new byte[maxBytes];
-        int count;
+        int count = 0;
+        IOException readFailure = null;
+        boolean cancelled;
+        session.activateBlobRead(requestId, streamId);
         try {
             count = input.read(buffer);
         } catch (IOException exception) {
-            throw new SQLException("JDBC Agent blob stream read failed", exception);
+            readFailure = exception;
+        } finally {
+            cancelled = session.finishBlobRead(requestId);
+        }
+        if (cancelled) {
+            throw new SQLException("JDBC Agent blob stream read cancelled", "HY008", readFailure);
+        }
+        if (Objects.nonNull(readFailure)) {
+            throw new SQLException("JDBC Agent blob stream read failed", readFailure);
         }
         return JsonNodeFactory.instance.objectNode()
                 .put("bytes", Base64.getEncoder().encodeToString(

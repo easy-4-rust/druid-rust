@@ -14,8 +14,11 @@ import java.sql.Statement;
 import javax.sql.XAConnection;
 import javax.transaction.xa.XAResource;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -34,6 +37,8 @@ public final class AgentSession implements Closeable {
     private final Map<String, Blob> blobs = new ConcurrentHashMap<>();
     private final Map<String, BlobStreamHandle> blobStreams = new ConcurrentHashMap<>();
     private final Map<Long, Statement> activeStatements = new ConcurrentHashMap<>();
+    private final Map<Long, String> activeBlobReads = new HashMap<>();
+    private final Set<Long> cancelledBlobReads = new HashSet<>();
     private final Map<String, Savepoint> savepoints = new ConcurrentHashMap<>();
 
     /** 创建拥有独占物理 JDBC 连接的会话。 */
@@ -343,13 +348,34 @@ public final class AgentSession implements Closeable {
         activeStatements.remove(requestId);
     }
 
-    /** 取消目标请求正在执行的 JDBC Statement。 */
+    /** 登记正在读取的 Blob 子流，以便并行的 cancel 请求关闭它。 */
+    public synchronized void activateBlobRead(long requestId, String streamId) throws SQLException {
+        blobInputStream(streamId);
+        activeBlobReads.put(requestId, streamId);
+    }
+
+    /** 原子地结束读取并返回是否已被 cancel 接受。 */
+    public synchronized boolean finishBlobRead(long requestId) {
+        activeBlobReads.remove(requestId);
+        return cancelledBlobReads.remove(requestId);
+    }
+
+    /** 取消目标请求正在执行的 JDBC Statement 或 Blob 输入流。 */
     public boolean cancel(long requestId) throws SQLException {
         Statement statement = activeStatements.get(requestId);
-        if (Objects.isNull(statement)) {
-            return false;
+        if (Objects.nonNull(statement)) {
+            statement.cancel();
+            return true;
         }
-        statement.cancel();
+        String streamId;
+        synchronized (this) {
+            streamId = activeBlobReads.get(requestId);
+            if (Objects.isNull(streamId)) {
+                return false;
+            }
+            cancelledBlobReads.add(requestId);
+        }
+        closeBlobStream(streamId);
         return true;
     }
 

@@ -18,6 +18,7 @@ import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.net.SocketTimeoutException;
+import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -27,6 +28,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Base64;
+import java.util.Map;
 import javax.sql.XAConnection;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
@@ -35,6 +37,8 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -722,6 +726,11 @@ class AgentServerTest {
 
             String streamId = call(requests, responses, 405, "blob_open_input_stream", blob)
                     .at("/result/streamId").asText();
+            ObjectNode oversizedRead = sessionOnly(sessionId);
+            oversizedRead.put("streamId", streamId);
+            oversizedRead.put("maxBytes", 65_537);
+            assertTrue(call(requests, responses, 419, "blob_read_input_stream", oversizedRead)
+                    .path("error").isObject());
             ByteArrayOutputStream actual = new ByteArrayOutputStream();
             for (int page = 0; page < 10; page++) {
                 ObjectNode next = sessionOnly(sessionId);
@@ -836,6 +845,75 @@ class AgentServerTest {
             requests.close();
             serverTask.get();
         } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void cancelClosesActiveBlobReadAndReturnsCancellationSqlState() throws Exception {
+        CountDownLatch reading = new CountDownLatch(1);
+        CountDownLatch closed = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:blob-protocol-cancel");
+             PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            AgentSession session = new AgentSession(connection, null);
+            String blobId = session.registerBlob(connection.createBlob());
+            InputStream blocked = new InputStream() {
+                @Override
+                public int read() throws IOException {
+                    reading.countDown();
+                    try {
+                        if (!closed.await(5, TimeUnit.SECONDS)) {
+                            throw new IOException("read was not cancelled");
+                        }
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("read interrupted", exception);
+                    }
+                    throw new IOException("read closed by cancellation");
+                }
+
+                @Override
+                public void close() {
+                    closed.countDown();
+                }
+            };
+            String streamId = session.registerBlobInputStream(blobId, blocked);
+            Field sessionsField = AgentServer.class.getDeclaredField("sessions");
+            sessionsField.setAccessible(true);
+            ((Map<String, AgentSession>) sessionsField.get(server)).put("blob-cancel-session", session);
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            assertEquals("ready", read(responses).path("method").asText());
+            ObjectNode readRequest = sessionOnly("blob-cancel-session");
+            readRequest.put("streamId", streamId);
+            readRequest.put("maxBytes", 1);
+            write(requests, request(601, "blob_read_input_stream", readRequest));
+            assertTrue(reading.await(5, TimeUnit.SECONDS));
+            ObjectNode cancelRequest = sessionOnly("blob-cancel-session");
+            cancelRequest.put("targetRequestId", 601);
+            write(requests, request(602, "cancel", cancelRequest));
+            JsonNode first = read(responses);
+            JsonNode second = read(responses);
+            JsonNode cancellation = first.path("id").asLong() == 602 ? first : second;
+            JsonNode readResult = first.path("id").asLong() == 601 ? first : second;
+            assertTrue(cancellation.at("/result/cancelled").asBoolean());
+            assertEquals("HY008", readResult.at("/error/data/sqlState").asText());
+            assertTrue(call(requests, responses, 603, "blob_read_input_stream", readRequest)
+                    .path("error").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            closed.countDown();
             executor.shutdownNow();
         }
     }
