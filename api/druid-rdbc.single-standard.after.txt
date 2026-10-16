@@ -801,6 +801,7 @@ pub fn druid_rdbc::extensions::OutputStreamHandle::close(&self) -> core::result:
 pub fn druid_rdbc::extensions::OutputStreamHandle::flush(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
 pub fn druid_rdbc::extensions::OutputStreamHandle::is_closed(&self) -> bool
 pub fn druid_rdbc::extensions::OutputStreamHandle::new(impl core::io::write::Write + core::marker::Send + 'static) -> Self
+pub fn druid_rdbc::extensions::OutputStreamHandle::with_close(impl core::io::write::Write + core::marker::Send + 'static, impl core::ops::function::FnMut() -> core::io::error::Result<()> + core::marker::Send + 'static) -> Self
 pub fn druid_rdbc::extensions::OutputStreamHandle::write(&self, &[u8]) -> core::result::Result<usize, druid_rdbc::RdbcError>
 impl core::cmp::Eq for druid_rdbc::extensions::OutputStreamHandle
 impl core::cmp::PartialEq for druid_rdbc::extensions::OutputStreamHandle
@@ -2529,6 +2530,7 @@ pub fn druid_rdbc::extensions::OutputStreamHandle::close(&self) -> core::result:
 pub fn druid_rdbc::extensions::OutputStreamHandle::flush(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
 pub fn druid_rdbc::extensions::OutputStreamHandle::is_closed(&self) -> bool
 pub fn druid_rdbc::extensions::OutputStreamHandle::new(impl core::io::write::Write + core::marker::Send + 'static) -> Self
+pub fn druid_rdbc::extensions::OutputStreamHandle::with_close(impl core::io::write::Write + core::marker::Send + 'static, impl core::ops::function::FnMut() -> core::io::error::Result<()> + core::marker::Send + 'static) -> Self
 pub fn druid_rdbc::extensions::OutputStreamHandle::write(&self, &[u8]) -> core::result::Result<usize, druid_rdbc::RdbcError>
 impl core::cmp::Eq for druid_rdbc::extensions::OutputStreamHandle
 impl core::cmp::PartialEq for druid_rdbc::extensions::OutputStreamHandle
