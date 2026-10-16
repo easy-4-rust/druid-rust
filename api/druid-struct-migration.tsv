@@ -4,6 +4,7 @@ ConnectionDatabaseMetaDataFilterChain	crates/druid/src/core/database_meta_data_p
 ConnectionLobFilterChain	crates/druid/src/core/standard_connection_lob_filter_chain.rs	StandardConnectionLobFilterChain	RENAMED	crates/druid/tests/resource_owner_cancellation_test.rs
 ConnectionWarningFilterChain	crates/druid/src/core/standard_connection_warning_filter_chain.rs	StandardConnectionWarningFilterChain	RENAMED	crates/druid/tests/task6_sql_warning_semantics_test_parity.rs
 DriverExtensionDescriptor	crates/druid-rdbc/src/driver/driver_extension_descriptor.rs	DriverExtensionDescriptor	STANDARD_PORT	crates/druid/tests/standard_driver_action_test.rs
+DriverManager	crates/druid-rdbc/src/driver/driver_manager.rs	DriverManager	STANDARD_PORT	crates/druid/tests/standard_driver_action_test.rs
 DriverProperty	crates/druid-rdbc/src/driver/driver.rs	DriverPropertyInfo	STANDARD_PORT	crates/druid-rdbc/tests/driver_contract_test.rs
 DriverPropertyInfo	crates/druid-rdbc/src/driver/driver.rs	DriverPropertyInfo	STANDARD_PORT	crates/druid-rdbc/tests/driver_contract_test.rs
 DruidPooledCallableStatementHandle	crates/druid/src/core/druid_pooled_callable_statement.rs	DruidPooledCallableStatement	PRIVATE_OWNER	crates/druid/tests/task6_standard_callable_statement_test_parity.rs
