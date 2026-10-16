@@ -777,6 +777,64 @@ class AgentServerTest {
         }
     }
 
+    @Test
+    void nClobCreationMatchesDirectH2DriverWithoutClobFallback() throws Exception {
+        SQLException driverFailure = null;
+        try (Connection direct = DriverManager.getConnection("jdbc:h2:mem:agent-nclob-direct")) {
+            try {
+                java.sql.NClob national = direct.createNClob();
+                national.free();
+            } catch (SQLException exception) {
+                driverFailure = exception;
+            }
+        }
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            assertEquals("ready", read(responses).path("method").asText());
+            assertTrue(call(requests, responses, 930, "handshake", handshakePayload()).path("result").isObject());
+            ObjectNode connect = connectPayload();
+            connect.put("url", "jdbc:h2:mem:agent-nclob-protocol");
+            String sessionId = call(requests, responses, 931, "open_session", connect)
+                    .at("/result/sessionId").asText();
+            JsonNode created = call(requests, responses, 932, "create_n_clob", sessionOnly(sessionId));
+            if (Objects.nonNull(driverFailure)) {
+                assertEquals(driverFailure.getSQLState(), created.at("/error/data/sqlState").asText());
+                assertEquals(driverFailure.getErrorCode(), created.at("/error/data/vendorCode").asInt());
+            } else {
+                assertTrue(created.path("result").isObject());
+                String nClobId = created.at("/result/nClobId").asText();
+                assertNotEquals("", nClobId);
+                ObjectNode national = sessionOnly(sessionId);
+                national.put("clobId", nClobId);
+                JsonNode length = call(requests, responses, 933, "clob_length", national);
+                assertTrue(length.path("result").isObject());
+                assertEquals(0L, length.at("/result/length").asLong());
+                national.put("nClobId", nClobId);
+                assertTrue(call(requests, responses, 934, "free_n_clob", national)
+                        .path("result").isObject());
+                assertTrue(call(requests, responses, 935, "clob_length", national)
+                        .path("error").isObject());
+            }
+            assertTrue(call(requests, responses, 936, "close_session", sessionOnly(sessionId))
+                    .path("result").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private String encodeUtf16(String value) {
         byte[] bytes = new byte[value.length() * 2];
         for (int index = 0; index < value.length(); index++) {

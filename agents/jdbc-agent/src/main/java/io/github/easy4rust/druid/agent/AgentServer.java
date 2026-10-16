@@ -23,6 +23,7 @@ import java.sql.Connection;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.Clob;
+import java.sql.NClob;
 import java.sql.DatabaseMetaData;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -286,6 +287,7 @@ public final class AgentServer implements Closeable {
             case "blob_close_stream" -> blobCloseStream(session, params);
             case "free_blob" -> freeBlob(session, params);
             case "create_clob" -> createClob(session);
+            case "create_n_clob" -> createNClob(session);
             case "clob_length" -> clobLength(session, params);
             case "clob_get_sub_string" -> clobGetSubString(session, params);
             case "clob_set_string" -> clobSetString(session, params);
@@ -305,6 +307,7 @@ public final class AgentServer implements Closeable {
             case "clob_flush_ascii_output" -> clobFlushAsciiOutput(session, params);
             case "clob_close_stream" -> clobCloseStream(session, params);
             case "free_clob" -> freeClob(session, params);
+            case "free_n_clob" -> freeNClob(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);
             case "reopen_logical_connection" -> reopenLogicalConnection(session);
             case "xa_start" -> xaStart(session, params);
@@ -676,6 +679,12 @@ public final class AgentServer implements Closeable {
         return JsonNodeFactory.instance.objectNode().put("clobId", session.registerClob(clob));
     }
 
+    /** 创建真实驱动 NClob，并以独立类型身份注册在当前会话中。 */
+    private JsonNode createNClob(AgentSession session) throws SQLException {
+        NClob nClob = session.connection().createNClob();
+        return JsonNodeFactory.instance.objectNode().put("nClobId", session.registerNClob(nClob));
+    }
+
     /** 返回以 Java UTF-16 code unit 计数的驱动 Clob 长度。 */
     private JsonNode clobLength(AgentSession session, JsonNode payload) throws SQLException {
         return JsonNodeFactory.instance.objectNode()
@@ -728,6 +737,12 @@ public final class AgentServer implements Closeable {
     /** 释放远程 Clob；失败时会话保留句柄供重试。 */
     private JsonNode freeClob(AgentSession session, JsonNode payload) throws SQLException {
         session.freeClob(requiredText(payload, "clobId"));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    /** 仅接受 NClob 句柄释放，沿用共享子流清理和失败重试规则。 */
+    private JsonNode freeNClob(AgentSession session, JsonNode payload) throws SQLException {
+        session.freeNClob(requiredText(payload, "nClobId"));
         return JsonNodeFactory.instance.objectNode();
     }
 

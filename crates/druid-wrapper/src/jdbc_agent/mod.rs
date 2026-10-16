@@ -21,6 +21,7 @@ mod jdbc_agent_clob_writer;
 mod jdbc_agent_connection;
 mod jdbc_agent_connection_factory;
 mod jdbc_agent_database_meta_data;
+mod jdbc_agent_n_clob;
 mod jdbc_agent_options;
 mod jdbc_agent_options_error;
 mod jdbc_agent_runtime_metrics;

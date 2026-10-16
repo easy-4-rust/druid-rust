@@ -18,6 +18,7 @@ use std::sync::Arc;
 pub(super) struct JdbcAgentClob {
     executor: Arc<dyn StandardExecutor>,
     clob_id: String,
+    national: bool,
     freed: bool,
 }
 
@@ -27,6 +28,17 @@ impl JdbcAgentClob {
         Self {
             executor,
             clob_id,
+            national: false,
+            freed: false,
+        }
+    }
+
+    /// 将真实 NClob 的共享 Clob 操作绑定到国别字符资源身份。
+    pub(super) fn national(executor: Arc<dyn StandardExecutor>, clob_id: String) -> Self {
+        Self {
+            executor,
+            clob_id,
+            national: true,
             freed: false,
         }
     }
@@ -257,8 +269,13 @@ impl Clob for JdbcAgentClob {
         if self.freed {
             return Ok(());
         }
-        self.control("free_clob", json!({"clobId": self.clob_id}))
-            .await?;
+        if self.national {
+            self.control("free_n_clob", json!({"nClobId": self.clob_id}))
+                .await?;
+        } else {
+            self.control("free_clob", json!({"clobId": self.clob_id}))
+                .await?;
+        }
         self.freed = true;
         Ok(())
     }

@@ -9,6 +9,7 @@ import java.io.Writer;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.Clob;
+import java.sql.NClob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -39,6 +40,7 @@ public final class AgentSession implements Closeable {
     private final Map<String, Array> arrays = new ConcurrentHashMap<>();
     private final Map<String, Blob> blobs = new ConcurrentHashMap<>();
     private final Map<String, Clob> clobs = new ConcurrentHashMap<>();
+    private final Set<String> nClobIds = ConcurrentHashMap.newKeySet();
     private final Map<String, ClobStreamHandle> clobStreams = new ConcurrentHashMap<>();
     private final Map<String, BlobStreamHandle> blobStreams = new ConcurrentHashMap<>();
     private final Map<Long, Statement> activeStatements = new ConcurrentHashMap<>();
@@ -342,6 +344,32 @@ public final class AgentSession implements Closeable {
         return clobId;
     }
 
+    /** 将真实驱动 NClob 注册到共享 Clob 资源域，并保留国别字符类型身份。 */
+    public String registerNClob(NClob nClob) {
+        String clobId = registerClob(Objects.requireNonNull(nClob, "nClob"));
+        nClobIds.add(clobId);
+        return clobId;
+    }
+
+    /** 仅允许通过 NClob 身份取得资源，普通 Clob 句柄不能冒充。 */
+    public NClob nClob(String clobId) throws SQLException {
+        if (!nClobIds.contains(clobId)) {
+            throw new SQLException("JDBC Agent nclob is not open: " + clobId);
+        }
+        return (NClob) clob(clobId);
+    }
+
+    /** 释放 NClob 及其子流，沿用 Clob 的失败重试和幂等关闭语义。 */
+    public void freeNClob(String clobId) throws SQLException {
+        if (!nClobIds.contains(clobId)) {
+            if (clobs.containsKey(clobId)) {
+                throw new SQLException("JDBC Agent clob is not an nclob: " + clobId);
+            }
+            return;
+        }
+        freeClob(clobId);
+    }
+
     /** 按当前会话句柄取得仍有效的驱动 Clob。 */
     public Clob clob(String clobId) throws SQLException {
         Clob clob = clobs.get(clobId);
@@ -368,6 +396,7 @@ public final class AgentSession implements Closeable {
             try {
                 clob.free();
                 clobs.remove(clobId, clob);
+                nClobIds.remove(clobId);
             } catch (SQLException exception) {
                 failure = appendFailure(failure, exception);
             }
