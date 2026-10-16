@@ -148,6 +148,7 @@ public final class AgentCursor implements AutoCloseable {
             ObjectNode column = result.addObject();
             column.put("label", resultSetMetaData.getColumnLabel(index));
             column.put("jdbcType", resultSetMetaData.getColumnType(index));
+            column.put("jdbcTypeName", resultSetMetaData.getColumnTypeName(index));
         }
         return result;
     }

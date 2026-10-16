@@ -493,6 +493,7 @@ class AgentServerTest {
             write(requests, request(114, "array_result_set", cursorRequest));
             JsonNode firstArrayPage = read(responses).path("result");
             assertEquals(2, firstArrayPage.path("rows").size());
+            assertEquals("BIGINT", firstArrayPage.at("/columns/1/jdbcTypeName").asText());
             assertEquals(1, firstArrayPage.at("/rows/0/0/value").asInt());
             assertEquals("null", firstArrayPage.at("/rows/1/1/kind").asText());
             String arrayCursorId = firstArrayPage.path("cursorId").asText();

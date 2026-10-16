@@ -74,6 +74,14 @@ async fn h2_array_factory_roundtrips_through_standard_connection() {
     let mut cursor = array.result_set().await.expect("Array ResultSet");
     assert_eq!(cursor.known_row_count(), None);
     assert_eq!(cursor.meta_data().expect("metadata").column_count(), 2);
+    assert_eq!(
+        cursor
+            .meta_data()
+            .expect("metadata")
+            .column_type_name(ColumnIndex::new(2).expect("value column"))
+            .expect("driver type name"),
+        "INTEGER",
+    );
     assert!(cursor.next().await.expect("first row"));
     assert_eq!(
         cursor

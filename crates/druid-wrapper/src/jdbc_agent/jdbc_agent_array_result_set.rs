@@ -141,8 +141,12 @@ impl JdbcAgentArrayResultSet {
                     .ok_or_else(|| {
                         JdbcAgentConnection::protocol_error("Array cursor column has no jdbcType")
                     })?;
+                let type_name = column
+                    .get("jdbcTypeName")
+                    .and_then(JsonValue::as_str)
+                    .unwrap_or("OTHER");
                 Ok(
-                    ColumnDescriptor::new(label, "OTHER", ColumnNullability::Unknown)
+                    ColumnDescriptor::new(label, type_name, ColumnNullability::Unknown)
                         .with_driver_type(label, ResultSetColumnType::Jdbc(code)),
                 )
             })
