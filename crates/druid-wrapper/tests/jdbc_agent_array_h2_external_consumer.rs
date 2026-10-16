@@ -96,14 +96,14 @@ async fn h2_array_factory_roundtrips_through_standard_connection() {
     let mut array = connection
         .create_array_of(
             Some("INTEGER"),
-            Some((1_i32..=9).map(RdbcObject::Integer).collect()),
+            Some((1_i32..=503).map(RdbcObject::Integer).collect()),
         )
         .await
         .expect("H2 Array");
     let mut cursor = array.result_set().await.expect("Array ResultSet");
     let index = ColumnIndex::new(1).expect("index column");
     let value = ColumnIndex::new(2).expect("value column");
-    for expected in 1_i32..=9 {
+    for expected in 1_i32..=503 {
         assert!(cursor.next().await.expect("next array element"));
         assert_eq!(
             cursor.value(index).expect("index"),
