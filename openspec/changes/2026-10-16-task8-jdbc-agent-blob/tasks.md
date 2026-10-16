@@ -7,7 +7,7 @@
 
 ## 2. Driver byte operations
 
-- [ ] 2.1 Add real-H2 protocol tests for length, one-based reads, both byte-write overloads, and original `HYC00/50100` search/truncation errors; add real-HSQLDB successful one-based search and truncation tests; implement the requests and pass `mvn verify` plus focused Rust-to-Agent tests for both drivers.
+- [x] 2.1 Add real-H2 protocol tests for length, one-based reads, both byte-write overloads, and original `HYC00/50100` search/truncation errors; add real-HSQLDB successful one-based search and truncation tests; implement the requests and pass `mvn verify` plus focused Rust-to-Agent tests for both drivers. Java AgentServer H2 and HSQLDB protocol tests passed under JDK 17 `mvn verify`; Rust external-consumer H2 4/4 and HSQLDB 1/1 passed against the packaged Agent.
 - [x] 2.2 Add a negative capability/error test for unsupported Blob operations, then make protocol advertisement and `0A000` behavior match it. The protocol test first failed with a null SQLState, then passed with `SQLFeatureNotSupportedException/0A000` for `position(Blob,long)` and no matching ready/handshake capability; JDK 17 `mvn verify` passed.
 
 ## 3. Bounded streams

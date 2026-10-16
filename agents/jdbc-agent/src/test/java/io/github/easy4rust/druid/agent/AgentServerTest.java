@@ -649,6 +649,65 @@ class AgentServerTest {
     }
 
     @Test
+    void hsqldbBlobProtocolSearchesAndTruncatesSuccessfully() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            assertEquals("ready", read(responses).path("method").asText());
+            assertTrue(call(requests, responses, 701, "handshake", handshakePayload()).path("result").isObject());
+            ObjectNode connect = connectPayload();
+            connect.put("url", "jdbc:hsqldb:mem:agent_blob_search");
+            connect.put("validationQuery", "VALUES (1)");
+            connect.with("properties").put("user", "SA").put("password", "");
+            String sessionId = call(requests, responses, 702, "open_session", connect)
+                    .at("/result/sessionId").asText();
+            String blobId = call(requests, responses, 703, "create_blob", sessionOnly(sessionId))
+                    .at("/result/blobId").asText();
+            ObjectNode blob = sessionOnly(sessionId);
+            blob.put("blobId", blobId);
+            ObjectNode write = blob.deepCopy();
+            write.put("position", 1L);
+            write.put("bytes", Base64.getEncoder().encodeToString(new byte[] {10, 20, 30, 40}));
+            assertEquals(4, call(requests, responses, 704, "blob_set_bytes", write)
+                    .at("/result/written").asInt());
+            ObjectNode search = blob.deepCopy();
+            search.put("pattern", Base64.getEncoder().encodeToString(new byte[] {20, 30}));
+            search.put("start", 1L);
+            assertEquals(2L, call(requests, responses, 705, "blob_position_bytes", search)
+                    .at("/result/position").asLong());
+            search.put("pattern", Base64.getEncoder().encodeToString(new byte[] {99, 98}));
+            assertEquals(-1L, call(requests, responses, 706, "blob_position_bytes", search)
+                    .at("/result/position").asLong());
+            ObjectNode truncate = blob.deepCopy();
+            truncate.put("length", 3L);
+            assertTrue(call(requests, responses, 707, "blob_truncate", truncate).path("result").isObject());
+            assertEquals(3L, call(requests, responses, 708, "blob_length", blob)
+                    .at("/result/length").asLong());
+            ObjectNode read = blob.deepCopy();
+            read.put("position", 1L);
+            read.put("length", 3);
+            assertTrue(Arrays.equals(new byte[] {10, 20, 30}, Base64.getDecoder().decode(
+                    call(requests, responses, 709, "blob_get_bytes", read).at("/result/bytes").asText())));
+            assertTrue(call(requests, responses, 710, "free_blob", blob).path("result").isObject());
+            assertTrue(call(requests, responses, 711, "close_session", sessionOnly(sessionId))
+                    .path("result").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void unsupportedBlobSearchIsNotAdvertisedAndReturnsStandardSqlState() throws Exception {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try (PipedInputStream serverInput = new PipedInputStream();
