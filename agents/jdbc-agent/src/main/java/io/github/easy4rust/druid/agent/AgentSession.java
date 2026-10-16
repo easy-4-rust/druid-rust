@@ -3,6 +3,7 @@ package io.github.easy4rust.druid.agent;
 import java.io.Closeable;
 import java.io.IOException;
 import java.sql.Array;
+import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -28,6 +29,7 @@ public final class AgentSession implements Closeable {
     private final Map<String, PreparedStatement> preparedStatements = new ConcurrentHashMap<>();
     private final Map<String, AgentCursor> cursors = new ConcurrentHashMap<>();
     private final Map<String, Array> arrays = new ConcurrentHashMap<>();
+    private final Map<String, Blob> blobs = new ConcurrentHashMap<>();
     private final Map<Long, Statement> activeStatements = new ConcurrentHashMap<>();
     private final Map<String, Savepoint> savepoints = new ConcurrentHashMap<>();
 
@@ -219,6 +221,31 @@ public final class AgentSession implements Closeable {
         }
     }
 
+    /** 将驱动 Blob 注册到当前逻辑连接资源域并返回不可猜测句柄。 */
+    public String registerBlob(Blob blob) {
+        String blobId = UUID.randomUUID().toString();
+        blobs.put(blobId, Objects.requireNonNull(blob, "blob"));
+        return blobId;
+    }
+
+    /** 按当前会话句柄取得仍有效的驱动 Blob。 */
+    public Blob blob(String blobId) throws SQLException {
+        Blob blob = blobs.get(blobId);
+        if (Objects.isNull(blob)) {
+            throw new SQLException("JDBC Agent blob is not open: " + blobId);
+        }
+        return blob;
+    }
+
+    /** 释放驱动 Blob；失败时保留句柄以允许重试，成功后重复释放无副作用。 */
+    public void freeBlob(String blobId) throws SQLException {
+        Blob blob = blobs.get(blobId);
+        if (Objects.nonNull(blob)) {
+            blob.free();
+            blobs.remove(blobId, blob);
+        }
+    }
+
     /** 将正在 JDBC 驱动中执行的语句关联到协议请求 ID。 */
     public void activate(long requestId, Statement statement) {
         activeStatements.put(requestId, Objects.requireNonNull(statement, "statement"));
@@ -326,6 +353,13 @@ public final class AgentSession implements Closeable {
         for (String arrayId : new ArrayList<>(arrays.keySet())) {
             try {
                 freeArray(arrayId);
+            } catch (SQLException exception) {
+                failure = appendFailure(failure, exception);
+            }
+        }
+        for (String blobId : new ArrayList<>(blobs.keySet())) {
+            try {
+                freeBlob(blobId);
             } catch (SQLException exception) {
                 failure = appendFailure(failure, exception);
             }
