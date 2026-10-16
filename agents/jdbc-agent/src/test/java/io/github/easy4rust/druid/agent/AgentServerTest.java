@@ -714,14 +714,15 @@ class AgentServerTest {
     void hsqldbCallableReturnsTwoOrderedResultSets() throws Exception {
         String procedure = "CREATE PROCEDURE two_results() READS SQL DATA DYNAMIC RESULT SETS 2 "
                 + "BEGIN ATOMIC "
-                + "DECLARE first_result CURSOR WITH RETURN FOR SELECT value FROM callable_values FOR READ ONLY; "
-                + "DECLARE second_result CURSOR WITH RETURN FOR SELECT value + 1 FROM callable_values FOR READ ONLY; "
+                + "DECLARE first_result CURSOR WITH RETURN FOR SELECT value FROM callable_values ORDER BY value FOR READ ONLY; "
+                + "DECLARE second_result CURSOR WITH RETURN FOR SELECT value + 1 FROM callable_values ORDER BY value FOR READ ONLY; "
                 + "OPEN first_result; OPEN second_result; END";
         try (Connection connection = DriverManager.getConnection(
                 "jdbc:hsqldb:mem:callable-multi-direct", "SA", "");
              Statement setup = connection.createStatement()) {
             setup.execute("CREATE TABLE callable_values(value INTEGER)");
             setup.execute("INSERT INTO callable_values VALUES(7)");
+            setup.execute("INSERT INTO callable_values VALUES(9)");
             setup.execute(procedure);
             try (java.sql.CallableStatement statement = connection.prepareCall("CALL two_results()")) {
                 assertEquals(false, statement.execute());
@@ -760,7 +761,8 @@ class AgentServerTest {
                     .at("/result/sessionId").asText();
             for (String sql : new String[] {
                     "CREATE TABLE callable_values(value INTEGER)",
-                    "INSERT INTO callable_values VALUES(7)", procedure}) {
+                    "INSERT INTO callable_values VALUES(7)",
+                    "INSERT INTO callable_values VALUES(9)", procedure}) {
                 assertTrue(call(requests, responses, 2403, "execute", sessionPayload(
                         sessionId, sqlPayload(sql, JsonNodeFactory.instance.arrayNode())))
                         .path("result").isObject());
@@ -777,12 +779,18 @@ class AgentServerTest {
             assertEquals("update", first.at("/result/kind").asText(), first.toString());
             ObjectNode next = sessionOnly(sessionId);
             next.put("statementId", statementId);
+            next.put("pageSize", 1);
             JsonNode firstRows = call(requests, responses, 2406, "next_callable_result", next);
             assertEquals("result_set", firstRows.at("/result/kind").asText(), firstRows.toString());
             assertEquals(7, firstRows.at("/result/rows/0/0/value").asInt(), firstRows.toString());
+            assertTrue(firstRows.at("/result/hasMore").asBoolean(), firstRows.toString());
+            String firstCursorId = firstRows.at("/result/cursorId").asText();
             JsonNode secondRows = call(requests, responses, 2407, "next_callable_result", next);
             assertEquals("result_set", secondRows.at("/result/kind").asText(), secondRows.toString());
             assertEquals(8, secondRows.at("/result/rows/0/0/value").asInt(), secondRows.toString());
+            ObjectNode staleCursor = sessionOnly(sessionId);
+            staleCursor.put("cursorId", firstCursorId);
+            assertTrue(call(requests, responses, 2411, "fetch_page", staleCursor).path("error").isObject());
             JsonNode done = call(requests, responses, 2408, "next_callable_result", next);
             assertEquals("done", done.at("/result/kind").asText(), done.toString());
             call(requests, responses, 2409, "close_statement", next);
