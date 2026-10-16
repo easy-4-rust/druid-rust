@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.net.SocketTimeoutException;
 import java.lang.reflect.Field;
 import java.sql.Connection;
+import java.sql.CallableStatement;
 import java.sql.DriverManager;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.SQLTransientConnectionException;
@@ -28,6 +29,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
 import java.util.Base64;
 import java.util.Map;
 import javax.sql.XAConnection;
@@ -61,6 +63,30 @@ class AgentServerTest {
             assertEquals(true, session.cancel(17));
             session.deactivate(17);
             assertEquals(false, session.cancel(17));
+        }
+    }
+
+    @Test
+    void callableCancelReleasesCursorAndKeepsStatementReusable() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:callable-cancel-contract");
+             CallableStatement callable = connection.prepareCall("{? = call ABS(?)}");
+             Statement query = connection.createStatement();
+             ResultSet rows = query.executeQuery("SELECT 1")) {
+            AgentSession session = new AgentSession(connection, null);
+            String statementId = session.registerPreparedStatement(callable);
+            session.registerCursor("old-cursor", new AgentCursor(
+                    callable, rows, false, statementId, objectMapper));
+            session.activate(91L, callable);
+            assertTrue(session.cancel(91L));
+            session.deactivate(91L);
+            assertThrows(SQLException.class, () -> session.cursor("old-cursor"));
+            assertEquals(false, callable.isClosed());
+            assertEquals(false, session.cancel(91L));
+            callable.registerOutParameter(1, Types.INTEGER);
+            callable.setInt(2, -7);
+            callable.execute();
+            assertEquals(7, callable.getInt(1));
+            session.closePreparedStatement(statementId);
         }
     }
 

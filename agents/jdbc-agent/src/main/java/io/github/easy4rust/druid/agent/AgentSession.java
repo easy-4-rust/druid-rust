@@ -584,7 +584,29 @@ public final class AgentSession implements Closeable {
     public boolean cancel(long requestId) throws SQLException {
         Statement statement = activeStatements.get(requestId);
         if (Objects.nonNull(statement)) {
-            statement.cancel();
+            // 只认领仍在执行的请求；迟到的取消不能触碰同一语句的下一次执行。
+            if (!activeStatements.remove(requestId, statement)) {
+                return false;
+            }
+            SQLException failure = null;
+            try {
+                statement.cancel();
+            } catch (SQLException exception) {
+                failure = appendFailure(failure, exception);
+            }
+            for (Map.Entry<String, PreparedStatement> entry : preparedStatements.entrySet()) {
+                if (entry.getValue() == statement) {
+                    try {
+                        closeCursorsForStatement(entry.getKey());
+                    } catch (SQLException exception) {
+                        failure = appendFailure(failure, exception);
+                    }
+                    break;
+                }
+            }
+            if (Objects.nonNull(failure)) {
+                throw failure;
+            }
             return true;
         }
         String streamId;
@@ -617,8 +639,12 @@ public final class AgentSession implements Closeable {
         if (Objects.isNull(statement) || statement.isClosed()) {
             return false;
         }
-        statement.cancel();
-        return true;
+        for (Map.Entry<Long, Statement> entry : activeStatements.entrySet()) {
+            if (entry.getValue() == statement) {
+                return cancel(entry.getKey());
+            }
+        }
+        return false;
     }
 
     /** 注册 JDBC 保存点并返回跨协议稳定标识。 */
