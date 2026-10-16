@@ -2,18 +2,19 @@
 
 use crate::standard_adapter_executor::StandardExecutor;
 use crate::standard_query_result::StandardQueryResult;
+use crate::standard_result_rows::StandardResultRows;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlWarning;
 use druid_rdbc::metadata::{ResultSetMetaData, ResultSetMetaDataSnapshot};
 use druid_rdbc::result_set::{
     default_object_as, ColumnIndex, ResultSet, ResultSetRead, ResultSetStreamKind, ResultSetUpdate,
 };
-use druid_rdbc::types::{RdbcInputStream, RdbcObject, RdbcReader, RdbcTargetType, Row, Value};
+use druid_rdbc::types::{RdbcInputStream, RdbcObject, RdbcReader, RdbcTargetType, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 pub(crate) struct StandardAdapterResultSet {
-    rows: Vec<Row>,
+    rows: StandardResultRows,
     cursor: usize,
     positioned: bool,
     before_first: bool,
@@ -29,7 +30,7 @@ pub(crate) struct StandardAdapterResultSet {
 impl StandardAdapterResultSet {
     pub(crate) fn new(result: StandardQueryResult, lease: Arc<dyn StandardExecutor>) -> Self {
         Self {
-            rows: result.rows,
+            rows: StandardResultRows::from_rows(result.rows),
             cursor: 0,
             positioned: false,
             before_first: true,
@@ -41,6 +42,19 @@ impl StandardAdapterResultSet {
             warnings: None,
             fetch_size: 0,
         }
+    }
+
+    #[cfg(feature = "jdbc-agent")]
+    pub(crate) fn new_spooled(
+        labels: Vec<String>,
+        rows: StandardResultRows,
+        lease: Arc<dyn StandardExecutor>,
+    ) -> Self {
+        let mut result = StandardQueryResult::with_labels(Vec::new(), labels);
+        result.rows = Vec::new();
+        let mut result_set = Self::new(result, lease);
+        result_set.rows = rows;
+        result_set
     }
 
     fn ensure_open_core(&self) -> Result<(), RdbcError> {
@@ -194,9 +208,7 @@ impl ResultSet for StandardAdapterResultSet {
         }
         let value = self
             .rows
-            .get(self.cursor)
-            .and_then(|row| row.values.get(column.get() - 1))
-            .cloned()
+            .value(self.cursor, column.get() - 1)?
             .ok_or_else(|| {
                 RdbcError::InvalidArgument("column index exceeds row width".to_owned())
             })?;
@@ -423,6 +435,7 @@ impl ResultSet for StandardAdapterResultSet {
     async fn close(&mut self) -> Result<(), RdbcError> {
         self.closed = true;
         self.lease.take();
+        self.rows = StandardResultRows::from_rows(Vec::new());
         Ok(())
     }
 

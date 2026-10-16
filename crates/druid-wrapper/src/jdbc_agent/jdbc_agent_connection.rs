@@ -916,15 +916,169 @@ mod callable_tests {
     use super::{JdbcAgentConnection, JdbcAgentTransport};
     use druid_rdbc::connection::Connection;
     use druid_rdbc::error::RdbcError;
+    use druid_rdbc::result_set::{ColumnIndex, ResultSetExt, ResultSetNavigation};
     use druid_rdbc::statement::{
-        CallableOutParameter, CallableParameter, ParameterIndex, PreparedParameter,
-        StatementOptions,
+        CallableOutParameter, CallableParameter, ExecutionResult, ParameterIndex,
+        PreparedParameter, StatementOptions,
     };
     use druid_rdbc::types::Value;
     use serde_json::{json, Value as JsonValue};
     use std::sync::{Arc, Mutex};
+    use tokio::sync::Notify;
 
     struct CallableTransport(Arc<Mutex<Vec<(String, JsonValue)>>>);
+
+    struct PagedCallableTransport(Arc<Mutex<Vec<String>>>);
+
+    struct CancelledPageTransport {
+        calls: Arc<Mutex<Vec<String>>>,
+        fetching: Arc<Notify>,
+    }
+
+    #[async_trait::async_trait]
+    impl JdbcAgentTransport for CancelledPageTransport {
+        async fn request(
+            &mut self,
+            operation: &str,
+            _payload: JsonValue,
+        ) -> Result<JsonValue, RdbcError> {
+            self.calls.lock().unwrap().push(operation.to_owned());
+            if operation == "fetch_page" {
+                self.fetching.notify_one();
+                return std::future::pending().await;
+            }
+            Ok(match operation {
+                "prepare_call" => json!({"statementId":"call-cancel"}),
+                "execute_callable" => json!({
+                    "kind":"result_set", "cursorId":"cursor-cancel",
+                    "columns":[{"label":"value"}],
+                    "rows":[[{"kind":"int","value":1}]], "hasMore":true,
+                    "outValues":[]
+                }),
+                "close_cursor" => json!({}),
+                _ => panic!("unexpected operation {operation}"),
+            })
+        }
+
+        async fn close(&mut self) -> Result<(), RdbcError> {
+            Ok(())
+        }
+
+        fn is_unusable(&self) -> bool {
+            false
+        }
+    }
+
+    #[tokio::test]
+    async fn cancelled_callable_page_fetch_closes_remote_cursor() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let fetching = Arc::new(Notify::new());
+        let mut connection = JdbcAgentConnection::from_session(
+            Box::new(CancelledPageTransport {
+                calls: Arc::clone(&calls),
+                fetching: Arc::clone(&fetching),
+            }),
+            json!({"capabilities":{"callableStatements":true}}),
+        );
+        let mut callable = connection
+            .prepare_call("CALL cancelled()", StatementOptions::default())
+            .await
+            .unwrap();
+        let running = tokio::spawn(async move { callable.execute_prepared().await });
+        tokio::time::timeout(std::time::Duration::from_secs(5), fetching.notified())
+            .await
+            .expect("fetch must start");
+        running.abort();
+        assert!(running.await.unwrap_err().is_cancelled());
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                if calls
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|call| call == "close_cursor")
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("cancelled fetch must close its cursor");
+    }
+
+    #[async_trait::async_trait]
+    impl JdbcAgentTransport for PagedCallableTransport {
+        async fn request(
+            &mut self,
+            operation: &str,
+            _payload: JsonValue,
+        ) -> Result<JsonValue, RdbcError> {
+            self.0
+                .lock()
+                .expect("request lock")
+                .push(operation.to_owned());
+            Ok(match operation {
+                "prepare_call" => json!({"statementId":"call-paged"}),
+                "execute_callable" => json!({
+                    "kind":"result_set", "cursorId":"cursor-paged",
+                    "columns":[{"label":"value"}],
+                    "rows":(1..=500).map(|value| vec![json!({"kind":"int","value":value})]).collect::<Vec<_>>(),
+                    "hasMore":true, "outValues":[]
+                }),
+                "fetch_page" => json!({
+                    "kind":"result_set", "cursorId":"cursor-paged",
+                    "rows":[[{"kind":"int","value":501}]], "hasMore":false
+                }),
+                "next_callable_result" => json!({"kind":"done"}),
+                "close_statement" => json!({}),
+                _ => panic!("unexpected operation {operation}"),
+            })
+        }
+
+        async fn close(&mut self) -> Result<(), RdbcError> {
+            Ok(())
+        }
+
+        fn is_unusable(&self) -> bool {
+            false
+        }
+    }
+
+    #[tokio::test]
+    async fn callable_spools_multiple_agent_pages_without_losing_navigation() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let mut connection = JdbcAgentConnection::from_session(
+            Box::new(PagedCallableTransport(Arc::clone(&calls))),
+            json!({"capabilities":{"callableStatements":true}}),
+        );
+        let mut callable = connection
+            .prepare_call("CALL paged()", StatementOptions::default())
+            .await
+            .expect("prepare callable");
+        let mut results = callable
+            .execute_prepared()
+            .await
+            .expect("execute paged call");
+        let Some(ExecutionResult::ResultSet(mut rows)) = results.pop() else {
+            panic!("expected one result set");
+        };
+        assert_eq!(rows.known_row_count(), Some(501));
+        assert!(rows.navigate(ResultSetNavigation::Last).await.unwrap());
+        assert_eq!(rows.int(ColumnIndex::new(1).unwrap()).unwrap(), 501);
+        assert!(rows.navigate(ResultSetNavigation::First).await.unwrap());
+        assert_eq!(rows.int(ColumnIndex::new(1).unwrap()).unwrap(), 1);
+        rows.close().await.unwrap();
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            [
+                "prepare_call",
+                "execute_callable",
+                "fetch_page",
+                "next_callable_result"
+            ]
+        );
+    }
 
     #[async_trait::async_trait]
     impl JdbcAgentTransport for CallableTransport {

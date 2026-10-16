@@ -24,7 +24,7 @@ turso = ["toasty", "toasty/turso"]
 duckdb-native = ["driver-catalog", "dep:duckdb"]
 http-sql = ["driver-catalog", "dep:reqwest"]
 libsql-native = ["driver-catalog", "dep:libsql"]
-jdbc-agent = ["driver-catalog"]
+jdbc-agent = ["driver-catalog", "dep:tempfile"]
 managed-driver-install = ["jdbc-agent", "dep:fs2", "dep:reqwest", "dep:uuid"]
 all-databases = ["driver-catalog", "sqlite", "postgresql", "mysql", "turso", "duckdb-native", "http-sql", "libsql-native", "jdbc-agent", "managed-driver-install"]
 
@@ -235,6 +235,7 @@ subtle.workspace = true
 sqlparser.workspace = true
 sqlx = { workspace = true, optional = true }
 thiserror.workspace = true
+tempfile = { version = "3.27.0", optional = true }
 tracing.workspace = true
 toasty = { workspace = true, optional = true }
 toasty-core = { workspace = true, optional = true }

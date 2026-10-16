@@ -31,11 +31,16 @@ The Agent protocol SHALL preserve indexed versus named parameter selection, SQL 
 #### Scenario: Failure and retry
 
 - **WHEN** a call fails or is cancelled, then the statement is executed again
-- **THEN** the old OUT values and cursors are inaccessible and the original JDBC error remains observable
+- **THEN** the old OUT values and cursors are inaccessible, the original JDBC error remains observable, and the same open CallableStatement can execute again
+
+#### Scenario: Cancel the current execution
+
+- **WHEN** a caller cancels an active callable execution or its result-page fetch
+- **THEN** only that execution is interrupted, its dependent cursors are released, and cancellation cannot affect a later execution on the same statement
 
 ### Requirement: Callable ownership is bounded by session and statement lifetimes
 
-The Agent SHALL close callable statements and dependent cursors on explicit close, session close, connection failure, and cancellation. A handle from another session or a closed statement SHALL fail without reaching its former JDBC object. Callback and resource cleanup SHALL happen once.
+The Agent SHALL close callable statements and dependent cursors on explicit close, session close, and connection failure. Cancellation SHALL release the current execution's dependent cursors while keeping the callable statement open for retry. A handle from another session or a closed statement SHALL fail without reaching its former JDBC object. Callback and resource cleanup SHALL happen once.
 
 #### Scenario: Close and cross-session access
 

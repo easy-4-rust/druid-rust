@@ -4,7 +4,7 @@
 use druid::pool::DruidPool;
 use druid_rdbc::data_source::PooledConnection;
 use druid_rdbc::driver::ConnectionFactory;
-use druid_rdbc::result_set::{ColumnIndex, ResultSetExt};
+use druid_rdbc::result_set::{ColumnIndex, ResultSetExt, ResultSetNavigation};
 use druid_rdbc::statement::{
     CallableInputParameter, CallableOutParameter, CallableParameter, CurrentResultDisposition,
     ExecutionResult, ParameterIndex, PreparedParameter, StatementOptions,
@@ -233,6 +233,28 @@ async fn hsqldb_callable_preserves_ordered_update_and_two_result_sets() {
         .prepare_call("CALL two_results()", StatementOptions::default())
         .await
         .expect("callable");
+    let mut full_results = callable.execute_prepared().await.expect("full execution");
+    assert!(matches!(
+        full_results.remove(0),
+        ExecutionResult::UpdateCount(0)
+    ));
+    for expected in [9, 10] {
+        let ExecutionResult::ResultSet(mut result) = full_results.remove(0) else {
+            panic!("expected a result set");
+        };
+        assert_eq!(result.known_row_count(), Some(2));
+        assert!(result.navigate(ResultSetNavigation::Last).await.unwrap());
+        assert_eq!(result.int(ColumnIndex::new(1).unwrap()).unwrap(), expected);
+        assert!(result
+            .navigate(ResultSetNavigation::Previous)
+            .await
+            .unwrap());
+        assert_eq!(
+            result.int(ColumnIndex::new(1).unwrap()).unwrap(),
+            expected - 2
+        );
+        result.close().await.unwrap();
+    }
     callable.set_max_rows(1).expect("max rows");
     let mut results = callable.execute_prepared().await.expect("execute");
     assert_eq!(results.len(), 3);

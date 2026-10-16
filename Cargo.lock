@@ -1855,6 +1855,7 @@ dependencies = [
  "sqlx",
  "static_assertions",
  "subtle",
+ "tempfile",
  "thiserror 1.0.69",
  "toasty",
  "toasty-core",

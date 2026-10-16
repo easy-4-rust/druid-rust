@@ -104,6 +104,16 @@ mod standard_query_result;
     feature = "http-sql",
     feature = "jdbc-agent"
 ))]
+mod standard_result_rows;
+#[cfg(any(
+    feature = "sqlx",
+    feature = "toasty",
+    feature = "rbdc",
+    feature = "duckdb-native",
+    feature = "libsql-native",
+    feature = "http-sql",
+    feature = "jdbc-agent"
+))]
 mod standard_statement_state;
 /// P04 Task 4 的 opaque runtime-trace evidence API；仅用于仓库内适配器验收。
 #[doc(hidden)]

@@ -1,9 +1,10 @@
 //! JDBC Agent 会话内的标准 CallableStatement 实体。
 
+use super::jdbc_agent_cursor_guard::JdbcAgentCursorGuard;
 use super::AgentValue;
 use crate::standard_adapter_executor::StandardExecutor;
 use crate::standard_adapter_result_set::StandardAdapterResultSet;
-use crate::standard_query_result::StandardQueryResult;
+use crate::standard_result_rows::StandardResultRows;
 use crate::standard_statement_state::{
     delegate_standard_statement_state_methods, StandardStatementState,
 };
@@ -14,7 +15,7 @@ use druid_rdbc::statement::{
     ExecutionResult, ParameterIndex, PreparedInputParameter, PreparedParameter, PreparedStatement,
     Statement, StatementOptions,
 };
-use druid_rdbc::types::{RdbcObject, Row, Value};
+use druid_rdbc::types::{RdbcObject, Value};
 use serde_json::{json, Value as JsonValue};
 use std::cell::Cell;
 use std::sync::Arc;
@@ -83,26 +84,26 @@ impl JdbcAgentCallableStatement {
     async fn collect_rows(
         executor: &Arc<dyn StandardExecutor>,
         payload: JsonValue,
-    ) -> Result<StandardQueryResult, RdbcError> {
+        remaining_budget: &mut u64,
+    ) -> Result<(Vec<String>, StandardResultRows, JdbcAgentCursorGuard), RdbcError> {
         let cursor_id = payload
             .get("cursorId")
             .and_then(JsonValue::as_str)
             .map(str::to_owned);
-        let result = Self::collect_rows_inner(executor, payload).await;
+        let mut guard = JdbcAgentCursorGuard::new(Arc::clone(executor), cursor_id);
+        let result = Self::collect_rows_inner(executor, payload, remaining_budget).await;
         if result.is_err() {
-            if let Some(cursor_id) = cursor_id {
-                let _ = executor
-                    .connection_control("close_cursor", json!({"cursorId": cursor_id}))
-                    .await;
-            }
+            // 保留原始错误；清理失败不可掩盖协议或驱动错误。
+            let _ = guard.close_now().await;
         }
-        result
+        result.map(|(labels, rows)| (labels, rows, guard))
     }
 
     async fn collect_rows_inner(
         executor: &Arc<dyn StandardExecutor>,
         mut payload: JsonValue,
-    ) -> Result<StandardQueryResult, RdbcError> {
+        remaining_budget: &mut u64,
+    ) -> Result<(Vec<String>, StandardResultRows), RdbcError> {
         let labels = payload
             .get("columns")
             .and_then(JsonValue::as_array)
@@ -116,7 +117,7 @@ impl JdbcAgentCallableStatement {
                     .ok_or_else(|| Self::protocol_error("callable column has no label"))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let mut rows = Vec::new();
+        let mut rows = StandardResultRows::new_spool()?;
         loop {
             let page: Vec<Vec<AgentValue>> = serde_json::from_value(
                 payload
@@ -126,12 +127,11 @@ impl JdbcAgentCallableStatement {
             )
             .map_err(|error| Self::protocol_error(error.to_string()))?;
             for values in page {
-                rows.push(Row::new(
-                    values
-                        .into_iter()
-                        .map(AgentValue::into_druid)
-                        .collect::<Result<Vec<_>, _>>()?,
-                ));
+                // 保持执行期解码错误的优先级，避免返回的游标在读取时才暴露损坏值。
+                for value in &values {
+                    value.clone().into_druid()?;
+                }
+                rows.push_agent_row(values, remaining_budget)?;
             }
             if !payload
                 .get("hasMore")
@@ -154,7 +154,7 @@ impl JdbcAgentCallableStatement {
                 )
                 .await?;
         }
-        Ok(StandardQueryResult::with_labels(rows, labels))
+        Ok((labels, rows))
     }
 }
 
@@ -283,6 +283,13 @@ impl PreparedStatement for JdbcAgentCallableStatement {
                 }),
             )
             .await?;
+        let mut initial_cursor_guard = JdbcAgentCursorGuard::new(
+            Arc::clone(&executor),
+            payload
+                .get("cursorId")
+                .and_then(JsonValue::as_str)
+                .map(str::to_owned),
+        );
         let response_values = payload
             .get("outValues")
             .and_then(JsonValue::as_array)
@@ -319,8 +326,12 @@ impl PreparedStatement for JdbcAgentCallableStatement {
             values.push((selector.clone(), value));
         }
         let mut results = Vec::new();
+        let mut first_update_count = None;
+        // 一次执行的所有结果集共享磁盘预算，避免多个小结果绕过单结果限制。
+        let mut remaining_spool_budget = 1024_u64 * 1024 * 1024;
         let mut current_payload = payload;
         loop {
+            let mut cursor_guard = None;
             match current_payload.get("kind").and_then(JsonValue::as_str) {
                 Some("done") => break,
                 Some("none") => {}
@@ -332,14 +343,19 @@ impl PreparedStatement for JdbcAgentCallableStatement {
                             Self::protocol_error("callable update has no rowsAffected")
                         })?;
                     if results.is_empty() {
-                        self.state.last_update_count = Some(count);
+                        first_update_count = Some(count);
                     }
                     results.push(ExecutionResult::UpdateCount(count));
                 }
                 Some("result_set") => {
-                    let result = Self::collect_rows(&executor, current_payload).await?;
+                    // 首次响应在 OUT 校验阶段也受守卫保护；分页接手前没有异步悬空窗口。
+                    initial_cursor_guard.disarm();
+                    let (labels, rows, guard) =
+                        Self::collect_rows(&executor, current_payload, &mut remaining_spool_budget)
+                            .await?;
+                    cursor_guard = Some(guard);
                     results.push(ExecutionResult::ResultSet(Box::new(
-                        StandardAdapterResultSet::new(result, Arc::clone(&executor)),
+                        StandardAdapterResultSet::new_spooled(labels, rows, Arc::clone(&executor)),
                     )));
                 }
                 _ => {
@@ -354,7 +370,12 @@ impl PreparedStatement for JdbcAgentCallableStatement {
                     json!({"statementId": self.statement_id}),
                 )
                 .await?;
+            // Java getMoreResults 已关闭上一游标；清理守卫只覆盖推进前取消窗口。
+            if let Some(mut guard) = cursor_guard {
+                guard.disarm();
+            }
         }
+        self.state.last_update_count = first_update_count;
         self.out_values = values;
         Ok(results)
     }
