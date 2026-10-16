@@ -53,6 +53,10 @@ async fn h2_callable_function_round_trip_and_pooled_owner_close() {
         .prepare_call("{? = call ABS(?)}", StatementOptions::default())
         .await
         .expect("H2 function call");
+    let first_execution_cancel = callable
+        .cancellation_control()
+        .expect("Agent callable cancellation control");
+    assert!(callable.cancel().is_err(), "sync cancellation must not report false success");
     callable
         .register_out_parameter(
             CallableParameter::by_index(1).unwrap(),
@@ -71,6 +75,10 @@ async fn h2_callable_function_round_trip_and_pooled_owner_close() {
         Value::Int(7)
     );
     assert!(!callable.was_null().unwrap());
+    first_execution_cancel
+        .cancel()
+        .await
+        .expect("completed execution cancellation is harmless");
     callable
         .set_parameter(PreparedParameter {
             index: ParameterIndex::new(2).unwrap(),

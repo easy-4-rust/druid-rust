@@ -1,5 +1,8 @@
 //! JDBC Agent 会话内的标准 CallableStatement 实体。
 
+use super::jdbc_agent_callable_cancellation::JdbcAgentCallableCancellation;
+use super::jdbc_agent_cancellation_context::JdbcAgentCancellationContext;
+use super::jdbc_agent_cancellation_slot::JdbcAgentCancellationSlot;
 use super::jdbc_agent_cursor_guard::JdbcAgentCursorGuard;
 use super::AgentValue;
 use crate::standard_adapter_executor::StandardExecutor;
@@ -13,7 +16,7 @@ use druid_rdbc::result_set::ResultSet;
 use druid_rdbc::statement::{
     CallableInputParameter, CallableOutParameter, CallableParameter, CallableStatement,
     ExecutionResult, ParameterIndex, PreparedInputParameter, PreparedParameter, PreparedStatement,
-    Statement, StatementOptions,
+    Statement, StatementCancellation, StatementOptions,
 };
 use druid_rdbc::types::{RdbcObject, Value};
 use serde_json::{json, Value as JsonValue};
@@ -26,6 +29,10 @@ pub(crate) struct JdbcAgentCallableStatement {
     sql: String,
     statement_id: String,
     executor: Option<Arc<dyn StandardExecutor>>,
+    cancellation: Option<(
+        Arc<JdbcAgentCancellationContext>,
+        Arc<JdbcAgentCancellationSlot>,
+    )>,
     state: StandardStatementState,
     inputs: Vec<(CallableParameter, Value)>,
     outputs: Vec<(CallableParameter, CallableOutParameter)>,
@@ -40,11 +47,16 @@ impl JdbcAgentCallableStatement {
         statement_id: String,
         options: StatementOptions,
         executor: Arc<dyn StandardExecutor>,
+        cancellation: Option<(
+            Arc<JdbcAgentCancellationContext>,
+            Arc<JdbcAgentCancellationSlot>,
+        )>,
     ) -> Self {
         Self {
             sql,
             statement_id,
             executor: Some(executor),
+            cancellation,
             state: StandardStatementState::new(options),
             inputs: Vec::new(),
             outputs: Vec::new(),
@@ -60,6 +72,13 @@ impl JdbcAgentCallableStatement {
             .ok_or(RdbcError::ConnectionDiscarded)?;
         executor.ensure_open()?;
         Ok(executor)
+    }
+
+    fn cancel_standard(&mut self) -> Result<(), RdbcError> {
+        self.executor_core()?;
+        Err(RdbcError::feature_not_supported(
+            "jdbc_agent_callable_sync_cancel_use_cancellation_control",
+        ))
     }
 
     fn replace_input(&mut self, selector: CallableParameter, value: Value) {
@@ -164,6 +183,22 @@ druid_rdbc::impl_standard_wrapper!(JdbcAgentCallableStatement => CallableStateme
 impl Statement for JdbcAgentCallableStatement {
     delegate_standard_statement_state_methods!();
 
+    fn cancellation_control(&self) -> Result<Arc<dyn StatementCancellation>, RdbcError> {
+        self.executor_core()?;
+        let (context, slot) = self
+            .cancellation
+            .as_ref()
+            .ok_or_else(|| RdbcError::feature_not_supported("jdbc_agent_callable_cancellation"))?;
+        let generation = slot
+            .control_generation()
+            .ok_or(RdbcError::ConnectionDiscarded)?;
+        Ok(Arc::new(JdbcAgentCallableCancellation::new(
+            Arc::clone(context),
+            Arc::clone(slot),
+            generation,
+        )))
+    }
+
     fn get_update_count(&self) -> Result<Option<i64>, RdbcError> {
         self.executor_core()?;
         Ok(self.state.last_update_count)
@@ -243,6 +278,10 @@ impl PreparedStatement for JdbcAgentCallableStatement {
 
     async fn execute_prepared(&mut self) -> Result<Vec<ExecutionResult>, RdbcError> {
         let executor = Arc::clone(self.executor_core()?);
+        let _execution_guard = self
+            .cancellation
+            .as_ref()
+            .map(|(_, slot)| slot.begin_execution());
         self.out_values.clear();
         self.was_null.set(false);
         self.state.last_update_count = None;

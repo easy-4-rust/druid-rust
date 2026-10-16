@@ -71,6 +71,10 @@ impl StandardAdapterPreparedStatement {
         Ok(executor)
     }
 
+    fn cancel_standard(&mut self) -> Result<(), RdbcError> {
+        self.executor_core()?.cancel_running()
+    }
+
     /// 新执行尝试先失效旧结果，参数错误、驱动失败或取消不得暴露上一轮键。
     fn reset_execution_results(&mut self) {
         self.generated_keys.clear();

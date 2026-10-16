@@ -113,7 +113,7 @@ macro_rules! delegate_standard_statement_state_methods {
         }
 
         fn cancel(&mut self) -> Result<(), druid_rdbc::error::RdbcError> {
-            self.executor_core()?.cancel_running()
+            self.cancel_standard()
         }
 
         fn set_cursor_name(&mut self, name: &str) -> Result<(), druid_rdbc::error::RdbcError> {

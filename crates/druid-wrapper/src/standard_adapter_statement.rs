@@ -36,6 +36,10 @@ impl StandardAdapterStatement {
         Ok(executor)
     }
 
+    fn cancel_standard(&mut self) -> Result<(), RdbcError> {
+        self.executor_core()?.cancel_running()
+    }
+
     fn generated_keys_core(generated_keys: &GeneratedKeys) -> Result<(), RdbcError> {
         if matches!(
             generated_keys,

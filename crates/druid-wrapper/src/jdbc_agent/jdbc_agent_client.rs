@@ -1,11 +1,14 @@
+use super::jdbc_agent_cancellation_context::JdbcAgentCancellationContext;
 use super::{AgentRuntimeLease, JdbcAgentOptions};
 use druid_rdbc::error::RdbcError;
 use serde_json::{json, Value as JsonValue};
+use std::sync::Arc;
 
 /// 共享 JDBC Agent 运行时中的单个数据库 session 客户端。
 pub(crate) struct JdbcAgentClient {
     runtime: AgentRuntimeLease,
     session_id: String,
+    cancellation: Arc<JdbcAgentCancellationContext>,
     closed: bool,
 }
 
@@ -27,10 +30,15 @@ impl JdbcAgentClient {
                 )
             })?
             .to_owned();
+        let cancellation = JdbcAgentCancellationContext::new(
+            session_id.clone(),
+            Arc::new(runtime.cancel_sender()),
+        );
         Ok((
             Self {
                 runtime,
                 session_id,
+                cancellation,
                 closed: false,
             },
             result,
@@ -59,9 +67,28 @@ impl JdbcAgentClient {
             "sessionId".to_owned(),
             JsonValue::String(self.session_id.clone()),
         );
-        self.runtime
-            .request(operation, JsonValue::Object(params))
-            .await
+        let payload = JsonValue::Object(params);
+        let request_key = match operation {
+            "execute_callable" | "next_callable_result" | "close_statement" => payload
+                .get("statementId")
+                .and_then(JsonValue::as_str)
+                .map(str::to_owned),
+            "fetch_page" | "close_cursor" => payload
+                .get("cursorId")
+                .and_then(JsonValue::as_str)
+                .map(str::to_owned),
+            _ => None,
+        };
+        let slot = self
+            .cancellation
+            .slot_for_request(operation, request_key.as_deref());
+        let response = self
+            .runtime
+            .request_tracked(operation, payload, slot)
+            .await?;
+        self.cancellation
+            .observe_response(operation, request_key.as_deref(), &response);
+        Ok(response)
     }
 
     /// 仅关闭当前 session；共享 Agent 在空闲 TTL 到期后退出。
@@ -75,11 +102,16 @@ impl JdbcAgentClient {
             .await
             .map(|_| ());
         self.closed = true;
+        self.cancellation.close();
         self.runtime.release_now();
         result
     }
 
     pub(crate) fn is_unusable(&self) -> bool {
         self.closed || self.runtime.is_unusable()
+    }
+
+    pub(crate) fn cancellation_context(&self) -> Arc<JdbcAgentCancellationContext> {
+        Arc::clone(&self.cancellation)
     }
 }

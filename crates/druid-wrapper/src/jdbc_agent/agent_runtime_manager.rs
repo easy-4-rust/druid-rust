@@ -1,3 +1,6 @@
+use super::jdbc_agent_cancel_sender::JdbcAgentCancelSender;
+use super::jdbc_agent_cancel_sender::NativeJdbcAgentCancelSender;
+use super::jdbc_agent_cancellation_slot::JdbcAgentCancellationSlot;
 use super::{AgentRuntime, JdbcAgentOptions, JdbcAgentRuntimeMetrics};
 use druid_rdbc::error::RdbcError;
 use serde_json::Value as JsonValue;
@@ -32,6 +35,26 @@ pub(crate) struct AgentRuntimeLease {
     managed: Arc<ManagedAgentRuntime>,
     request_timeout: Duration,
     released: bool,
+}
+
+struct TrackedRequestAbort {
+    sender: Option<NativeJdbcAgentCancelSender>,
+    session_id: Option<String>,
+    request_id: u64,
+}
+
+impl Drop for TrackedRequestAbort {
+    fn drop(&mut self) {
+        let (Some(sender), Some(session_id)) = (self.sender.take(), self.session_id.take()) else {
+            return;
+        };
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            let request_id = self.request_id;
+            runtime.spawn(async move {
+                let _ = sender.cancel_request(&session_id, request_id).await;
+            });
+        }
+    }
 }
 
 impl AgentRuntimeManager {
@@ -172,6 +195,15 @@ impl AgentRuntimeLease {
         method: &str,
         params: JsonValue,
     ) -> Result<JsonValue, RdbcError> {
+        self.request_tracked(method, params, None).await
+    }
+
+    pub(crate) async fn request_tracked(
+        &self,
+        method: &str,
+        params: JsonValue,
+        slot: Option<Arc<JdbcAgentCancellationSlot>>,
+    ) -> Result<JsonValue, RdbcError> {
         if !self.managed.healthy.load(Ordering::Acquire) {
             return Err(RdbcError::ConnectionDiscarded);
         }
@@ -185,10 +217,21 @@ impl AgentRuntimeLease {
             }
         };
         let request_id = pending.request_id();
+        let _active_request = slot.map(|slot| slot.begin_request(request_id));
+        let mut abort = TrackedRequestAbort {
+            sender: _active_request.as_ref().map(|_| self.cancel_sender()),
+            session_id: session_id
+                .as_ref()
+                .and_then(JsonValue::as_str)
+                .map(str::to_owned),
+            request_id,
+        };
         if let Ok(result) = tokio::time::timeout(self.request_timeout, pending.wait()).await {
+            abort.sender.take();
             JdbcAgentRuntimeMetrics::rpc_completed(started.elapsed(), result.is_err());
             result
         } else {
+            abort.sender.take();
             JdbcAgentRuntimeMetrics::rpc_completed(started.elapsed(), true);
             JdbcAgentRuntimeMetrics::request_timed_out();
             JdbcAgentRuntimeMetrics::cancellation_requested();
@@ -210,6 +253,10 @@ impl AgentRuntimeLease {
                 self.request_timeout,
             )))
         }
+    }
+
+    pub(crate) fn cancel_sender(&self) -> NativeJdbcAgentCancelSender {
+        NativeJdbcAgentCancelSender::new(Arc::clone(&self.managed.runtime), self.request_timeout)
     }
 
     /// 返回共享运行时是否已经不可用。

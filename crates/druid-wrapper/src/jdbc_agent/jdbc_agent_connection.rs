@@ -1,6 +1,7 @@
 use super::jdbc_agent_array::JdbcAgentArray;
 use super::jdbc_agent_blob::JdbcAgentBlob;
 use super::jdbc_agent_callable_statement::JdbcAgentCallableStatement;
+use super::jdbc_agent_cancellation_context::JdbcAgentCancellationContext;
 use super::{AgentValue, JdbcAgentClient, JdbcAgentDatabaseMetaData, JdbcAgentOptions};
 use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
 use crate::standard_adapter_executor::{
@@ -30,6 +31,9 @@ pub(super) trait JdbcAgentTransport: Send {
     ) -> Result<JsonValue, RdbcError>;
     async fn close(&mut self) -> Result<(), RdbcError>;
     fn is_unusable(&self) -> bool;
+    fn cancellation_context(&self) -> Option<Arc<JdbcAgentCancellationContext>> {
+        None
+    }
 }
 
 #[async_trait::async_trait]
@@ -48,6 +52,10 @@ impl JdbcAgentTransport for JdbcAgentClient {
 
     fn is_unusable(&self) -> bool {
         JdbcAgentClient::is_unusable(self)
+    }
+
+    fn cancellation_context(&self) -> Option<Arc<JdbcAgentCancellationContext>> {
+        Some(JdbcAgentClient::cancellation_context(self))
     }
 }
 
@@ -78,6 +86,7 @@ impl JdbcAgentConnector for NativeJdbcAgentConnector {
 #[allow(clippy::struct_excessive_bools)]
 pub struct JdbcAgentConnection {
     client: Option<Box<dyn JdbcAgentTransport>>,
+    cancellation: Option<Arc<JdbcAgentCancellationContext>>,
     capabilities: druid_rdbc::extensions::ConnectionCapabilities,
     auto_commit: bool,
     read_only: bool,
@@ -133,6 +142,7 @@ impl JdbcAgentConnection {
     }
 
     pub(super) fn from_session(client: Box<dyn JdbcAgentTransport>, session: JsonValue) -> Self {
+        let cancellation = client.cancellation_context();
         let capability = |name: &str| {
             session
                 .pointer(&format!("/capabilities/{name}"))
@@ -153,6 +163,7 @@ impl JdbcAgentConnection {
         );
         Self {
             client: Some(client),
+            cancellation,
             capabilities: druid_rdbc::extensions::ConnectionCapabilities {
                 transactions: supports_transactions,
                 // 保存点只能存在于事务中；协议返回矛盾能力时按可执行的交集声明。
@@ -212,6 +223,7 @@ impl JdbcAgentConnection {
         let runtime_trace = self.runtime_trace.take();
         let shell = Self {
             client: None,
+            cancellation: self.cancellation.clone(),
             capabilities: self.capabilities,
             auto_commit: self.auto_commit,
             read_only: self.read_only,
@@ -863,6 +875,9 @@ impl druid_rdbc::connection::Connection for JdbcAgentConnection {
             statement_id.to_owned(),
             options,
             executor,
+            self.cancellation
+                .as_ref()
+                .map(|context| (Arc::clone(context), context.register(statement_id))),
         )))
     }
 
