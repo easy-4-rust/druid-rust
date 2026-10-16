@@ -47,6 +47,12 @@ async fn h2_blob_byte_contract_through_standard_connection() {
         .expect_err("driver rejects negative length");
     assert!(matches!(error, RdbcError::SqlException(ref sql)
         if sql.sql_state() == Some("90028") && sql.error_code() == 90028));
+    assert_eq!(
+        blob.get_bytes(2, 2)
+            .await
+            .expect("nonfatal driver error keeps the Blob usable"),
+        vec![20, 30]
+    );
     let search = blob
         .position_bytes(&[20, 30], 1)
         .await
