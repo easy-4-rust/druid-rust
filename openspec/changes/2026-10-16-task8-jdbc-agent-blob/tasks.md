@@ -3,7 +3,7 @@
 ## 1. Session ownership
 
 - [x] 1.1 Add a failing Java test for Blob registration, explicit free, failed-free retry, and logical/session close; implement the registry and pass the test. Missing-method compilation failed first; focused H2 3/3 and JDK 17 `mvn verify` passed.
-- [ ] 1.2 Add child stream ownership and close-order fault tests; implement aggregated cleanup and pass the Java tests.
+- [x] 1.2 Add child stream ownership and close-order fault tests; implement aggregated cleanup and pass the Java tests. The missing-method test failed first; H2 target 4/4 and JDK 17 `mvn verify` passed.
 
 ## 2. Driver byte operations
 

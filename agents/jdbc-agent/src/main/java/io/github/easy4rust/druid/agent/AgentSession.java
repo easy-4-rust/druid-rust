@@ -2,6 +2,8 @@ package io.github.easy4rust.druid.agent;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.Connection;
@@ -30,6 +32,7 @@ public final class AgentSession implements Closeable {
     private final Map<String, AgentCursor> cursors = new ConcurrentHashMap<>();
     private final Map<String, Array> arrays = new ConcurrentHashMap<>();
     private final Map<String, Blob> blobs = new ConcurrentHashMap<>();
+    private final Map<String, BlobStreamHandle> blobStreams = new ConcurrentHashMap<>();
     private final Map<Long, Statement> activeStatements = new ConcurrentHashMap<>();
     private final Map<String, Savepoint> savepoints = new ConcurrentHashMap<>();
 
@@ -237,12 +240,96 @@ public final class AgentSession implements Closeable {
         return blob;
     }
 
+    /** 注册 Blob 子输入流，并保留其父资源身份。 */
+    public String registerBlobInputStream(String blobId, InputStream input) throws SQLException {
+        blob(blobId);
+        return registerBlobStream(blobId, Objects.requireNonNull(input, "input"));
+    }
+
+    /** 注册 Blob 子输出流，并保留其父资源身份。 */
+    public String registerBlobOutputStream(String blobId, OutputStream output) throws SQLException {
+        blob(blobId);
+        return registerBlobStream(blobId, Objects.requireNonNull(output, "output"));
+    }
+
+    private String registerBlobStream(String blobId, Closeable stream) {
+        String streamId = UUID.randomUUID().toString();
+        blobStreams.put(streamId, new BlobStreamHandle(blobId, stream));
+        return streamId;
+    }
+
+    /** 获取仍在会话内且类型正确的 Blob 输入流。 */
+    public InputStream blobInputStream(String streamId) throws SQLException {
+        BlobStreamHandle handle = blobStream(streamId);
+        if (!(handle.stream instanceof InputStream)) {
+            throw new SQLException("JDBC Agent blob stream is not an input stream: " + streamId);
+        }
+        return (InputStream) handle.stream;
+    }
+
+    /** 获取仍在会话内且类型正确的 Blob 输出流。 */
+    public OutputStream blobOutputStream(String streamId) throws SQLException {
+        BlobStreamHandle handle = blobStream(streamId);
+        if (!(handle.stream instanceof OutputStream)) {
+            throw new SQLException("JDBC Agent blob stream is not an output stream: " + streamId);
+        }
+        return (OutputStream) handle.stream;
+    }
+
+    private BlobStreamHandle blobStream(String streamId) throws SQLException {
+        BlobStreamHandle handle = blobStreams.get(streamId);
+        if (Objects.isNull(handle)) {
+            throw new SQLException("JDBC Agent blob stream is not open: " + streamId);
+        }
+        blob(handle.blobId);
+        return handle;
+    }
+
+    /** 关闭并移除 Blob 子流；失败保留原始 I/O cause，重复关闭无副作用。 */
+    public void closeBlobStream(String streamId) throws SQLException {
+        BlobStreamHandle handle = blobStreams.remove(streamId);
+        if (Objects.nonNull(handle)) {
+            try {
+                handle.stream.close();
+            } catch (IOException exception) {
+                throw new SQLException("JDBC Agent blob stream close failed", exception);
+            }
+        }
+    }
+
     /** 释放驱动 Blob；失败时保留句柄以允许重试，成功后重复释放无副作用。 */
     public void freeBlob(String blobId) throws SQLException {
         Blob blob = blobs.get(blobId);
         if (Objects.nonNull(blob)) {
-            blob.free();
-            blobs.remove(blobId, blob);
+            SQLException failure = null;
+            for (Map.Entry<String, BlobStreamHandle> entry : new ArrayList<>(blobStreams.entrySet())) {
+                if (Objects.equals(entry.getValue().blobId, blobId)) {
+                    try {
+                        closeBlobStream(entry.getKey());
+                    } catch (SQLException exception) {
+                        failure = appendFailure(failure, exception);
+                    }
+                }
+            }
+            try {
+                blob.free();
+                blobs.remove(blobId, blob);
+            } catch (SQLException exception) {
+                failure = appendFailure(failure, exception);
+            }
+            if (Objects.nonNull(failure)) {
+                throw failure;
+            }
+        }
+    }
+
+    private static final class BlobStreamHandle {
+        private final String blobId;
+        private final Closeable stream;
+
+        private BlobStreamHandle(String blobId, Closeable stream) {
+            this.blobId = blobId;
+            this.stream = stream;
         }
     }
 
