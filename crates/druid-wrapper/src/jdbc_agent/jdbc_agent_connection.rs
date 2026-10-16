@@ -587,6 +587,21 @@ druid_rdbc::impl_standard_wrapper!(JdbcAgentConnection => Connection);
 
 #[async_trait::async_trait]
 impl druid_rdbc::connection::Connection for JdbcAgentConnection {
+    async fn create_clob(&mut self) -> Result<Box<dyn druid_rdbc::resource::Clob>, RdbcError> {
+        self.ensure_open()?;
+        let executor = self.standard_executor_core()?;
+        let response = executor.connection_control("create_clob", json!({})).await?;
+        let clob_id = response
+            .get("clobId")
+            .and_then(JsonValue::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| Self::protocol_error("create_clob returned no clobId"))?;
+        Ok(Box::new(super::jdbc_agent_clob::JdbcAgentClob::new(
+            executor,
+            clob_id.to_owned(),
+        )))
+    }
+
     async fn create_blob(&mut self) -> Result<Box<dyn druid_rdbc::resource::Blob>, RdbcError> {
         self.ensure_open()?;
         let executor = self.standard_executor_core()?;
