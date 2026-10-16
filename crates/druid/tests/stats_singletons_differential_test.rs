@@ -20,10 +20,15 @@ use druid::stats::{
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
 // ── Helpers ──────────────────────────────────────────────────
+
+fn global_stat_test_guard() -> MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+}
 
 fn props(entries: &[(&str, &str)]) -> HashMap<String, String> {
     entries
@@ -183,6 +188,7 @@ fn table_stat_name_hash_and_equality() {
 /// URL 路由：basic.json、reset-all、datasource、sql、wall、activeConnectionStackTrace。
 #[test]
 fn stat_service_routes_basic_endpoints() {
+    let _guard = global_stat_test_guard();
     let service = DruidStatService;
 
     let basic = service.service("/basic.json");
@@ -217,6 +223,7 @@ fn stat_service_routes_basic_endpoints() {
 /// reset 门禁：setResetEnable 联动 `StatManagerFacade`。
 #[test]
 fn stat_service_reset_enable_gate() {
+    let _guard = global_stat_test_guard();
     let service = DruidStatService;
     service.set_reset_enable(false);
     assert!(!service.is_reset_enable());
@@ -284,6 +291,7 @@ fn stat_manager_reset_and_count() {
 /// `log_and_reset_data_source` 调用 logStats + resetCount++。
 #[test]
 fn stat_manager_log_and_reset() {
+    let _guard = global_stat_test_guard();
     let manager = DruidDataSourceStatManager::global();
     let ds = FakeDataSource::arc();
     let id = manager.register(ds.clone());
@@ -446,6 +454,7 @@ fn stat_value_default_and_field_access() {
 /// 进程级单例与 `basic_stat` / `reset_all` / `data_source_stat_data_list`。
 #[test]
 fn stat_manager_facade_singleton_and_basic_ops() {
+    let _guard = global_stat_test_guard();
     let facade = DruidStatManagerFacade::global();
     let basic = facade.basic_stat();
     assert!(basic.is_object(), "basic={basic:?}");
