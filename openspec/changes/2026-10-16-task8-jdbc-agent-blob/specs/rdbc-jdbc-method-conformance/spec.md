@@ -4,10 +4,15 @@
 
 The JDBC Agent SHALL expose a session-owned `java.sql.Blob` through the canonical RDBC Blob contract. Length, one-based byte ranges and search positions, zero-based source offsets for ranged writes, truncation, and release SHALL preserve the driver's values and SQL errors. A capability bit SHALL be advertised only after its operations have positive adapter evidence; an unsupported operation SHALL return the standard `0A000` error without a false success.
 
-#### Scenario: Mutable H2 Blob
+#### Scenario: H2 byte operations and original unsupported errors
 
-- **WHEN** a caller creates an H2 Blob, writes bytes with both setter overloads, reads a range, searches a pattern, and truncates it
-- **THEN** values and positions match H2, including the distinct one-based Blob position and zero-based source offset
+- **WHEN** a caller creates an H2 Blob, writes bytes with both setter overloads, reads a one-based range, then requests search and truncation
+- **THEN** byte values and the zero-based source offset are exact, while H2's unsupported search and truncation retain the original `HYC00` SQLState and `50100` vendor code
+
+#### Scenario: HSQLDB successful search and truncation
+
+- **WHEN** a caller writes an HSQLDB Blob, searches a two-byte pattern from a one-based start, and truncates it
+- **THEN** search returns the one-based match position or no match, and truncation changes the length and remaining bytes exactly
 
 #### Scenario: Driver rejection and unsupported operation
 

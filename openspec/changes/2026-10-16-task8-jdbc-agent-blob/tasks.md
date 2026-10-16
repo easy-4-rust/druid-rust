@@ -7,7 +7,7 @@
 
 ## 2. Driver byte operations
 
-- [ ] 2.1 Add real-H2 protocol tests for length, one-based reads/search, both byte-write overloads, truncation, and original SQL errors; implement the requests and pass `mvn verify`.
+- [ ] 2.1 Add real-H2 protocol tests for length, one-based reads, both byte-write overloads, and original `HYC00/50100` search/truncation errors; add real-HSQLDB successful one-based search and truncation tests; implement the requests and pass `mvn verify` plus focused Rust-to-Agent tests for both drivers.
 - [x] 2.2 Add a negative capability/error test for unsupported Blob operations, then make protocol advertisement and `0A000` behavior match it. The protocol test first failed with a null SQLState, then passed with `SQLFeatureNotSupportedException/0A000` for `position(Blob,long)` and no matching ready/handshake capability; JDK 17 `mvn verify` passed.
 
 ## 3. Bounded streams
@@ -17,7 +17,7 @@
 
 ## 4. Standard Rust adapter
 
-- [ ] 4.1 Add failing external-consumer tests for Blob factory, values, mutation, search, failure/retry, and capability bits; implement through the owned executor and pass focused Rust tests against H2.
+- [ ] 4.1 Add failing external-consumer tests for Blob factory, values, mutation, search, failure/retry, and capability bits; implement through the owned executor and pass focused Rust tests against H2 error behavior and HSQLDB positive search/truncation.
 - [x] 4.2 Add external-consumer stream and pooled-owner invalidation tests; implement the bounded stream bridge and pass H2 plus RDBC resource regressions. Real H2 external-consumer 4/4 covers 160-KiB paged input/output, ranged read, flush/close, parent and pooled-owner invalidation, and current-thread fail-fast. `rdbc_blob_test` 2/2, RDBC resource contracts 32/32, resource-owner cancellation 118/118, strict wrapper Clippy, and direct rustfmt passed. Legacy output-stream flush-failure closure semantics remain unchanged; remote close failures retain the handle for retry.
 
 ## 5. Integration
