@@ -42,6 +42,7 @@ jobs:
         run: |
           cargo test -p druid-wrapper --features jdbc-agent --test task6_jdbc_agent_h2_contract_test_parity
           cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_blob_h2_external_consumer
+          cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_clob_external_consumer
 
   jdbc-agent-hsqldb:
     name: JDBC Agent HSQLDB (${{ matrix.os }}, JDK ${{ matrix.java }})
@@ -73,6 +74,7 @@ jobs:
         run: |
           cargo test -p druid-wrapper --features jdbc-agent --test task6_jdbc_agent_hsqldb_contract_test_parity
           cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_blob_hsqldb_external_consumer
+          cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_clob_external_consumer
 
   rust-contracts:
     runs-on: ubuntu-latest
