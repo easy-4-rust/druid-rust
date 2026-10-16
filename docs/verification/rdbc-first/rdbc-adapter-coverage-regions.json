@@ -356,7 +356,7 @@
           "requirement_id": "FAMILY_EXECUTOR_FUNCTION",
           "requirement_kind": "FAMILY_EXECUTOR_FUNCTION",
           "source_path": "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs",
-          "source_sha256": "fdb78057fa8abf968595bda6d88f6181ddb363d329dae5ee750693346c7fdd83",
+          "source_sha256": "76630486d889fd4fd443d5ee8b6178ef12f1c45a4abea7dfccef00fc995fdf92",
           "source_function": "standard_execute_update_core",
           "compiler_function_name": "_RNvXs2_NtNtCscgdOsqAspPe_13druid_wrapper10jdbc_agent21jdbc_agent_connectionNtB5_19JdbcAgentConnectionNtNtB9_25standard_adapter_executor20AdapterExecutionCore28standard_execute_update_core",
           "anchor_id": "family_executor.jdbc_agent",

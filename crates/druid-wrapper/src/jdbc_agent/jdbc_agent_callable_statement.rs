@@ -40,7 +40,6 @@ impl JdbcAgentCallableStatement {
         options: StatementOptions,
         executor: Arc<dyn StandardExecutor>,
     ) -> Self {
-        executor.task4_trace_prepared_create();
         Self {
             sql,
             statement_id,

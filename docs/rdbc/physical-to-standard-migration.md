@@ -197,14 +197,14 @@ Task 6 intentionally rebuilds the stale Task 4 compiler artifacts after the brea
 
 | artifact | Task 4 SHA-256 | Task 6 SHA-256 | result |
 | --- | --- | --- | --- |
-| compiler coverage manifest | `f7b3d4b429fe9e5c4bfe954082f0518d8e78635f6f7cc21bde1ffcd40f2307c9` | `a2b06227c716c068d577582995bb6627756b8a5aef7c59f7b2d517278b13d7fe` | 7 families × 15 exact identities regenerated; post-rewrite verifier 7/7 PASS |
+| compiler coverage manifest | `f7b3d4b429fe9e5c4bfe954082f0518d8e78635f6f7cc21bde1ffcd40f2307c9` | `5ded11a03073806437fb920ca0e8f3fd027eada1819bf578bf653d979ef94eb8` | 7 families × 15 exact identities regenerated; post-rewrite verifier 7/7 PASS |
 | runtime trace manifest | `106323e17904d377172986ce7464a54de60b4bb575e5f67e333e37f16188a3ec` | `bb63308865daf2e1d528e8e415e9438545919bf4752e300710c219a978bf344a` | 31 canonical source rows, seven runtime families and two compile-identity rows |
 
 The committed `task6-compiler-identity-migration.tsv` is the exact 105-row BASE-to-final compiler
 identity/source-hash mapping. `render_task6_coverage_identity_map.py` regenerates and verifies its
 canonical bytes; the current integration SHA-256 is
-`ae6fe28be5f0197a7e27cc78520689edf0e1577dee4d9ea0b488efdbcedcd590` and will be refreshed after
-the final seven-family manifest regeneration.
+`9670e526b457d07ca9200504f08367dbedc6a66dbd47f913e9e1c3bd52cef046` after
+the latest seven-family manifest regeneration.
 
 ## Dependency cutover
 
