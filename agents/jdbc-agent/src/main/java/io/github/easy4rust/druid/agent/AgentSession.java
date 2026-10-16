@@ -512,6 +512,12 @@ public final class AgentSession implements Closeable {
         activeClobReads.put(requestId, streamId);
     }
 
+    /** 登记正在读取的 Clob ASCII 子流，复用同一父资源取消域。 */
+    public synchronized void activateClobAsciiRead(long requestId, String streamId) throws SQLException {
+        clobInputStream(streamId);
+        activeClobReads.put(requestId, streamId);
+    }
+
     /** 原子地结束 Clob 字符读取并返回是否已接受 cancel。 */
     public synchronized boolean finishClobRead(long requestId) {
         activeClobReads.remove(requestId);

@@ -654,6 +654,7 @@ class AgentServerTest {
         SQLException expectedReadError;
         SQLException expectedSearchError;
         SQLException expectedTruncateError;
+        SQLException expectedAsciiOutputError;
         String driverIsolatedSurrogate;
         try (Connection direct = DriverManager.getConnection("jdbc:h2:mem:agent-clob-direct")) {
             java.sql.Clob driverClob = direct.createClob();
@@ -661,6 +662,8 @@ class AgentServerTest {
             expectedReadError = assertThrows(SQLException.class, () -> driverClob.getSubString(1, -1));
             expectedSearchError = assertThrows(SQLException.class, () -> driverClob.position("😀", 1));
             expectedTruncateError = assertThrows(SQLException.class, () -> driverClob.truncate(3));
+            expectedAsciiOutputError = assertThrows(SQLException.class,
+                    () -> driverClob.setAsciiStream(1));
             driverClob.free();
             java.sql.Clob isolated = direct.createClob();
             isolated.setString(1, new String(new char[] {(char) 0xd800}));
@@ -726,6 +729,12 @@ class AgentServerTest {
             JsonNode truncateError = call(requests, responses, 813, "clob_truncate", truncate).path("error");
             assertEquals(expectedTruncateError.getSQLState(), truncateError.at("/data/sqlState").asText());
             assertEquals(expectedTruncateError.getErrorCode(), truncateError.at("/data/vendorCode").asInt());
+            ObjectNode asciiOutput = clob.deepCopy();
+            asciiOutput.put("position", 1L);
+            JsonNode asciiError = call(requests, responses, 834, "clob_open_ascii_output", asciiOutput)
+                    .path("error");
+            assertEquals(expectedAsciiOutputError.getSQLState(), asciiError.at("/data/sqlState").asText());
+            assertEquals(expectedAsciiOutputError.getErrorCode(), asciiError.at("/data/vendorCode").asInt());
             ObjectNode unsupported = clob.deepCopy();
             unsupported.put("patternClobId", clobId);
             unsupported.put("start", 1L);
@@ -980,6 +989,91 @@ class AgentServerTest {
             assertTrue(call(requests, responses, 887, "clob_write_writer", active).path("error").isObject());
             assertTrue(call(requests, responses, 888, "free_clob", clob).path("result").isObject());
             assertTrue(call(requests, responses, 889, "close_session", sessionOnly(sessionId))
+                    .path("result").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void hsqldbClobAsciiStreamsTransferBoundedPagesAndCloseWithParent() throws Exception {
+        byte[] expected = new byte[160_000];
+        for (int index = 0; index < expected.length; index++) {
+            expected[index] = (byte) ('A' + index % 26);
+        }
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            read(responses);
+            call(requests, responses, 901, "handshake", handshakePayload());
+            ObjectNode connect = connectPayload();
+            connect.put("url", "jdbc:hsqldb:mem:agent_clob_ascii_stream");
+            connect.put("validationQuery", "VALUES (1)");
+            connect.with("properties").put("user", "SA").put("password", "");
+            String sessionId = call(requests, responses, 902, "open_session", connect)
+                    .at("/result/sessionId").asText();
+            String clobId = call(requests, responses, 903, "create_clob", sessionOnly(sessionId))
+                    .at("/result/clobId").asText();
+            ObjectNode clob = sessionOnly(sessionId);
+            clob.put("clobId", clobId);
+            clob.put("position", 1L);
+            JsonNode openedOutput = call(requests, responses, 904, "clob_open_ascii_output", clob);
+            assertTrue(openedOutput.path("result").isObject(), openedOutput.toString());
+            String outputId = openedOutput.at("/result/streamId").asText();
+            ObjectNode output = sessionOnly(sessionId);
+            output.put("streamId", outputId);
+            for (int index = 0; index < expected.length; index += 32_000) {
+                byte[] page = Arrays.copyOfRange(expected, index, Math.min(index + 32_000, expected.length));
+                ObjectNode write = output.deepCopy();
+                write.put("bytes", Base64.getEncoder().encodeToString(page));
+                assertEquals(page.length, call(requests, responses, 905 + index / 32_000,
+                        "clob_write_ascii_output", write).at("/result/written").asInt());
+            }
+            ObjectNode oversized = output.deepCopy();
+            oversized.put("bytes", Base64.getEncoder().encodeToString(new byte[65_537]));
+            assertTrue(call(requests, responses, 910, "clob_write_ascii_output", oversized)
+                    .path("error").isObject());
+            assertTrue(call(requests, responses, 911, "clob_flush_ascii_output", output)
+                    .path("result").isObject());
+            assertTrue(call(requests, responses, 912, "clob_close_stream", output).path("result").isObject());
+            assertEquals(expected.length, call(requests, responses, 913, "clob_length", clob)
+                    .at("/result/length").asLong());
+            String inputId = call(requests, responses, 914, "clob_open_ascii_input", clob)
+                    .at("/result/streamId").asText();
+            ObjectNode input = sessionOnly(sessionId);
+            input.put("streamId", inputId);
+            input.put("maxBytes", 65_536);
+            ByteArrayOutputStream actual = new ByteArrayOutputStream();
+            for (int index = 0; index < 5; index++) {
+                JsonNode page = call(requests, responses, 915 + index, "clob_read_ascii_input", input)
+                        .path("result");
+                assertTrue(page.isObject(), page.toString());
+                byte[] bytes = Base64.getDecoder().decode(page.path("bytes").asText());
+                assertTrue(bytes.length <= 65_536);
+                actual.write(bytes);
+                if (page.path("eof").asBoolean()) {
+                    break;
+                }
+            }
+            assertTrue(Arrays.equals(expected, actual.toByteArray()));
+            ObjectNode oversizedRead = input.deepCopy();
+            oversizedRead.put("maxBytes", 65_537);
+            assertTrue(call(requests, responses, 920, "clob_read_ascii_input", oversizedRead)
+                    .path("error").isObject());
+            assertTrue(call(requests, responses, 921, "free_clob", clob).path("result").isObject());
+            assertTrue(call(requests, responses, 922, "clob_read_ascii_input", input).path("error").isObject());
+            assertTrue(call(requests, responses, 923, "close_session", sessionOnly(sessionId))
                     .path("result").isObject());
             requests.close();
             serverTask.get();
@@ -1377,6 +1471,75 @@ class AgentServerTest {
             assertTrue(cancellation.at("/result/cancelled").asBoolean());
             assertEquals("HY008", readResult.at("/error/data/sqlState").asText());
             assertTrue(call(requests, responses, 863, "clob_read_reader", readRequest)
+                    .path("error").isObject());
+            requests.close();
+            serverTask.get();
+        } finally {
+            closed.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void cancelClosesActiveClobAsciiInputAndReturnsCancellationSqlState() throws Exception {
+        CountDownLatch reading = new CountDownLatch(1);
+        CountDownLatch closed = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (Connection connection = DriverManager.getConnection("jdbc:hsqldb:mem:clob-ascii-protocol-cancel");
+             PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            AgentSession session = new AgentSession(connection, null);
+            String clobId = session.registerClob(connection.createClob());
+            InputStream blocked = new InputStream() {
+                @Override
+                public int read() throws IOException {
+                    reading.countDown();
+                    try {
+                        if (!closed.await(5, TimeUnit.SECONDS)) {
+                            throw new IOException("read was not cancelled");
+                        }
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("read interrupted", exception);
+                    }
+                    throw new IOException("ASCII input closed by cancellation");
+                }
+
+                @Override
+                public void close() {
+                    closed.countDown();
+                }
+            };
+            String streamId = session.registerClobInputStream(clobId, blocked);
+            Field sessionsField = AgentServer.class.getDeclaredField("sessions");
+            sessionsField.setAccessible(true);
+            ((Map<String, AgentSession>) sessionsField.get(server)).put("clob-ascii-cancel-session", session);
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
+            assertEquals("ready", read(responses).path("method").asText());
+            ObjectNode readRequest = sessionOnly("clob-ascii-cancel-session");
+            readRequest.put("streamId", streamId);
+            readRequest.put("maxBytes", 1);
+            write(requests, request(864, "clob_read_ascii_input", readRequest));
+            assertTrue(reading.await(5, TimeUnit.SECONDS));
+            ObjectNode cancelRequest = sessionOnly("clob-ascii-cancel-session");
+            cancelRequest.put("targetRequestId", 864);
+            write(requests, request(865, "cancel", cancelRequest));
+            JsonNode first = read(responses);
+            JsonNode second = read(responses);
+            JsonNode cancellation = first.path("id").asLong() == 865 ? first : second;
+            JsonNode readResult = first.path("id").asLong() == 864 ? first : second;
+            assertTrue(cancellation.at("/result/cancelled").asBoolean());
+            assertEquals("HY008", readResult.at("/error/data/sqlState").asText());
+            assertTrue(call(requests, responses, 866, "clob_read_ascii_input", readRequest)
                     .path("error").isObject());
             requests.close();
             serverTask.get();

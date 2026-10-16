@@ -298,6 +298,11 @@ public final class AgentServer implements Closeable {
             case "clob_open_writer" -> clobOpenWriter(session, params);
             case "clob_write_writer" -> clobWriteWriter(session, params);
             case "clob_flush_writer" -> clobFlushWriter(session, params);
+            case "clob_open_ascii_input" -> clobOpenAsciiInput(session, params);
+            case "clob_read_ascii_input" -> clobReadAsciiInput(requestId, session, params);
+            case "clob_open_ascii_output" -> clobOpenAsciiOutput(session, params);
+            case "clob_write_ascii_output" -> clobWriteAsciiOutput(session, params);
+            case "clob_flush_ascii_output" -> clobFlushAsciiOutput(session, params);
             case "clob_close_stream" -> clobCloseStream(session, params);
             case "free_clob" -> freeClob(session, params);
             case "close_logical_connection" -> closeLogicalConnection(session);
@@ -822,6 +827,96 @@ public final class AgentServer implements Closeable {
             writer.flush();
         } catch (IOException exception) {
             throw new SQLException("JDBC Agent clob writer flush failed", exception);
+        }
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    /** 打开 Clob 的 ASCII 输入流并绑定到父资源域。 */
+    private JsonNode clobOpenAsciiInput(AgentSession session, JsonNode payload) throws SQLException {
+        String clobId = requiredText(payload, "clobId");
+        InputStream input = session.clob(clobId).getAsciiStream();
+        try {
+            return JsonNodeFactory.instance.objectNode()
+                    .put("streamId", session.registerClobInputStream(clobId, input));
+        } catch (SQLException exception) {
+            try {
+                input.close();
+            } catch (IOException closeFailure) {
+                exception.addSuppressed(closeFailure);
+            }
+            throw exception;
+        }
+    }
+
+    /** 每次只读取至多 64 KiB ASCII 字节，并允许并发取消。 */
+    private JsonNode clobReadAsciiInput(long requestId, AgentSession session, JsonNode payload)
+            throws SQLException {
+        String streamId = requiredText(payload, "streamId");
+        InputStream input = session.clobInputStream(streamId);
+        int maxBytes = requiredInt(payload, "maxBytes");
+        if (maxBytes < 1 || maxBytes > MAX_BLOB_STREAM_CHUNK_BYTES) {
+            throw new IllegalArgumentException("maxBytes must be between 1 and 65536");
+        }
+        byte[] buffer = new byte[maxBytes];
+        int count = 0;
+        IOException readFailure = null;
+        boolean cancelled;
+        session.activateClobAsciiRead(requestId, streamId);
+        try {
+            count = input.read(buffer);
+        } catch (IOException exception) {
+            readFailure = exception;
+        } finally {
+            cancelled = session.finishClobRead(requestId);
+        }
+        if (cancelled) {
+            throw new SQLException("JDBC Agent clob ASCII read cancelled", "HY008", readFailure);
+        }
+        if (Objects.nonNull(readFailure)) {
+            throw new SQLException("JDBC Agent clob ASCII read failed", readFailure);
+        }
+        return JsonNodeFactory.instance.objectNode()
+                .put("bytes", Base64.getEncoder().encodeToString(
+                        count < 0 ? new byte[0] : Arrays.copyOf(buffer, count)))
+                .put("eof", count < 0);
+    }
+
+    /** 在 JDBC 1-based 位置打开 Clob ASCII 输出流。 */
+    private JsonNode clobOpenAsciiOutput(AgentSession session, JsonNode payload) throws SQLException {
+        String clobId = requiredText(payload, "clobId");
+        OutputStream output = session.clob(clobId).setAsciiStream(requiredLong(payload, "position"));
+        try {
+            return JsonNodeFactory.instance.objectNode()
+                    .put("streamId", session.registerClobOutputStream(clobId, output));
+        } catch (SQLException exception) {
+            try {
+                output.close();
+            } catch (IOException closeFailure) {
+                exception.addSuppressed(closeFailure);
+            }
+            throw exception;
+        }
+    }
+
+    /** 单次向驱动 Clob ASCII 输出流写入至多 64 KiB。 */
+    private JsonNode clobWriteAsciiOutput(AgentSession session, JsonNode payload) throws SQLException {
+        OutputStream output = session.clobOutputStream(requiredText(payload, "streamId"));
+        byte[] bytes = blobStreamRequestBytes(payload);
+        try {
+            output.write(bytes);
+        } catch (IOException exception) {
+            throw new SQLException("JDBC Agent clob ASCII write failed", exception);
+        }
+        return JsonNodeFactory.instance.objectNode().put("written", bytes.length);
+    }
+
+    /** 将 Clob ASCII 输出流缓冲的字节刷新到底层驱动。 */
+    private JsonNode clobFlushAsciiOutput(AgentSession session, JsonNode payload) throws SQLException {
+        OutputStream output = session.clobOutputStream(requiredText(payload, "streamId"));
+        try {
+            output.flush();
+        } catch (IOException exception) {
+            throw new SQLException("JDBC Agent clob ASCII flush failed", exception);
         }
         return JsonNodeFactory.instance.objectNode();
     }
