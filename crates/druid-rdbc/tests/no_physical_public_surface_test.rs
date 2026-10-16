@@ -47,14 +47,20 @@ fn check_external(name: &str, source: &str) -> Result<Output, Box<dyn Error>> {
         ),
     )?;
     fs::write(package.path.join("src/main.rs"), source)?;
+    let target_root = std::env::var_os("DRUID_RDBC_EXTERNAL_TARGET_ROOT")
+        .or_else(|| std::env::var_os("CARGO_TARGET_DIR"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| manifest_dir.join("target"));
+    let target_root = if target_root.is_absolute() {
+        target_root
+    } else {
+        std::env::current_dir()?.join(target_root)
+    };
     let output = Command::new(env!("CARGO"))
         .args(["check", "--offline", "--quiet"])
         .env(
             "CARGO_TARGET_DIR",
-            std::env::var_os("DRUID_RDBC_EXTERNAL_TARGET_ROOT").map_or_else(
-                || manifest_dir.join("target/no-physical-public-surface"),
-                |root| std::path::PathBuf::from(root).join("no-physical-public-surface"),
-            ),
+            target_root.join("no-physical-public-surface"),
         )
         .current_dir(&package.path)
         .output()?;
