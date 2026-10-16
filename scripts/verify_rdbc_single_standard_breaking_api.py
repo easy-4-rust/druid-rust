@@ -29,6 +29,10 @@ FAILURE_SUMMARY = re.compile(
     r"(\d+) major and (\d+) minor checks failed"
 )
 PASS_SUMMARY = re.compile(r"Summary no semver update required")
+LINT_PROGRESS = re.compile(
+    r"^\s+(?:(?:PASS|FAIL) \[\s*[0-9.]+s\]\s+(?:major|minor)\s+[a-z_]+|"
+    r"Checked \[\s*[0-9.]+s\] [0-9]+ checks:.*)$"
+)
 HEADER = ("crate", "lint", "count", "sha256", "status", "reason")
 MODULE_MAP_HEADER = ("old_module", "target_file", "transition", "test_file")
 MODULE_FINDING = re.compile(r"(?m)^  mod (druid::[A-Za-z0-9_:]+), previously in file ")
@@ -89,7 +93,9 @@ def findings_by_lint(report: str, exit_code: int) -> dict[str, tuple[int, str]]:
         if "Failed in:" not in body:
             raise ValueError(f"SemVer lint has no findings: {lint}")
         findings = []
-        for line in body.split("Failed in:", 1)[1].splitlines():
+        for line in body.split("Failed in:", 1)[1].split("\n\n", 1)[0].splitlines():
+            if LINT_PROGRESS.match(line):
+                continue
             if not line.startswith("  ") or line.lstrip().startswith(("Summary ", "Finished ")):
                 continue
             finding = normalize_report_path(line.strip())
@@ -135,9 +141,12 @@ def method_migration_rows(report: str) -> tuple[tuple[str, ...], ...]:
         body = report[section.end() : end]
         if "Failed in:" not in body:
             raise ValueError(f"SemVer method lint has no findings: {lint}")
-        finding_lines = [line for line in body.split("Failed in:", 1)[1].splitlines() if line.startswith("  ")]
+        finding_lines = [line for line in body.split("Failed in:", 1)[1].split("\n\n", 1)[0].splitlines()
+                         if line.startswith("  ")]
         parsed = 0
         for line in finding_lines:
+            if LINT_PROGRESS.match(line):
+                continue
             match = METHOD_FINDING.fullmatch(line)
             if match is None:
                 raise ValueError(f"unrecognized {lint} finding: {line.strip()}")

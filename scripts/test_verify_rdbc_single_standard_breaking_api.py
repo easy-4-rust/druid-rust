@@ -28,6 +28,24 @@ def report(item: str, line: int = 4) -> str:
 
 
 class BreakingApiAllowlistTest(unittest.TestCase):
+    def test_interleaved_verbose_progress_does_not_change_findings(self) -> None:
+        method_report = (
+            "--- failure inherent_method_missing: removed ---\n"
+            "Failed in:\n"
+            "  DruidPooledConnection::close, previously in file old.rs:40\n"
+            "Summary semver requires new major version: 1 major and 0 minor checks failed\n"
+        )
+        interleaved = method_report.replace(
+            "Summary semver",
+            "        PASS [   0.000s]       major        unsafe_function_target_feature_added\n"
+            "    Checked [   0.419s] 229 checks: 214 pass, 15 fail, 0 warn, 31 skip\n"
+            "Summary semver",
+        )
+        self.assertEqual(verifier.findings_by_lint(method_report, 100),
+                         verifier.findings_by_lint(interleaved, 100))
+        self.assertEqual(verifier.method_migration_rows(method_report),
+                         verifier.method_migration_rows(interleaved))
+
     def test_retired_method_ledger_preserves_exact_identities_and_duplicate_counts(self) -> None:
         method_report = (
             "--- failure inherent_method_missing: pub method removed or renamed ---\n"
