@@ -128,6 +128,7 @@ CURRENT_DECLARATION_CORRECTIONS = {
     "java.sql.SQLWarning": ("ENUM_KIND", "DTO", TASK3_STANDARD_ENTRIES["java.sql.SQLWarning"]),
 }
 TASK4_ADAPTER_LIVE_ENTRIES = {
+    "java.sql.Array",
     "java.sql.Connection",
     "java.sql.DatabaseMetaData",
     "java.sql.ParameterMetaData",
