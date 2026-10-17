@@ -6,3 +6,5 @@
 - The obsolete CI-only override of `zip 6.0.0` in the SemVer job was removed; the SQLite compatibility override remains.
 
 Still required: clean audit/deny CI, full affected feature and cross-platform checks, and review of any new failures. No waiver was added.
+
+CI run `38988298868` exposed a lockfile reproducibility error before audit: a developer-local global Cargo patch had written an unused `zip 6.0.0` patch record into `Cargo.lock`. Regenerating with a clean D-drive `CARGO_HOME` removed only that unused record. `cargo metadata --format-version 1 --locked` and `scripts/verify_rsa_waiver_scope.py` then passed in the clean environment. The new CI audit remains pending.
