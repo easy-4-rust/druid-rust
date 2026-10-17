@@ -715,17 +715,17 @@ async fn sigterm_forces_held_connection_exit_before_shutdown_deadline() {
         .expect("open held HTTP connection");
     // 完整请求头与未结束的请求体由 HTTP 解析器持有，不会被登录路由提前拒绝。
     held.write_all(
-        b"POST /druid/submitLogin HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n\r\n{",
+        b"POST /druid/submitLogin HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 100\r\n\r\nloginUsername=",
     )
     .await
     .expect("write partial request body");
     // Tokio 的 readable 可能虚假唤醒；实际 read 才能证明服务端未提前应答或断开。
     let mut response = [0_u8; 1];
+    let before_sigterm =
+        tokio::time::timeout(Duration::from_millis(100), held.read(&mut response)).await;
     assert!(
-        tokio::time::timeout(Duration::from_millis(100), held.read(&mut response))
-            .await
-            .is_err(),
-        "partial request remains in flight before SIGTERM"
+        before_sigterm.is_err(),
+        "partial request remains in flight before SIGTERM: {before_sigterm:?}"
     );
 
     let pid = child.id().expect("child process ID");
