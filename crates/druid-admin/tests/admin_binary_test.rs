@@ -713,12 +713,12 @@ async fn sigterm_forces_held_connection_exit_before_shutdown_deadline() {
     let mut held = tokio::net::TcpStream::connect(http_addr)
         .await
         .expect("open held HTTP connection");
-    // 未结束的请求头由 HTTP 解析器持有，不会被登录路由提前拒绝。
+    // 完整请求头与未结束的请求体由 HTTP 解析器持有，不会被登录路由提前拒绝。
     held.write_all(
-        b"POST /druid/submitLogin HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n",
+        b"POST /druid/submitLogin HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n\r\n{",
     )
     .await
-    .expect("write partial request headers");
+    .expect("write partial request body");
     // Tokio 的 readable 可能虚假唤醒；实际 read 才能证明服务端未提前应答或断开。
     let mut response = [0_u8; 1];
     assert!(
