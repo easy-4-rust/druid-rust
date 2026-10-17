@@ -232,6 +232,10 @@ jobs:
           cargo test -p druid-admin --test repository_capacity_test
           default_repository_projection_budget_keeps_sampled_physical_memory_below_128_mib
           --locked -- --exact --test-threads=1 --nocapture
+      - name: Gate Admin TTL session churn sampled physical memory
+        run: >-
+          cargo test -p druid-admin --test repository_churn_memory_budget_test
+          --locked -- --test-threads=1 --nocapture
 
   sqlite-product-contract:
     name: SQLite contract (${{ matrix.platform.target }}, Rust ${{ matrix.rust.label }})
