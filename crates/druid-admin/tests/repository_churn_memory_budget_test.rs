@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use druid_admin::model::dto::{DataSourceContent, WallResult};
+use druid_admin::model::dto::{DataSourceContent, SqlListContent, WallResult};
 use druid_admin::repository::{
     DataSourceEntry, DataSourceId, MetricsRepository, MetricsRepositoryConfig,
 };
@@ -13,6 +13,7 @@ const GENERATIONS: u64 = 50;
 const SERVICES_PER_GENERATION: usize = 32;
 const DATASOURCES_PER_SERVICE: usize = 2;
 const LIVE_PROJECTIONS: usize = SERVICES_PER_GENERATION * DATASOURCES_PER_SERVICE;
+const SQL_BYTES_PER_PROJECTION: usize = 60 * 1024;
 const MAX_SAMPLED_PHYSICAL_MEMORY_BYTES: usize = 128 * 1024 * 1024;
 
 fn sample_physical_memory(peak: &mut usize) {
@@ -47,7 +48,13 @@ fn projection(
             active_count: 1,
             ..Default::default()
         },
-        sql_stats: HashMap::new(),
+        sql_stats: HashMap::from([(
+            1,
+            SqlListContent {
+                sql: Some("x".repeat(SQL_BYTES_PER_PROJECTION)),
+                ..Default::default()
+            },
+        )]),
         wall: WallResult::default(),
         last_updated_ms: 1,
         sequence: 1,
@@ -104,6 +111,11 @@ fn fifty_expired_session_generations_stay_within_sampled_memory_budget() {
     }
 
     sample_physical_memory(&mut sampled_peak_bytes);
+    let retained_bytes = repository.retained_state_bytes();
+    assert!(
+        retained_bytes >= LIVE_PROJECTIONS * SQL_BYTES_PER_PROJECTION,
+        "the current generation must retain its full SQL payload"
+    );
     batch_micros.sort_unstable();
     let percentile =
         |percent: usize| batch_micros[(batch_micros.len() * percent).div_ceil(100) - 1];
@@ -112,7 +124,7 @@ fn fifty_expired_session_generations_stay_within_sampled_memory_budget() {
     #[cfg(not(target_os = "windows"))]
     let metric_name = "rss";
     eprintln!(
-        "admin_session_churn_budget generations={GENERATIONS} retained={} ttl_evicted={} capacity_rejected=0 batch_p50_us={} batch_p95_us={} batch_p99_us={} sampled_peak_{metric_name}_bytes={sampled_peak_bytes} sampled_memory_limit_bytes={MAX_SAMPLED_PHYSICAL_MEMORY_BYTES}",
+        "admin_session_churn_budget generations={GENERATIONS} retained={} retained_state_bytes={retained_bytes} ttl_evicted={} capacity_rejected=0 batch_p50_us={} batch_p95_us={} batch_p99_us={} sampled_peak_{metric_name}_bytes={sampled_peak_bytes} sampled_memory_limit_bytes={MAX_SAMPLED_PHYSICAL_MEMORY_BYTES}",
         repository.len(),
         repository.limit_counters().1,
         percentile(50),
