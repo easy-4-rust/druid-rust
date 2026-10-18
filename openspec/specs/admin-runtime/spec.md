@@ -56,3 +56,17 @@ The Admin repository release gate SHALL run at least 50 TTL-separated generation
 - **WHEN** the churn test runs on Linux, macOS or Windows
 - **THEN** it reports the platform memory metric and sampled high-water mark and fails above 128 MiB
 - **AND** an unavailable process-memory reading fails the test
+
+### Requirement: Admin network faults have repeatable process-level release evidence
+
+The scheduled/manual release workflow SHALL repeatedly execute real HTTP/gRPC tests for duplicate batches, sequence gaps, Admin restart with pending work, unavailable Admin shutdown, invalid remote authentication, and SIGTERM while a command ACK is pending. It SHALL require each behavioral test to pass, capture raw output, record each scenario's process-level completion p50/p95/p99 and Linux child peak RSS, and retain a machine-readable result on failure. Each run SHALL also report the asserted sequence, projection, rejection, unflushed work, or pending-release count relevant to that scenario; shutdown scenarios SHALL report their measured shutdown duration. Missing or contradictory observations SHALL fail the workflow. The report SHALL label process times as whole-scenario times including test setup, not request-only latency. Numeric limits SHALL be accepted after baseline measurement and enforced before P06 Task 5 closes.
+
+#### Scenario: The complete fault matrix succeeds
+
+- **WHEN** every named fault scenario is executed repeatedly against real transports
+- **THEN** each run preserves its behavior assertions and records duration and process memory without silently omitting a scenario
+
+#### Scenario: A scenario or measurement fails
+
+- **WHEN** an executable is missing, a test fails or times out, output is malformed, or an accepted limit is exceeded
+- **THEN** the release workflow fails and retains available raw logs and JSON failure evidence
