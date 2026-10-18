@@ -1,5 +1,13 @@
 use druid::sql::{WallConfig, WallUtils};
 
+/// 对应 Java: WallMultiStatementTest#testOracle/#testMySql。
+#[test]
+fn java_wall_multi_statement_oracle_is_rejected_by_both_dialects() {
+    let sql = "SELECT email FROM members WHERE email = 'x'; UPDATE members SET email = 'steve@unixwiz.net' WHERE email = 'bob@example.com';";
+    assert!(!WallUtils::is_validate_oracle(sql).expect("Oracle Wall check"));
+    assert!(!WallUtils::is_validate_my_sql(sql).expect("MySQL Wall check"));
+}
+
 #[test]
 fn wall_utils_is_validate_my_sql_valid() {
     assert!(WallUtils::is_validate_my_sql("SELECT 1").unwrap());
