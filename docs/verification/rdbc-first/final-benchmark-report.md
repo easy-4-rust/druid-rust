@@ -17,7 +17,7 @@ On 2026-10-18, Windows NT 10.0.26200.0, Rust/Cargo 1.97.1, source `16c71fc623b7b
 | wall_check_2_safe | 0.73 | 0.88 | 0.94 | `488410de1c90177fa09977f7a1b6c520d905fed61ee1889fe356eed95c07b95b` |
 | wall_check_all_categories | 2.25 | 2.76 | 3.19 | `b763b0f00ac80ac0053a8b194a4045b50a1f9649bbe9942a7b67fe69aebeef13` |
 
-The Windows runtime p99 is 126.034 ms, below the documented 150 ms local reference ceiling. The separate [Linux release workflow](https://github.com/easy-4-rust/druid-rust/actions/runs/39107207211) enforced runtime, Pool slow-close, Metrics saturation, and Admin fault budgets successfully. Other microbenchmark cases have measured values but no accepted cross-platform numeric ceilings; these results alone do not establish a performance regression gate or release readiness.
+The Windows runtime p99 is 126.034 ms, below the documented 150 ms local reference ceiling. The [final-head Linux release workflow](https://github.com/easy-4-rust/druid-rust/actions/runs/39112049201) enforced runtime, Pool slow-close, Metrics saturation, and Admin fault budgets successfully. Other microbenchmark cases have measured values but no accepted cross-platform numeric ceilings; these results alone do not establish a performance regression gate or release readiness.
 
 ## SQLx SQLite cursor follow-up
 

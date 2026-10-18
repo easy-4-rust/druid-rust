@@ -76,13 +76,12 @@ git commit -m "test(architecture): verify rdbc-first dependency dag"
 
 **Files:**
 - Create: `docs/verification/rdbc-first/final-quality-report.md`
-- Create: `api/druid-rdbc-public-api.txt`
-- Create: `api/druid-public-api.rdbc-first.final.txt`
+- Verify: `api/druid-rdbc.single-standard.after.txt`, `api/druid.single-standard.after.txt`, and `api/druid-wrapper.single-standard.after.txt`
 
 **Interfaces:**
 - Produces: quality/API/semver verdict
 
-- [ ] **Step 1: Run format/check/clippy**
+- [x] **Step 1: Run format/check/clippy**
 
 ```bash
 cargo fmt --all -- --check
@@ -94,16 +93,15 @@ cargo clippy --workspace --all-targets --all-features -- \
 
 Expected: all exit 0.
 
-- [ ] **Step 2: Run feature powerset**
+- [x] **Step 2: Run feature powerset or the explicit feature matrix**
 
 ```bash
 cargo hack check --workspace --feature-powerset --no-dev-deps
 ```
 
-Expected: exit 0. If cargo-hack is unavailable, record missing tool and use the explicit feature
-matrix from the driver-feature plan; do not silently skip.
+Expected: exit 0. `cargo-hack` is unavailable locally; the final `rust-contracts` job instead passed the repository's explicit isolated-driver, no-default, Toasty SQLite and catalog-only matrix. The literal powerset command is `NOT_RUN`, not a claimed pass.
 
-- [ ] **Step 3: Run MSRV**
+- [x] **Step 3: Run MSRV**
 
 ```bash
 cargo +1.95 check --workspace --all-targets
@@ -111,7 +109,7 @@ cargo +1.95 check --workspace --all-targets
 
 Expected: exit 0.
 
-- [ ] **Step 4: Run tests/docs**
+- [x] **Step 4: Run tests/docs**
 
 ```bash
 cargo test --workspace
@@ -121,24 +119,26 @@ cargo doc --workspace --all-features --no-deps
 
 Expected: all exit 0; report passed/failed/ignored counts separately.
 
-- [ ] **Step 5: Capture public API**
+- [x] **Step 5: Verify public API snapshots and SemVer migration**
 
 ```bash
-cargo public-api -p druid-rdbc -sss --all-features \
-  > api/druid-rdbc-public-api.txt
-cargo public-api -p druid -sss --all-features \
-  > api/druid-public-api.rdbc-first.final.txt
-cargo semver-checks check-release -p druid-rdbc
-cargo semver-checks check-release -p druid
+cargo public-api -p druid-rdbc -sss --all-features --target aarch64-apple-darwin \
+  > api/observed/druid-rdbc.txt
+cargo public-api -p druid -sss --all-features --target aarch64-apple-darwin \
+  > api/observed/druid.txt
+cargo public-api -p druid-wrapper -sss --all-features --target aarch64-apple-darwin \
+  > api/observed/druid-wrapper.txt
+cargo semver-checks --package druid-rdbc --baseline-rev "$SEMVER_BASELINE_REV" --release-type patch --all-features
+cargo semver-checks --package druid --baseline-rev "$SEMVER_BASELINE_REV" --release-type patch --all-features
+cargo semver-checks --package druid-wrapper --baseline-rev "$SEMVER_BASELINE_REV" --release-type patch --all-features
 ```
 
-Expected: API files non-empty; old `druid::sql::*` external fixture PASS; semver differences either
-PASS or listed as explicitly approved pre-release changes.
+Expected: CI compares all three observed files byte-for-byte and by SHA-256 to checked-in `api/*.single-standard.after.txt` snapshots, runs the old `druid::sql::*` external fixture, and verifies SemVer differences against the exact approved pre-release allowlist. The final `public-api`, `semver`, and Ubuntu `rust-contracts` jobs passed. Local untracked `api/observed/` remains untouched.
 
-- [ ] **Step 6: Commit report**
+- [x] **Step 6: Commit report**
 
 ```bash
-git add docs/verification/rdbc-first/final-quality-report.md api
+git add docs/verification/rdbc-first/final-quality-report.md docs/superpowers/plans/2026-08-21-rdbc-first-verification.md
 git commit -m "test(quality): verify rdbc-first api and toolchains"
 ```
 
@@ -202,7 +202,7 @@ git commit -m "test(semantics): verify rdbc and java parity contracts"
 **Interfaces:**
 - Produces: single-protocol, fault, shutdown and management security verdict
 
-- [ ] **Step 1: Verify one protocol**
+- [x] **Step 1: Verify one protocol**
 
 ```bash
 find crates -path '*/proto/*.proto' -print
@@ -212,7 +212,7 @@ cargo test -p druid-admin --test shared_protocol_compile_test
 
 Expected: one Metrics proto and tests PASS.
 
-- [ ] **Step 2: Run real network/fault tests**
+- [x] **Step 2: Run real network/fault tests**
 
 ```bash
 cargo test -p druid-admin --test grpc_network_e2e_test -- --nocapture
@@ -224,16 +224,17 @@ cargo test -p druid-admin --test repository_capacity_test
 Expected: payload non-empty, byte-identical resend, duplicate ACK/gap handling, full snapshot,
 reset, shutdown flush and TTL/cap PASS.
 
-- [ ] **Step 3: Run security tests**
+- [x] **Step 3: Run security tests**
 
 ```bash
-cargo test -p druid-admin --test security_e2e_test -- --nocapture
+cargo test -p druid-admin --test admin_binary_test -- --nocapture
+cargo test -p druid-admin --test admin_trace_redaction_test -- --nocapture
 ```
 
 Expected: loopback default; non-loopback without TLS/auth rejected; protected HTTP/gRPC requires
 credentials; captured logs contain no token/password/bind parameter.
 
-- [ ] **Step 4: Commit report**
+- [x] **Step 4: Commit report**
 
 ```bash
 git add docs/verification/rdbc-first/final-runtime-security-report.md
@@ -248,7 +249,7 @@ git commit -m "test(runtime): verify metrics admin reliability and security"
 **Interfaces:**
 - Produces: final RELEASE_READY / NOT_READY verdict
 
-- [ ] **Step 1: Run supply-chain gates**
+- [x] **Step 1: Run supply-chain gates**
 
 ```bash
 cargo audit --ignore RUSTSEC-2023-0071
@@ -261,7 +262,7 @@ Before the ignored audit, verify from locked Cargo dependency metadata that
 are `druid` and `sqlx-mysql`. Fail the gate if the waiver becomes stale or its
 dependency scope expands.
 
-- [ ] **Step 2: Run real database certification**
+- [x] **Step 2: Run real database certification**
 
 Run configured SQLite and DuckDB contract matrices plus any available PostgreSQL/MySQL/JDBC Agent
 environments. Each report records target triple, Rust version, database version, artifact SHA and
@@ -280,13 +281,13 @@ cargo bench -p druid-bench --bench runtime -- --noplot
 Expected: commands complete; report p50/p95/p99 where available, throughput, allocation/RSS, cursor
 first-row/full-consume and shutdown values against accepted numeric budgets.
 
-- [ ] **Step 4: Produce requirement-by-requirement verdict**
+- [x] **Step 4: Produce requirement-by-requirement verdict**
 
 Copy all twelve completion gates from the architecture spec §10 into the report. For each gate link
 the exact report/command. Verdict is `RELEASE_READY` only when every gate is PASS; otherwise
 `NOT_READY` with remaining actions.
 
-- [ ] **Step 5: Validate docs and diff**
+- [x] **Step 5: Validate docs and diff**
 
 ```bash
 rg -n 'ADR-CRATE-001|druid-core.*facade|当前源码仍为三' \
