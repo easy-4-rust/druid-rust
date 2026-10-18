@@ -336,6 +336,13 @@ impl DruidPool {
         db_type_name: Option<&str>,
         driver_name: &str,
     ) -> Option<Arc<dyn ExceptionSorter>> {
+        // Java Druid 按实际驱动类选择 Mock sorter，即使 dbTypeName 被设为 mysql。
+        // Rust 的 driver_name 是这里可用的驱动身份；先处理 Mock 再回退到数据库类型。
+        if driver_name.eq_ignore_ascii_case("mock")
+            || driver_name.eq_ignore_ascii_case("com.alibaba.druid.mock.MockDriver")
+        {
+            return Some(Arc::new(MockExceptionSorter));
+        }
         let identity = db_type_name.unwrap_or(driver_name).to_ascii_lowercase();
         if identity.contains("oceanbase") && identity.contains("oracle") {
             Some(Arc::new(OceanBaseOracleExceptionSorter::new()))

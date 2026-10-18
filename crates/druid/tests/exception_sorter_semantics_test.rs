@@ -8,6 +8,38 @@ use druid::core::{
     ORACLE_FATAL_ERROR_CODES_PROPERTY,
 };
 use std::collections::BTreeSet;
+use std::sync::Arc;
+
+#[path = "standard_test_support/mod.rs"]
+mod standard_test_support;
+use standard_test_support::{TrackingFactory, TrackingState};
+
+/// 对应 Java: ExceptionSorterTest#test_exceptionSorter 的 MockDriver 优先级。
+#[tokio::test]
+async fn mock_driver_uses_mock_sorter_even_with_mysql_db_type() {
+    for (driver_name, expected) in [
+        ("mock", "MockExceptionSorter"),
+        ("com.alibaba.druid.mock.MockDriver", "MockExceptionSorter"),
+        ("tracking", "MySqlExceptionSorter"),
+    ] {
+        let pool = druid::pool::DruidPool::builder()
+            .name(format!("exception-sorter-{driver_name}"))
+            .driver_name(driver_name)
+            .db_type_name("mysql")
+            .factory(Arc::new(TrackingFactory::new(TrackingState::configured())))
+            .max_open(1)
+            .max_idle(1)
+            .build()
+            .await
+            .expect("pool init");
+        let sorter = pool
+            .stat_value_and_reset()
+            .exception_sorter_class_name
+            .expect("sorter class");
+        assert!(sorter.ends_with(expected), "{driver_name}: {sorter}");
+        pool.close().await;
+    }
+}
 
 #[test]
 fn sql_exception_preserves_nullable_rdbc_fields_and_runtime_identity() {
