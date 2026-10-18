@@ -38,16 +38,28 @@ def sample_percentiles_us(sample_path: Path) -> dict[str, int | float]:
     }
 
 
-def write_evidence(measurement: dict, limits: dict[str, int | float], output: Path) -> None:
+def write_evidence(
+    measurement: dict,
+    limits: dict[str, int | float],
+    output: Path,
+    minimums: dict[str, int | float] | None = None,
+) -> None:
     """Save measured results before failing a configured numeric release budget."""
+    minimums = minimums or {}
     violations = [
         f"{metric}={measurement[metric]} exceeds {limit}"
         for metric, limit in limits.items()
         if measurement[metric] > limit
     ]
+    violations.extend(
+        f"{metric}={measurement[metric]} below {minimum}"
+        for metric, minimum in minimums.items()
+        if measurement[metric] < minimum
+    )
     measurement["budget"] = {
-        "status": "ENFORCED" if limits else "BASELINE_ONLY",
+        "status": "ENFORCED" if limits or minimums else "BASELINE_ONLY",
         "limits": limits,
+        "minimums": minimums,
         "violations": violations,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -66,6 +78,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--max-first-p99-us", type=float)
     parser.add_argument("--max-full-p99-us", type=float)
+    parser.add_argument("--min-full-rows-per-second", type=float)
     parser.add_argument("--max-peak-rss-kib", type=int)
     args = parser.parse_args()
     if not sys.platform.startswith("linux"):
@@ -121,13 +134,16 @@ def main() -> int:
         }.items()
         if value is not None
     }
-    if limits and len(limits) != 3:
-        parser.error("cursor budgets must configure all three limits together")
-    if any(not math.isfinite(value) or value <= 0 for value in limits.values()):
+    minimums = {
+        "full_consume_rows_per_second": args.min_full_rows_per_second
+    } if args.min_full_rows_per_second is not None else {}
+    if (limits or minimums) and (len(limits) != 3 or len(minimums) != 1):
+        parser.error("cursor budgets must configure all four limits together")
+    if any(not math.isfinite(value) or value <= 0 for value in (*limits.values(), *minimums.values())):
         parser.error("cursor budgets must be finite positive values")
     measurement["first_row_p99_us"] = first["p99_us"]
     measurement["full_consume_p99_us"] = full["p99_us"]
-    write_evidence(measurement, limits, args.output)
+    write_evidence(measurement, limits, args.output, minimums)
     return 0
 
 

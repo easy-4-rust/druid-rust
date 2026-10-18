@@ -63,13 +63,27 @@ class AdapterCursorBenchmarkEvidenceTest(unittest.TestCase):
             self.assertEqual(saved["budget"]["status"], "ENFORCED")
             self.assertEqual(len(saved["budget"]["violations"]), 1)
 
+    def test_throughput_floor_is_enforced_and_persisted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "cursor.json"
+            with redirect_stdout(StringIO()):
+                with self.assertRaisesRegex(RuntimeError, "below 5000"):
+                    write_evidence(
+                        {"full_consume_rows_per_second": 4999.0},
+                        {},
+                        output,
+                        {"full_consume_rows_per_second": 5000.0},
+                    )
+            saved = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(saved["budget"]["minimums"], {"full_consume_rows_per_second": 5000.0})
+
     def test_baseline_is_explicitly_not_a_release_gate(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "cursor.json"
             with redirect_stdout(StringIO()):
                 write_evidence({"first_row_p99_us": 251.0}, {}, output)
             saved = json.loads(output.read_text(encoding="utf-8"))
-            self.assertEqual(saved["budget"], {"status": "BASELINE_ONLY", "limits": {}, "violations": []})
+            self.assertEqual(saved["budget"], {"status": "BASELINE_ONLY", "limits": {}, "minimums": {}, "violations": []})
 
 
 if __name__ == "__main__":

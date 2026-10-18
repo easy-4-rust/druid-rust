@@ -47,14 +47,18 @@ jobs:
       - name: Build adapter cursor benchmark
         run: |
           cargo bench -p druid-bench --locked --bench adapter --no-run --message-format=json > target/benchmark-evidence/adapter-build.jsonl
-      - name: Measure SQLx SQLite cursor baseline
+      - name: Enforce SQLx SQLite cursor budget
         run: |
           python3 scripts/measure_adapter_cursor_benchmark.py \
             --build-log target/benchmark-evidence/adapter-build.jsonl \
             --first-row-sample target/criterion/adapter_sqlite_cursor_first_row_1000/new/sample.json \
             --full-consume-sample target/criterion/adapter_sqlite_cursor_full_consume_1000/new/sample.json \
             --run-log target/benchmark-evidence/adapter-cursor-run.log \
-            --output target/benchmark-evidence/adapter-cursor-measurement.json
+            --output target/benchmark-evidence/adapter-cursor-measurement.json \
+            --max-first-p99-us 2000 \
+            --max-full-p99-us 200000 \
+            --min-full-rows-per-second 5000 \
+            --max-peak-rss-kib 65536
       - name: Build Metrics saturation test
         run: |
           cargo test -p druid-metrics --locked --test queue_semantics_test --no-run --message-format=json > target/benchmark-evidence/metrics-build.jsonl
