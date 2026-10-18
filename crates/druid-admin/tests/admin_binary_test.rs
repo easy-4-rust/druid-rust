@@ -699,13 +699,23 @@ async fn sigterm_forces_held_connection_exit_before_shutdown_deadline() {
         .kill_on_drop(true)
         .spawn()
         .expect("spawn admin for shutdown deadline");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    // 构建机可并发执行大量合同测试；启动等待不计入 200 ms 关闭预算。
+    let startup_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
-        if tokio::net::TcpStream::connect(http_addr).await.is_ok() {
+        if let Some(status) = child.try_wait().expect("poll admin during startup") {
+            panic!("admin exited during startup with {status}");
+        }
+        if let Ok(Ok(stream)) = tokio::time::timeout(
+            Duration::from_millis(300),
+            tokio::net::TcpStream::connect(http_addr),
+        )
+        .await
+        {
+            drop(stream);
             break;
         }
         assert!(
-            tokio::time::Instant::now() < deadline,
+            tokio::time::Instant::now() < startup_deadline,
             "admin did not start before shutdown test deadline"
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
