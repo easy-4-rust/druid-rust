@@ -1034,7 +1034,9 @@ async fn grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames()
     );
 
     fixture.shutdown().await;
-    println!("admin_fault_observation scenario=sequence_gap expected_sequence=6 identity_rejected=1");
+    println!(
+        "admin_fault_observation scenario=sequence_gap expected_sequence=6 identity_rejected=1"
+    );
 }
 
 #[tokio::test]
@@ -3746,7 +3748,9 @@ async fn admin_restart_with_pending_incremental_supersedes_it_with_monotonic_ful
     grpc_handle.await.expect("gRPC joins").expect("gRPC stops");
     http_shutdown.cancel();
     http_handle.await.expect("HTTP joins").expect("HTTP stops");
-    println!("admin_fault_observation scenario=restart_pending recovered_sequence=3 projected_active=9");
+    println!(
+        "admin_fault_observation scenario=restart_pending recovered_sequence=3 projected_active=9"
+    );
 }
 
 fn frame_header(frame: &ClientFrame) -> Option<&FrameHeader> {
