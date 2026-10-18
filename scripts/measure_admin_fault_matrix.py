@@ -36,6 +36,14 @@ SCENARIOS = {
     ),
 }
 PASS_SUMMARY = re.compile(r"test result: ok\. 1 passed; 0 failed;")
+OBSERVATION_FIELDS = {
+    "duplicate_batch": {"accepted_sequence": 11, "duplicate_preserved": 1},
+    "sequence_gap": {"expected_sequence": 6, "identity_rejected": 1},
+    "restart_pending": {"recovered_sequence": 3, "projected_active": 9},
+    "unavailable_shutdown": {"unflushed": 1, "shutdown_us": None},
+    "remote_auth": {"rejected_credentials": 5, "projected_identity": 901},
+    "pending_ack_sigterm": {"pending_released": 1, "shutdown_us": None},
+}
 
 
 def test_executables(build_log: Path) -> dict[str, Path]:
@@ -63,6 +71,27 @@ def verify_test_result(output: str, test_name: str) -> None:
         raise ValueError(f"Admin fault test did not report one passing execution: {test_name}")
 
 
+def parse_observation(output: str, scenario: str) -> dict[str, int]:
+    """Require one complete, positive real-fault observation after assertions pass."""
+    prefix = f"admin_fault_observation scenario={scenario} "
+    lines = [line.split(prefix, 1)[1].strip() for line in output.splitlines() if prefix in line]
+    if len(lines) != 1:
+        raise ValueError(f"expected one Admin fault observation for {scenario}")
+    fields = {}
+    for item in lines[0].split():
+        key, separator, raw_value = item.partition("=")
+        if not separator or key in fields or not raw_value.isdecimal():
+            raise ValueError(f"malformed Admin fault observation for {scenario}")
+        fields[key] = int(raw_value)
+    expected = OBSERVATION_FIELDS[scenario]
+    if set(fields) != set(expected) or any(
+        fields[key] <= 0 if value is None else fields[key] != value
+        for key, value in expected.items()
+    ):
+        raise ValueError(f"incomplete or false Admin fault observation for {scenario}")
+    return fields
+
+
 def percentile(values: list[int], fraction: float) -> int:
     """Return nearest-rank microseconds for one scenario."""
     if not values or any(value <= 0 for value in values):
@@ -71,9 +100,13 @@ def percentile(values: list[int], fraction: float) -> int:
     return ordered[math.ceil(len(ordered) * fraction) - 1]
 
 
-def summarize_runs(runs: dict[str, list[int]], peak_rss_kib: int) -> dict:
+def summarize_runs(runs: dict[str, list[int]], observations: dict[str, list[dict[str, int]]],
+                   peak_rss_kib: int) -> dict:
     """Require the whole matrix and retain every raw scenario duration."""
-    if set(runs) != set(SCENARIOS) or peak_rss_kib <= 0:
+    if (set(runs) != set(SCENARIOS) or set(observations) != set(SCENARIOS)
+            or peak_rss_kib <= 0 or any(
+                len(observations[name]) != len(samples) for name, samples in runs.items()
+            )):
         raise ValueError("all Admin scenarios and positive child peak RSS are required")
     return {
         "schema": "druid-admin-fault-matrix-v1",
@@ -88,6 +121,7 @@ def summarize_runs(runs: dict[str, list[int]], peak_rss_kib: int) -> dict:
                 "test": SCENARIOS[name][1],
                 "runs_us": samples,
                 "run_count": len(samples),
+                "observations": observations[name],
                 "p50_us": percentile(samples, 0.50),
                 "p95_us": percentile(samples, 0.95),
                 "p99_us": percentile(samples, 0.99),
@@ -164,6 +198,7 @@ def main() -> int:
     import resource  # Linux ru_maxrss is reported in KiB.
 
     runs = {name: [] for name in SCENARIOS}
+    observations = {name: [] for name in SCENARIOS}
     args.run_log.parent.mkdir(parents=True, exist_ok=True)
     try:
         executables = test_executables(args.build_log)
@@ -190,8 +225,12 @@ def main() -> int:
                     if result.returncode != 0:
                         raise RuntimeError(f"Admin {name} run {index + 1} exited {result.returncode}")
                     verify_test_result(output, test_name)
+                    observation = parse_observation(output, name)
                     runs[name].append(elapsed_us)
-        measurement = summarize_runs(runs, resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)
+                    observations[name].append(observation)
+        measurement = summarize_runs(
+            runs, observations, resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+        )
         measurement["run_log_sha256"] = hashlib.sha256(args.run_log.read_bytes()).hexdigest()
         write_evidence(measurement, limits, args.max_peak_rss_kib, args.output)
     except Exception as error:

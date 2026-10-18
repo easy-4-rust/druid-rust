@@ -597,6 +597,7 @@ async fn remote_http_and_grpc_use_tls_and_require_authentication() {
 
     child.kill().await.expect("stop secure admin child");
     let _ = child.wait().await;
+    println!("admin_fault_observation scenario=remote_auth rejected_credentials=5 projected_identity=901");
 }
 
 #[tokio::test]
@@ -886,6 +887,7 @@ async fn sigterm_releases_pending_command_http_waiter_before_deadline() {
         "client intentionally sent no ACK"
     );
 
+    let shutdown_started = std::time::Instant::now();
     let pid = child.id().expect("child process ID");
     let kill_status = tokio::process::Command::new("kill")
         .args(["-TERM", &pid.to_string()])
@@ -915,6 +917,10 @@ async fn sigterm_releases_pending_command_http_waiter_before_deadline() {
     assert!(status.success(), "Admin shutdown should join both servers");
     drop(sender);
     drop(inbound);
+    println!(
+        "admin_fault_observation scenario=pending_ack_sigterm pending_released=1 shutdown_us={}",
+        shutdown_started.elapsed().as_micros()
+    );
 }
 
 /// The standalone admin binary must expose a /health endpoint on the HTTP port

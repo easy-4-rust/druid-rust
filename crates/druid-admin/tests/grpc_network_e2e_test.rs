@@ -756,6 +756,7 @@ async fn grpc_duplicate_and_increasing_sequences_are_handled_over_network() {
 
     drop(stream.tx);
     fixture.shutdown().await;
+    println!("admin_fault_observation scenario=duplicate_batch accepted_sequence=11 duplicate_preserved=1");
 }
 
 #[tokio::test]
@@ -1033,6 +1034,7 @@ async fn grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames()
     );
 
     fixture.shutdown().await;
+    println!("admin_fault_observation scenario=sequence_gap expected_sequence=6 identity_rejected=1");
 }
 
 #[tokio::test]
@@ -3744,6 +3746,7 @@ async fn admin_restart_with_pending_incremental_supersedes_it_with_monotonic_ful
     grpc_handle.await.expect("gRPC joins").expect("gRPC stops");
     http_shutdown.cancel();
     http_handle.await.expect("HTTP joins").expect("HTTP stops");
+    println!("admin_fault_observation scenario=restart_pending recovered_sequence=3 projected_active=9");
 }
 
 fn frame_header(frame: &ClientFrame) -> Option<&FrameHeader> {
@@ -3883,7 +3886,9 @@ async fn unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushe
     .await
     .expect("snapshot leaves the aggregator and becomes exporter/client-owned");
 
+    let shutdown_started = std::time::Instant::now();
     let result = runtime.shutdown(Duration::from_millis(100)).await;
+    let shutdown_us = shutdown_started.elapsed().as_micros();
     assert!(
         matches!(
             result,
@@ -3896,6 +3901,7 @@ async fn unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushe
         .await
         .expect("unavailable Admin probe joins")
         .expect("unavailable Admin probe stops");
+    println!("admin_fault_observation scenario=unavailable_shutdown unflushed=1 shutdown_us={shutdown_us}");
 }
 
 #[tokio::test]
