@@ -24,6 +24,7 @@ jobs:
       - name: Verify benchmark evidence parser
         run: |
           python3 scripts/test_measure_runtime_benchmark.py
+          python3 scripts/test_measure_adapter_cursor_benchmark.py
           python3 scripts/test_measure_metrics_saturation.py
           python3 scripts/test_measure_pool_slow_close.py
           python3 scripts/test_measure_admin_fault_matrix.py
@@ -43,6 +44,17 @@ jobs:
             --max-shutdown-ms 250 \
             --max-wait-queue-depth 56 \
             --max-active-peak 8
+      - name: Build adapter cursor benchmark
+        run: |
+          cargo bench -p druid-bench --locked --bench adapter --no-run --message-format=json > target/benchmark-evidence/adapter-build.jsonl
+      - name: Measure SQLx SQLite cursor baseline
+        run: |
+          python3 scripts/measure_adapter_cursor_benchmark.py \
+            --build-log target/benchmark-evidence/adapter-build.jsonl \
+            --first-row-sample target/criterion/adapter_sqlite_cursor_first_row_1000/new/sample.json \
+            --full-consume-sample target/criterion/adapter_sqlite_cursor_full_consume_1000/new/sample.json \
+            --run-log target/benchmark-evidence/adapter-cursor-run.log \
+            --output target/benchmark-evidence/adapter-cursor-measurement.json
       - name: Build Metrics saturation test
         run: |
           cargo test -p druid-metrics --locked --test queue_semantics_test --no-run --message-format=json > target/benchmark-evidence/metrics-build.jsonl
@@ -93,6 +105,10 @@ jobs:
           path: |
             target/benchmark-evidence/runtime-measurement.json
             target/benchmark-evidence/runtime-run.log
+            target/benchmark-evidence/adapter-cursor-measurement.json
+            target/benchmark-evidence/adapter-cursor-run.log
+            target/criterion/adapter_sqlite_cursor_first_row_1000/new/sample.json
+            target/criterion/adapter_sqlite_cursor_full_consume_1000/new/sample.json
             target/criterion/runtime_pool_burst_64/new/sample.json
             target/benchmark-evidence/metrics-saturation-measurement.json
             target/benchmark-evidence/metrics-saturation-run.log

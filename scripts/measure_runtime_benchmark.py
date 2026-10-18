@@ -19,8 +19,8 @@ SUMMARY = re.compile(
 )
 
 
-def benchmark_executable(build_log: Path) -> Path:
-    """Return the executable Cargo emitted for the runtime bench target."""
+def benchmark_executable(build_log: Path, target_name: str = "runtime") -> Path:
+    """Return the executable Cargo emitted for the named bench target."""
     executable = None
     for line in build_log.read_text(encoding="utf-8").splitlines():
         if not line.startswith("{"):
@@ -29,13 +29,13 @@ def benchmark_executable(build_log: Path) -> Path:
         target = row.get("target", {})
         if (
             row.get("reason") == "compiler-artifact"
-            and target.get("name") == "runtime"
+            and target.get("name") == target_name
             and "bench" in target.get("kind", [])
             and row.get("executable")
         ):
             executable = Path(row["executable"])
     if executable is None:
-        raise ValueError("Cargo did not emit the runtime benchmark executable")
+        raise ValueError(f"Cargo did not emit the {target_name} benchmark executable")
     return executable
 
 
