@@ -266,6 +266,21 @@ async fn task6_pooled_statement_semantics_test_sqlite_generic_execute_preserves_
         .unwrap());
     assert!(current.is_closed().unwrap());
 
+    // 对应 Java 1.2.28 StatementTest#test_stmt：SELECT 后使用 CLOSE_CURRENT_RESULT
+    // 推进到无后续结果，返回 false，且当前游标被关闭。
+    let mut java_shape_results = statement
+        .execute("SELECT 42", GeneratedKeys::None)
+        .await
+        .unwrap();
+    let ExecutionResult::ResultSet(java_shape_cursor) = java_shape_results.remove(0) else {
+        panic!("SELECT must yield ResultSet");
+    };
+    assert!(!statement
+        .get_more_results_current(druid::core::DruidPooledStatement::CLOSE_CURRENT_RESULT)
+        .await
+        .unwrap());
+    assert!(java_shape_cursor.is_closed().unwrap());
+
     let plain_results = statement
         .execute(
             "INSERT INTO generic_event(label) VALUES ('plain')",
