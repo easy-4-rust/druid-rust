@@ -95,3 +95,9 @@ Admin 的 `repository_capacity_test`（2/2）与 `ingest_test`（11/11）以 `--
 当前提交 `bb1bea1` 的[手动 CI 复测](https://github.com/easy-4-rust/druid-rust/actions/runs/38134374659)通过：进程级故障注入验证超预算返回非零并保留 JSON；真实基准 100 样本测得 p50/p95/p99 为 24.758/25.112/25.163 ms，峰值 RSS 18,764 KiB，等待队列峰值 56，关闭 1 ms，五项预算零超限。该故障注入证明检查进程的失败传播；尚未通过故意让整个 GitHub 作业失败来验证工作流终态。
 
 提交 `e1e6d22` 的[主线复测](https://github.com/easy-4-rust/druid-rust/actions/runs/38165824500)通过：100 样本 p50/p95/p99 为 24.758/25.089/25.122 ms，峰值 RSS 19,120 KiB，等待队列峰值 56、活动连接峰值 8、关闭 2 ms；上传 JSON 的五项预算均无超限。此提交包含 Wrapper 取消关闭修复；测量仍只覆盖 Pool burst，不能替代 Metrics/Admin 故障预算。
+
+## 2026-10-18 Pool/Admin 故障预算
+
+[基线运行](https://github.com/easy-4-rust/druid-rust/actions/runs/39106637663)使用 `a96185a`，20 次 Pool 慢关闭及六类 Admin 真实 HTTP/gRPC 故障各 10 次均通过，原始日志与逐次 JSON 已上传。[带预算运行](https://github.com/easy-4-rust/druid-rust/actions/runs/39107207211)使用 `0b0c3cb`，全部步骤成功，JSON 报告的违规项为零。Pool 队列峰值 4/4、每次至少拒绝 20 个多余关闭、清空后 worker 退出；p99 关闭风暴/池关闭为 544/139 µs，峰值 RSS 18,236 KiB，对应上限 10,000/50,000 µs 和 65,536 KiB。
+
+Admin 六场景的整场景 p99（包含测试夹具启动）分别为：重复批 14,652 µs、序列缺口 51,705 µs、带待处理批重启 288,054 µs、不可用时关闭 110,682 µs、远程认证 62,682 µs、待 ACK 的 SIGTERM 32,647 µs，子进程峰值 RSS 21,828 KiB。对应上限为 250,000/500,000/2,000,000/500,000/1,000,000/1,000,000 µs 及 65,536 KiB；每次运行还必须报告与断言一致的序列、投影、拒绝、未刷新工作或待命令释放数据。完整字段、源码提交和日志 SHA-256 见 [OpenSpec 证据](../../../openspec/changes/p06-fault-budget-matrix/implementation-evidence.md)。跨平台矩阵与 P07 最终发布门禁仍需分别验收。
