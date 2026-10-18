@@ -8,23 +8,26 @@ use druid::sql::{Wall, WallConfig, WallViolation};
 fn test_wall_deny_schema_in_select() {
     let c = WallConfig::builder().deny_schema("pg_catalog").build();
     let wall = Wall::new(c);
-    // SELECT with schema-qualified table
-    let result = wall.check("SELECT * FROM pg_catalog.pg_user");
-    // Should pass since deny_schema is not yet wired in Wall (architecture doc says TBD)
-    // For now just verify no panic
-    let _ = result;
+    assert!(matches!(
+        wall.check("SELECT * FROM pg_catalog.pg_user"),
+        Err(ref violations) if violations.contains(&WallViolation::DeniedSchema("pg_catalog".into()))
+    ));
+    assert!(wall.check("SELECT * FROM public.pg_user").is_ok());
+    assert!(wall.check("SELECT 'pg_catalog.pg_user'").is_ok());
 }
 
 // ── deny_function tests ──
 
 #[test]
-fn test_wall_deny_function_not_wired() {
-    // deny_functions is stored in WallConfig but not yet checked in Wall::check
-    // This is a known gap documented in architecture doc §15
+fn test_wall_deny_function_in_select() {
     let c = WallConfig::builder().deny_function("sleep").build();
     let wall = Wall::new(c);
-    // Verify no panic even with deny_function set
-    let _ = wall.check("SELECT sleep(1)");
+    assert!(matches!(
+        wall.check("SELECT sleep(1)"),
+        Err(ref violations) if violations.contains(&WallViolation::DeniedFunction("sleep".into()))
+    ));
+    assert!(wall.check("SELECT ABS(1)").is_ok());
+    assert!(wall.check("SELECT 'sleep(1)'").is_ok());
 }
 
 // ── multi-statement branches ──
