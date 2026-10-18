@@ -4,8 +4,8 @@ use super::{
     TenantStatementType, WallConfig, WallProvider, WallSqlStat,
 };
 use crate::core::{
-    AfterFilter, BatchExecContext, BeforeFilter, DruidError, ExecContext, ExecResult,
-    ResultSetFilter, StandardResultSetFilterChain,
+    AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, DruidError, ExecContext,
+    ExecResult, ResultSetFilter, StandardResultSetFilterChain,
 };
 use dashmap::DashMap;
 use std::collections::HashMap;
@@ -408,8 +408,22 @@ impl BeforeFilter for WallFilter {
     async fn before_batch(&self, context: &mut BatchExecContext<'_>) -> Result<(), DruidError> {
         // Java WallFilter 在 Statement#addBatch(String) 时逐条检查/改写，且没有
         // 覆盖 preparedStatement_executeBatch；executeBatch 不重复 hard-check，
-        // 也不对每组 Prepared 参数调用 WallUpdateCheckHandler。
-        self.in_flight.insert(context.start, Vec::new());
+        // 也不对每组 Prepared 参数调用 WallUpdateCheckHandler。这里只把已经
+        // 解析过的 SQL 统计与每个返回的 update count 对齐，不重复检查 SQL。
+        let stats = match context.kind {
+            BatchExecKind::PreparedStatement => self
+                .provider
+                .sql_stat(context.sql)
+                .map(|stat| vec![stat; context.parameter_sets.len()])
+                .unwrap_or_default(),
+            BatchExecKind::Statement => context
+                .statements
+                .iter()
+                .map(|sql| self.provider.sql_stat(sql))
+                .collect::<Option<Vec<_>>>()
+                .unwrap_or_default(),
+        };
+        self.in_flight.insert(context.start, stats);
         Ok(())
     }
 
