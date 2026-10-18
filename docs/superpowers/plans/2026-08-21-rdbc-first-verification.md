@@ -270,7 +270,7 @@ Run configured SQLite and DuckDB contract matrices plus any available PostgreSQL
 environments. Each report records target triple, Rust version, database version, artifact SHA and
 test cases. Unconfigured products remain NOT_VERIFIED and support count is not increased.
 
-- [ ] **Step 3: Run benchmarks**
+- [x] **Step 3: Run benchmarks**
 
 ```bash
 cargo bench -p druid-bench --bench pool -- --noplot
@@ -282,6 +282,8 @@ cargo bench -p druid-bench --bench runtime -- --noplot
 
 Expected: commands complete; report p50/p95/p99 where available, throughput, allocation/RSS, cursor
 first-row/full-consume and shutdown values against accepted numeric budgets.
+
+The [benchmark report](../../verification/rdbc-first/final-benchmark-report.md) records all five targets, the enforced 11-case Linux p99/RSS matrix at `8ff85c6`, the two-case SQLx cursor budget, and the runtime shutdown budget. The matrix collector rejects stale or missing samples and preserves violation evidence; its parser batch passed 17/17 tests. This closes the configured CI performance batch, not the separate Task 3 Java/Rust semantic comparison.
 
 - [x] **Step 4: Produce requirement-by-requirement verdict**
 
