@@ -58,23 +58,33 @@ jobs:
       - name: Build Pool slow-close fault test
         run: |
           cargo test -p druid --locked --test pool_close_backpressure_test --no-run --message-format=json > target/benchmark-evidence/pool-slow-close-build.jsonl
-      - name: Measure Pool slow-close fault baseline
+      - name: Enforce Pool slow-close fault budget
         run: |
           python3 scripts/measure_pool_slow_close.py \
             --build-log target/benchmark-evidence/pool-slow-close-build.jsonl \
             --run-log target/benchmark-evidence/pool-slow-close-run.log \
             --output target/benchmark-evidence/pool-slow-close-measurement.json \
-            --repetitions 20
+            --repetitions 20 \
+            --max-p99-storm-us 10000 \
+            --max-p99-shutdown-us 50000 \
+            --max-peak-rss-kib 65536
       - name: Build Admin network fault tests
         run: |
           cargo test -p druid-admin --locked --test grpc_network_e2e_test --test admin_binary_test --no-run --message-format=json > target/benchmark-evidence/admin-fault-build.jsonl
-      - name: Measure Admin network fault baseline
+      - name: Enforce Admin network fault budget
         run: |
           python3 scripts/measure_admin_fault_matrix.py \
             --build-log target/benchmark-evidence/admin-fault-build.jsonl \
             --run-log target/benchmark-evidence/admin-fault-run.log \
             --output target/benchmark-evidence/admin-fault-measurement.json \
-            --repetitions 10
+            --repetitions 10 \
+            --max-p99-us duplicate_batch=250000 \
+            --max-p99-us sequence_gap=500000 \
+            --max-p99-us restart_pending=2000000 \
+            --max-p99-us unavailable_shutdown=500000 \
+            --max-p99-us remote_auth=1000000 \
+            --max-p99-us pending_ack_sigterm=1000000 \
+            --max-peak-rss-kib 65536
       - name: Upload runtime measurement
         if: always()
         uses: actions/upload-artifact@v4

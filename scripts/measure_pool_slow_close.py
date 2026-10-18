@@ -137,6 +137,8 @@ def main() -> int:
     }
     if any(limit <= 0 for limit in limits.values()):
         parser.error("numeric budgets must be positive")
+    if limits and len(limits) != 3:
+        parser.error("accepted Pool budgets require storm, shutdown, and RSS limits together")
 
     import resource  # Linux ru_maxrss is reported in KiB.
 
