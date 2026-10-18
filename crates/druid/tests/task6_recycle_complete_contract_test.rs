@@ -14,7 +14,10 @@
 //! - `DruidDataSourceTest9_phyMaxUseCount`
 //! - `TestDefault#test_close`
 
-use druid::core::{DruidError, ValidConnectionChecker};
+use druid::core::{
+    AfterFilter, BeforeFilter, ConnectionEvent, DruidError, ExecContext, FilterChain,
+    ResultSetFilter, ValidConnectionChecker,
+};
 use druid::pool::DruidPool;
 use druid_rdbc::connection::{Connection, TransactionIsolation};
 use druid_rdbc::driver::ConnectionFactory;
@@ -475,6 +478,80 @@ async fn task6_recycle_complete_rollback_failure_is_swallowed_counted_and_connec
     let replacement = pool.get().await.expect("replacement must be created");
     assert_ne!(replacement.id(), first_id);
     assert_eq!(factory.created_count(), 2);
+}
+
+/// 对应 Java: `DruidDataSourceTest_recycle2` 的回滚过滤器抛错。
+struct RejectRollbackFilter(Arc<AtomicUsize>);
+
+#[async_trait::async_trait]
+impl BeforeFilter for RejectRollbackFilter {
+    fn name(&self) -> &str {
+        "recycle-rollback-rejection"
+    }
+
+    async fn before(&self, _context: &mut ExecContext<'_>) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    async fn on_connection_event(&self, event: &ConnectionEvent) -> Result<(), DruidError> {
+        if matches!(event, ConnectionEvent::Rollback) {
+            self.0.fetch_add(1, Ordering::AcqRel);
+            return Err(DruidError::SqlException(Box::new(
+                druid_rdbc::error::SqlException::new(0, None, None),
+            )));
+        }
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl AfterFilter for RejectRollbackFilter {
+    fn name(&self) -> &str {
+        "recycle-rollback-rejection"
+    }
+
+    async fn after(
+        &self,
+        _context: &ExecContext<'_>,
+        _result: &Result<druid::core::ExecResult, DruidError>,
+        _elapsed: Duration,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+}
+
+impl ResultSetFilter for RejectRollbackFilter {}
+
+#[tokio::test]
+async fn task6_recycle_complete_java_filter_rollback_failure_is_swallowed_and_discarded() {
+    let factory = Arc::new(TrackingFactory::new());
+    let rollback_calls = Arc::new(AtomicUsize::new(0));
+    let mut chain = FilterChain::new();
+    chain.add_filter(Arc::new(RejectRollbackFilter(Arc::clone(&rollback_calls))));
+    let pool = build_pool(factory.clone(), |builder| {
+        builder.filter_chain(Arc::new(chain))
+    })
+    .await;
+    let mut connection = pool.get().await.expect("connection must open");
+    connection.begin().await.expect("transaction must begin");
+    assert_eq!(pool.state().active_count, 1);
+    assert_eq!(pool.state().idle_count, 0);
+
+    connection
+        .close()
+        .await
+        .expect("Java recycle swallows rollback filter error");
+    assert_eq!(rollback_calls.load(Ordering::Acquire), 1);
+    let state = pool.state();
+    assert_eq!(state.active_count, 0);
+    assert_eq!(state.idle_count, 0);
+    assert_eq!(state.recycle_error_count, 1);
+    assert_eq!(state.discard_count, 1);
+
+    let mut replacement = pool.get().await.expect("replacement must be borrowable");
+    replacement.close().await.expect("replacement close");
+    assert_eq!(pool.state().active_count, 0);
+    assert_eq!(pool.state().idle_count, 1);
 }
 
 #[tokio::test]
