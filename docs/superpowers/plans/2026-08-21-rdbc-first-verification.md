@@ -150,7 +150,7 @@ git commit -m "test(quality): verify rdbc-first api and toolchains"
 **Interfaces:**
 - Produces: conformance matrix with Java oracle/Rust contract/real DB columns
 
-- [ ] **Step 1: Run core RDBC contracts**
+- [x] **Step 1: Run core RDBC contracts**
 
 ```bash
 cargo test -p druid-rdbc --tests
@@ -162,7 +162,7 @@ cargo test -p druid --test task7_pooled_async_result_set_test
 
 Expected: all PASS.
 
-- [ ] **Step 2: Run adapter parity**
+- [x] **Step 2: Run adapter parity**
 
 ```bash
 cargo test -p druid-wrapper --test task6_sqlx_canonical_matrix_test
@@ -176,18 +176,20 @@ cargo test -p druid-wrapper --test toasty_connection_adapter_test
 Expected: all configured SQLite/local contracts PASS; capability matrix contains no declaration/
 behavior mismatch.
 
+The final-source [driver matrix](https://github.com/easy-4-rust/druid-rust/actions/runs/39112028023) passed 44/44 jobs. Its Ubuntu default/all-feature suites include the named RDBC and adapter cases; the [semantic report](../../verification/rdbc-first/final-semantic-report.md) records direct suite counts and real-product evidence. This closes Steps 1–2, while exact Java/Rust case correspondence in Step 3 remains open.
+
 - [ ] **Step 3: Run Java/Rust differential suites**
 
 Run the repository's frozen Java oracle commands and corresponding Rust differential tests for Pool,
 Statement, PreparedStatement, ResultSet, Wall, exception sorter and lifecycle. Record Java JDK,
 Druid SHA and exact case counts.
 
-- [ ] **Step 4: Write matrix**
+- [x] **Step 4: Write matrix**
 
 Every behavior row records `JAVA_ORACLE`, `RUST_CONTRACT`, `REAL_DB`, and `STATUS`; a missing column
 prevents DONE.
 
-- [ ] **Step 5: Commit report**
+- [x] **Step 5: Commit report**
 
 ```bash
 git add docs/verification/rdbc-first/final-semantic-report.md
