@@ -1,5 +1,7 @@
 # druid 核心模块迁移实施计划
 
+> **历史计划（已被 ADR-CRATE-002 / ADR-RDBC-006 取代）：** 下文的 `PhysicalConnection` 内部 SPI 和 Toasty 内置归属不再是当前实现目标。当前边界以 [RDBC-first 总路线图](2026-08-21-rdbc-first-master-roadmap.md) 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将 Java Druid core 模块的 1,644 个生产对象的功能语义完整迁移到 Rust `crates/druid`，涵盖 core/pool/sql/stats/dynamic/toasty 六个内部目录，实现语义完成率 100%、对象可追溯率 100%。

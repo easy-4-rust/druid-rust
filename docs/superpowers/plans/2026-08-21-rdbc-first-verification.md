@@ -29,7 +29,7 @@
 **Interfaces:**
 - Produces: exact package set and recursive dependency evidence
 
-- [ ] **Step 1: 验证 package 集合**
+- [x] **Step 1: 验证 package 集合**
 
 ```bash
 cargo metadata --format-version 1 --no-deps \
@@ -47,7 +47,7 @@ druid-rdbc
 druid-wrapper
 ```
 
-- [ ] **Step 2: 验证依赖方向**
+- [x] **Step 2: 验证依赖方向**
 
 ```bash
 python3 scripts/verify_rdbc_dependency_boundary.py
@@ -61,11 +61,11 @@ cargo tree -p druid-admin -e normal --depth 2
 Expected: `druid-rdbc` has no forbidden dependency; Admin reaches Metrics but not direct Druid/
 Wrapper; every package is `publish=false`.
 
-- [ ] **Step 3: 写报告**
+- [x] **Step 3: 写报告**
 
 Include the exact Cargo package IDs, edges, rejected edges and script exit codes.
 
-- [ ] **Step 4: Commit report**
+- [x] **Step 4: Commit report**
 
 ```bash
 git add docs/verification/rdbc-first/final-dependency-report.md scripts
@@ -282,7 +282,7 @@ first-row/full-consume and shutdown values against accepted numeric budgets.
 
 - [ ] **Step 4: Produce requirement-by-requirement verdict**
 
-Copy all ten completion gates from the architecture spec §10 into the report. For each gate link
+Copy all twelve completion gates from the architecture spec §10 into the report. For each gate link
 the exact report/command. Verdict is `RELEASE_READY` only when every gate is PASS; otherwise
 `NOT_READY` with remaining actions.
 

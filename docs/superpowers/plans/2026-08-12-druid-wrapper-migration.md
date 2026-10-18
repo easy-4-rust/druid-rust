@@ -1,5 +1,7 @@
 # druid-wrapper 模块迁移实施计划
 
+> **历史计划（已被 ADR-CRATE-002 / ADR-RDBC-006 取代）：** 下文的 Toasty 归属和 Physical bridge 只记录旧基线。当前 Wrapper 适配器边界以 [RDBC-first 总路线图](2026-08-21-rdbc-first-master-roadmap.md) 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将 Java druid-wrapper 模块的 13 个生产 Java 对象以及 Rust DB 生态（SQLx/RBDC/bb8/deadpool）完整迁移到 Rust `crates/druid-wrapper`，实现可选数据库 Adapter 和外部池适配的完整迁移。

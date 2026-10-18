@@ -1,5 +1,7 @@
 # 跨模块迁移总路线图
 
+> **历史计划（已被 ADR-CRATE-002 取代）：** 下文三模块工作区、`PhysicalConnection` SPI、`druid-core + facade` 目标与 2026-08-12 冻结数值只记录当时的基线，不代表当前源码或待执行路线。当前路线见 [RDBC-first 总路线图](2026-08-21-rdbc-first-master-roadmap.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将 Java Druid 1.2.28 的功能语义完整迁移到 Rust druid-rust 三个产品模块（druid、druid-admin、druid-wrapper），实现语义完成率 100%、对象可追溯率 100%、命名合规率 100%，最终发布 `1.0-semantic-parity`。

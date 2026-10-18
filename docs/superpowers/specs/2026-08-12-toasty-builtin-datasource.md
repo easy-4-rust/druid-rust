@@ -1,5 +1,7 @@
 # Toasty 内置数据源标准实现规格
 
+> **历史规格（已被 ADR-CRATE-002 / ADR-RDBC-006 取代）：** 下文 Toasty 内置与 `PhysicalConnection` SPI 仅保存旧决策，不是当前架构。当前适配器合同以 [单一 RDBC 标准规格](2026-08-24-rdbc-single-standard-trait-tree.md) 为准。
+
 > 日期：2026-08-12  来源：原 docs/druid/Toasty-内置数据源标准实现.md
 
 决策日期：2026-07-28

@@ -1,5 +1,7 @@
 # 数据库驱动集成矩阵规格
 
+> **历史规格（已被 ADR-CRATE-002 / ADR-RDBC-006 取代）：** 下文 `PhysicalConnection*`、内置 Toasty 和三模块归属仅保存 2026-08-12 的迁移基线，不再作为当前实现目标。当前标准接口与适配器边界以 [单一 RDBC 标准规格](2026-08-24-rdbc-single-standard-trait-tree.md) 为准。
+
 > 日期：2026-08-12  来源：原 docs/druid-wrapper/数据库驱动集成矩阵.md
 
 基线日期：2026-08-07
