@@ -18,3 +18,14 @@ On 2026-10-18, Windows NT 10.0.26200.0, Rust/Cargo 1.97.1, source `16c71fc623b7b
 | wall_check_all_categories | 2.25 | 2.76 | 3.19 | `b763b0f00ac80ac0053a8b194a4045b50a1f9649bbe9942a7b67fe69aebeef13` |
 
 The Windows runtime p99 is 126.034 ms, below the documented 150 ms local reference ceiling. The separate [Linux release workflow](https://github.com/easy-4-rust/druid-rust/actions/runs/39107207211) enforced runtime, Pool slow-close, Metrics saturation, and Admin fault budgets successfully. Other microbenchmark cases have measured values but no accepted cross-platform numeric ceilings; these results alone do not establish a performance regression gate or release readiness.
+
+## SQLx SQLite cursor follow-up
+
+The `adapter` target now also measures a real forward-only SQLx SQLite cursor over a 1,000-row recursive query. Both cases reuse one physical connection and create/close a new statement and cursor for every iteration. `first_row` times query admission through the first successful `next` and cursor cleanup; `full_consume` times all 1,000 successful rows and final exhaustion/cleanup. The same Windows host and Rust toolchain ran 100 Criterion samples for each case; the complete adapter target exited 0.
+
+| Case | p50 µs | p95 µs | p99 µs | Sample SHA-256 |
+| --- | ---: | ---: | ---: | --- |
+| adapter_sqlite_cursor_first_row_1000 | 207.25 | 218.05 | 224.05 | `00acb2ac8d3f794ef404ec33c17269876295b9dd9704e563d495799568beae5d` |
+| adapter_sqlite_cursor_full_consume_1000 | 3,524.66 | 4,292.89 | 4,770.35 | `d8df9c0a6f492810a02b0a310a233a3dae2e5206289edbc5788e34922367894b` |
+
+The median full-consume rate derived from this batch is about 283,700 rows/s, including statement/query setup and cleanup. This is a measured baseline, not an accepted regression ceiling; per-case allocation and RSS remain unmeasured.

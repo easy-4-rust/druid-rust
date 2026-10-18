@@ -12,7 +12,7 @@ workspace = true
 
 [dependencies]
 druid         = { version = "0.0.0-design", path = "../druid" }
-druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false, optional = true }
+druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false, features = ["sqlite", "sqlx"], optional = true }
 criterion     = { workspace = true }
 tokio         = { workspace = true }
 futures       = { workspace = true }
