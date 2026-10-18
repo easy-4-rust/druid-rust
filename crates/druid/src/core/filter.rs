@@ -124,6 +124,15 @@ pub enum ResultSetEvent {
 pub trait BeforeFilter: Send + Sync {
     fn name(&self) -> &str;
 
+    /// 在标准语句属性读取前检查操作；参数为 Java 同名 getter 事件，返回允许读取或 SQL 错误。
+    /// 对应 Java: Filter#statement_getMaxRows 等属性读取过滤器入口。
+    fn standard_statement_property_read(
+        &self,
+        _event: &StatementPropertyEvent,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
     async fn data_source_get_connection(
         &self,
         chain: &mut DataSourceGetConnectionFilterChain<'_>,

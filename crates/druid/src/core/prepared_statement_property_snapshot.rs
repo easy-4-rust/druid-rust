@@ -34,12 +34,12 @@ impl PreparedStatementPropertySnapshot {
     /// 恢复已变更属性；首错立即返回，成功部分由代理状态保留，重试不重复恢复。
     pub(crate) fn restore(&self, statement: &mut DruidPooledStatement) -> Result<(), RdbcError> {
         if let Some(value) = self.max_field_size {
-            if Statement::max_field_size(statement)? != value {
+            if statement.prepared_max_field_size() != value {
                 Statement::set_max_field_size(statement, value)?;
             }
         }
         if let Some(value) = self.max_rows {
-            if Statement::max_rows(statement)? != value {
+            if statement.prepared_max_rows() != value {
                 Statement::set_max_rows(statement, value)?;
             }
         }
@@ -49,12 +49,12 @@ impl PreparedStatementPropertySnapshot {
             }
         }
         if let Some(value) = self.fetch_direction {
-            if Statement::fetch_direction(statement)? != value {
+            if statement.prepared_fetch_direction() != value {
                 Statement::set_fetch_direction(statement, value)?;
             }
         }
         if let Some(value) = self.fetch_size {
-            if Statement::fetch_size(statement)? != value {
+            if statement.prepared_fetch_size() != value {
                 Statement::set_fetch_size(statement, value)?;
             }
         }

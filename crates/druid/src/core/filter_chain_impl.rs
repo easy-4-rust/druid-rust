@@ -616,6 +616,17 @@ impl FilterChainImpl {
             .await
     }
 
+    /// 按注册顺序检查标准语句属性读取；参数为 getter 事件，返回首个过滤器错误。
+    pub(crate) fn standard_statement_property_read(
+        &self,
+        event: &super::StatementPropertyEvent,
+    ) -> Result<(), DruidError> {
+        for filter in &self.before {
+            filter.standard_statement_property_read(event)?;
+        }
+        Ok(())
+    }
+
     /// 按注册顺序读取标准语句警告；参数为驱动语句，返回完整警告链。
     pub(crate) fn standard_statement_get_warnings(
         &self,
