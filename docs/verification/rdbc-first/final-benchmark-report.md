@@ -36,4 +36,24 @@ The dedicated [Linux baseline run 39116529320](https://github.com/easy-4-rust/dr
 
 The release-runner budget uses approximately four times the baseline p99 latency as scheduling headroom: first row ≤ **2,000 µs**, 1,000-row full consume ≤ **200,000 µs**, throughput ≥ **5,000 rows/s**, and peak RSS ≤ **65,536 KiB**. The throughput floor checks the derived-rate field independently. These are process-level regression guardrails, not application query SLOs; they apply to this SQLx SQLite case on the Linux CI runner.
 
-The [enforced Linux run 39117292451](https://github.com/easy-4-rust/druid-rust/actions/runs/39117292451) on `bd3855b890b8316943829444db0fe58e807e4298` completed successfully. Its 100-sample first-row p50/p95/p99 was **469.795/487.139/500.016 µs** (sample SHA-256 `2983d36d15c01d6c3acd9456801de066d6b640823c2b59b1503437ac5639cf0e`); full-consume was **40,563.586/43,005.731/43,881.207 µs** (SHA-256 `e7feee16f35fbb4544c6c4f3747fea5664d58a481151acb3b159382819b93986`). Median throughput was **24,652.7 rows/s**; benchmark-child peak RSS was **23,676 KiB**. The uploaded measurement JSON has SHA-256 `952dc6ac8bcf29ec6b830fb8d03943fb538b33d84446ca86c1db74212fb7d6d3`, status `ENFORCED`, and zero violations. This closes the SQLx SQLite cursor regression gate; other microbenchmark cases still lack accepted numeric ceilings.
+The [enforced Linux run 39117292451](https://github.com/easy-4-rust/druid-rust/actions/runs/39117292451) on `bd3855b890b8316943829444db0fe58e807e4298` completed successfully. Its 100-sample first-row p50/p95/p99 was **469.795/487.139/500.016 µs** (sample SHA-256 `2983d36d15c01d6c3acd9456801de066d6b640823c2b59b1503437ac5639cf0e`); full-consume was **40,563.586/43,005.731/43,881.207 µs** (SHA-256 `e7feee16f35fbb4544c6c4f3747fea5664d58a481151acb3b159382819b93986`). Median throughput was **24,652.7 rows/s**; benchmark-child peak RSS was **23,676 KiB**. The uploaded measurement JSON has SHA-256 `952dc6ac8bcf29ec6b830fb8d03943fb538b33d84446ca86c1db74212fb7d6d3`, status `ENFORCED`, and zero violations. This closes the SQLx SQLite cursor regression gate; the separate microbenchmark matrix follows below.
+
+## Pool, FilterChain, Wall and Adapter regression matrix
+
+The [first Linux matrix run 39118318389](https://github.com/easy-4-rust/druid-rust/actions/runs/39118318389) at `98e1afd5c843750fe310c7a64e5bf5220e17a0b1` completed successfully. All 11 cases produced 100 fresh Criterion observations. Its uploaded matrix JSON SHA-256 is `92307d2b132df9b1309ce32460aade09ceab4304fedd0dd4effa2195783457a1`; status was `ENFORCED`, with zero violations and a benchmark-child peak RSS of **24,796 KiB**. The p99 observations, in microseconds per case iteration, were:
+
+| Case | Linux p99 µs | Tightened p99 ceiling µs |
+| --- | ---: | ---: |
+| pool/single_borrow_return | 1.25 | 7 |
+| pool/parallel_16 | 17.20 | 100 |
+| pool/parallel_64 | 79.19 | 450 |
+| filter_chain/empty_build | 0.01 | 0.1 |
+| filter_chain/5_adapter_build | 0.31 | 2 |
+| filter_chain/20_adapter_build | 1.14 | 6 |
+| wall/check_2_safe | 0.51 | 4 |
+| wall/check_all_categories | 1.68 | 10 |
+| adapter/single_borrow | 1.26 | 7 |
+| adapter/parallel_8_borrow | 9.44 | 50 |
+| adapter/parallel_64_borrow | 77.45 | 450 |
+
+The JSON also records each case's p50/p95, derived operations per second and sample SHA-256. The initial Windows-derived limits passed but were wider than necessary on the dedicated Linux runner; the table gives approximately 5–6 times the observed p99 for substantive cases, with a 0.1 µs floor for the tiny empty-chain operation. RSS remains capped at **65,536 KiB**. These are process-level CI regression budgets, not production SQL latency SLOs. A fresh Linux run enforcing the tightened limits is required before closing this matrix gate.

@@ -73,17 +73,17 @@ jobs:
             --run-log-dir target/benchmark-evidence \
             --output target/benchmark-evidence/microbenchmark-matrix.json \
             --max-peak-rss-kib 65536 \
-            --max-p99-us pool/single_borrow_return=20 \
-            --max-p99-us pool/parallel_16=300 \
-            --max-p99-us pool/parallel_64=1500 \
-            --max-p99-us filter_chain/empty_build=1 \
-            --max-p99-us filter_chain/5_adapter_build=15 \
-            --max-p99-us filter_chain/20_adapter_build=50 \
-            --max-p99-us wall/check_2_safe=20 \
-            --max-p99-us wall/check_all_categories=50 \
-            --max-p99-us adapter/single_borrow=30 \
-            --max-p99-us adapter/parallel_8_borrow=200 \
-            --max-p99-us adapter/parallel_64_borrow=1500
+            --max-p99-us pool/single_borrow_return=7 \
+            --max-p99-us pool/parallel_16=100 \
+            --max-p99-us pool/parallel_64=450 \
+            --max-p99-us filter_chain/empty_build=0.1 \
+            --max-p99-us filter_chain/5_adapter_build=2 \
+            --max-p99-us filter_chain/20_adapter_build=6 \
+            --max-p99-us wall/check_2_safe=4 \
+            --max-p99-us wall/check_all_categories=10 \
+            --max-p99-us adapter/single_borrow=7 \
+            --max-p99-us adapter/parallel_8_borrow=50 \
+            --max-p99-us adapter/parallel_64_borrow=450
       - name: Build Metrics saturation test
         run: |
           cargo test -p druid-metrics --locked --test queue_semantics_test --no-run --message-format=json > target/benchmark-evidence/metrics-build.jsonl
