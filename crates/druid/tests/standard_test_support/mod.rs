@@ -130,6 +130,17 @@ impl TrackingState {
         Ok(())
     }
 
+    fn check_plain_sql_failure(&self, operation: &'static str) -> Result<(), RdbcError> {
+        if self.check_failure(operation).is_err() {
+            return Err(RdbcError::SqlException(Box::new(SqlException::new(
+                0,
+                None,
+                Some(format!("forced {operation} SQL failure")),
+            ))));
+        }
+        Ok(())
+    }
+
     pub fn install_query_barrier(
         &self,
         started: Arc<tokio::sync::Notify>,
@@ -550,8 +561,40 @@ druid_rdbc::impl_standard_wrapper!(TrackingStatement => Statement);
 
 #[async_trait::async_trait]
 impl Statement for TrackingStatement {
+    fn max_field_size(&self) -> Result<i32, RdbcError> {
+        self.state
+            .check_plain_sql_failure("statement_max_field_size")?;
+        Err(RdbcError::UnsupportedOperation {
+            operation: "statement_max_field_size",
+        })
+    }
+
+    fn max_rows(&self) -> Result<i64, RdbcError> {
+        self.state.check_plain_sql_failure("statement_max_rows")?;
+        Err(RdbcError::UnsupportedOperation {
+            operation: "statement_max_rows",
+        })
+    }
+
     fn query_timeout(&self) -> Result<i32, RdbcError> {
+        self.state
+            .check_plain_sql_failure("statement_query_timeout")?;
         Ok(self.query_timeout)
+    }
+
+    fn fetch_direction(&self) -> Result<druid_rdbc::statement::FetchDirection, RdbcError> {
+        self.state
+            .check_plain_sql_failure("statement_fetch_direction")?;
+        Err(RdbcError::UnsupportedOperation {
+            operation: "statement_fetch_direction",
+        })
+    }
+
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
+        self.state.check_plain_sql_failure("statement_fetch_size")?;
+        Err(RdbcError::UnsupportedOperation {
+            operation: "statement_fetch_size",
+        })
     }
 
     fn set_query_timeout(&mut self, seconds: i32) -> Result<(), RdbcError> {

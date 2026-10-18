@@ -63,6 +63,71 @@ impl AfterFilter for StatementErrorFilter {
 impl ResultSetFilter for StatementErrorFilter {}
 
 #[tokio::test]
+async fn java_statement_property_getter_sql_errors_count_once_and_keep_holder_reusable() {
+    // 对应 Java 1.2.28 DruidPooledStatementTest 的五个 getter 错误用例。
+    let state = TrackingState::configured();
+    let pool = DruidPool::new_standard(
+        "java-statement-getter-parity".to_owned(),
+        "tracking".to_owned(),
+        Arc::new(TrackingFactory::new(Arc::clone(&state))),
+        PoolInnerConfig {
+            max_open: 1,
+            max_idle: 1,
+            acquire_timeout: Duration::from_secs(2),
+            ..PoolInnerConfig::default()
+        },
+        None,
+    );
+    pool.init().await.expect("pool init");
+    let mut connection = pool.get().await.expect("borrow");
+    let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .expect("statement");
+
+    assert_eq!(statement.max_field_size().unwrap(), 0);
+    assert_eq!(statement.max_rows().unwrap(), 0);
+    assert_eq!(statement.query_timeout().unwrap(), 0);
+    assert_eq!(statement.fetch_direction().unwrap().rdbc_code(), 1002);
+    assert_eq!(statement.fetch_size().unwrap(), 0);
+
+    state.fail_next("statement_max_field_size");
+    assert!(matches!(
+        statement.max_field_size(),
+        Err(druid_rdbc::error::RdbcError::SqlException(_))
+    ));
+    state.fail_next("statement_max_rows");
+    assert!(matches!(
+        statement.max_rows(),
+        Err(druid_rdbc::error::RdbcError::SqlException(_))
+    ));
+    state.fail_next("statement_query_timeout");
+    assert!(matches!(
+        statement.query_timeout(),
+        Err(druid_rdbc::error::RdbcError::SqlException(_))
+    ));
+    state.fail_next("statement_fetch_direction");
+    assert!(matches!(
+        statement.fetch_direction(),
+        Err(druid_rdbc::error::RdbcError::SqlException(_))
+    ));
+    state.fail_next("statement_fetch_size");
+    assert!(matches!(
+        statement.fetch_size(),
+        Err(druid_rdbc::error::RdbcError::SqlException(_))
+    ));
+    assert_eq!(pool.stat_value_and_reset().error_count, 5);
+    assert_eq!(pool.state().active_count, 1);
+    statement.close().await.expect("statement close");
+    connection.close().await.expect("connection close");
+    assert_eq!(pool.state().active_count, 0);
+    assert_eq!(pool.state().idle_count, 1);
+    let mut replacement = pool.get().await.expect("same holder remains usable");
+    replacement.close().await.expect("replacement close");
+    assert_eq!(state.factory_create_count.load(Ordering::Acquire), 1);
+    pool.close().await;
+}
+
+#[tokio::test]
 async fn java_statement_filter_errors_count_once_and_keep_pool_reusable() {
     let state = TrackingState::configured();
     let mut chain = FilterChain::new();

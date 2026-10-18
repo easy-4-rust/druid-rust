@@ -266,9 +266,40 @@ impl DruidPooledStatement {
     }
 
     fn classify_statement_mutation<T>(&self, result: Result<T, RdbcError>) -> Result<T, RdbcError> {
-        self.inner
+        let result = self
+            .inner
             .policy
-            .classify(result, self.last_sql().as_deref())
+            .classify(result, self.last_sql().as_deref());
+        if let Err(error) = &result {
+            self.inner.policy.record_statement_access_error(error);
+        }
+        result
+    }
+
+    fn read_statement_property<T>(
+        &self,
+        unsupported_operation: &'static str,
+        cached: T,
+        getter: impl FnOnce(&dyn Statement) -> Result<T, RdbcError>,
+    ) -> Result<T, RdbcError> {
+        self.ensure_open()?;
+        let result = {
+            let statement = self
+                .inner
+                .statement
+                .try_lock()
+                .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?;
+            getter(statement.as_ref())
+        };
+        match result {
+            Ok(value) => Ok(value),
+            Err(RdbcError::UnsupportedOperation { operation })
+                if operation == unsupported_operation =>
+            {
+                Ok(cached)
+            }
+            Err(error) => self.classify_statement_mutation(Err(error)),
+        }
     }
 
     fn validate_non_negative(value: i64, name: &str) -> Result<(), RdbcError> {
@@ -651,8 +682,12 @@ impl Statement for DruidPooledStatement {
     }
 
     fn max_field_size(&self) -> Result<i32, RdbcError> {
-        self.ensure_open()?;
-        Ok(self.state().max_field_size)
+        let cached = self.state().max_field_size;
+        self.read_statement_property(
+            "statement_max_field_size",
+            cached,
+            Statement::max_field_size,
+        )
     }
 
     fn set_max_field_size(&mut self, max: i32) -> Result<(), RdbcError> {
@@ -665,8 +700,8 @@ impl Statement for DruidPooledStatement {
     }
 
     fn max_rows(&self) -> Result<i64, RdbcError> {
-        self.ensure_open()?;
-        Ok(self.state().max_rows)
+        let cached = self.state().max_rows;
+        self.read_statement_property("statement_max_rows", cached, Statement::max_rows)
     }
 
     fn set_max_rows(&mut self, max: i64) -> Result<(), RdbcError> {
@@ -687,12 +722,8 @@ impl Statement for DruidPooledStatement {
     }
 
     fn query_timeout(&self) -> Result<i32, RdbcError> {
-        self.ensure_open()?;
-        self.inner
-            .statement
-            .try_lock()
-            .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
-            .query_timeout()
+        let cached = self.state().query_timeout;
+        self.read_statement_property("statement_query_timeout", cached, Statement::query_timeout)
     }
 
     fn set_query_timeout(&mut self, seconds: i32) -> Result<(), RdbcError> {
@@ -738,8 +769,12 @@ impl Statement for DruidPooledStatement {
     }
 
     fn fetch_direction(&self) -> Result<FetchDirection, RdbcError> {
-        self.ensure_open()?;
-        Ok(self.state().fetch_direction)
+        let cached = self.state().fetch_direction;
+        self.read_statement_property(
+            "statement_fetch_direction",
+            cached,
+            Statement::fetch_direction,
+        )
     }
 
     fn set_fetch_size(&mut self, rows: i32) -> Result<(), RdbcError> {
@@ -752,8 +787,8 @@ impl Statement for DruidPooledStatement {
     }
 
     fn fetch_size(&self) -> Result<i32, RdbcError> {
-        self.ensure_open()?;
-        Ok(self.state().fetch_size)
+        let cached = self.state().fetch_size;
+        self.read_statement_property("statement_fetch_size", cached, Statement::fetch_size)
     }
 
     fn set_poolable(&mut self, poolable: bool) -> Result<(), RdbcError> {
