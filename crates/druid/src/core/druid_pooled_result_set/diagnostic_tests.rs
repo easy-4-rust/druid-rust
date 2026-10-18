@@ -3626,6 +3626,37 @@ async fn task6_sqlite_rejects_every_scalar_and_stream_update_without_corrupting_
     connection.close().await.unwrap();
 }
 
+/// 单行结果集在反复前后移动后仍只报告一个历史抓取行。
+/// 对应 Java: DruidPooledResultSetTest#test_rowCount。
+#[tokio::test]
+async fn java_single_row_navigation_preserves_fetch_peak_one() {
+    // 对应 Java 1.2.28 DruidPooledResultSetTest#test_rowCount：
+    // 返回同一行两次只增加游标访问，不把历史抓取峰值误计为两行。
+    let (mut statement, mut connection) =
+        task6_sqlite_diagnostic_statement_with_filters(None).await;
+    let cursor = statement.execute_query("SELECT 1 AS id").await.unwrap();
+    drop(cursor);
+    let resource = statement.current_result_set_for_diagnostics();
+    let mut result_set =
+        DruidPooledResultSet::from_tracked_resource(Arc::clone(&statement.inner), resource)
+            .unwrap();
+
+    assert!(result_set.next().await.unwrap());
+    assert!(!result_set.next().await.unwrap());
+    assert_eq!(result_set.filter_context.fetch_row_count(), 1);
+    assert!(result_set.previous().await.unwrap());
+    assert!(!result_set.previous().await.unwrap());
+    assert_eq!(result_set.filter_context.fetch_row_count(), 1);
+    assert!(result_set.next().await.unwrap());
+    assert!(!result_set.next().await.unwrap());
+    assert_eq!(result_set.filter_context.fetch_row_count(), 1);
+
+    result_set.close().await.unwrap();
+    assert_eq!(statement.fetch_row_peak(), 1);
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
 /// 完整保留原六列值、创建语句身份、42次资源拒绝、双向游标与抓取峰值。
 /// 对应 Java: DruidPooledResultSet / java.sql.ResultSet。
 #[tokio::test]
