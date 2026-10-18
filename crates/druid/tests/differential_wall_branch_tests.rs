@@ -1,6 +1,6 @@
 //! Differential tests for Wall `deny_schema`, `deny_function`, multi-statement branches.
 
-use druid::sql::{Wall, WallConfig, WallViolation};
+use druid::sql::{Wall, WallConfig, WallProvider, WallViolation};
 
 // ── deny_schema tests ──
 
@@ -26,8 +26,30 @@ fn test_wall_deny_function_in_select() {
         wall.check("SELECT sleep(1)"),
         Err(ref violations) if violations.contains(&WallViolation::DeniedFunction("sleep".into()))
     ));
+    assert!(matches!(
+        wall.check("SELECT sys.sleep(1)"),
+        Err(ref violations) if violations.contains(&WallViolation::DeniedFunction("sys.sleep".into()))
+    ));
     assert!(wall.check("SELECT ABS(1)").is_ok());
     assert!(wall.check("SELECT 'sleep(1)'").is_ok());
+    assert!(wall.check("SELECT 'sys.sleep(1)'").is_ok());
+}
+
+#[test]
+fn test_wall_provider_rejects_qualified_denied_function() {
+    let provider = WallProvider::new(WallConfig::builder().deny_function("sleep").build());
+    let denied_sql = "SELECT sys.sleep(1)";
+    for _ in 0..2 {
+        let result = provider.check(denied_sql);
+        assert!(result
+            .violations()
+            .contains(&WallViolation::DeniedFunction("sys.sleep".into())));
+    }
+    assert_eq!(provider.black_list_hit_count(), 1);
+    assert!(provider
+        .check("SELECT 'sys.sleep(1)'")
+        .violations()
+        .is_empty());
 }
 
 // ── multi-statement branches ──

@@ -100,12 +100,17 @@ impl Wall {
                 if self.config.function_check {
                     if let Expr::Function(function) = expression {
                         let function_name = function.name.to_string().to_ascii_lowercase();
-                        if self
-                            .config
-                            .deny_functions
-                            .iter()
-                            .any(|deny| function_name.eq_ignore_ascii_case(deny))
-                        {
+                        // 对应 Java WallVisitorUtils：带 schema 的调用仍按方法名检查 denyFunctions。
+                        // 同时保留对完整限定名规则的支持。
+                        let method_name = function_name
+                            .rsplit('.')
+                            .next()
+                            .unwrap_or(&function_name)
+                            .trim_matches(['`', '"', '[', ']']);
+                        if self.config.deny_functions.iter().any(|deny| {
+                            function_name.eq_ignore_ascii_case(deny)
+                                || method_name.eq_ignore_ascii_case(deny)
+                        }) {
                             Self::push_unique(
                                 &mut violations,
                                 WallViolation::DeniedFunction(function_name),
