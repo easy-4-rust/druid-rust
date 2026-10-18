@@ -25,6 +25,7 @@ jobs:
         run: |
           python3 scripts/test_measure_runtime_benchmark.py
           python3 scripts/test_measure_adapter_cursor_benchmark.py
+          python3 scripts/test_measure_microbenchmark_matrix.py
           python3 scripts/test_measure_metrics_saturation.py
           python3 scripts/test_measure_pool_slow_close.py
           python3 scripts/test_measure_admin_fault_matrix.py
@@ -59,6 +60,30 @@ jobs:
             --max-full-p99-us 200000 \
             --min-full-rows-per-second 5000 \
             --max-peak-rss-kib 65536
+      - name: Build four microbenchmark targets
+        run: |
+          for target in pool filter_chain wall adapter; do
+            cargo bench -p druid-bench --locked --bench "$target" --no-run --message-format=json > "target/benchmark-evidence/$target-build.jsonl"
+          done
+      - name: Enforce Pool FilterChain Wall and Adapter p99 budgets
+        run: |
+          python3 scripts/measure_microbenchmark_matrix.py \
+            --build-log-dir target/benchmark-evidence \
+            --criterion-root target/criterion \
+            --run-log-dir target/benchmark-evidence \
+            --output target/benchmark-evidence/microbenchmark-matrix.json \
+            --max-peak-rss-kib 65536 \
+            --max-p99-us pool/single_borrow_return=20 \
+            --max-p99-us pool/parallel_16=300 \
+            --max-p99-us pool/parallel_64=1500 \
+            --max-p99-us filter_chain/empty_build=1 \
+            --max-p99-us filter_chain/5_adapter_build=15 \
+            --max-p99-us filter_chain/20_adapter_build=50 \
+            --max-p99-us wall/check_2_safe=20 \
+            --max-p99-us wall/check_all_categories=50 \
+            --max-p99-us adapter/single_borrow=30 \
+            --max-p99-us adapter/parallel_8_borrow=200 \
+            --max-p99-us adapter/parallel_64_borrow=1500
       - name: Build Metrics saturation test
         run: |
           cargo test -p druid-metrics --locked --test queue_semantics_test --no-run --message-format=json > target/benchmark-evidence/metrics-build.jsonl
@@ -111,6 +136,16 @@ jobs:
             target/benchmark-evidence/runtime-run.log
             target/benchmark-evidence/adapter-cursor-measurement.json
             target/benchmark-evidence/adapter-cursor-run.log
+            target/benchmark-evidence/microbenchmark-matrix.json
+            target/benchmark-evidence/pool-run.log
+            target/benchmark-evidence/filter_chain-run.log
+            target/benchmark-evidence/wall-run.log
+            target/benchmark-evidence/adapter-run.log
+            target/criterion/pool_*/new/sample.json
+            target/criterion/filter_chain_*/new/sample.json
+            target/criterion/wall_*/new/sample.json
+            target/criterion/adapter_single_borrow/new/sample.json
+            target/criterion/adapter_parallel_*_borrow/new/sample.json
             target/criterion/adapter_sqlite_cursor_first_row_1000/new/sample.json
             target/criterion/adapter_sqlite_cursor_full_consume_1000/new/sample.json
             target/criterion/runtime_pool_burst_64/new/sample.json
