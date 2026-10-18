@@ -416,6 +416,9 @@ impl StandardLogicalPolicy {
             Ok(outcome) => outcome,
             Err(error) => {
                 let result = self.classify(Err(error.into()), Some(sql));
+                // 过滤器在原始批量执行前拒绝时，也属于一次失败的语句执行。
+                // 与单条执行路径一致记录池、连接和 Statement 错误计数。
+                self.record_execution(sql, &result);
                 if kind == BatchExecKind::PreparedStatement {
                     if let Err(error) = &result {
                         self.notify_statement_error(statement_id, error);
