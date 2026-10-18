@@ -146,10 +146,17 @@ def main() -> int:
         executable = test_executable(args.build_log)
         with args.run_log.open("w", encoding="utf-8") as log:
             for index in range(args.repetitions):
-                result = subprocess.run(
-                    [str(executable), "--exact", TEST_NAME, "--nocapture"],
-                    cwd=ROOT, text=True, capture_output=True, check=False, timeout=20,
-                )
+                try:
+                    result = subprocess.run(
+                        [str(executable), "--exact", TEST_NAME, "--nocapture"],
+                        cwd=ROOT, text=True, capture_output=True, check=False, timeout=20,
+                    )
+                except subprocess.TimeoutExpired as error:
+                    stdout = error.stdout.decode(errors="replace") if isinstance(error.stdout, bytes) else error.stdout or ""
+                    stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else error.stderr or ""
+                    log.write(f"=== run {index + 1} timeout ===\n{stdout}{stderr}\n")
+                    log.flush()
+                    raise
                 output = result.stdout + result.stderr
                 log.write(f"=== run {index + 1} exit={result.returncode} ===\n{output}\n")
                 log.flush()

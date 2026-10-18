@@ -26,6 +26,7 @@ jobs:
           python3 scripts/test_measure_runtime_benchmark.py
           python3 scripts/test_measure_metrics_saturation.py
           python3 scripts/test_measure_pool_slow_close.py
+          python3 scripts/test_measure_admin_fault_matrix.py
       - name: Build runtime benchmark
         run: |
           mkdir -p target/benchmark-evidence
@@ -64,6 +65,16 @@ jobs:
             --run-log target/benchmark-evidence/pool-slow-close-run.log \
             --output target/benchmark-evidence/pool-slow-close-measurement.json \
             --repetitions 20
+      - name: Build Admin network fault tests
+        run: |
+          cargo test -p druid-admin --locked --test grpc_network_e2e_test --test admin_binary_test --no-run --message-format=json > target/benchmark-evidence/admin-fault-build.jsonl
+      - name: Measure Admin network fault baseline
+        run: |
+          python3 scripts/measure_admin_fault_matrix.py \
+            --build-log target/benchmark-evidence/admin-fault-build.jsonl \
+            --run-log target/benchmark-evidence/admin-fault-run.log \
+            --output target/benchmark-evidence/admin-fault-measurement.json \
+            --repetitions 10
       - name: Upload runtime measurement
         if: always()
         uses: actions/upload-artifact@v4
@@ -77,5 +88,7 @@ jobs:
             target/benchmark-evidence/metrics-saturation-run.log
             target/benchmark-evidence/pool-slow-close-measurement.json
             target/benchmark-evidence/pool-slow-close-run.log
+            target/benchmark-evidence/admin-fault-measurement.json
+            target/benchmark-evidence/admin-fault-run.log
           if-no-files-found: error
           retention-days: 90
