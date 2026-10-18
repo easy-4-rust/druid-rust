@@ -8,7 +8,8 @@
 use druid::core::{Connection, RdbcError, Value};
 use druid::pool::DruidPool;
 use druid_rdbc::statement::{
-    ParameterIndex, PreparedParameter, PreparedStatement, Statement, StatementOptions,
+    FetchDirection, ParameterIndex, PreparedParameter, PreparedStatement, Statement,
+    StatementOptions,
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::Arc;
@@ -56,6 +57,19 @@ async fn task6_sqlite_core_semantics_test_sqlite_proves_pool_prepared_transactio
         )
         .await
         .expect("必须创建真实 Toasty PreparedStatement");
+    // 对应 Java 1.2.28 DruidPooledPreparedStatementTest#test_hitCount：
+    // 第一次借出的可变属性不得泄漏到同一缓存 key 的下一次逻辑借出。
+    assert_eq!(pool.state().cached_prepared_statement_hit_count, 0);
+    insert.set_fetch_size(1).unwrap();
+    insert.set_fetch_direction(FetchDirection::Reverse).unwrap();
+    insert.set_max_rows(3).unwrap();
+    insert.set_max_field_size(4).unwrap();
+    insert.set_query_timeout(5).unwrap();
+    assert_eq!(insert.fetch_size().unwrap(), 1);
+    assert_eq!(insert.fetch_direction().unwrap(), FetchDirection::Reverse);
+    assert_eq!(insert.max_rows().unwrap(), 3);
+    assert_eq!(insert.max_field_size().unwrap(), 4);
+    assert_eq!(insert.query_timeout().unwrap(), 5);
     for (index, value) in [
         (1, Value::Int(1)),
         (2, Value::String("primary".to_string())),
@@ -83,6 +97,11 @@ async fn task6_sqlite_core_semantics_test_sqlite_proves_pool_prepared_transactio
         .await
         .expect("相同 key 必须可从连接级缓存复用");
     assert_eq!(pool.state().cached_prepared_statement_hit_count, 1);
+    assert_eq!(cached.fetch_size().unwrap(), 0);
+    assert_eq!(cached.fetch_direction().unwrap(), FetchDirection::Unknown);
+    assert_eq!(cached.max_rows().unwrap(), 0);
+    assert_eq!(cached.max_field_size().unwrap(), 0);
+    assert_eq!(cached.query_timeout().unwrap(), 0);
     for (index, value) in [
         (1, Value::Int(2)),
         (2, Value::String("rollback".to_string())),
