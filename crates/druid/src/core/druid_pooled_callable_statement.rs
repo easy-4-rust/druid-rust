@@ -540,7 +540,14 @@ impl DruidPooledCallableStatement {
                 .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?;
             read(raw.as_ref().ok_or(RdbcError::ConnectionDiscarded)?.as_ref())
         };
-        self.classify_statement_mutation(result)
+        let result = self.classify_statement_mutation(result);
+        if let Err(error) = &result {
+            self.statement_base
+                .inner
+                .policy
+                .record_statement_access_error(error);
+        }
+        result
     }
 
     fn parameter_snapshot(&self) -> Result<Vec<PreparedInputParameter>, RdbcError> {

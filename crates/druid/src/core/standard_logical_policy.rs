@@ -499,6 +499,22 @@ impl StandardLogicalPolicy {
         }
     }
 
+    /// 记录 Callable OUT getter 的真实 SQL 异常，不伪增 SQL executeCount。
+    /// 对应 Java: `DruidPooledCallableStatement#checkException`。
+    pub(crate) fn record_statement_access_error(&self, error: &RdbcError) {
+        if error.sql_exception().is_none() {
+            return;
+        }
+        let Some(stats) = self.stats_collector.read().clone() else {
+            return;
+        };
+        stats.record_error();
+        stats.statement_stat().error(error);
+        if let Some(entry) = stats.connection_stat().entry(self.connection_id) {
+            entry.error(error);
+        }
+    }
+
     fn record_execution<T>(&self, sql: &str, result: &Result<T, RdbcError>) {
         let Some(stats) = self.stats_collector.read().clone() else {
             return;
