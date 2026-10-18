@@ -1011,6 +1011,32 @@ async fn task6_sqlite_row_updated_inserted_deleted_return_false_for_sqlite() {
 }
 
 #[tokio::test]
+async fn sqlite_single_row_cursor_revisits_row_like_java_pooled_result_set() {
+    // 对应 Java 1.2.28 DruidPooledResultSetTest#test_rowCount 的可观察导航：
+    // 单行游标越过末尾、回到该行、退到首行前，再次读取仍只有一行。
+    let mut conn = task6_sqlite_connection().await;
+    task6_sqlite_setup_table(&mut conn).await;
+    let mut stmt = conn
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    let mut rs = stmt
+        .execute_query("SELECT id FROM t WHERE id = 1")
+        .await
+        .unwrap();
+    assert!(rs.next().await.unwrap());
+    assert!(!rs.next().await.unwrap());
+    assert!(rs.previous().await.unwrap());
+    assert!(!rs.previous().await.unwrap());
+    assert!(rs.next().await.unwrap());
+    assert!(!rs.next().await.unwrap());
+    assert!(!rs.row_updated().unwrap());
+    rs.close().await.unwrap();
+    stmt.close().await.unwrap();
+    conn.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn sqlite_metadata_and_property_base_cases_preserve_real_driver_contracts() {
     task6_sqlite_warnings_returns_none_for_sqlite().await;
     task6_sqlite_meta_data_returns_column_count().await;
