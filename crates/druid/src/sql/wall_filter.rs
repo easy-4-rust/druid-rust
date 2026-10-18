@@ -212,14 +212,8 @@ impl WallFilter {
         match result {
             Ok(result) => {
                 stat.add_update_count(result.rows_affected);
-                if let Some(row_count) = result.row_count {
-                    stat.add_fetch_row_count(row_count);
-                }
-                self.provider.record_effect_rows_for_stat(
-                    stat,
-                    result.rows_affected,
-                    result.row_count,
-                );
+                self.provider
+                    .record_effect_rows_for_stat(stat, result.rows_affected, None);
                 if !stat.violations().is_empty() {
                     self.provider
                         .add_violation_effect_row_count(result.rows_affected);
@@ -499,6 +493,23 @@ impl AfterFilter for WallFilter {
 #[allow(private_interfaces)]
 #[async_trait::async_trait]
 impl ResultSetFilter for WallFilter {
+    fn standard_result_set_close_after(
+        &self,
+        context: &crate::core::ResultSetFilterContext,
+        result: &Result<(), DruidError>,
+    ) -> Result<(), DruidError> {
+        if result.is_ok() {
+            if let Some(sql) = context.sql() {
+                // Java WallFilter 在物理游标关闭成功后记录实际读取的行数。
+                self.provider.record_fetched_rows(
+                    sql,
+                    u64::try_from(context.fetch_row_count()).unwrap_or_default(),
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn standard_result_set_open_after_with_proxy(
         &self,
         context: &mut crate::core::StandardResultSetOpenContext<'_>,

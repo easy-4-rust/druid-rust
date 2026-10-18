@@ -414,7 +414,25 @@ impl WallProvider {
                 table_stat.add_delete_data_count(rows_affected);
             }
             if operation.select_count > 0 {
-                table_stat.add_fetch_row_count(row_count.unwrap_or_default());
+                if let Some(row_count) = row_count {
+                    table_stat.add_fetch_row_count(row_count);
+                }
+            }
+        }
+    }
+
+    /// 在 ResultSet 成功关闭后汇总实际读取行数。对应 Java: WallProvider#addFetchRowCount。
+    pub(crate) fn record_fetched_rows(&self, sql: &str, row_count: u64) {
+        let Some(sql_stat) = self.sql_stat(sql) else {
+            return;
+        };
+        sql_stat.add_fetch_row_count(row_count);
+        for (name, operation) in sql_stat.table_stats() {
+            if operation.select_count == 0 {
+                continue;
+            }
+            if let Some(table_stat) = self.table_stats.get(name) {
+                table_stat.add_fetch_row_count(row_count);
             }
         }
     }
