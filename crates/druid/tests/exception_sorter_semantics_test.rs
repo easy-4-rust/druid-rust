@@ -7,6 +7,8 @@ use druid::core::{
     PhoenixExceptionSorter, SqlException, SqlExceptionCause, SybaseExceptionSorter,
     ORACLE_FATAL_ERROR_CODES_PROPERTY,
 };
+use druid_rdbc::connection::Connection;
+use druid_rdbc::statement::StatementOptions;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -39,6 +41,48 @@ async fn mock_driver_uses_mock_sorter_even_with_mysql_db_type() {
         assert!(sorter.ends_with(expected), "{driver_name}: {sorter}");
         pool.close().await;
     }
+}
+
+/// 对应 Java: ExceptionSorterTest#test_exceptionSorter 的物理关闭与丢弃链路。
+#[tokio::test]
+async fn mock_physical_close_makes_prepared_close_fail_and_discards_holder() {
+    let state = TrackingState::configured();
+    let pool = druid::pool::DruidPool::builder()
+        .name("mock-physical-close")
+        .driver_name("mock")
+        .db_type_name("mysql")
+        .factory(Arc::new(TrackingFactory::new(Arc::clone(&state))))
+        .max_open(1)
+        .max_idle(1)
+        .pool_prepared_statements(true)
+        .build()
+        .await
+        .expect("pool init");
+    let mut connection = pool.get().await.expect("logical connection");
+    let mut prepared = connection
+        .prepare_statement("SELECT 1", StatementOptions::default())
+        .await
+        .expect("prepared statement");
+    prepared
+        .execute_prepared_update()
+        .await
+        .expect("execute before physical close");
+    state.close_mock_physical();
+    let error = prepared
+        .close()
+        .await
+        .expect_err("closed physical mock must fail cleanup");
+    assert_eq!(
+        error.sql_exception().map(SqlException::class_name),
+        Some("com.alibaba.druid.mock.MockConnectionClosedException")
+    );
+    connection
+        .close()
+        .await
+        .expect("logical connection closes after discard");
+    assert_eq!(pool.state().discard_count, 1);
+    assert_eq!(pool.state().active_count, 0);
+    pool.close().await;
 }
 
 #[test]

@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 #[derive(Debug, Default)]
 pub struct TrackingState {
     pub events: Mutex<Vec<String>>,
+    pub mock_physical_closed: AtomicBool,
     pub raw_close_count: AtomicUsize,
     pub raw_close_attempt_count: AtomicUsize,
     pub statement_close_count: AtomicUsize,
@@ -93,6 +94,11 @@ impl TrackingState {
             .fail_operation
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(operation);
+    }
+
+    pub fn close_mock_physical(&self) {
+        self.mock_physical_closed.store(true, Ordering::Release);
+        self.record("mock.physical.close");
     }
 
     fn check_failure(&self, operation: &'static str) -> Result<(), RdbcError> {
@@ -866,6 +872,12 @@ impl PreparedStatement for TrackingPreparedStatement {
         self.state
             .prepared_clear_attempt_count
             .fetch_add(1, Ordering::AcqRel);
+        if self.state.mock_physical_closed.load(Ordering::Acquire) {
+            return Err(RdbcError::SqlException(Box::new(
+                SqlException::new(0, None, Some("mock connection closed".to_owned()))
+                    .with_class_name("com.alibaba.druid.mock.MockConnectionClosedException"),
+            )));
+        }
         self.state.check_failure("prepared_clear_parameters")?;
         self.parameters.clear();
         self.state.prepared_input_bindings.lock().unwrap().clear();
