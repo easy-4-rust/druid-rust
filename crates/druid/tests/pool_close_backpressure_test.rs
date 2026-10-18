@@ -7,7 +7,7 @@ use druid::core::{
 use druid::pool::{DataSourceStatSink, DruidPool};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc as std_mpsc, Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 
 /// 可阻塞物理关闭的测试连接。对应 Java: DruidDataSource 的物理 Connection。
@@ -235,6 +235,8 @@ async fn slow_physical_close_has_bounded_queue_and_shutdown_joins_worker() {
         .expect("build pool");
 
     // 持续销毁超过 max_open + 队列容量的连接，验证生产者不会无限积压。
+    let storm_started = Instant::now();
+    let mut peak_close_queue_depth = 0;
     tokio::time::timeout(Duration::from_secs(5), async {
         for round in 0..ROUNDS {
             let mut connection = tokio::time::timeout(Duration::from_secs(1), pool.get())
@@ -242,10 +244,12 @@ async fn slow_physical_close_has_bounded_queue_and_shutdown_joins_worker() {
                 .unwrap_or_else(|_| panic!("borrow stalled at round {round}: {:?}", pool.state()))
                 .expect("borrow connection");
             connection.discard_connection();
+            peak_close_queue_depth = peak_close_queue_depth.max(pool.state().close_queue_depth);
         }
     })
     .await
     .expect("close storm remains bounded");
+    let storm_us = storm_started.elapsed().as_micros();
 
     let state = pool.state();
     assert!(state.close_queue_depth <= CAPACITY);
@@ -259,11 +263,27 @@ async fn slow_physical_close_has_bounded_queue_and_shutdown_joins_worker() {
     .expect("close worker starts processing");
 
     gate.add_permits(ROUNDS + CAPACITY);
+    let shutdown_started = Instant::now();
     tokio::time::timeout(Duration::from_secs(5), pool.close())
         .await
         .expect("shutdown joins close worker");
-    assert_eq!(pool.state().close_queue_depth, 0);
+    let shutdown_us = shutdown_started.elapsed().as_micros();
+    let final_state = pool.state();
+    assert_eq!(final_state.close_queue_depth, 0);
+    assert!(final_state.close_worker_terminated);
     assert!(closed.load(Ordering::Acquire) <= ROUNDS);
+    eprintln!(
+        "pool_slow_close_budget queue_capacity={} queue_peak={} queue_remaining={} rejected={} timeouts={} physical_closed={} storm_us={} shutdown_us={} worker_terminated={}",
+        CAPACITY,
+        peak_close_queue_depth,
+        final_state.close_queue_depth,
+        state.close_queue_rejected_total,
+        final_state.close_timeout_total,
+        closed.load(Ordering::Acquire),
+        storm_us,
+        shutdown_us,
+        final_state.close_worker_terminated,
+    );
 }
 
 #[tokio::test]

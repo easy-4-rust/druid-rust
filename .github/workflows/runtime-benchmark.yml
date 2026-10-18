@@ -25,6 +25,7 @@ jobs:
         run: |
           python3 scripts/test_measure_runtime_benchmark.py
           python3 scripts/test_measure_metrics_saturation.py
+          python3 scripts/test_measure_pool_slow_close.py
       - name: Build runtime benchmark
         run: |
           mkdir -p target/benchmark-evidence
@@ -53,6 +54,16 @@ jobs:
             --repetitions 20 \
             --max-p99-shutdown-us 100000 \
             --max-peak-rss-kib 65536
+      - name: Build Pool slow-close fault test
+        run: |
+          cargo test -p druid --locked --test pool_close_backpressure_test --no-run --message-format=json > target/benchmark-evidence/pool-slow-close-build.jsonl
+      - name: Measure Pool slow-close fault baseline
+        run: |
+          python3 scripts/measure_pool_slow_close.py \
+            --build-log target/benchmark-evidence/pool-slow-close-build.jsonl \
+            --run-log target/benchmark-evidence/pool-slow-close-run.log \
+            --output target/benchmark-evidence/pool-slow-close-measurement.json \
+            --repetitions 20
       - name: Upload runtime measurement
         if: always()
         uses: actions/upload-artifact@v4
@@ -64,5 +75,7 @@ jobs:
             target/criterion/runtime_pool_burst_64/new/sample.json
             target/benchmark-evidence/metrics-saturation-measurement.json
             target/benchmark-evidence/metrics-saturation-run.log
+            target/benchmark-evidence/pool-slow-close-measurement.json
+            target/benchmark-evidence/pool-slow-close-run.log
           if-no-files-found: error
           retention-days: 90
