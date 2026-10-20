@@ -636,6 +636,16 @@ impl FilterChainImpl {
             .statement_clear_batch()
     }
 
+    /// 包围语句设置或取消；参数为原始语句和操作，返回最终生效参数。
+    pub(crate) fn standard_statement_mutation(
+        &self,
+        statement: &mut dyn druid_rdbc::statement::Statement,
+        mutation: super::StatementMutation,
+    ) -> Result<super::StatementMutation, DruidError> {
+        super::StandardStatementMutationFilterChain::new(&self.before, statement, mutation.clone())
+            .apply(mutation)
+    }
+
     /// 按注册顺序读取标准语句警告；参数为驱动语句，返回完整警告链。
     pub(crate) fn standard_statement_get_warnings(
         &self,

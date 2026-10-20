@@ -142,6 +142,16 @@ pub trait BeforeFilter: Send + Sync {
         chain.statement_clear_batch()
     }
 
+    /// 包围标准语句设置或取消；参数为链和操作，返回最终生效参数或原始错误。
+    /// 对应 Java: Filter#statement_setXxx/statement_cancel；默认委托保持既有过滤器兼容。
+    fn standard_statement_mutation(
+        &self,
+        chain: &mut super::StandardStatementMutationFilterChain<'_>,
+        mutation: super::StatementMutation,
+    ) -> Result<super::StatementMutation, DruidError> {
+        chain.apply(mutation)
+    }
+
     async fn data_source_get_connection(
         &self,
         chain: &mut DataSourceGetConnectionFilterChain<'_>,

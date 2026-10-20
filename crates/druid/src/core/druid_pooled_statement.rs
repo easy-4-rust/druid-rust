@@ -1,5 +1,7 @@
 //! Canonical pooled Statement proxy.
 
+use super::StatementMutation;
+
 use super::druid_execution_filter_policy::DruidExecutionFilterPolicy;
 use super::druid_pooled_result_set::StandardResultSetResource;
 use super::filter::ExecOperation;
@@ -277,12 +279,7 @@ impl DruidPooledStatement {
     }
 
     pub(crate) fn configure_standard_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
-        Self::validate_non_negative(i64::from(seconds), "query timeout")?;
-        self.apply_statement_state_mutation(
-            "statement_set_query_timeout",
-            |statement| statement.set_query_timeout(seconds),
-            |state| state.query_timeout = seconds,
-        )
+        self.apply_statement_mutation(StatementMutation::SetQueryTimeout(seconds))
     }
 
     fn classify_statement_mutation<T>(&self, result: Result<T, RdbcError>) -> Result<T, RdbcError> {
@@ -399,26 +396,8 @@ impl DruidPooledStatement {
         self.classify_statement_access(result, sql)
     }
 
-    fn validate_non_negative(value: i64, name: &str) -> Result<(), RdbcError> {
-        if value < 0 {
-            Err(RdbcError::InvalidArgument(format!(
-                "{name} must be non-negative"
-            )))
-        } else {
-            Ok(())
-        }
-    }
-
-    fn apply_statement_state_mutation<Driver, Update>(
-        &self,
-        unsupported_operation: &'static str,
-        driver: Driver,
-        update: Update,
-    ) -> Result<(), RdbcError>
-    where
-        Driver: FnOnce(&mut dyn Statement) -> Result<(), RdbcError>,
-        Update: FnOnce(&mut DruidPooledStatementState),
-    {
+    /// 以最终生效参数提交代理状态；驱动和过滤器失败均保留原状态并仅分类一次。
+    fn apply_statement_mutation(&self, mutation: StatementMutation) -> Result<(), RdbcError> {
         self.ensure_open()?;
         let result = {
             let mut statement = self
@@ -426,15 +405,31 @@ impl DruidPooledStatement {
                 .statement
                 .try_lock()
                 .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?;
-            driver(statement.as_mut())
+            match &self.inner.filter_chain {
+                Some(chain) => chain.standard_statement_mutation(statement.as_mut(), mutation),
+                None => super::StandardStatementMutationFilterChain::new(
+                    &[],
+                    statement.as_mut(),
+                    mutation.clone(),
+                )
+                .apply(mutation),
+            }
+            .map_err(RdbcError::from)
         };
-        match result {
-            Ok(()) => {}
-            Err(RdbcError::UnsupportedOperation { operation })
-                if operation == unsupported_operation => {}
-            Err(error) => self.classify_statement_mutation(Err(error))?,
+        let effective = self.classify_statement_mutation(result)?;
+        let mut state = self.state_mut();
+        match effective {
+            StatementMutation::SetMaxFieldSize(value) => state.max_field_size = value,
+            StatementMutation::SetMaxRows(value) => state.max_rows = value,
+            StatementMutation::SetEscapeProcessing(value) => state.escape_processing = value,
+            StatementMutation::SetQueryTimeout(value) => state.query_timeout = value,
+            StatementMutation::SetCursorName(value) => state.cursor_name = Some(value),
+            StatementMutation::SetFetchDirection(value) => state.fetch_direction = value,
+            StatementMutation::SetFetchSize(value) => state.fetch_size = value,
+            StatementMutation::SetPoolable(value) => state.poolable = value,
+            StatementMutation::CloseOnCompletion => state.close_on_completion = true,
+            StatementMutation::Cancel => {}
         }
-        update(&mut self.state_mut());
         Ok(())
     }
 
@@ -789,12 +784,7 @@ impl Statement for DruidPooledStatement {
     }
 
     fn set_max_field_size(&mut self, max: i32) -> Result<(), RdbcError> {
-        Self::validate_non_negative(i64::from(max), "max field size")?;
-        self.apply_statement_state_mutation(
-            "statement_set_max_field_size",
-            |statement| statement.set_max_field_size(max),
-            |state| state.max_field_size = max,
-        )
+        self.apply_statement_mutation(StatementMutation::SetMaxFieldSize(max))
     }
 
     fn max_rows(&self) -> Result<i64, RdbcError> {
@@ -808,20 +798,11 @@ impl Statement for DruidPooledStatement {
     }
 
     fn set_max_rows(&mut self, max: i64) -> Result<(), RdbcError> {
-        Self::validate_non_negative(max, "max rows")?;
-        self.apply_statement_state_mutation(
-            "statement_set_max_rows",
-            |statement| statement.set_max_rows(max),
-            |state| state.max_rows = max,
-        )
+        self.apply_statement_mutation(StatementMutation::SetMaxRows(max))
     }
 
     fn set_escape_processing(&mut self, enabled: bool) -> Result<(), RdbcError> {
-        self.apply_statement_state_mutation(
-            "statement_set_escape_processing",
-            |statement| statement.set_escape_processing(enabled),
-            |state| state.escape_processing = enabled,
-        )
+        self.apply_statement_mutation(StatementMutation::SetEscapeProcessing(enabled))
     }
 
     fn query_timeout(&self) -> Result<i32, RdbcError> {
@@ -840,15 +821,7 @@ impl Statement for DruidPooledStatement {
     }
 
     fn cancel(&mut self) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        let result = self
-            .inner
-            .statement
-            .try_lock()
-            .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
-            .cancel();
-        // 取消是一次实际的 driver 操作；不支持时不能沿用属性缓存的成功回退。
-        self.classify_statement_mutation(result)
+        self.apply_statement_mutation(StatementMutation::Cancel)
     }
 
     fn cancellation_control(
@@ -868,20 +841,11 @@ impl Statement for DruidPooledStatement {
     }
 
     fn set_cursor_name(&mut self, name: &str) -> Result<(), RdbcError> {
-        let cursor_name = name.to_owned();
-        self.apply_statement_state_mutation(
-            "statement_set_cursor_name",
-            |statement| statement.set_cursor_name(name),
-            |state| state.cursor_name = Some(cursor_name),
-        )
+        self.apply_statement_mutation(StatementMutation::SetCursorName(name.to_owned()))
     }
 
     fn set_fetch_direction(&mut self, direction: FetchDirection) -> Result<(), RdbcError> {
-        self.apply_statement_state_mutation(
-            "statement_set_fetch_direction",
-            |statement| statement.set_fetch_direction(direction),
-            |state| state.fetch_direction = direction,
-        )
+        self.apply_statement_mutation(StatementMutation::SetFetchDirection(direction))
     }
 
     fn fetch_direction(&self) -> Result<FetchDirection, RdbcError> {
@@ -895,12 +859,7 @@ impl Statement for DruidPooledStatement {
     }
 
     fn set_fetch_size(&mut self, rows: i32) -> Result<(), RdbcError> {
-        Self::validate_non_negative(i64::from(rows), "fetch size")?;
-        self.apply_statement_state_mutation(
-            "statement_set_fetch_size",
-            |statement| statement.set_fetch_size(rows),
-            |state| state.fetch_size = rows,
-        )
+        self.apply_statement_mutation(StatementMutation::SetFetchSize(rows))
     }
 
     fn fetch_size(&self) -> Result<i32, RdbcError> {
@@ -914,11 +873,7 @@ impl Statement for DruidPooledStatement {
     }
 
     fn set_poolable(&mut self, poolable: bool) -> Result<(), RdbcError> {
-        self.apply_statement_state_mutation(
-            "statement_set_poolable",
-            |statement| statement.set_poolable(poolable),
-            |state| state.poolable = poolable,
-        )
+        self.apply_statement_mutation(StatementMutation::SetPoolable(poolable))
     }
 
     fn is_poolable(&self) -> Result<bool, RdbcError> {
@@ -927,11 +882,7 @@ impl Statement for DruidPooledStatement {
     }
 
     fn close_on_completion(&mut self) -> Result<(), RdbcError> {
-        self.apply_statement_state_mutation(
-            "statement_close_on_completion",
-            Statement::close_on_completion,
-            |state| state.close_on_completion = true,
-        )
+        self.apply_statement_mutation(StatementMutation::CloseOnCompletion)
     }
 
     fn is_close_on_completion(&self) -> Result<bool, RdbcError> {

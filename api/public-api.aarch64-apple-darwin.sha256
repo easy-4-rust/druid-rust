@@ -1,4 +1,4 @@
 # cargo-public-api 0.52.0; nightly-2026-08-07; -sss --all-features --target aarch64-apple-darwin
 64e8fa7961b0e103fdbbeba529280634efbe1cf1627453b387c2d4ac8bd80d99  druid-rdbc
-d79352e1f277779c280bcb33b62acb2316516f3768126da0cdedf4f82d23df28  druid
+443e0eb428eff0bdebd9a88a71e7d54afdfe28c7daa86f8d15a9ef968f0702dc  druid
 3dce6cbfb168e24109af702e08fff0e4a849211876b6915d84831de436875847  druid-wrapper

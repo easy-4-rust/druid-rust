@@ -1035,6 +1035,7 @@ pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_connec
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::core::filter::config::config_filter::ConfigFilter
@@ -1155,6 +1156,7 @@ pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_connec
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::core::filter::config::config_filter::ConfigFilter
@@ -1286,6 +1288,7 @@ pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFi
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter
@@ -1399,6 +1402,7 @@ pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFi
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter
@@ -1490,6 +1494,7 @@ pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::M
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter
@@ -1579,6 +1584,7 @@ pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::M
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter
@@ -1833,6 +1839,7 @@ pub fn druid::core::filter::BeforeFilter::standard_connection_get_meta_data_befo
 pub fn druid::core::filter::BeforeFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::BeforeFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::BeforeFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::BeforeFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::BeforeFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::BeforeFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::core::filter::config::config_filter::ConfigFilter
@@ -1880,6 +1887,7 @@ pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_connec
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter
@@ -1927,6 +1935,7 @@ pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFi
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter
@@ -1974,6 +1983,7 @@ pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::M
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::core::filter_adapter::FilterAdapter
@@ -2021,6 +2031,7 @@ pub fn druid::core::filter_adapter::FilterAdapter::standard_connection_get_meta_
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::core::log_filter::LogFilter
@@ -2068,6 +2079,7 @@ pub fn druid::core::log_filter::LogFilter::standard_connection_get_meta_data_bef
 pub fn druid::core::log_filter::LogFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::log_filter::LogFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter
@@ -2115,6 +2127,7 @@ pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataS
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::sql::wall_filter::WallFilter
@@ -2162,6 +2175,7 @@ pub fn druid::sql::wall_filter::WallFilter::standard_connection_get_meta_data_be
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::sql::wall_filter::WallFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::stats::merge_stat_filter::MergeStatFilter
@@ -2209,6 +2223,7 @@ pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_connection_get
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::stats::stat_filter::StatFilter
@@ -2256,6 +2271,7 @@ pub fn druid::stats::stat_filter::StatFilter::standard_connection_get_meta_data_
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::stats::stat_filter::StatFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl<L> druid::core::filter::BeforeFilter for druid::core::filter_event_adapter::FilterEventAdapter<L> where L: druid::core::filter_event_adapter::FilterEventListener + 'static
@@ -2303,6 +2319,7 @@ pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_connec
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 pub trait druid::core::filter::ExtendedFilter: core::marker::Send + core::marker::Sync
@@ -2378,6 +2395,7 @@ pub fn druid::core::filter_adapter::FilterAdapter::standard_connection_get_meta_
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::ExtendedFilter for druid::core::filter_adapter::FilterAdapter
@@ -2571,6 +2589,7 @@ pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_connec
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl<L> druid::core::filter::ExtendedFilter for druid::core::filter_event_adapter::FilterEventAdapter<L> where L: druid::core::filter_event_adapter::FilterEventListener + 'static
@@ -2786,6 +2805,7 @@ pub fn druid::core::log_filter::LogFilter::standard_connection_get_meta_data_bef
 pub fn druid::core::log_filter::LogFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::log_filter::LogFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::core::log_filter::LogFilter
@@ -4145,6 +4165,17 @@ pub druid::core::StatementExecuteType::Execute
 pub druid::core::StatementExecuteType::ExecuteBatch
 pub druid::core::StatementExecuteType::ExecuteQuery
 pub druid::core::StatementExecuteType::ExecuteUpdate
+pub enum druid::core::StatementMutation
+pub druid::core::StatementMutation::Cancel
+pub druid::core::StatementMutation::CloseOnCompletion
+pub druid::core::StatementMutation::SetCursorName(alloc::string::String)
+pub druid::core::StatementMutation::SetEscapeProcessing(bool)
+pub druid::core::StatementMutation::SetFetchDirection(druid_rdbc::statement::statement::FetchDirection)
+pub druid::core::StatementMutation::SetFetchSize(i32)
+pub druid::core::StatementMutation::SetMaxFieldSize(i32)
+pub druid::core::StatementMutation::SetMaxRows(i64)
+pub druid::core::StatementMutation::SetPoolable(bool)
+pub druid::core::StatementMutation::SetQueryTimeout(i32)
 pub enum druid::core::StatementPropertyEvent
 pub druid::core::StatementPropertyEvent::AddBatch(alloc::string::String)
 pub druid::core::StatementPropertyEvent::ClearWarnings
@@ -4347,6 +4378,7 @@ pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_connec
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::core::filter::config::config_filter::ConfigFilter
@@ -5026,6 +5058,7 @@ pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFi
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter
@@ -5185,6 +5218,7 @@ pub fn druid::core::filter_adapter::FilterAdapter::standard_connection_get_meta_
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::ExtendedFilter for druid::core::filter_adapter::FilterAdapter
@@ -5329,6 +5363,7 @@ pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_connec
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl<L> druid::core::filter::ExtendedFilter for druid::core::filter_event_adapter::FilterEventAdapter<L> where L: druid::core::filter_event_adapter::FilterEventListener + 'static
@@ -5509,6 +5544,7 @@ pub fn druid::core::log_filter::LogFilter::standard_connection_get_meta_data_bef
 pub fn druid::core::log_filter::LogFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::log_filter::LogFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::core::log_filter::LogFilter
@@ -5620,6 +5656,7 @@ pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::M
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter
@@ -6070,6 +6107,9 @@ pub async fn druid::core::StandardConnectionWarningFilterChain<'a>::connection_g
 pub struct druid::core::StandardStatementClearBatchFilterChain<'a>
 impl<'a> druid::core::StandardStatementClearBatchFilterChain<'a>
 pub fn druid::core::StandardStatementClearBatchFilterChain<'a>::statement_clear_batch(&mut self) -> core::result::Result<(), druid::core::error::DruidError>
+pub struct druid::core::StandardStatementMutationFilterChain<'a>
+impl<'a> druid::core::StandardStatementMutationFilterChain<'a>
+pub fn druid::core::StandardStatementMutationFilterChain<'a>::apply(&mut self, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub struct druid::core::StandardStatementWarningFilterChain<'a>
 impl<'a> druid::core::StandardStatementWarningFilterChain<'a>
 pub fn druid::core::StandardStatementWarningFilterChain<'a>::statement_clear_warnings(&mut self) -> core::result::Result<(), druid::core::error::DruidError>
@@ -6247,6 +6287,7 @@ pub fn druid::core::BeforeFilter::standard_connection_get_meta_data_before<'life
 pub fn druid::core::BeforeFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::BeforeFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::BeforeFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::BeforeFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::BeforeFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::BeforeFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::core::filter::config::config_filter::ConfigFilter
@@ -6294,6 +6335,7 @@ pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_connec
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::config::config_filter::ConfigFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter
@@ -6341,6 +6383,7 @@ pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFi
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::encoding::encoding_convert_filter::EncodingConvertFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter
@@ -6388,6 +6431,7 @@ pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::M
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter::mysql8datetime::my_sql8_date_time_sql_type_filter::MySQL8DateTimeSqlTypeFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::core::filter_adapter::FilterAdapter
@@ -6435,6 +6479,7 @@ pub fn druid::core::filter_adapter::FilterAdapter::standard_connection_get_meta_
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_adapter::FilterAdapter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::core::log_filter::LogFilter
@@ -6482,6 +6527,7 @@ pub fn druid::core::log_filter::LogFilter::standard_connection_get_meta_data_bef
 pub fn druid::core::log_filter::LogFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::log_filter::LogFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::log_filter::LogFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter
@@ -6529,6 +6575,7 @@ pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataS
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::sql::wall_filter::WallFilter
@@ -6576,6 +6623,7 @@ pub fn druid::sql::wall_filter::WallFilter::standard_connection_get_meta_data_be
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::sql::wall_filter::WallFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::stats::merge_stat_filter::MergeStatFilter
@@ -6623,6 +6671,7 @@ pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_connection_get
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::filter::BeforeFilter for druid::stats::stat_filter::StatFilter
@@ -6670,6 +6719,7 @@ pub fn druid::stats::stat_filter::StatFilter::standard_connection_get_meta_data_
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::stats::stat_filter::StatFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl<L> druid::core::filter::BeforeFilter for druid::core::filter_event_adapter::FilterEventAdapter<L> where L: druid::core::filter_event_adapter::FilterEventListener + 'static
@@ -6717,6 +6767,7 @@ pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_connec
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::core::filter_event_adapter::FilterEventAdapter<L>::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 pub trait druid::core::ClobProxy: core::marker::Send + core::marker::Sync
@@ -7752,6 +7803,7 @@ pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataS
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter
@@ -7926,6 +7978,7 @@ pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataS
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter
@@ -8265,6 +8318,7 @@ pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataS
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::dynamic::selector::random_data_source_validate_filter::RandomDataSourceValidateFilter
@@ -11681,6 +11735,7 @@ pub fn druid::sql::wall_filter::WallFilter::standard_connection_get_meta_data_be
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::sql::wall_filter::WallFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::sql::wall_filter::WallFilter
@@ -13981,6 +14036,7 @@ pub fn druid::sql::wall_filter::WallFilter::standard_connection_get_meta_data_be
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::sql::wall_filter::WallFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::sql::wall_filter::WallFilter
@@ -14605,6 +14661,7 @@ pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_connection_get
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::stats::merge_stat_filter::MergeStatFilter
@@ -15016,6 +15073,7 @@ pub fn druid::stats::stat_filter::StatFilter::standard_connection_get_meta_data_
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::stats::stat_filter::StatFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::stats::stat_filter::StatFilter
@@ -15432,6 +15490,7 @@ pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_connection_get
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::merge_stat_filter::MergeStatFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::stats::merge_stat_filter::MergeStatFilter
@@ -15856,6 +15915,7 @@ pub fn druid::stats::stat_filter::StatFilter::standard_connection_get_meta_data_
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_clear_batch(&self, &mut druid::core::StandardStatementClearBatchFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_clear_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_get_warnings(&self, &mut druid::core::StandardStatementWarningFilterChain<'_>) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid::core::error::DruidError>
+pub fn druid::stats::stat_filter::StatFilter::standard_statement_mutation(&self, &mut druid::core::StandardStatementMutationFilterChain<'_>, druid::core::StatementMutation) -> core::result::Result<druid::core::StatementMutation, druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::standard_statement_property_read(&self, &druid::core::filter::StatementPropertyEvent) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::stats::stat_filter::StatFilter::statement_add_batch_sql(&self, &str) -> core::result::Result<alloc::string::String, druid::core::error::DruidError>
 impl druid::core::result_set_filter::ResultSetFilter for druid::stats::stat_filter::StatFilter
