@@ -1,0 +1,3 @@
+case_id	dialect	sql
+testOracle	oracle	SELECT email FROM members WHERE email = 'x'; UPDATE members SET email = 'steve@unixwiz.net' WHERE email = 'bob@example.com';
+testMySql	mysql	SELECT email FROM members WHERE email = 'x'; UPDATE members SET email = 'steve@unixwiz.net' WHERE email = 'bob@example.com';

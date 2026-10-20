@@ -68,6 +68,11 @@
 - **THEN** 每例独立观察异常类别、错误码、SQLState、消息、错误计数、活动/空闲连接和关闭后复用；全部输入和两端输出保留
 - **AND** 两项已批准 closeOnCompletion 差异保留分母并独立标记，其他差异不得以泛化白名单放行
 
+#### Scenario: 固定两例 Wall 多语句拒绝实时差分
+- **WHEN** 对冻结 Java Druid 1.2.28 的 WallMultiStatementTest 两个原始方法执行相同 SQL 及 Oracle/MySQL 方言入口
+- **THEN** 保留原始断言、SQL 和两例分母，分别记录并逐项比较两端布尔校验结果，任何未一致结果使实时差分失败
+- **AND** 默认运行中忽略的 Java 用例不能充当实测证据；这两例不替代整个 Wall、SQL 安全或 P07 差分验收
+
 #### Scenario: 预编译与可调用语句属性错误取消缓存资格
 - **WHEN** 已启用语句缓存的 PreparedStatement 或 CallableStatement 在最大字段长度、最大行数、查询超时、抓取方向、抓取大小或三个结果集属性的读取中收到过滤器或驱动 SQL 错误
 - **THEN** 原始 SQL 错误只分类和计错一次，逻辑关闭时底层失败语句只关闭一次且不再进入缓存；同一 SQL 必须重新创建语句
