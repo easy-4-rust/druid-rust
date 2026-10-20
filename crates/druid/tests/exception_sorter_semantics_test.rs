@@ -177,9 +177,18 @@ fn mysql_sorter_matches_every_java_fatal_branch_and_cause_depth_limit() {
 
     assert!(sorter.is_exception_fatal(
         &SqlException::driver(0, "driver")
-            .with_class_name("com.mysql.cj.rdbc.exceptions.CommunicationsException")
+            .with_class_name("com.mysql.cj.jdbc.exceptions.CommunicationsException")
     ));
     assert!(sorter.is_exception_fatal(&SqlException::driver(
+        0,
+        concat!(
+            "Streaming result set com.mysql.jdbc.RowDataDynamic ",
+            "is still active. No statements may be issued when any streaming result sets are ",
+            "open and in use on a given connection. Ensure that you have called .close() on any ",
+            "active streaming result sets before attempting more queries."
+        )
+    )));
+    assert!(!sorter.is_exception_fatal(&SqlException::driver(
         0,
         concat!(
             "Streaming result set com.mysql.rdbc.RowDataDynamic ",
