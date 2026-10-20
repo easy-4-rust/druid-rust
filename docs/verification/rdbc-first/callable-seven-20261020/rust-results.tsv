@@ -1,0 +1,8 @@
+case_id	trace	outcome	error_class	error_code	sql_state_utf16	message_utf16	errors_before	errors_after	active_during	idle_during	statement_closed	connection_closed	active_after	idle_after	reused
+DruidPooledCallableStatementTest.test_getObject	-	THROW	java.sql.SQLFeatureNotSupportedException	0	-	-	0	1	1	0	true	true	0	1	true
+DruidPooledCallableStatementTest.test_getObject_1	-	THROW	java.sql.SQLFeatureNotSupportedException	0	-	-	0	1	1	0	true	true	0	1	true
+DruidPooledCallableStatementTest.test_wasNull_error	-	THROW	java.sql.SQLException	0	-	-	0	1	1	0	true	true	0	1	true
+DruidPooledCallableStatementTest.test_wasNull_noerror	false	RETURN	-	-	-	-	0	0	1	0	true	true	0	1	true
+DruidPooledCallableStatementTest.test_wrap	role_raw=false,callable_raw=false,logical=true	RETURN	-	-	-	-	0	0	1	0	true	true	0	1	true
+DruidPooledCallableStatementTest.test_wrap_1	role_raw=false,callable_raw=false,logical=true	RETURN	-	-	-	-	0	0	1	0	true	true	0	1	true
+DruidPooledCallableStatementTest.test_wrap_2	role_raw=false,callable_raw=false,logical=true	RETURN	-	-	-	-	0	0	1	0	true	true	0	1	true

@@ -1,0 +1,8 @@
+case_id	method	sql	execute	filters	throw_error	operation	selector
+DruidPooledCallableStatementTest.test_wasNull_noerror	test_wasNull_noerror	select 1	true	true	false	WAS_NULL	-
+DruidPooledCallableStatementTest.test_wasNull_error	test_wasNull_error	select 1	true	true	true	WAS_NULL	-
+DruidPooledCallableStatementTest.test_getObject	test_getObject	select 1	true	true	true	TYPED_INDEX	1
+DruidPooledCallableStatementTest.test_getObject_1	test_getObject_1	select 1	true	true	true	TYPED_NAME	1
+DruidPooledCallableStatementTest.test_wrap	test_wrap	select 1	false	true	true	UNWRAP	callable
+DruidPooledCallableStatementTest.test_wrap_1	test_wrap_1	select 1	false	true	true	UNWRAP	prepared
+DruidPooledCallableStatementTest.test_wrap_2	test_wrap_2	select 1	false	false	true	UNWRAP	prepared

@@ -68,6 +68,11 @@
 - **THEN** 每例独立观察异常类别、错误码、SQLState、消息、错误计数、活动/空闲连接和关闭后复用；全部输入和两端输出保留
 - **AND** 两项已批准 closeOnCompletion 差异保留分母并独立标记，其他差异不得以泛化白名单放行
 
+#### Scenario: 固定七例 Callable 实时差分
+- **WHEN** 对冻结 Java Druid 1.2.28 的 DruidPooledCallableStatementTest 执行全部七例
+- **THEN** 保留原 SQL、执行标志、过滤器启停、wasNull 拒绝标志、按索引/名称 String 目标及 Callable/Prepared 解包角色；运行原断言并保留错误字段、计数、关闭与连接复用观测
+- **AND** 类型化取值的错误计数及原生/逻辑对象身份差异必须独立报告，未批准时比较失败，不以其他字段一致删除这些用例
+
 #### Scenario: Callable wasNull 经过可包围的标准过滤器
 - **WHEN** 池化 CallableStatement 调用 was_null，已注册过滤器拒绝、短路、包围驱动读取或改写布尔结果
 - **THEN** 按注册顺序分派，拒绝发生在底层 was_null 前；原始 SQL 错误仅分类和计错一次，并保留既有失败语句退出缓存策略

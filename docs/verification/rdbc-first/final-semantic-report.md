@@ -277,3 +277,30 @@ Module log: D:\druid-rust-tooling\callable-was-null-module-20261020.log, SHA-256
 No new live seven-case Java Callable comparator was executed in this increment. The frozen 59-case manifest therefore keeps the seven Callable rows NOT_PAIRED, and remains at 43 matches, two approved differences, four mismatches and ten unpaired cases. Typed getObject and raw/logical unwrap identities still require their own paired observations and decisions. The full production-ready goal remains NOT_READY.
 
 Strict all-test Druid Clippy passed (exit 0), log `D:\druid-rust-tooling\callable-was-null-clippy-20261020.log`, SHA-256 `558c97a5a370f0b5e452e09a9e96d249aa6f397a883504a4635afbe5ea8c700f`. The two pinned-nightly all-feature Windows API generators exited 0. The reviewed Druid changes are only the new default callback, its inherited paths and the typed chain; there are zero removals. Wrapper API is unchanged, and RDBC source/API was not modified. Reviewed portable additions were applied to the existing Darwin snapshot while preserving platform-specific lines and repeated public-path occurrences; native Darwin CI equality remains required. No SemVer allowance or Java difference was added by this fix.
+
+
+### Live seven-case Callable differential (2026-10-20)
+
+All seven original DruidPooledCallableStatementTest methods now have a paired comparator. The original assertion methods execute unchanged before fresh-setup explicit observations. The corpus preserves select 1, original execute/no-execute flags, initialSize=1, filter enabled/cleared state, wasNull throwError, the separate indexed/named String targets and Callable/Prepared roles. The runtime version and seven-method denominator are checked, and four source hashes are verified before compiling the original test plus the frozen raw mock and pooled Callable implementation against the existing frozen build classpath. This is partial-source provenance, not a claim of rebuilding every Java production class.
+
+With JDK 17.0.12 and Java Druid 1.2.28 commit 33824c3dec1612711f9bb4e409319bcab2e4cd0e, original Java assertions passed. The explicit paired comparison ran all seven inputs and **failed (Cargo exit 101)**: two exact wasNull matches and five unapproved differences. [The 32-column comparison](callable-seven-20261020/comparison.tsv), [Java results](callable-seven-20261020/java-results.tsv), [Rust results](callable-seven-20261020/rust-results.tsv) and [source receipt](callable-seven-20261020/tested-source-sha256.tsv) retain complete observations. The wasNull match now verifies the registered filter route fixed in 21ff9c0, rather than injecting an equivalent error directly in the raw driver.
+
+The five differences are precise:
+
+- test_getObject and test_getObject_1 both preserve SQLFeatureNotSupportedException, code 0, null SQLState and null message. Java's typed delegations do not record the error (after=0), whereas Rust's existing standard OUT-access error policy records it once (after=1). Every other observation matches.
+- test_wrap, test_wrap_1 and test_wrap_2 return a raw MockCallableStatement from the requested Callable/Prepared role in Java. Rust returns the same governed logical role (raw=false, logical=true). Error counts, logical close and physical-holder reuse match. No nonstandard concrete-class unwrap was fabricated in the Rust fixture.
+
+The comparator has no allowance path. These observations are recorded as unapproved; neither the existing error-counting policy nor governed identity contract is silently changed to force equivalence. No production code/API changed in this increment. The 59-case baseline is now paired for 56 cases: **45 MATCH, two previously approved standard differences, nine MISMATCH and three NOT_PAIRED**. The remaining unpaired baseline cases are prepared cache, Mock exception-sorter selection/cleanup, and WallFilter table statistics (one each). Other JDBC, extra ResultSet and vendor-sorter scopes remain separate requirements.
+
+After coding the complete observation batch, the default druid-bench module passed eight tests across eight reported targets, zero failed and six environment-dependent live tests ignored. Strict Clippy for all default benchmark tests passed with -D warnings; the five pairing-verifier mutation tests passed. The actual live Callable test is separately executed and failed, so none of its ignored/default status is promoted to parity. The default 59-case verifier checks pinned Java sources and still exits 1/NOT_READY.
+
+Raw evidence: D:\druid-rust-tooling\callable-seven-live-2680-1792510181665659700. Logs under D:\druid-rust-tooling:
+
+| Log | SHA-256 |
+| --- | --- |
+| callable-seven-bench-module-20261020.log | 269f1988e5b800a9a241751111cdb0c65eb68a7e6013d67b6b620e265dba3de9 |
+| callable-seven-live-20261020.log | 41437b86aa9eda3a7d1227bd3d4d408996e8e553cbd9c17dade4c8f7bf998c14 |
+| callable-seven-clippy-20261020.log | 04081bdcd275d7b3f0067559458c39fcb30b4f6caf9a548ecb42699f92f27408 |
+| callable-seven-pairing-tests-20261020.log | b905297367dac58af553ad03e400fb8406546ed1e244d34b9f200d87f52010a2 |
+
+No approval request is repeated or inferred from elapsed time. The new five cases remain failed while the remaining baseline observations are collected for review. The full production-ready goal remains NOT_READY and still needs the final global source matrix and all other required gates.

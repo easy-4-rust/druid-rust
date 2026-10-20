@@ -1,0 +1,5 @@
+path	sha256
+core/src/test/java/com/alibaba/druid/bvt/pool/DruidPooledCallableStatementTest.java	22ab0569c64defa03426f1a20df1b1e2ff02f8ac8bee68753e3fc6d251f1fc49
+core/src/main/java/com/alibaba/druid/mock/MockCallableStatement.java	6239dc37b3184e8a18cf0e01a20cc068a2f08fbe48820e208da2456792fbe018
+core/src/main/java/com/alibaba/druid/mock/MockPreparedStatement.java	da89f99924bfdb1e1ad52f90d88146e9d9df63555ba26827f3e5ed54b354002e
+core/src/main/java/com/alibaba/druid/pool/DruidPooledCallableStatement.java	afff997cacee9edc3774d0d79cc18eb97964be94aa557d9ce175e2c26aa87841
