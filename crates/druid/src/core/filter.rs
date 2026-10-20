@@ -133,6 +133,15 @@ pub trait BeforeFilter: Send + Sync {
         Ok(())
     }
 
+    /// 包围 Callable OUT NULL 状态读取；参数为标准调用链，返回最终布尔状态或原始错误。
+    /// 对应 Java: Filter#callableStatement_wasNull；默认委托以兼容已有过滤器。
+    fn standard_callable_was_null(
+        &self,
+        chain: &mut super::StandardCallableWasNullFilterChain<'_>,
+    ) -> Result<bool, DruidError> {
+        chain.callable_statement_was_null()
+    }
+
     /// 包围标准语句批次清除；参数为调用链，返回过滤或驱动结果。
     /// 对应 Java: Filter#statement_clearBatch；默认继续调用以保持已有过滤器兼容。
     fn standard_statement_clear_batch(

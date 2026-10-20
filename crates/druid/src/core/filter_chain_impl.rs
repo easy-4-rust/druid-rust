@@ -646,6 +646,15 @@ impl FilterChainImpl {
             .apply(mutation)
     }
 
+    /// 包围 Callable NULL 状态读取；参数为延迟驱动读取，返回过滤后的结果。
+    pub(crate) fn standard_callable_was_null(
+        &self,
+        terminal: &mut dyn FnMut() -> Result<bool, DruidError>,
+    ) -> Result<bool, DruidError> {
+        super::StandardCallableWasNullFilterChain::new(&self.before, terminal)
+            .callable_statement_was_null()
+    }
+
     /// 按注册顺序读取标准语句警告；参数为驱动语句，返回完整警告链。
     pub(crate) fn standard_statement_get_warnings(
         &self,

@@ -1165,7 +1165,18 @@ impl CallableStatement for DruidPooledCallableStatement {
 
     /// 保留底层 OUT getter 与参数描述符；失败使当前语句退出缓存。
     fn was_null(&self) -> Result<bool, RdbcError> {
-        self.read_out_result(CallableStatement::was_null)
+        self.read_out_result(|raw| {
+            if let Some(filters) = &self.statement_base.inner.filter_chain {
+                // 让过滤器先于驱动读取；错误统一由外层读取策略分类、计数和撤销缓存资格。
+                filters
+                    .standard_callable_was_null(&mut || {
+                        raw.was_null().map_err(super::DruidError::from)
+                    })
+                    .map_err(RdbcError::from)
+            } else {
+                raw.was_null()
+            }
+        })
     }
 
     /// 保留底层 OUT getter 与参数描述符；失败使当前语句退出缓存。

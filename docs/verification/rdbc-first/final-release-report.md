@@ -41,3 +41,6 @@ The frozen ten-class Java baseline now has a 59-case identity manifest and fail-
 
 
 The six-case Pool live comparator has three exact matches and three unapproved differences (two credential error contracts and one discarded Statement closed-state field). Its explicit live test fails with exit 101; default benchmark module checks and independent original Java assertions do not waive those differences. User confirmation is pending. See the final semantic report and retained per-case comparison for the exact evidence.
+
+
+Callable follow-up fixes an actual missing filter route: was_null now dispatches the registered typed around-chain before the driver terminal, preserving once-only SQL access accounting and existing cache retirement. The library plus seven related integration targets passed 202 tests with zero failures/ignored cases; all-test Druid Clippy passed. The generated API additions are limited to the default filter callback, inherited paths and its typed chain (49 lines, zero removals). This Rust correction does not itself complete the seven-case live Callable comparison or change the frozen baseline's ten NOT_PAIRED rows. Full source matrix and native Darwin API confirmation remain required.
