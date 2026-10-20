@@ -36,6 +36,11 @@ resource-owner 回到内部。`druid` 保留池化、Filter、SQL Parser、Wall�
 执行计划时必须重新记录实际 HEAD、dirty worktree、Cargo metadata 和 CodeGraph
 状态；本表不是跳过新鲜基线检查的许可。
 
+2026-10-20 用户批准的精确兼容差异：Rust 保留 JDBC 标准
+`Statement#closeOnCompletion/isCloseOnCompletion` 实现，不复现 Java Druid 1.2.28
+在这两个方法上返回不支持的限制。以 OpenSpec `rdbc-jdbc-method-conformance`
+MC-03 的对应场景为准；其他可观察语义仍按冻结基线及各自合同验收。
+
 ## 3. 当前事实与问题定义
 
 ### 3.1 当前合同分成三层

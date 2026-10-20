@@ -41,6 +41,11 @@
 - **WHEN** 时间转换或标准接口签名产生兼容差异
 - **THEN** 差异逐项关联迁移说明和验证记录；未审阅的 SemVer 失败仍保留失败状态
 
+#### Scenario: 保留已批准的 JDBC closeOnCompletion 标准实现
+- **WHEN** 对照 Java Druid 1.2.28 的 `Statement#closeOnCompletion` 和 `#isCloseOnCompletion` 不支持行为
+- **THEN** 按 2026-10-20 用户确认，Rust 保留 JDBC 标准实现，登记为明确允许的行为差异，不把 Java 的不支持结果冒充等价结果
+- **AND** 结果集依赖释放、语句自动关闭及关闭状态仍必须以 Rust 生命周期合同验证；此批准不豁免其他 Java/Rust 差异
+
 ### Requirement: MC-04 验收范围和终止条件固定
 
 本变更 SHALL 按固定批次验收；同一未修改输入、环境和命令的失败不得无限重跑。通过目标测试及受影响回归后 SHALL 结束该批，新发现的范围外问题只登记，不自动扩展实现范围。
