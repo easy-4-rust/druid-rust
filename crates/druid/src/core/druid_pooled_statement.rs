@@ -507,7 +507,7 @@ impl DruidPooledStatement {
         }
     }
 
-    fn begin_single_execution(&self, sql: &str, execute_type: StatementExecuteType) {
+    pub(super) fn begin_single_execution(&self, sql: &str, execute_type: StatementExecuteType) {
         let mut state = self.state_mut();
         state.last_sql = Some(sql.to_owned());
         state.last_execute_type = Some(execute_type);

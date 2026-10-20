@@ -1,0 +1,21 @@
+step	operation	sql	parameters	checkpoint
+0	statement	CREATE TABLE t (FID INTEGER, FNAME VARCHAR(50))	-	create_count
+1	statement	INSERT INTO t (FID, FNAME) VALUES (0, 'a0')	-	-
+2	statement	INSERT INTO t (FID, FNAME) VALUES (1, 'a1')	-	-
+3	statement	INSERT INTO t (FID, FNAME) VALUES (2, 'a2')	-	-
+4	statement	INSERT INTO t (FID, FNAME) VALUES (3, 'a3')	-	-
+5	statement	INSERT INTO t (FID, FNAME) VALUES (4, 'a4')	-	-
+6	statement	INSERT INTO t (FID, FNAME) VALUES (5, 'a5')	-	-
+7	statement	INSERT INTO t (FID, FNAME) VALUES (6, 'a6')	-	-
+8	statement	INSERT INTO t (FID, FNAME) VALUES (7, 'a7')	-	-
+9	statement	INSERT INTO t (FID, FNAME) VALUES (8, 'a8')	-	-
+10	statement	INSERT INTO t (FID, FNAME) VALUES (9, 'a9')	-	-
+11	query	SELECT * FROM T	-	fetch_row_count
+12	statement	DELETE from t where FID = 0	-	delete_data_count
+13	statement	DELETE from t where FID = 1 OR FID = 2	-	delete_data_count
+14	statement	update t SET fname = 'xx' where FID = 3 OR FID = 4	-	update_data_count
+15	prepared	update t SET fname = 'xx' where FID = ? OR FID = ?	3,4	update_data_count
+16	prepared	update t SET fname = 'xx' where FID = ? OR FID = ?	3,4	update_data_count
+17	batch	update t SET fname = 'xx' where FID = ?	3,4	update_data_count
+18	statement	truncate table t	-	truncate_count
+19	statement	drop table t	-	drop_count

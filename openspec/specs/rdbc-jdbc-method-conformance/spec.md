@@ -68,6 +68,11 @@
 - **THEN** 每例独立观察异常类别、错误码、SQLState、消息、错误计数、活动/空闲连接和关闭后复用；全部输入和两端输出保留
 - **AND** 两项已批准 closeOnCompletion 差异保留分母并独立标记，其他差异不得以泛化白名单放行
 
+#### Scenario: WallFilter 原始 H2 表统计完整配对
+- **WHEN** 执行冻结 WallFilterTest 的原断言及原始二十步 SQL/参数，两端均连接同版 H2，Rust 经 JDBC Agent 与真实池化过滤器执行
+- **THEN** 保留原始十条 INSERT 的同借用边界、Prepared 查询、两次 Prepared 更新、批次、TRUNCATE 和 DROP，逐项比较全部十个表统计检查点
+- **AND** 缺少 Agent/H2 环境时仅显式跳过，不能记为配对成功；实库制品与输入哈希随结果保留，任何未批准差异使实时比较失败
+
 #### Scenario: Prepared 缓存原始单例的完整观测
 - **WHEN** 执行冻结 DruidPooledPreparedStatementTest 的完整 test_hitCount，两次借出相同 SQL 并按原值设置五项属性及绑定字符串
 - **THEN** 保留五项属性初始值、修改值、第二次恢复值、两次结果遍历、SQL、语句级命中/key 和补充池级命中计数

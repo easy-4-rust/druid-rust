@@ -1,5 +1,5 @@
 java_class	java_method	java_source	java_source_sha256	status	comparison
-com.alibaba.druid.bvt.filter.wall.WallFilterTest	test_wallFilter	core/src/test/java/com/alibaba/druid/bvt/filter/wall/WallFilterTest.java	269698f1122383bb22fa8b58df06770d0d29e938319b9a88aa885d6a1ebb2569	NOT_PAIRED	-
+com.alibaba.druid.bvt.filter.wall.WallFilterTest	test_wallFilter	core/src/test/java/com/alibaba/druid/bvt/filter/wall/WallFilterTest.java	269698f1122383bb22fa8b58df06770d0d29e938319b9a88aa885d6a1ebb2569	MATCH	wall-table-20261021/comparison.tsv
 com.alibaba.druid.bvt.filter.wall.WallMultiStatementTest	testMySql	core/src/test/java/com/alibaba/druid/bvt/filter/wall/WallMultiStatementTest.java	ac9ef98f31cfcfa8a1d821cccec657072d2f06f2a72ea617913986d124496fb7	MATCH	wall-multi-20261020/comparison.tsv
 com.alibaba.druid.bvt.filter.wall.WallMultiStatementTest	testOracle	core/src/test/java/com/alibaba/druid/bvt/filter/wall/WallMultiStatementTest.java	ac9ef98f31cfcfa8a1d821cccec657072d2f06f2a72ea617913986d124496fb7	MATCH	wall-multi-20261020/comparison.tsv
 com.alibaba.druid.bvt.pool.DruidDataSourceTest_getConnection	test_conn_ok	core/src/test/java/com/alibaba/druid/bvt/pool/DruidDataSourceTest_getConnection.java	01a2d7f4b70a496106658e8432e548dd290826735d50f0a14cf960450518aee1	MATCH	pool-six-20261020/comparison.tsv

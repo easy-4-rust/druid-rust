@@ -335,3 +335,25 @@ The complete original case remains **MISMATCH**: Java's statement-specific hit c
 Log SHA-256: module `8df7593cc76bd4273a8616aa532b7958ab3711f6ddc9f41937bab43dd34e0389`; live `cbab2c791049796cd5fe315a406dbd808f40b992352ee29759a49b551f1c9356`; clippy `cbb8c662151958ed5ed92a87ca13c8d2443ebbac67a46d232ae84ff1170efea1`.
 
 The fixed 59-case manifest is now **46 MATCH, 2 approved differences, 10 MISMATCH, 1 NOT_PAIRED**. Only WallFilter table statistics remains unpaired in this named selection. Broader P07/JDBC method coverage, pending compatibility decisions and the latest complete platform matrix remain required; the full release verdict remains NOT_READY.
+
+
+## Original H2 WallFilter differential and native cursor SQL fix — 2026-10-21
+
+Implemented the complete one-method WallFilterTest differential as twenty original SQL/parameter operations, preserving all ten intermediate table-statistic assertions and the original borrow/close boundaries. The Java helper first runs the unchanged original JUnit test with its actual lifecycle, then observes a fresh setup. Rust executes through the real pool, WallFilter and JDBC Agent against the same H2 1.4.199 JAR used by the frozen Java build. The Agent was packaged from current source with JDK 17/Maven 3.9.16; that packaging used skipTests and is not Java Agent test evidence. Jar digests and tested source receipts are retained. This oracle compiles the original test against a configured frozen build classpath, not a full rebuild attestation of all Java production classes.
+
+Initial explicit live execution failed with Java `1,10,1,3,2,4,6,8,1,1` versus Rust `1,0,1,3,2,4,6,8,1,1`. Investigation found that native Prepared/Callable query and generic execution did not initialize their inherited Statement's last executed SQL. Cursor filter context therefore had no SQL, and the Wall close callback could not associate the ten fetched rows with a SQL/table. This was not a table-name case-normalization defect.
+
+Both proxy types now call the existing internal begin_single_execution path for native query, update and generic execution. It binds the current SQL/execution type before asynchronous driver work and resets the inherited result metadata consistently with ordinary Statement. The helper's visibility is restricted to its parent module, with no public API added. Regression `prepared_result_set_wall_context_test` covers Prepared and Callable query/generic routes, SQL- and table-level counts, repeated cursor close and connection cleanup; each consumed row is counted once after successful close.
+
+Final [real H2 comparison](wall-table-20261021/comparison.tsv): **1 MATCH, all ten checkpoints equal, 0 allowed differences**, explicit live exit 0. Raw final receipt: `D:/druid-rust-tooling/wall-table-live-11884-1792513185153711100`. The initial failed raw directory remains retained separately.
+
+After completing code changes, unified checks passed:
+
+- Druid library plus all selected Wall and affected canonical/lifecycle suites: **610 passed, 0 failed, 0 ignored across 28 reported targets** (library plus 27 integrations).
+- `cargo +1.97.1 test -p druid-bench --locked --features jdbc-agent --tests`: **11 passed, 0 failed, 9 ignored across 11 reported targets**. Environment-dependent default skips are not parity evidence.
+- The explicit H2 differential: **1 passed**, exit 0, using the frozen original assertions and same driver JAR on both sides.
+- Strict `clippy --tests -- -D warnings` for Druid and jdbc-agent-enabled druid-bench: exit 0.
+
+Log SHA-256: wall-context-druid-module `ad42a4f199bee99e9abddac51d2c8fdd53a279b8b40fc39b5605bed4057f1fae`; wall-context-druid-clippy `196c1248b3f0004245d734a0e9392064de8e58051a4c32a4eef79556d72ae932`; wall-table-module `83a31183fe79faf53ff47ee0327b1c13103d4742f3c6049a908d52983b049b0d`; wall-table-live `634c742aa9bf441dab9a53cd70d494bb7bc6d420104273a6c4ce6723df731c23`; wall-table-clippy `6f9ad43ed9cda937f871ad7fdd823b02694c01cf4f035d03d7937f4fbed7b215`.
+
+The original fixed 59-case selection is now fully paired: **47 MATCH, 2 approved standard differences, 10 unapproved MISMATCH, 0 NOT_PAIRED**. Fully paired does not mean fully conformant. The live Prepared diagnostics gap, Callable count/identity differences, Pool and ResultSet differences, external vendor corpus differences, pending SemVer review and current complete platform matrix remain open. No new allowance was introduced and no full P07/production-ready claim is made.

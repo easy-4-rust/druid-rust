@@ -16,13 +16,13 @@ class FrozenCasePairsTest(unittest.TestCase):
         destination = self.root / verifier.DIRECTORY
         destination.mkdir(parents=True)
         shutil.copyfile(source / verifier.MANIFEST.name, destination / verifier.MANIFEST.name)
-        for directory in ("statement-errors-20261020", "resultset-five-20261020", "wall-multi-20261020", "pool-six-20261020", "callable-seven-20261020", "mock-sorter-20261020", "prepared-cache-20261020"):
+        for directory in ("statement-errors-20261020", "resultset-five-20261020", "wall-multi-20261020", "pool-six-20261020", "callable-seven-20261020", "mock-sorter-20261020", "prepared-cache-20261020", "wall-table-20261021"):
             (destination / directory).mkdir()
             shutil.copyfile(source / directory / "comparison.tsv", destination / directory / "comparison.tsv")
 
-    def test_actual_evidence_keeps_unpaired_and_mismatch_counts(self):
+    def test_actual_evidence_keeps_full_denominator_and_mismatch_counts(self):
         counts = verifier.verify(self.root)
-        self.assertEqual(dict(counts), {"NOT_PAIRED": 1, "MATCH": 46, "APPROVED_STANDARD_DIFFERENCE": 2, "MISMATCH": 10})
+        self.assertEqual(dict(counts), {"MATCH": 47, "APPROVED_STANDARD_DIFFERENCE": 2, "MISMATCH": 10})
 
     def test_removed_case_is_rejected(self):
         path = self.root / verifier.MANIFEST
@@ -46,7 +46,7 @@ class FrozenCasePairsTest(unittest.TestCase):
 
     def test_unpaired_case_cannot_claim_a_comparison(self):
         path = self.root / verifier.MANIFEST
-        path.write_text(path.read_text(encoding="utf-8").replace("\tNOT_PAIRED\t-", "\tNOT_PAIRED\twall-multi-20261020/comparison.tsv", 1), encoding="utf-8")
+        path.write_text(path.read_text(encoding="utf-8").replace("\tMATCH\t", "\tNOT_PAIRED\t", 1), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "unpaired case"):
             verifier.verify(self.root)
 

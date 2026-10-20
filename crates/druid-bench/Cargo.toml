@@ -26,6 +26,7 @@ druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-f
 [features]
 default = ["wrapper"]
 wrapper = ["dep:druid-wrapper"]
+jdbc-agent = ["wrapper", "druid-wrapper/jdbc-agent"]
 
 [[bench]]
 name = "pool"

@@ -706,6 +706,9 @@ impl DruidPooledPreparedStatement {
 
     async fn execute_prepared_results(&mut self) -> Result<Vec<ExecutionResult>, RdbcError> {
         self.ensure_open()?;
+        // 原生 Prepared/Callable 路径也必须绑定执行 SQL，供游标关闭统计和过滤器追踪。
+        self.statement_base
+            .begin_single_execution(&self.shared.sql, super::StatementExecuteType::Execute);
         self.begin_execution_result();
         let admission = self.statement_base.inner.begin_standard_admission()?;
         let parameters = self.parameter_snapshot()?;
@@ -1104,6 +1107,9 @@ impl PreparedStatement for DruidPooledPreparedStatement {
 
     async fn execute_prepared_query(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.ensure_open()?;
+        // 原生 Prepared/Callable 路径也必须绑定执行 SQL，供游标关闭统计和过滤器追踪。
+        self.statement_base
+            .begin_single_execution(&self.shared.sql, super::StatementExecuteType::ExecuteQuery);
         self.begin_execution_result();
         let admission = self.statement_base.inner.begin_standard_admission()?;
         let parameters = self.parameter_snapshot()?;
@@ -1142,6 +1148,9 @@ impl PreparedStatement for DruidPooledPreparedStatement {
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
         self.ensure_open()?;
+        // 原生 Prepared/Callable 路径也必须绑定执行 SQL，供游标关闭统计和过滤器追踪。
+        self.statement_base
+            .begin_single_execution(&self.shared.sql, super::StatementExecuteType::ExecuteUpdate);
         self.begin_execution_result();
         let parameters = self.parameter_snapshot()?;
         let resource = Arc::clone(&self.shared.resource);
