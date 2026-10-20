@@ -590,6 +590,8 @@ pub enum StatementPropertyEvent {
     IsPoolable,
     IsClosed,
     GetMoreResults,
+    /// 对应 Java: Statement#getResultSet；读取当前游标，不执行 SQL。
+    GetResultSet,
     GetResultSetConcurrency,
     GetResultSetType,
     GetResultSetHoldability,

@@ -41,7 +41,29 @@ holder. Error state and message columns contain lossless UTF-16 hex; `-` means
 null and an empty field means an empty string. Original logs remain separate
 from the structured UTF-8 result file.
 
-These are Java observations only. A live Rust comparison has not yet been added
-for this corpus. The two close-on-completion cases correspond to the user's
-approved standard-behavior difference; a future comparator must retain them as
-explicit allowed differences, rather than remove them or report exact matches.
+The live Rust counterpart is `java_rust_statement_errors_differential.rs`. It
+executes the explicit method and argument fields against the real pooled
+Statement and ErrorFilter hooks. Each case gets a fresh single-connection pool;
+its full 15-column observation includes original SQL exception fields and
+connection reuse. The default runtime test exercises all 37 Rust inputs. It is
+not a replacement for the explicit live Java comparison.
+
+With the four oracle environment variables configured, run:
+
+```powershell
+cargo +1.97.1 test -p druid-bench --locked --test java_rust_statement_errors_differential pinned_java_and_rust_compare_all_37_statement_inputs -- --ignored --exact --nocapture
+```
+
+The live runner recompiles the SHA-verified original test and helper, validates
+the runtime version and input digest, and saves Java diagnostics, tool/runtime
+metadata, Git revision and dirty state, shared inputs, both complete result tables
+and a case-by-case comparison on the configured work drive. The production Java
+classpath still requires the frozen 1.2.28 build; the runner does not assert that
+it recompiles every transitive production class.
+
+The two approved close-on-completion cases retain their identities and complete
+expected records, with status `APPROVED_STANDARD_DIFFERENCE`. Any other case,
+field change, missing/extra row, source drift or digest drift fails. A successful
+comparison must report 35 exact matches and two approved differences, not 37
+exact matches. Actual live results are recorded in the semantic report only
+after execution succeeds.

@@ -562,6 +562,28 @@ druid_rdbc::impl_standard_wrapper!(TrackingStatement => Statement);
 
 #[async_trait::async_trait]
 impl Statement for TrackingStatement {
+    fn result_set_type(&self) -> Result<druid_rdbc::statement::ResultSetType, RdbcError> {
+        self.state.record("result_set_type");
+        self.state
+            .check_plain_sql_failure("statement_result_set_type")?;
+        Ok(druid_rdbc::statement::ResultSetType::ScrollSensitive)
+    }
+    fn result_set_concurrency(
+        &self,
+    ) -> Result<druid_rdbc::statement::ResultSetConcurrency, RdbcError> {
+        self.state.record("result_set_concurrency");
+        self.state
+            .check_plain_sql_failure("statement_result_set_concurrency")?;
+        Ok(druid_rdbc::statement::ResultSetConcurrency::Updatable)
+    }
+    fn result_set_holdability(
+        &self,
+    ) -> Result<druid_rdbc::statement::ResultSetHoldability, RdbcError> {
+        self.state.record("result_set_holdability");
+        self.state
+            .check_plain_sql_failure("statement_result_set_holdability")?;
+        Ok(druid_rdbc::statement::ResultSetHoldability::HoldOverCommit)
+    }
     fn set_cursor_name_nullable(&mut self, name: Option<&str>) -> Result<(), RdbcError> {
         self.state
             .check_failure("statement_set_cursor_name_nullable")?;
@@ -812,6 +834,28 @@ druid_rdbc::impl_standard_wrapper!(TrackingPreparedStatement => PreparedStatemen
 
 #[async_trait::async_trait]
 impl Statement for TrackingPreparedStatement {
+    fn result_set_type(&self) -> Result<druid_rdbc::statement::ResultSetType, RdbcError> {
+        self.state.record("result_set_type");
+        self.state
+            .check_plain_sql_failure("statement_result_set_type")?;
+        Ok(druid_rdbc::statement::ResultSetType::ScrollSensitive)
+    }
+    fn result_set_concurrency(
+        &self,
+    ) -> Result<druid_rdbc::statement::ResultSetConcurrency, RdbcError> {
+        self.state.record("result_set_concurrency");
+        self.state
+            .check_plain_sql_failure("statement_result_set_concurrency")?;
+        Ok(druid_rdbc::statement::ResultSetConcurrency::Updatable)
+    }
+    fn result_set_holdability(
+        &self,
+    ) -> Result<druid_rdbc::statement::ResultSetHoldability, RdbcError> {
+        self.state.record("result_set_holdability");
+        self.state
+            .check_plain_sql_failure("statement_result_set_holdability")?;
+        Ok(druid_rdbc::statement::ResultSetHoldability::HoldOverCommit)
+    }
     fn set_cursor_name_nullable(&mut self, name: Option<&str>) -> Result<(), RdbcError> {
         self.state
             .check_failure("statement_set_cursor_name_nullable")?;
@@ -1009,6 +1053,19 @@ druid_rdbc::impl_standard_wrapper!(TrackingCallableStatement => CallableStatemen
 
 #[async_trait::async_trait]
 impl Statement for TrackingCallableStatement {
+    fn result_set_type(&self) -> Result<druid_rdbc::statement::ResultSetType, RdbcError> {
+        Statement::result_set_type(&self.prepared)
+    }
+    fn result_set_concurrency(
+        &self,
+    ) -> Result<druid_rdbc::statement::ResultSetConcurrency, RdbcError> {
+        Statement::result_set_concurrency(&self.prepared)
+    }
+    fn result_set_holdability(
+        &self,
+    ) -> Result<druid_rdbc::statement::ResultSetHoldability, RdbcError> {
+        Statement::result_set_holdability(&self.prepared)
+    }
     fn set_cursor_name_nullable(&mut self, name: Option<&str>) -> Result<(), RdbcError> {
         self.prepared.set_cursor_name_nullable(name)
     }

@@ -757,8 +757,8 @@ impl Statement for DruidPooledPreparedStatement {
     /// 对应 Java：DruidPooledPreparedStatement#getMoreResults(int)。返回下个结果是否为游标。
     async fn get_more_results_current(&mut self, current: i32) -> Result<bool, RdbcError> {
         self.ensure_open()?;
-        self.get_more_results(CurrentResultDisposition::try_from(current)?)
-            .await
+        let result = self.statement_base.get_more_results_current(current).await;
+        self.retain_cacheable_result(result)
     }
 
     delegate_statement_state_methods!(statement_base);

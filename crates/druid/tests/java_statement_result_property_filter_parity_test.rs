@@ -11,12 +11,13 @@ use druid_rdbc::connection::Connection;
 use druid_rdbc::statement::{CurrentResultDisposition, Statement, StatementOptions};
 use standard_test_support::{TrackingFactory, TrackingState};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// 对应 Java: DruidPooledStatementTest.ErrorFilter；拒绝发生在真实结果状态入口。
 struct ResultPropertyFilter {
     reject: Arc<AtomicBool>,
     calls: Arc<AtomicUsize>,
+    events: Arc<Mutex<Vec<StatementPropertyEvent>>>,
 }
 
 impl ResultPropertyFilter {
@@ -46,11 +47,16 @@ impl BeforeFilter for ResultPropertyFilter {
         &self,
         event: &StatementPropertyEvent,
     ) -> Result<(), DruidError> {
+        self.events.lock().unwrap().push(event.clone());
         if matches!(
             event,
             StatementPropertyEvent::GetUpdateCount
                 | StatementPropertyEvent::GetMoreResults
                 | StatementPropertyEvent::GetGeneratedKeys
+                | StatementPropertyEvent::GetResultSet
+                | StatementPropertyEvent::GetResultSetType
+                | StatementPropertyEvent::GetResultSetConcurrency
+                | StatementPropertyEvent::GetResultSetHoldability
         ) {
             self.enter()?;
         }
@@ -64,10 +70,12 @@ async fn all_statement_kinds_count_result_filter_errors_once_and_reject_closed_a
         let state = TrackingState::configured();
         let reject = Arc::new(AtomicBool::new(true));
         let calls = Arc::new(AtomicUsize::new(0));
+        let events = Arc::new(Mutex::new(Vec::new()));
         let mut filters = FilterChain::new();
         filters.add_before(Arc::new(ResultPropertyFilter {
             reject: Arc::clone(&reject),
             calls: Arc::clone(&calls),
+            events: Arc::clone(&events),
         }));
         let pool = DruidPool::new_standard(
             format!("java-result-property-{kind}"),
@@ -110,7 +118,7 @@ async fn all_statement_kinds_count_result_filter_errors_once_and_reject_closed_a
         };
         assert!(!cursor.is_closed().unwrap());
         let closes_before = state.result_set_close_attempt_count.load(Ordering::Acquire);
-        for operation in 0..3 {
+        for operation in 0..8 {
             let error = if operation == 0 {
                 statement.get_update_count().unwrap_err()
             } else if operation == 1 {
@@ -118,12 +126,26 @@ async fn all_statement_kinds_count_result_filter_errors_once_and_reject_closed_a
                     .get_more_results(CurrentResultDisposition::CloseCurrent)
                     .await
                     .unwrap_err()
-            } else {
+            } else if operation == 2 {
                 statement
                     .generated_keys()
                     .await
                     .err()
                     .expect("generated keys filter must reject")
+            } else if operation == 3 {
+                statement
+                    .get_result_set()
+                    .await
+                    .err()
+                    .expect("current cursor filter rejects")
+            } else if operation == 4 {
+                statement.result_set_type().unwrap_err()
+            } else if operation == 5 {
+                statement.result_set_concurrency().unwrap_err()
+            } else if operation == 6 {
+                statement.result_set_holdability().unwrap_err()
+            } else {
+                statement.get_more_results_current(0).await.unwrap_err()
             };
             let sql = error.sql_exception().unwrap();
             assert_eq!(sql.class_name(), "java.sql.SQLException");
@@ -135,7 +157,21 @@ async fn all_statement_kinds_count_result_filter_errors_once_and_reject_closed_a
                 "{kind}/{operation}"
             );
         }
-        assert_eq!(calls.load(Ordering::Acquire), 3);
+        assert_eq!(calls.load(Ordering::Acquire), 8);
+        assert_eq!(
+            *events.lock().unwrap(),
+            vec![
+                StatementPropertyEvent::GetUpdateCount,
+                StatementPropertyEvent::GetMoreResults,
+                StatementPropertyEvent::GetGeneratedKeys,
+                StatementPropertyEvent::GetResultSet,
+                StatementPropertyEvent::GetResultSetType,
+                StatementPropertyEvent::GetResultSetConcurrency,
+                StatementPropertyEvent::GetResultSetHoldability,
+                StatementPropertyEvent::GetMoreResults,
+            ],
+            "each Java getter must use its own exact filter event"
+        );
         assert!(
             !cursor.is_closed().unwrap(),
             "filter rejection must retain cursor"
@@ -144,6 +180,39 @@ async fn all_statement_kinds_count_result_filter_errors_once_and_reject_closed_a
             state.result_set_close_attempt_count.load(Ordering::Acquire),
             closes_before
         );
+        reject.store(false, Ordering::Release);
+        // options 默认不支持，实际独立 getter 的非默认值仍必须穿过两层转发。
+        assert_eq!(statement.result_set_type().unwrap().rdbc_code(), 1005);
+        assert_eq!(
+            statement.result_set_concurrency().unwrap().rdbc_code(),
+            1008
+        );
+        assert_eq!(statement.result_set_holdability().unwrap().rdbc_code(), 1);
+        assert!(matches!(
+            statement.get_more_results_current(0).await,
+            Err(druid_rdbc::error::RdbcError::InvalidArgument(_))
+        ));
+        for operation in [
+            "statement_result_set_type",
+            "statement_result_set_concurrency",
+            "statement_result_set_holdability",
+        ] {
+            state.fail_next(operation);
+            let error = match operation {
+                "statement_result_set_type" => statement.result_set_type().unwrap_err(),
+                "statement_result_set_concurrency" => {
+                    statement.result_set_concurrency().unwrap_err()
+                }
+                _ => statement.result_set_holdability().unwrap_err(),
+            };
+            assert_eq!(error.sql_exception().unwrap().error_code(), 0);
+            assert_eq!(
+                pool.stat_value_and_reset().error_count,
+                1,
+                "driver SQL error counted once"
+            );
+        }
+        let calls_before_close = calls.load(Ordering::Acquire);
         statement.close().await.unwrap();
         assert!(statement.get_update_count().is_err());
         assert!(statement
@@ -151,9 +220,14 @@ async fn all_statement_kinds_count_result_filter_errors_once_and_reject_closed_a
             .await
             .is_err());
         assert!(statement.generated_keys().await.is_err());
+        assert!(statement.get_result_set().await.is_err());
+        assert!(statement.result_set_type().is_err());
+        assert!(statement.result_set_concurrency().is_err());
+        assert!(statement.result_set_holdability().is_err());
+        assert!(statement.get_more_results_current(0).await.is_err());
         assert_eq!(
             calls.load(Ordering::Acquire),
-            3,
+            calls_before_close,
             "closed access must not enter filters"
         );
         assert_eq!(pool.stat_value_and_reset().error_count, 0);

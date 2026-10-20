@@ -458,6 +458,9 @@ pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatemen
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::result_set_concurrency(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetConcurrency, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::result_set_holdability(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetHoldability, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::result_set_type(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetType, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -631,6 +634,9 @@ pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatemen
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::result_set_concurrency(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetConcurrency, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::result_set_holdability(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetHoldability, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::result_set_type(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetType, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -771,6 +777,9 @@ pub fn druid::core::druid_pooled_statement::DruidPooledStatement::max_field_size
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::result_set_concurrency(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetConcurrency, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::result_set_holdability(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetHoldability, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::result_set_type(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetType, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -1689,6 +1698,7 @@ pub druid::core::filter::StatementPropertyEvent::GetMaxFieldSize
 pub druid::core::filter::StatementPropertyEvent::GetMaxRows
 pub druid::core::filter::StatementPropertyEvent::GetMoreResults
 pub druid::core::filter::StatementPropertyEvent::GetQueryTimeout
+pub druid::core::filter::StatementPropertyEvent::GetResultSet
 pub druid::core::filter::StatementPropertyEvent::GetResultSetConcurrency
 pub druid::core::filter::StatementPropertyEvent::GetResultSetHoldability
 pub druid::core::filter::StatementPropertyEvent::GetResultSetType
@@ -4190,6 +4200,7 @@ pub druid::core::StatementPropertyEvent::GetMaxFieldSize
 pub druid::core::StatementPropertyEvent::GetMaxRows
 pub druid::core::StatementPropertyEvent::GetMoreResults
 pub druid::core::StatementPropertyEvent::GetQueryTimeout
+pub druid::core::StatementPropertyEvent::GetResultSet
 pub druid::core::StatementPropertyEvent::GetResultSetConcurrency
 pub druid::core::StatementPropertyEvent::GetResultSetHoldability
 pub druid::core::StatementPropertyEvent::GetResultSetType
@@ -4685,6 +4696,9 @@ pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatemen
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::result_set_concurrency(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetConcurrency, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::result_set_holdability(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetHoldability, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::result_set_type(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetType, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -4852,6 +4866,9 @@ pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatemen
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::result_set_concurrency(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetConcurrency, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::result_set_holdability(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetHoldability, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::result_set_type(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetType, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -4990,6 +5007,9 @@ pub fn druid::core::druid_pooled_statement::DruidPooledStatement::max_field_size
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::result_set_concurrency(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetConcurrency, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::result_set_holdability(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetHoldability, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::result_set_type(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetType, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -9632,6 +9652,9 @@ pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatemen
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::result_set_concurrency(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetConcurrency, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::result_set_holdability(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetHoldability, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::result_set_type(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetType, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -10506,6 +10529,9 @@ pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatemen
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::result_set_concurrency(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetConcurrency, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::result_set_holdability(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetHoldability, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::result_set_type(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetType, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -11099,6 +11125,9 @@ pub fn druid::core::druid_pooled_statement::DruidPooledStatement::max_field_size
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::result_set_concurrency(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetConcurrency, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::result_set_holdability(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetHoldability, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::result_set_type(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetType, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -12987,6 +13016,9 @@ pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatemen
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::result_set_concurrency(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetConcurrency, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::result_set_holdability(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetHoldability, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::result_set_type(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetType, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -13438,6 +13470,9 @@ pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatemen
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::result_set_concurrency(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetConcurrency, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::result_set_holdability(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetHoldability, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::result_set_type(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetType, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -13772,6 +13807,9 @@ pub fn druid::core::druid_pooled_statement::DruidPooledStatement::max_field_size
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::result_set_concurrency(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetConcurrency, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::result_set_holdability(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetHoldability, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::result_set_type(&self) -> core::result::Result<druid_rdbc::statement::statement::ResultSetType, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>

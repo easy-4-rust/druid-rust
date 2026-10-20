@@ -17,7 +17,7 @@ use super::{
 use crate::stats::StatsCollector;
 use druid_rdbc::statement::{
     CurrentResultDisposition, ExecResult, ExecutionResult, FetchDirection, GeneratedKeys,
-    Statement, StatementOptions,
+    ResultSetConcurrency, ResultSetHoldability, ResultSetType, Statement, StatementOptions,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -782,13 +782,50 @@ impl Statement for DruidPooledStatement {
     /// 对应 Java：DruidPooledStatement#getMoreResults(int)。返回下个结果是否为游标。
     async fn get_more_results_current(&mut self, current: i32) -> Result<bool, RdbcError> {
         self.ensure_open()?;
-        self.get_more_results(CurrentResultDisposition::try_from(current)?)
-            .await
+        let disposition = match CurrentResultDisposition::try_from(current) {
+            Ok(disposition) => disposition,
+            Err(error) => {
+                // Java 过滤器先看到原始调用；拒绝不应被代理的整数校验掩盖。
+                self.check_result_property(StatementPropertyEvent::GetMoreResults)?;
+                return Err(error);
+            }
+        };
+        self.get_more_results(disposition).await
     }
 
     fn options(&self) -> Result<StatementOptions, RdbcError> {
         self.ensure_open()?;
         Ok(self.state().options)
+    }
+
+    fn result_set_type(&self) -> Result<ResultSetType, RdbcError> {
+        let cached = self.state().options.result_set_type();
+        self.read_statement_property(
+            StatementPropertyEvent::GetResultSetType,
+            "statement_result_set_type",
+            cached,
+            Statement::result_set_type,
+        )
+    }
+
+    fn result_set_concurrency(&self) -> Result<ResultSetConcurrency, RdbcError> {
+        let cached = self.state().options.concurrency();
+        self.read_statement_property(
+            StatementPropertyEvent::GetResultSetConcurrency,
+            "statement_result_set_concurrency",
+            cached,
+            Statement::result_set_concurrency,
+        )
+    }
+
+    fn result_set_holdability(&self) -> Result<ResultSetHoldability, RdbcError> {
+        let cached = self.state().options.holdability();
+        self.read_statement_property(
+            StatementPropertyEvent::GetResultSetHoldability,
+            "statement_result_set_holdability",
+            cached,
+            Statement::result_set_holdability,
+        )
     }
 
     fn max_field_size(&self) -> Result<i32, RdbcError> {
@@ -1122,7 +1159,7 @@ impl Statement for DruidPooledStatement {
     async fn get_result_set(
         &mut self,
     ) -> Result<Option<Box<dyn druid_rdbc::result_set::ResultSet>>, RdbcError> {
-        self.ensure_open()?;
+        self.check_result_property(StatementPropertyEvent::GetResultSet)?;
         // 即使只恢复共享视图，也保留原 getter 的 registry generation 入场检查。
         let admission = self.inner.begin_standard_admission()?;
         // 已登记的游标保留共享身份；raw getter 仍参与驱动错误分类和拥有型交接。

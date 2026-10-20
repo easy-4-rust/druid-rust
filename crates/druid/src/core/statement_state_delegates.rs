@@ -8,6 +8,24 @@ macro_rules! delegate_statement_state_methods {
             druid_rdbc::statement::Statement::options(&self.$base)
         }
 
+        fn result_set_type(
+            &self,
+        ) -> Result<druid_rdbc::statement::ResultSetType, druid_rdbc::error::RdbcError> {
+            druid_rdbc::statement::Statement::result_set_type(&self.$base)
+        }
+
+        fn result_set_concurrency(
+            &self,
+        ) -> Result<druid_rdbc::statement::ResultSetConcurrency, druid_rdbc::error::RdbcError> {
+            druid_rdbc::statement::Statement::result_set_concurrency(&self.$base)
+        }
+
+        fn result_set_holdability(
+            &self,
+        ) -> Result<druid_rdbc::statement::ResultSetHoldability, druid_rdbc::error::RdbcError> {
+            druid_rdbc::statement::Statement::result_set_holdability(&self.$base)
+        }
+
         fn max_field_size(&self) -> Result<i32, druid_rdbc::error::RdbcError> {
             druid_rdbc::statement::Statement::max_field_size(&self.$base)
         }

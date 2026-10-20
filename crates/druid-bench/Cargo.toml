@@ -18,6 +18,7 @@ tokio         = { workspace = true }
 futures       = { workspace = true }
 
 [dev-dependencies]
+async-trait = { workspace = true }
 sha2 = { workspace = true }
 druid-rdbc = { version = "0.0.0-design", path = "../druid-rdbc" }
 druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false, features = ["sqlite"] }

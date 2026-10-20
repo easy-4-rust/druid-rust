@@ -10,3 +10,18 @@
 /docs/verification/rdbc-first/format407/** -text whitespace=cr-at-eol,-blank-at-eof
 /docs/verification/rdbc-first/format407/*.log -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 /docs/verification/rdbc-first/format407/initial406/*.log -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+# Java8 evidence hashes refer to these exact LF source/test bytes on every checkout.
+/crates/druid-rdbc/src/data_source/common_data_source.rs text eol=lf
+/crates/druid-rdbc/src/data_source/pooled_connection.rs text eol=lf
+/crates/druid-rdbc/src/data_source/xa_data_source.rs text eol=lf
+/crates/druid-rdbc/src/driver/driver_registry.rs text eol=lf
+/crates/druid-rdbc/src/statement/statement.rs text eol=lf
+/crates/druid-rdbc/src/types/timestamp.rs text eol=lf
+/crates/druid-rdbc/tests/driver_registry_negotiation_contract_test.rs text eol=lf
+/crates/druid-rdbc/tests/jdbc_temporal_value_contract_test.rs text eol=lf
+/crates/druid-rdbc/tests/standard_event_contract_test.rs text eol=lf
+/crates/druid-rdbc/tests/xa_standard_external_consumer.rs text eol=lf
+/crates/druid-wrapper/tests/common_data_source_public_examples_test.rs text eol=lf
+/crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs text eol=lf
+/crates/druid/tests/standard_pooled_connection_owner_test.rs text eol=lf

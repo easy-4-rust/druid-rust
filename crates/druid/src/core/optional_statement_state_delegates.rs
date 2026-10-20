@@ -5,6 +5,24 @@ macro_rules! delegate_optional_statement_state_methods {
             self.$first$(.$rest)*.try_lock().map_err(|_| druid_rdbc::error::RdbcError::Other($busy.to_owned()))?
                 .as_ref().ok_or(druid_rdbc::error::RdbcError::ConnectionDiscarded)?.options()
         }
+        fn result_set_type(&self) -> Result<druid_rdbc::statement::ResultSetType, druid_rdbc::error::RdbcError> {
+            self.ensure_open()?;
+            self.$first$(.$rest)*.try_lock().map_err(|_| druid_rdbc::error::RdbcError::Other($busy.to_owned()))?
+                .as_ref().ok_or(druid_rdbc::error::RdbcError::ConnectionDiscarded)?.result_set_type()
+        }
+
+        fn result_set_concurrency(&self) -> Result<druid_rdbc::statement::ResultSetConcurrency, druid_rdbc::error::RdbcError> {
+            self.ensure_open()?;
+            self.$first$(.$rest)*.try_lock().map_err(|_| druid_rdbc::error::RdbcError::Other($busy.to_owned()))?
+                .as_ref().ok_or(druid_rdbc::error::RdbcError::ConnectionDiscarded)?.result_set_concurrency()
+        }
+
+        fn result_set_holdability(&self) -> Result<druid_rdbc::statement::ResultSetHoldability, druid_rdbc::error::RdbcError> {
+            self.ensure_open()?;
+            self.$first$(.$rest)*.try_lock().map_err(|_| druid_rdbc::error::RdbcError::Other($busy.to_owned()))?
+                .as_ref().ok_or(druid_rdbc::error::RdbcError::ConnectionDiscarded)?.result_set_holdability()
+        }
+
         fn max_field_size(&self) -> Result<i32, druid_rdbc::error::RdbcError> {
             self.ensure_open()?;
             self.$first$(.$rest)*.try_lock().map_err(|_| druid_rdbc::error::RdbcError::Other($busy.to_owned()))?

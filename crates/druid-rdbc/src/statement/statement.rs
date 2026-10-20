@@ -261,6 +261,48 @@ pub trait Statement: Wrapper + Send + 'static {
         })
     }
 
+    /// 读取独立结果集属性，无参数，返回类型化属性或原始驱动错误。
+    /// 对应 Java: java.sql.Statement#getResultSetType；旧实现默认读取创建选项。
+    fn result_set_type(&self) -> Result<ResultSetType, RdbcError> {
+        match self.options() {
+            Ok(options) => Ok(options.result_set_type()),
+            Err(RdbcError::UnsupportedOperation {
+                operation: "statement_options",
+            }) => Err(RdbcError::UnsupportedOperation {
+                operation: "statement_result_set_type",
+            }),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// 读取独立结果集属性，无参数，返回类型化属性或原始驱动错误。
+    /// 对应 Java: java.sql.Statement#getResultSetConcurrency；旧实现默认读取创建选项。
+    fn result_set_concurrency(&self) -> Result<ResultSetConcurrency, RdbcError> {
+        match self.options() {
+            Ok(options) => Ok(options.concurrency()),
+            Err(RdbcError::UnsupportedOperation {
+                operation: "statement_options",
+            }) => Err(RdbcError::UnsupportedOperation {
+                operation: "statement_result_set_concurrency",
+            }),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// 读取独立结果集属性，无参数，返回类型化属性或原始驱动错误。
+    /// 对应 Java: java.sql.Statement#getResultSetHoldability；旧实现默认读取创建选项。
+    fn result_set_holdability(&self) -> Result<ResultSetHoldability, RdbcError> {
+        match self.options() {
+            Ok(options) => Ok(options.holdability()),
+            Err(RdbcError::UnsupportedOperation {
+                operation: "statement_options",
+            }) => Err(RdbcError::UnsupportedOperation {
+                operation: "statement_result_set_holdability",
+            }),
+            Err(error) => Err(error),
+        }
+    }
+
     /// 返回 max-field-size 限制；`0` 表示无限制。
     fn max_field_size(&self) -> Result<i32, RdbcError> {
         Err(RdbcError::UnsupportedOperation {

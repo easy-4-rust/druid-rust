@@ -1760,6 +1760,7 @@ dependencies = [
 name = "druid-bench"
 version = "0.0.0-design"
 dependencies = [
+ "async-trait",
  "criterion",
  "druid",
  "druid-rdbc",
