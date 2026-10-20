@@ -44,6 +44,23 @@ def evidence_exists(reference: str) -> bool:
     return True
 
 
+def specification_exists(reference: str) -> bool:
+    """Resolve an exact requirement ID inside the repository's OpenSpec fact source."""
+    file_name, separator, requirement = reference.partition("#")
+    relative = Path(file_name)
+    if (not separator or relative.is_absolute() or ".." in relative.parts
+            or len(relative.parts) != 2 or relative.name != "spec.md"
+            or not re.fullmatch(r"[A-Z]+-\d+", requirement)):
+        return False
+    directory = (ROOT / "openspec/specs").resolve()
+    path = (directory / relative).resolve()
+    if directory not in path.parents or not path.is_file():
+        return False
+    headings = re.findall(r"^### Requirement: " + re.escape(requirement) + r"(?:[ \t].*)?$",
+                          path.read_text(encoding="utf-8"), re.MULTILINE)
+    return len(headings) == 1
+
+
 def file_digest(reference: str) -> str:
     """Hash an evidence reference's file, ignoring any #test selector."""
     path = (ROOT / reference.partition("#")[0]).resolve()
@@ -89,13 +106,17 @@ def verify(ledger: Path, inventory: Path) -> dict[str, int]:
             raise EvidenceError(f"row {line}: invalid evidence layer state")
         if row["capability"] not in {"UNASSESSED", "SUPPORTED", "PARTIAL", "UNSUPPORTED", "NOT_RUN"}:
             raise EvidenceError(f"row {line}: invalid capability state")
-        if row["capability"] == "SUPPORTED":
+        if row["capability"] == "UNASSESSED" and any(row[layer] != "UNASSESSED" for layer in LAYERS):
+            raise EvidenceError(f"row {line}: unassessed capability cannot claim an assessed layer")
+        if row["capability"] != "UNASSESSED" and not specification_exists(row["spec_scenario"]):
+            raise EvidenceError(f"row {line}: missing or ambiguous OpenSpec requirement reference")
+        if row["capability"] in {"SUPPORTED", "PARTIAL"}:
             if not row["rust_method_entry"] or row["rust_method_entry"] == "UNMAPPED":
-                raise EvidenceError(f"row {line}: supported capability lacks Rust method mapping")
+                raise EvidenceError(f"row {line}: linked capability lacks Rust method mapping")
             if not evidence_exists(row["positive_evidence"]):
-                raise EvidenceError(f"row {line}: supported capability lacks a positive test/evidence reference")
+                raise EvidenceError(f"row {line}: linked capability lacks a positive test/evidence reference")
             if not any(row[layer] == "PASS" for layer in LAYERS):
-                raise EvidenceError(f"row {line}: supported capability lacks a passed evidence layer")
+                raise EvidenceError(f"row {line}: linked capability lacks a passed evidence layer")
         if row["capability"] == "UNSUPPORTED":
             result = row["unsupported_result"]
             if not evidence_exists(row["unsupported_evidence"]):
@@ -130,21 +151,29 @@ def verify(ledger: Path, inventory: Path) -> dict[str, int]:
             "linked": sum(row["capability"] != "UNASSESSED" for row in rows),
             "unassessed": sum(row["capability"] == "UNASSESSED" for row in rows),
             "not_run": sum(row["capability"] == "NOT_RUN" for row in rows),
-            "failed_layers": sum(row[layer] == "FAIL" for row in rows for layer in LAYERS)}
+            "failed_layers": sum(row[layer] == "FAIL" for row in rows for layer in LAYERS),
+            "incomplete": sum(row["capability"] not in {"SUPPORTED", "UNSUPPORTED"}
+                              or any(row[layer] in {"UNASSESSED", "NOT_RUN", "FAIL"} for layer in LAYERS)
+                              for row in rows)}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ledger", type=Path, default=ROOT / "docs/verification/rdbc-first/java8-method-evidence.tsv")
     parser.add_argument("--inventory", type=Path, default=ROOT / "docs/verification/rdbc-first/java8-public-method-inventory.tsv")
+    parser.add_argument("--require-complete", action="store_true",
+                        help="also fail for partial, unassessed, not-run or failed coverage; default checks integrity only")
     args = parser.parse_args()
     try:
         result = verify(args.ledger, args.inventory)
     except (EvidenceError, OSError, KeyError) as error:
         print(f"EVIDENCE_GATE_FAIL: {error}", file=sys.stderr)
         return 1
-    print(f"EVIDENCE_GATE_PASS inventory={result['inventory']} ledger={result['ledger']} linked={result['linked']} "
+    print(f"EVIDENCE_INTEGRITY_PASS inventory={result['inventory']} ledger={result['ledger']} linked={result['linked']} "
           f"unassessed={result['unassessed']} not_run={result['not_run']} failed_layers={result['failed_layers']}")
+    if args.require_complete and result["incomplete"]:
+        print(f"EVIDENCE_COVERAGE_INCOMPLETE identities={result['incomplete']}", file=sys.stderr)
+        return 1
     return 0
 
 

@@ -1,0 +1,8 @@
+check	source	exit	log	log_sha256
+wall-current-full-druid	5bb051f + evidence-only working changes	0	D:\druid-rust-tooling\wall-current-full-druid-20261021.log	63680efac4612e005daf04a4768c8d6cfdde0590bc73f6735becce1a32638438
+method-evidence-verifier-tests	5bb051f + evidence-only working changes	0	D:\druid-rust-tooling\method-evidence-verifier-tests-20261021.log	55b6d70aaf5ae334bee39e099e7e56fdb5156efd005eb04f97f351d469b115a8
+method-evidence-integrity	5bb051f + evidence-only working changes	0	D:\druid-rust-tooling\method-evidence-integrity-20261021.log	b7715321b54c15703db2a8f77957cfee1d795e2d13e171c8b0dc7eb670a3fc64
+method-evidence-completion	5bb051f + evidence-only working changes	1	D:\druid-rust-tooling\method-evidence-completion-20261021.log	8aca668e4c015b45740f3c1f5e4a6dc6b59c6f86dcdbd3e6c52465ad6ff8a8c4
+method-evidence-package-ownership	5bb051f + evidence-only working changes	0	D:\druid-rust-tooling\method-evidence-package-ownership-20261021.log	a1e7986a6cd54153a21f2373f6f48cc3c1f5d73c50019003fbdc764e596af291
+method-evidence-benchmark-targets	5bb051f + evidence-only working changes	0	D:\druid-rust-tooling\method-evidence-benchmark-targets-20261021.log	2942037f1bb08abf07530508662eaf91b7ce4b80d0a38343480c472f70d492dc
+method-evidence-workspace-dag	5bb051f + evidence-only working changes	0	D:\druid-rust-tooling\method-evidence-workspace-dag-20261021.log	58c2ff2d5a659d9aae22530748fa0045264438a617a6b92261c173e591c92930

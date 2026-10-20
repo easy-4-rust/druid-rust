@@ -25,3 +25,8 @@
 /crates/druid-wrapper/tests/common_data_source_public_examples_test.rs text eol=lf
 /crates/druid-wrapper/tests/sqlx_statement_cancel_contract_test.rs text eol=lf
 /crates/druid/tests/standard_pooled_connection_owner_test.rs text eol=lf
+
+/crates/druid/src/core/druid_pooled_callable_statement.rs text eol=lf
+/crates/druid/src/core/druid_pooled_prepared_statement.rs text eol=lf
+/crates/druid/src/core/druid_pooled_result_set.rs text eol=lf
+/crates/druid/tests/prepared_result_set_wall_context_test.rs text eol=lf

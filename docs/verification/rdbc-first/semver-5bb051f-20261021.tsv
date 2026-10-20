@@ -1,0 +1,16 @@
+item	value
+run	39457949689
+source	5bb051f86e5a56c278ece805994f89b21f3ae921
+artifact_id	12282821633
+artifact_name	semver-reports-5bb051f86e5a56c278ece805994f89b21f3ae921
+url	https://github.com/easy-4-rust/druid-rust/actions/runs/39457949689
+local_reports	D:\druid-rust-tooling\semver-5bb051f-20261021
+replay_exit	1
+replay_finding	unlisted: druid/enum_variant_added
+decision	NOT_APPROVED; no allowlist change
+druid-rdbc.semver-checks.txt.sha256	bb979fa71c1bfa5b39aa2c3c787a352131ccbe1e59268d3d496d6cc6c76b352b
+druid-wrapper.semver-checks.txt.sha256	6b2f83a815067507b9ce80a99cd439eb565fe533564288fb449204cc1f9d1e1d
+druid.semver-checks.txt.sha256	febc1d9bb1a1d233f475fbdd5acfb419bc26b28deae67176d74ce128d2aa2c0a
+semver-baseline.txt.sha256	5897b3b89b611985b33a297e57af9e007fab529b6debbb255f2f6bcd42ad401f
+semver-exit-codes.txt.sha256	a38a27f01847584806328ef8129b986b53d2898e87c77aa385e7c90f9350b7ca
+semver-tool-version.txt.sha256	3f1811cd396eb203e0e50c40e211aa48dc82f6784db64cb780cad93d7f57faa6
