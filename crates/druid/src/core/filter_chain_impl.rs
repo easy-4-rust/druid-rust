@@ -627,6 +627,15 @@ impl FilterChainImpl {
         Ok(())
     }
 
+    /// 包围标准语句批次清除；参数为底层标准语句，返回过滤或驱动结果。
+    pub(crate) fn standard_statement_clear_batch(
+        &self,
+        statement: &mut dyn druid_rdbc::statement::Statement,
+    ) -> Result<(), DruidError> {
+        super::StandardStatementClearBatchFilterChain::new(&self.before, statement)
+            .statement_clear_batch()
+    }
+
     /// 按注册顺序读取标准语句警告；参数为驱动语句，返回完整警告链。
     pub(crate) fn standard_statement_get_warnings(
         &self,

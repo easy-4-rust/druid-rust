@@ -133,6 +133,15 @@ pub trait BeforeFilter: Send + Sync {
         Ok(())
     }
 
+    /// 包围标准语句批次清除；参数为调用链，返回过滤或驱动结果。
+    /// 对应 Java: Filter#statement_clearBatch；默认继续调用以保持已有过滤器兼容。
+    fn standard_statement_clear_batch(
+        &self,
+        chain: &mut super::StandardStatementClearBatchFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        chain.statement_clear_batch()
+    }
+
     async fn data_source_get_connection(
         &self,
         chain: &mut DataSourceGetConnectionFilterChain<'_>,

@@ -1032,12 +1032,19 @@ impl Statement for DruidPooledStatement {
 
     fn clear_batch(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
-        let result = self
-            .inner
-            .statement
-            .try_lock()
-            .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
-            .clear_batch();
+        let result = {
+            let mut statement = self
+                .inner
+                .statement
+                .try_lock()
+                .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?;
+            match &self.inner.filter_chain {
+                Some(chain) => chain
+                    .standard_statement_clear_batch(statement.as_mut())
+                    .map_err(RdbcError::from),
+                None => statement.clear_batch(),
+            }
+        };
         self.classify_statement_access(result, None)?;
         self.state_mut().batch.clear();
         Ok(())
