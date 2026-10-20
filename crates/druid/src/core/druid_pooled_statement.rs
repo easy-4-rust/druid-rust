@@ -769,7 +769,15 @@ impl Statement for DruidPooledStatement {
     }
 
     fn cancel(&mut self) -> Result<(), RdbcError> {
-        self.apply_statement_state_mutation("statement_cancel", Statement::cancel, |_| {})
+        self.ensure_open()?;
+        let result = self
+            .inner
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
+            .cancel();
+        // 取消是一次实际的 driver 操作；不支持时不能沿用属性缓存的成功回退。
+        self.classify_statement_mutation(result)
     }
 
     fn cancellation_control(

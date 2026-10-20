@@ -6,6 +6,7 @@ mod standard_test_support;
 use druid::core::ConnectionFactory;
 use druid::pool::DruidPool;
 use druid_rdbc::connection::Connection;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::statement::{
     FetchDirection, ResultSetConcurrency, ResultSetHoldability, ResultSetType, Statement,
     StatementOptions,
@@ -42,7 +43,12 @@ fn assert_all_properties(statement: &mut dyn Statement, options: StatementOption
         .set_escape_processing(false)
         .expect("escape processing");
     statement.set_cursor_name("cursor").expect("cursor name");
-    statement.cancel().expect("cancel");
+    assert!(matches!(
+        statement.cancel(),
+        Err(RdbcError::UnsupportedOperation {
+            operation: "statement_cancel"
+        })
+    ));
     assert!(!statement.is_poolable().expect("poolable"));
     statement.set_poolable(true).expect("set poolable");
     assert!(statement.is_poolable().expect("poolable"));

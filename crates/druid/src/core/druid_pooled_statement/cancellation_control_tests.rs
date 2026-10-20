@@ -42,7 +42,7 @@ async fn pooled_cancellation_delegates_only_while_original_lease_is_active() {
         generation,
         Arc::new(OwnerDispositionControl::new(Box::new(|_| {}))),
     );
-    let statement = DruidPooledStatement::new_standard(
+    let mut statement = DruidPooledStatement::new_standard(
         Box::new(CancellationProbe {
             calls: Arc::clone(&calls),
         }),
@@ -57,6 +57,13 @@ async fn pooled_cancellation_delegates_only_while_original_lease_is_active() {
         None,
         None,
     );
+    assert!(matches!(
+        Statement::cancel(&mut statement),
+        Err(RdbcError::UnsupportedOperation {
+            operation: "statement_cancel"
+        })
+    ));
+    assert_eq!(calls.load(Ordering::Acquire), 0);
     let admission = resources.begin_admission(generation).unwrap();
     resources
         .register(&admission, Arc::clone(&statement.inner))
