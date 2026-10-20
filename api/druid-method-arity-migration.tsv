@@ -3,10 +3,10 @@ CallableStatement	2	1>0:2	crates/druid/tests/task6_pooled_callable_coverage_test
 Connection	8	0>1:2;1>2:4;6>5:2	crates/druid/tests/task6_druid_pooled_connection_differential_test_parity_part_02.rs;crates/druid/tests/integer_result_disposition_owner_test.rs
 DruidPooledCallableStatement	2	1>0:2	crates/druid/tests/task6_pooled_callable_coverage_test_parity.rs
 DruidPooledConnection	16	0>1:4;1>2:8;6>5:4	crates/druid/tests/task6_druid_pooled_connection_differential_test_parity_part_02.rs;crates/druid/tests/integer_result_disposition_owner_test.rs
-DruidPooledPreparedStatement	46	1>0:28;2>1:18	crates/druid/tests/task6_pooled_prepared_statement_coverage_test_parity_part_01.rs
+DruidPooledPreparedStatement	52	1>0:34;2>1:18	crates/druid/tests/task6_pooled_prepared_statement_coverage_test_parity_part_01.rs;crates/druid/tests/java_statement_result_property_filter_parity_test.rs
 DruidPooledResultSet	64	1>0:52;2>1:10;3>2:2	crates/druid/tests/task6_result_set_filter_canonical_matrix_test.rs
-DruidPooledStatement	46	1>0:26;2>1:20	crates/druid/tests/task6_pooled_statement_coverage_test_parity.rs
+DruidPooledStatement	52	1>0:32;2>1:20	crates/druid/tests/task6_pooled_statement_coverage_test_parity.rs;crates/druid/tests/java_statement_result_property_filter_parity_test.rs
 PooledConnection	8	0>1:2;1>2:4;6>5:2	crates/druid/tests/task6_druid_pooled_connection_differential_test_parity_part_02.rs;crates/druid/tests/integer_result_disposition_owner_test.rs
-PreparedStatement	46	1>0:28;2>1:18	crates/druid/tests/task6_pooled_prepared_statement_coverage_test_parity_part_01.rs
+PreparedStatement	52	1>0:34;2>1:18	crates/druid/tests/task6_pooled_prepared_statement_coverage_test_parity_part_01.rs;crates/druid/tests/java_statement_result_property_filter_parity_test.rs
 ResultSet	64	1>0:52;2>1:10;3>2:2	crates/druid/tests/task6_result_set_filter_canonical_matrix_test.rs
-Statement	46	1>0:26;2>1:20	crates/druid/tests/task6_pooled_statement_coverage_test_parity.rs
+Statement	52	1>0:32;2>1:20	crates/druid/tests/task6_pooled_statement_coverage_test_parity.rs;crates/druid/tests/java_statement_result_property_filter_parity_test.rs
