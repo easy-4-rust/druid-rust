@@ -1,3 +1,24 @@
+# 当前验证状态（2026-10-21）
+
+**总判定：NOT_READY。** 当前事实以 [最终门禁报告](final-release-report.md)、正式 OpenSpec 和逐项运行证据为准。下面的历史记录保留原冻结输入与原失败，不表示旧进程仍在运行，也不表示已通过的修复仍然失败。
+
+| 范围 | 已验证进展 | 尚未闭合 |
+| --- | --- | --- |
+| P04 Task 6 | 运行源码 5bb051f 的完整 Druid 默认模块 3,004 项通过；原生 Darwin 三个 API 快照与审阅版本逐字节一致 | SemVer 的 GetResultSet 穷尽枚举变更待确认；不以 API 快照相等代替 SemVer 通过 |
+| P04 Task 7 | 资源、异步游标及配置后端已有分层证据，保留各自驱动与版本范围 | 当前完整 feature/驱动/平台矩阵仍需最终结果；未评估能力不晋升为支持 |
+| P04 Task 8 / P07 语义对照 | 原 59 例全部实时配对：47 MATCH、2 项已批准标准差异 | 59 例内 10 项差异，范围外另 4 例，以及公共枚举决策仍待确认 |
+| P05 | 六包/七条正常依赖边、发布/CI 归属和基准目标检查通过；清单生成与完整性工具模块 24 项测试通过 | 59d8246 最终 CI 已终结：补跑取消项成功，合计 43 通过、仅 SemVer 失败；不重复把元数据完整性视为完整方法行为 |
+| P06 | 3279d31 的六组 Linux 运行预算全部通过；macOS 工作区合同在 5bb051f 通过 | 各项证据保留平台范围，最终矩阵与其余门禁继续独立验收 |
+| P07 | 所有结论及剩余要求对应最终报告；当前修复已提交并推送 59d8246 | 原顶层任务不因局部通过自动关闭，最终报告保持 NOT_READY |
+
+待确认的准确用例与影响范围集中于 [验收决策清单](pending-acceptance-decisions.md)。没有把推荐选项当成用户批准，也没有放宽任何比较器。
+
+Java 8 冻结清单仍为 2,001 项公共身份，17 项具有局部证据链接、1,984 项未评估；其中方法及继承方法分母仍为 1,573。生成器输出统一为 LF，实际 JDK 8 再生成与 Git 字节完全一致；此完整性证明不等于 TCK 或全部方法通过。
+
+本轮最新源码统一实时差分已执行全部九个目标，Cargo exit 101；636 项跨范围观察中 620 MATCH、2 项已批准差异、14 MISMATCH。原 59 例分母不变。见 [统一差分证据](unified-java-differential-59d8246-20261021.md)。
+
+## 历史操作记录
+
 最新canonical声明收口（2026-10-13）：verify_jdbc42_public_entries 为深度≥4的类型成员路径（枚举变体与关联常量）新增值位置探针——use 语句无法导入关联常量，原 `pub use` 探针对 `SqlExceptionKind::InvalidAuthorizationSpec`（cdcc9c8 保留变体 `InvalidAuthorization` 以维持穷尽匹配兼容）误报 FAIL。TDD 先行 3 个新用例真实 RED（常量 E0432、成员 scope、缺失成员 E0599），修正后套件 14/14 PASS；真实 rustc 门禁 68 PASS/0 FAIL/1 NOT_RUST_TARGET exit0，收据 target/jdbc42-probe-final/summary.json（构建产物不入库）。据此把语义 inventory 49 行 PLANNED_TARGET 晋升 DECLARED（69/69），TASK3_STANDARD_ENTRIES 20→69，oracle semantic_sha256 重绑 afe4824599b8843f769440afa5c805a822985b9fb8d9ef46e7f8739bf7fa5c26（final 来源绑定重建与 logical-live 阶段归一化双路径一致后写入）。test_verify_jdbc42_semantic_inventory 35/35、test_verify_jdbc42_public_entries 14/14 PASS；带范围语义校验（logical-live 与 adapter-live 双阶段、require_standard_entries、关闭环境受阻的证据组件）exit0；cargo test -p druid-rdbc 0 failed。本条只收口 target 声明维度：adapter/logical/capability 证据列未动、未手写任何 LIVE；完整 Task4 wrapper 证据门禁因本机 cargo-llvm-cov/LLVM 组件缺失（2026-10-07 已记录、待授权补装）未执行，Task6 FIX_REQUIRED 与 18 顶层任务状态不变。
 
 最新全仓终态（2026-10-08）：workspace/all-features 原 session52736 实际 exit101，164 个已完成结果块累计 2886 PASS/8 FAIL/0 ignored；失败目标 grpc_network_e2e_test 为38/8，Admin binary 为14/0。fail-fast停止剩余目标，不能声明完整全仓通过；终态1092源码+58控制输入变化0。完整C1/C2既有PASS保留。只读防火墙检查发现本轮20b9d4a616891dd0测试程序的Public入站Block规则，尚无受控对照，不能判定全部失败根因。随后仅删除两项已报告的unused import，开始独立编译核验，旧冻结结果不扩大到修改后源码。Task6 FIX_REQUIRED，18顶层任务OPEN。

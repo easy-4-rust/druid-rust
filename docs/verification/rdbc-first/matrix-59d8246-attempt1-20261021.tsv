@@ -1,0 +1,45 @@
+job	id	conclusion	url
+DuckDB contract (x86_64-unknown-linux-gnu, Rust 1.95)	118779607705	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779607705
+SQLite contract (x86_64-unknown-linux-gnu, Rust default)	118779607840	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779607840
+JDBC Agent HSQLDB (ubuntu-latest, JDK 21)	118779607867	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779607867
+SQLite contract (x86_64-pc-windows-msvc, Rust 1.95)	118779607879	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779607879
+SQLite contract (aarch64-apple-darwin, Rust default)	118779607895	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779607895
+SQLite contract (x86_64-apple-darwin, Rust default)	118779607901	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779607901
+supply-chain	118779607929	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779607929
+JDBC Agent H2 (windows-latest, JDK 21)	118779607953	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779607953
+SQLite contract (aarch64-unknown-linux-gnu, Rust 1.95)	118779607973	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779607973
+JDBC Agent H2 (macos-latest, JDK 21)	118779607994	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779607994
+rust-contracts	118779607999	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779607999
+msrv	118779608003	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608003
+DuckDB contract (aarch64-unknown-linux-gnu, Rust 1.95)	118779608060	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608060
+public-api	118779608084	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608084
+JDBC Agent HSQLDB (macos-latest, JDK 17)	118779608126	cancelled	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608126
+Rust contracts (macos-latest)	118779608146	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608146
+SQLite contract (x86_64-apple-darwin, Rust 1.95)	118779608155	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608155
+PostgreSQL real product contract	118779608199	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608199
+DuckDB contract (aarch64-apple-darwin, Rust 1.95)	118779608232	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608232
+DuckDB contract (x86_64-pc-windows-msvc, Rust 1.95)	118779608238	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608238
+Rust contracts (windows-latest)	118779608246	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608246
+JDBC Agent H2 (macos-latest, JDK 17)	118779608274	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608274
+MySQL real product contract	118779608282	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608282
+DuckDB contract (x86_64-pc-windows-msvc, Rust default)	118779608293	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608293
+JDBC Agent H2 (ubuntu-latest, JDK 21)	118779608297	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608297
+Rust contracts (ubuntu-latest)	118779608317	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608317
+JDBC Agent HSQLDB (windows-latest, JDK 17)	118779608332	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608332
+JDBC Agent HSQLDB (windows-latest, JDK 21)	118779608336	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608336
+JDBC Agent H2 (windows-latest, JDK 17)	118779608341	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608341
+SQLite contract (aarch64-unknown-linux-gnu, Rust default)	118779608348	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608348
+SQLite contract (x86_64-pc-windows-msvc, Rust default)	118779608361	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608361
+DuckDB contract (x86_64-apple-darwin, Rust default)	118779608384	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608384
+SQLite contract (x86_64-unknown-linux-gnu, Rust 1.95)	118779608423	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608423
+semver	118779608432	failure	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608432
+DuckDB contract (x86_64-apple-darwin, Rust 1.95)	118779608452	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608452
+JDBC Agent H2 (ubuntu-latest, JDK 17)	118779608492	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608492
+DuckDB contract (aarch64-apple-darwin, Rust default)	118779608510	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608510
+DuckDB contract (aarch64-unknown-linux-gnu, Rust default)	118779608534	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608534
+DuckDB contract (x86_64-unknown-linux-gnu, Rust default)	118779608557	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608557
+JDBC Agent HSQLDB (macos-latest, JDK 21)	118779608559	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608559
+SQLite contract (aarch64-apple-darwin, Rust 1.95)	118779608582	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779608582
+JDBC Agent HSQLDB (ubuntu-latest, JDK 17)	118779609877	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118779609877
+aggregate-duckdb-evidence	118794310084	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118794310084
+aggregate-sqlite-evidence	118800664519	success	https://github.com/easy-4-rust/druid-rust/actions/runs/39466380279/job/118800664519

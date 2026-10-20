@@ -1,0 +1,10 @@
+comparison	sha256	cases	match	approved_standard_difference	mismatch
+D:\druid-rust-tooling\callable-seven-live-39176-1792520009849740900\comparison.tsv	7e9b0a72d76d9f9ea4b3f01f90c248af4385c4f8de7e350dc539852af42d6802	7	2	0	5
+D:\druid-rust-tooling\exception-sorters-70480-1792520013227682500\comparison.tsv	3d6ddbb1cb76eaad1038ed709a67dd6572c07798106d25e24a2f4a0983b5f354	576	573	0	3
+D:\druid-rust-tooling\mock-sorter-live-75120-1792520015295945600\comparison.tsv	eae005a3cbe441dc7fc3d935c043e00271cece09c68ac08a98e903e8ed0d4fa6	1	1	0	0
+D:\druid-rust-tooling\pool-six-live-22036-1792520018425312800\comparison.tsv	fbf2da2c8198205a2736ef99b0dd00fe9c3cf73efb28445bdef8b83ce7d43c64	6	3	0	3
+D:\druid-rust-tooling\prepared-cache-live-65700-1792520021243202100\comparison.tsv	a9920c3fe0e6d6602b5ba467bed8919959f9f0891b00e28a9207db1a4fb093dd	1	0	0	1
+D:\druid-rust-tooling\result-set-live-38532-1792520024362682500\comparison.tsv	9dbbce04815dd812cf7d70eaf6c47f1bae72e88c777be7d598d060f9decbcd0e	5	3	0	2
+D:\druid-rust-tooling\statement-errors-live-70576-1792520027340941600\comparison.tsv	66cb4244f8c3dc107f1cd54613ff4fa7c4f4b1d01bdf2732eb852912d39ae6ea	37	35	2	0
+D:\druid-rust-tooling\wall-multi-live-11596-1792520030161202400\comparison.tsv	f6976faae74f13485dfaf5ee1f7563aeef79d12327c8442170aec36de92a5b6d	2	2	0	0
+D:\druid-rust-tooling\wall-table-live-23860-1792520032667711900\comparison.tsv	343d6e59786c9a0aef616aff72ac93af9cc6cb5c9c39c0fb1bd86e1344aba220	1	1	0	0
