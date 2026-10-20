@@ -696,15 +696,10 @@ impl Statement for DruidPooledCallableStatement {
     fn clear_batch(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
         let result = self
-            .shared
-            .resource
-            .statement
-            .try_lock()
-            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
-            .as_mut()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-            .clear_batch();
-        self.classify_statement_mutation(result)?;
+            .statement_base
+            .clear_batch_with_sql(Some(&self.shared.sql));
+        // 基类已完成一次分类和计错；这里只保留调用语句缓存失效约束。
+        self.retain_cacheable_result(result)?;
         self.shared
             .state
             .lock()

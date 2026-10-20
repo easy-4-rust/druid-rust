@@ -9,7 +9,7 @@ use druid::core::{
 use druid::pool::config::PoolInnerConfig;
 use druid::pool::DruidPool;
 use druid_rdbc::connection::Connection;
-use druid_rdbc::statement::StatementOptions;
+use druid_rdbc::statement::{PreparedStatement, StatementOptions};
 use standard_test_support::{TrackingFactory, TrackingState};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -115,4 +115,68 @@ async fn clear_batch_filter_preserves_errors_pending_batch_order_and_holder_reus
     assert_eq!(state.factory_create_count.load(Ordering::Acquire), 1);
     next.close().await.unwrap();
     pool.close().await;
+}
+
+#[tokio::test]
+async fn prepared_and_callable_clear_batch_share_filter_accounting_and_keep_rejected_batches() {
+    for callable in [false, true] {
+        let state = TrackingState::configured();
+        let reject = Arc::new(AtomicBool::new(true));
+        let trace = Arc::new(Mutex::new(Vec::new()));
+        let mut filters = FilterChain::new();
+        filters.add_before(Arc::new(ClearBatchFilter {
+            reject: Arc::clone(&reject),
+            trace: Arc::clone(&trace),
+            name: "clear",
+        }));
+        let pool = DruidPool::new_standard(
+            format!("inherited-clear-batch-{callable}"),
+            "mock".to_owned(),
+            Arc::new(TrackingFactory::new(Arc::clone(&state))),
+            PoolInnerConfig {
+                max_open: 1,
+                max_idle: 1,
+                ..PoolInnerConfig::default()
+            },
+            Some(Arc::new(filters)),
+        );
+        pool.init().await.unwrap();
+        let mut connection = pool.get().await.unwrap();
+        let mut statement: Box<dyn PreparedStatement> = if callable {
+            connection
+                .prepare_call("SELECT 1", StatementOptions::default())
+                .await
+                .unwrap()
+        } else {
+            connection
+                .prepare_statement("SELECT 1", StatementOptions::default())
+                .await
+                .unwrap()
+        };
+        statement.add_batch("SELECT 1".to_owned()).unwrap();
+        let error = statement.clear_batch().unwrap_err();
+        assert_eq!(error.sql_exception().unwrap().error_code(), 0);
+        assert_eq!(pool.stat_value_and_reset().error_count, 1);
+        assert_eq!(*trace.lock().unwrap(), vec!["clear"]);
+        assert!(!state
+            .event_snapshot()
+            .iter()
+            .any(|event| event == "prepared.batch.clear"));
+        // 底层批次与池化参数快照均须保留；后续执行仍返回原来的一项。
+        assert_eq!(statement.execute_batch().await.unwrap(), vec![1]);
+        statement.add_batch("SELECT 1".to_owned()).unwrap();
+        reject.store(false, Ordering::Release);
+        statement.clear_batch().unwrap();
+        assert!(statement.execute_batch().await.unwrap().is_empty());
+        assert_eq!(*trace.lock().unwrap(), vec!["clear", "clear", "clear"]);
+        statement.close().await.unwrap();
+        connection.close().await.unwrap();
+        assert_eq!(pool.state().active_count, 0);
+        assert_eq!(pool.state().idle_count, 1);
+        assert_eq!(state.prepared_close_count.load(Ordering::Acquire), 1);
+        let mut next = pool.get().await.unwrap();
+        assert_eq!(state.factory_create_count.load(Ordering::Acquire), 1);
+        next.close().await.unwrap();
+        pool.close().await;
+    }
 }

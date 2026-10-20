@@ -334,6 +334,28 @@ impl DruidPooledStatement {
         }
     }
 
+    /// 通过唯一清除链治理继承语句；参数为预编译 SQL 上下文，返回已分类和计错的结果。
+    /// 对应 Java: DruidPooledStatement#clearBatch；成功后才清除代理批次。
+    pub(crate) fn clear_batch_with_sql(&self, sql: Option<&str>) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        let result = {
+            let mut statement = self
+                .inner
+                .statement
+                .try_lock()
+                .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?;
+            match &self.inner.filter_chain {
+                Some(chain) => chain
+                    .standard_statement_clear_batch(statement.as_mut())
+                    .map_err(RdbcError::from),
+                None => statement.clear_batch(),
+            }
+        };
+        self.classify_statement_access(result, sql)?;
+        self.state_mut().batch.clear();
+        Ok(())
+    }
+
     fn validate_non_negative(value: i64, name: &str) -> Result<(), RdbcError> {
         if value < 0 {
             Err(RdbcError::InvalidArgument(format!(
@@ -1031,23 +1053,7 @@ impl Statement for DruidPooledStatement {
     }
 
     fn clear_batch(&mut self) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        let result = {
-            let mut statement = self
-                .inner
-                .statement
-                .try_lock()
-                .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?;
-            match &self.inner.filter_chain {
-                Some(chain) => chain
-                    .standard_statement_clear_batch(statement.as_mut())
-                    .map_err(RdbcError::from),
-                None => statement.clear_batch(),
-            }
-        };
-        self.classify_statement_access(result, None)?;
-        self.state_mut().batch.clear();
-        Ok(())
+        self.clear_batch_with_sql(None)
     }
 
     fn batch(&self) -> Result<Vec<String>, RdbcError> {
