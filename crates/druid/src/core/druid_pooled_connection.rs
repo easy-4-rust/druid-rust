@@ -639,6 +639,9 @@ impl DruidPooledConnection {
                 exception_sorter.is_exception_fatal(exception)
             });
         if fatal {
+            if let Some(policy) = &self.standard_policy {
+                policy.remember_fatal_error(error);
+            }
             let fatal_error_handler = self.fatal_error_handler.clone();
             let on_fatal_error = fatal_error_handler.as_ref().is_some_and(|handler| {
                 let product_error = DruidError::from(error.clone());
@@ -826,6 +829,13 @@ impl DruidPooledConnection {
             if let Some(holder) = self.holder.as_mut() {
                 holder.mark_discarded();
             }
+            if let Some(error) = self
+                .standard_policy
+                .as_ref()
+                .and_then(|policy| policy.fatal_discard_error())
+            {
+                return Err(error);
+            }
             return Err(RdbcError::ConnectionLeaked {
                 id: self.id,
                 held_for: self.borrowed_at.elapsed(),
@@ -841,6 +851,13 @@ impl DruidPooledConnection {
         &self,
     ) -> Result<&(dyn druid_rdbc::connection::Connection + 'static), RdbcError> {
         if !self.lease_active.load(Ordering::Acquire) {
+            if let Some(error) = self
+                .standard_policy
+                .as_ref()
+                .and_then(|policy| policy.fatal_discard_error())
+            {
+                return Err(error);
+            }
             return Err(RdbcError::ConnectionLeaked {
                 id: self.id,
                 held_for: self.borrowed_at.elapsed(),
@@ -1875,6 +1892,8 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
     }
 
     async fn commit(&mut self) -> Result<(), RdbcError> {
+        // Java checkState 在统计提交尝试之前执行；致命拒绝不产生新的提交计数。
+        self.standard_ref()?;
         let event = ConnectionEvent::Commit;
         let started_at = Instant::now();
         self.before_connection_event(&event).await?;

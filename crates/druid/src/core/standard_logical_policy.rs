@@ -13,7 +13,7 @@ use crate::stats::{RdbcStatementStat, StatsCollector};
 use parking_lot::{Mutex, RwLock};
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 type StatementListenerHandle = Arc<RwLock<Vec<Arc<dyn StatementEventListener>>>>;
@@ -32,6 +32,7 @@ pub(crate) struct StandardLogicalPolicy {
     transaction_started_at: Mutex<Option<Instant>>,
     resource_generation: u64,
     discarded: AtomicBool,
+    fatal_cause: OnceLock<RdbcError>,
     owner_disposition: Arc<OwnerDispositionControl>,
     statement_event_listeners: RwLock<Option<StatementListenerHandle>>,
 }
@@ -60,6 +61,7 @@ impl StandardLogicalPolicy {
             transaction_started_at: Mutex::new(None),
             resource_generation,
             discarded: AtomicBool::new(false),
+            fatal_cause: OnceLock::new(),
             owner_disposition,
             statement_event_listeners: RwLock::new(None),
         })
@@ -168,8 +170,27 @@ impl StandardLogicalPolicy {
         if self.lease_active.load(Ordering::Acquire) {
             Ok(())
         } else {
-            Err(RdbcError::ConnectionDiscarded)
+            Err(self
+                .fatal_discard_error()
+                .unwrap_or(RdbcError::ConnectionDiscarded))
         }
+    }
+
+    /// 保留本租约的第一条致命错误；参数为原始错误，重复通知不覆盖原因。
+    pub(crate) fn remember_fatal_error(&self, error: &RdbcError) {
+        let _ = self.fatal_cause.set(error.clone());
+    }
+
+    /// 返回携带原始原因的产品级丢弃错误；没有致命错误时返回 None。
+    pub(crate) fn fatal_discard_error(&self) -> Option<RdbcError> {
+        self.fatal_cause.get().map(|cause| {
+            let discarded = DruidError::ConnectionDiscarded;
+            RdbcError::ProductBoundary(druid_rdbc::error::ProductErrorBoundary::new(
+                discarded.class_name(),
+                discarded.to_string(),
+                Some(cause.clone()),
+            ))
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -451,6 +472,7 @@ impl StandardLogicalPolicy {
                 .zip(error.sql_exception())
                 .is_some_and(|(sorter, exception)| sorter.is_exception_fatal(exception));
             if fatal {
+                self.remember_fatal_error(error);
                 self.discarded.store(true, Ordering::Release);
                 self.lease_active.store(false, Ordering::Release);
                 self.owner_disposition
