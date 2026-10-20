@@ -48,7 +48,9 @@ impl BeforeFilter for ResultPropertyFilter {
     ) -> Result<(), DruidError> {
         if matches!(
             event,
-            StatementPropertyEvent::GetUpdateCount | StatementPropertyEvent::GetMoreResults
+            StatementPropertyEvent::GetUpdateCount
+                | StatementPropertyEvent::GetMoreResults
+                | StatementPropertyEvent::GetGeneratedKeys
         ) {
             self.enter()?;
         }
@@ -108,14 +110,20 @@ async fn all_statement_kinds_count_result_filter_errors_once_and_reject_closed_a
         };
         assert!(!cursor.is_closed().unwrap());
         let closes_before = state.result_set_close_attempt_count.load(Ordering::Acquire);
-        for operation in 0..2 {
+        for operation in 0..3 {
             let error = if operation == 0 {
                 statement.get_update_count().unwrap_err()
-            } else {
+            } else if operation == 1 {
                 statement
                     .get_more_results(CurrentResultDisposition::CloseCurrent)
                     .await
                     .unwrap_err()
+            } else {
+                statement
+                    .generated_keys()
+                    .await
+                    .err()
+                    .expect("generated keys filter must reject")
             };
             let sql = error.sql_exception().unwrap();
             assert_eq!(sql.class_name(), "java.sql.SQLException");
@@ -127,7 +135,7 @@ async fn all_statement_kinds_count_result_filter_errors_once_and_reject_closed_a
                 "{kind}/{operation}"
             );
         }
-        assert_eq!(calls.load(Ordering::Acquire), 2);
+        assert_eq!(calls.load(Ordering::Acquire), 3);
         assert!(
             !cursor.is_closed().unwrap(),
             "filter rejection must retain cursor"
@@ -142,9 +150,10 @@ async fn all_statement_kinds_count_result_filter_errors_once_and_reject_closed_a
             .get_more_results(CurrentResultDisposition::CloseCurrent)
             .await
             .is_err());
+        assert!(statement.generated_keys().await.is_err());
         assert_eq!(
             calls.load(Ordering::Acquire),
-            2,
+            3,
             "closed access must not enter filters"
         );
         assert_eq!(pool.stat_value_and_reset().error_count, 0);

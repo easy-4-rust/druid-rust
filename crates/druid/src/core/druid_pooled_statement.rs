@@ -301,7 +301,10 @@ impl DruidPooledStatement {
 
     /// 在结果状态访问前执行过滤器，拒绝时不得处置已有游标。
     /// 对应 Java: DruidPooledStatement#getUpdateCount/getMoreResults。
-    fn check_result_property(&self, event: StatementPropertyEvent) -> Result<(), RdbcError> {
+    pub(crate) fn check_result_property(
+        &self,
+        event: StatementPropertyEvent,
+    ) -> Result<(), RdbcError> {
         self.ensure_open()?;
         if let Some(chain) = &self.inner.filter_chain {
             self.classify_statement_mutation(
@@ -1106,9 +1109,10 @@ impl Statement for DruidPooledStatement {
     async fn generated_keys(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
-        self.ensure_open()?;
+        self.check_result_property(StatementPropertyEvent::GetGeneratedKeys)?;
         let admission = self.inner.begin_standard_admission()?;
-        let raw = self.inner.statement.lock().await.generated_keys().await?;
+        let raw = self.inner.statement.lock().await.generated_keys().await;
+        let raw = self.classify_statement_mutation(raw)?;
         Ok(Box::new(
             DruidPooledResultSet::new_standard_auxiliary(Arc::clone(&self.inner), raw, &admission)
                 .await?,

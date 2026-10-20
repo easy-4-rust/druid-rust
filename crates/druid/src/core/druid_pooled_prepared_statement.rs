@@ -4,7 +4,7 @@ mod identity;
 mod prepared_batch;
 mod shared_owner;
 
-use super::filter::ExecOperation;
+use super::filter::{ExecOperation, StatementPropertyEvent};
 use super::optional_statement_state_delegates::delegate_optional_statement_state_methods;
 use super::prepared_statement_cache_stats::PreparedStatementCacheStats;
 use super::prepared_statement_key::PreparedStatementKey;
@@ -884,6 +884,10 @@ impl Statement for DruidPooledPreparedStatement {
 
     async fn generated_keys(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.ensure_open()?;
+        self.retain_cacheable_result(
+            self.statement_base
+                .check_result_property(StatementPropertyEvent::GetGeneratedKeys),
+        )?;
         let admission = self.statement_base.inner.begin_standard_admission()?;
         let raw: Box<dyn ResultSet> = if self.shared.has_execution_result.load(Ordering::Acquire) {
             let result = self
