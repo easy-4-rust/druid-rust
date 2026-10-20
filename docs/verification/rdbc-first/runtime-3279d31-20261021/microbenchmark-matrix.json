@@ -1,0 +1,114 @@
+{
+  "budget": {
+    "max_peak_rss_kib": 65536,
+    "p99_us_limits": {
+      "adapter/parallel_64_borrow": 450.0,
+      "adapter/parallel_8_borrow": 50.0,
+      "adapter/single_borrow": 7.0,
+      "filter_chain/20_adapter_build": 6.0,
+      "filter_chain/5_adapter_build": 2.0,
+      "filter_chain/empty_build": 0.1,
+      "pool/parallel_16": 100.0,
+      "pool/parallel_64": 450.0,
+      "pool/single_borrow_return": 7.0,
+      "wall/check_2_safe": 4.0,
+      "wall/check_all_categories": 10.0
+    },
+    "status": "ENFORCED",
+    "violations": []
+  },
+  "cases": {
+    "adapter/parallel_64_borrow": {
+      "operations_per_second": 10746.7,
+      "p50_us": 93.052,
+      "p95_us": 93.554,
+      "p99_us": 93.837,
+      "sample_sha256": "fa43faae9e093234553a148e2062377f170b8bbc7305ad59c5e917098450f34f",
+      "samples": 100
+    },
+    "adapter/parallel_8_borrow": {
+      "operations_per_second": 101224.8,
+      "p50_us": 9.879,
+      "p95_us": 9.914,
+      "p99_us": 10.007,
+      "sample_sha256": "85138b928733cadcda802833bc247527b1647b3fef5f8f2ca84923fbcb8fde45",
+      "samples": 100
+    },
+    "adapter/single_borrow": {
+      "operations_per_second": 683994.5,
+      "p50_us": 1.462,
+      "p95_us": 1.468,
+      "p99_us": 1.497,
+      "sample_sha256": "49df9ace10b5455d710943116fecb7f852ea9dcc56b95a2ffaa590a9496d8a8e",
+      "samples": 100
+    },
+    "filter_chain/20_adapter_build": {
+      "operations_per_second": 693000.7,
+      "p50_us": 1.443,
+      "p95_us": 1.453,
+      "p99_us": 1.456,
+      "sample_sha256": "41ac6af7ef57d78d615259a46878486d68b7c7fa9439bd4cee10b5b54279740e",
+      "samples": 100
+    },
+    "filter_chain/5_adapter_build": {
+      "operations_per_second": 2487562.2,
+      "p50_us": 0.402,
+      "p95_us": 0.406,
+      "p99_us": 0.412,
+      "sample_sha256": "dda8b0a4e0876770a4ddf4f219ce435581d851a0ec52888832f14af3a11d18a2",
+      "samples": 100
+    },
+    "filter_chain/empty_build": {
+      "operations_per_second": 200000000.0,
+      "p50_us": 0.005,
+      "p95_us": 0.005,
+      "p99_us": 0.005,
+      "sample_sha256": "6ead1bb766c2a309b2c4c83121cc3623784b3be4b3cc4086427ba96571bae3fb",
+      "samples": 100
+    },
+    "pool/parallel_16": {
+      "operations_per_second": 50684.2,
+      "p50_us": 19.73,
+      "p95_us": 19.804,
+      "p99_us": 20.033,
+      "sample_sha256": "a13949422cd01aa6df423b8c65e07dc1b416208bd7bcbfd20be4d97a60fa2a34",
+      "samples": 100
+    },
+    "pool/parallel_64": {
+      "operations_per_second": 10679.4,
+      "p50_us": 93.638,
+      "p95_us": 94.072,
+      "p99_us": 94.456,
+      "sample_sha256": "4415ea0fc48b818dadeea7d91cdf2fb5a805d43e34ec14d4b216dd0f914d4205",
+      "samples": 100
+    },
+    "pool/single_borrow_return": {
+      "operations_per_second": 672043.0,
+      "p50_us": 1.488,
+      "p95_us": 1.494,
+      "p99_us": 1.505,
+      "sample_sha256": "d0b9f23a6f2e23e31b36406410e30eda0787275845c03a882c8d40c4e4e64b1d",
+      "samples": 100
+    },
+    "wall/check_2_safe": {
+      "operations_per_second": 1727115.7,
+      "p50_us": 0.579,
+      "p95_us": 0.582,
+      "p99_us": 0.597,
+      "sample_sha256": "b73529f18d31e935c810a8756afed6fdaea990ba10846fd187557d3cb39dfbac",
+      "samples": 100
+    },
+    "wall/check_all_categories": {
+      "operations_per_second": 562746.2,
+      "p50_us": 1.777,
+      "p95_us": 1.784,
+      "p99_us": 1.79,
+      "sample_sha256": "3bfedafc256b1477408e588bcbf0258a7256b87d2aa7b10683f7ab2e87cf83fd",
+      "samples": 100
+    }
+  },
+  "commit": "3279d3155c044fd1ed6031761198086c65230755",
+  "peak_rss_kib": 24304,
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "schema": "druid-microbenchmark-matrix-v1"
+}

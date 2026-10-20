@@ -1,0 +1,396 @@
+{
+  "budget": {
+    "peak_rss_kib": 65536,
+    "scenario_p99_us": {
+      "duplicate_batch": 250000,
+      "pending_ack_sigterm": 1000000,
+      "remote_auth": 1000000,
+      "restart_pending": 2000000,
+      "sequence_gap": 500000,
+      "unavailable_shutdown": 500000
+    },
+    "status": "enforced",
+    "violations": []
+  },
+  "commit": "3279d3155c044fd1ed6031761198086c65230755",
+  "latency_scope": "whole_scenario_including_fixture_setup",
+  "peak_rss_kib": 21756,
+  "peak_rss_scope": "maximum_of_child_processes",
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "run_log_sha256": "1b805c2e2216e3f614ae101a6fec9d8262af429f540abb707a46af0d96757ae3",
+  "scenarios": {
+    "duplicate_batch": {
+      "observations": [
+        {
+          "accepted_sequence": 11,
+          "duplicate_preserved": 1
+        },
+        {
+          "accepted_sequence": 11,
+          "duplicate_preserved": 1
+        },
+        {
+          "accepted_sequence": 11,
+          "duplicate_preserved": 1
+        },
+        {
+          "accepted_sequence": 11,
+          "duplicate_preserved": 1
+        },
+        {
+          "accepted_sequence": 11,
+          "duplicate_preserved": 1
+        },
+        {
+          "accepted_sequence": 11,
+          "duplicate_preserved": 1
+        },
+        {
+          "accepted_sequence": 11,
+          "duplicate_preserved": 1
+        },
+        {
+          "accepted_sequence": 11,
+          "duplicate_preserved": 1
+        },
+        {
+          "accepted_sequence": 11,
+          "duplicate_preserved": 1
+        },
+        {
+          "accepted_sequence": 11,
+          "duplicate_preserved": 1
+        }
+      ],
+      "p50_us": 13277,
+      "p95_us": 14501,
+      "p99_us": 14501,
+      "run_count": 10,
+      "runs_us": [
+        14501,
+        13462,
+        14483,
+        13537,
+        13287,
+        13222,
+        12992,
+        13277,
+        13048,
+        13106
+      ],
+      "target": "grpc_network_e2e_test",
+      "test": "grpc_duplicate_and_increasing_sequences_are_handled_over_network"
+    },
+    "pending_ack_sigterm": {
+      "observations": [
+        {
+          "pending_released": 1,
+          "shutdown_us": 2772
+        },
+        {
+          "pending_released": 1,
+          "shutdown_us": 2132
+        },
+        {
+          "pending_released": 1,
+          "shutdown_us": 2096
+        },
+        {
+          "pending_released": 1,
+          "shutdown_us": 2235
+        },
+        {
+          "pending_released": 1,
+          "shutdown_us": 2402
+        },
+        {
+          "pending_released": 1,
+          "shutdown_us": 2107
+        },
+        {
+          "pending_released": 1,
+          "shutdown_us": 2581
+        },
+        {
+          "pending_released": 1,
+          "shutdown_us": 2090
+        },
+        {
+          "pending_released": 1,
+          "shutdown_us": 2087
+        },
+        {
+          "pending_released": 1,
+          "shutdown_us": 2118
+        }
+      ],
+      "p50_us": 30137,
+      "p95_us": 31048,
+      "p99_us": 31048,
+      "run_count": 10,
+      "runs_us": [
+        31048,
+        29887,
+        30167,
+        29873,
+        30300,
+        30137,
+        30579,
+        29947,
+        30287,
+        30062
+      ],
+      "target": "admin_binary_test",
+      "test": "sigterm_releases_pending_command_http_waiter_before_deadline"
+    },
+    "remote_auth": {
+      "observations": [
+        {
+          "projected_identity": 901,
+          "rejected_credentials": 5
+        },
+        {
+          "projected_identity": 901,
+          "rejected_credentials": 5
+        },
+        {
+          "projected_identity": 901,
+          "rejected_credentials": 5
+        },
+        {
+          "projected_identity": 901,
+          "rejected_credentials": 5
+        },
+        {
+          "projected_identity": 901,
+          "rejected_credentials": 5
+        },
+        {
+          "projected_identity": 901,
+          "rejected_credentials": 5
+        },
+        {
+          "projected_identity": 901,
+          "rejected_credentials": 5
+        },
+        {
+          "projected_identity": 901,
+          "rejected_credentials": 5
+        },
+        {
+          "projected_identity": 901,
+          "rejected_credentials": 5
+        },
+        {
+          "projected_identity": 901,
+          "rejected_credentials": 5
+        }
+      ],
+      "p50_us": 99475,
+      "p95_us": 101181,
+      "p99_us": 101181,
+      "run_count": 10,
+      "runs_us": [
+        101181,
+        100667,
+        98652,
+        99627,
+        100017,
+        99391,
+        99188,
+        98672,
+        99660,
+        99475
+      ],
+      "target": "admin_binary_test",
+      "test": "remote_http_and_grpc_use_tls_and_require_authentication"
+    },
+    "restart_pending": {
+      "observations": [
+        {
+          "projected_active": 9,
+          "recovered_sequence": 3
+        },
+        {
+          "projected_active": 9,
+          "recovered_sequence": 3
+        },
+        {
+          "projected_active": 9,
+          "recovered_sequence": 3
+        },
+        {
+          "projected_active": 9,
+          "recovered_sequence": 3
+        },
+        {
+          "projected_active": 9,
+          "recovered_sequence": 3
+        },
+        {
+          "projected_active": 9,
+          "recovered_sequence": 3
+        },
+        {
+          "projected_active": 9,
+          "recovered_sequence": 3
+        },
+        {
+          "projected_active": 9,
+          "recovered_sequence": 3
+        },
+        {
+          "projected_active": 9,
+          "recovered_sequence": 3
+        },
+        {
+          "projected_active": 9,
+          "recovered_sequence": 3
+        }
+      ],
+      "p50_us": 287882,
+      "p95_us": 288450,
+      "p99_us": 288450,
+      "run_count": 10,
+      "runs_us": [
+        287882,
+        288450,
+        287715,
+        287778,
+        287521,
+        287889,
+        288233,
+        287741,
+        288093,
+        287935
+      ],
+      "target": "grpc_network_e2e_test",
+      "test": "admin_restart_with_pending_incremental_supersedes_it_with_monotonic_full_snapshot"
+    },
+    "sequence_gap": {
+      "observations": [
+        {
+          "expected_sequence": 6,
+          "identity_rejected": 1
+        },
+        {
+          "expected_sequence": 6,
+          "identity_rejected": 1
+        },
+        {
+          "expected_sequence": 6,
+          "identity_rejected": 1
+        },
+        {
+          "expected_sequence": 6,
+          "identity_rejected": 1
+        },
+        {
+          "expected_sequence": 6,
+          "identity_rejected": 1
+        },
+        {
+          "expected_sequence": 6,
+          "identity_rejected": 1
+        },
+        {
+          "expected_sequence": 6,
+          "identity_rejected": 1
+        },
+        {
+          "expected_sequence": 6,
+          "identity_rejected": 1
+        },
+        {
+          "expected_sequence": 6,
+          "identity_rejected": 1
+        },
+        {
+          "expected_sequence": 6,
+          "identity_rejected": 1
+        }
+      ],
+      "p50_us": 51897,
+      "p95_us": 52319,
+      "p99_us": 52319,
+      "run_count": 10,
+      "runs_us": [
+        52319,
+        51885,
+        51904,
+        51969,
+        51911,
+        51875,
+        50934,
+        51976,
+        51075,
+        51897
+      ],
+      "target": "grpc_network_e2e_test",
+      "test": "grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames"
+    },
+    "unavailable_shutdown": {
+      "observations": [
+        {
+          "shutdown_us": 101431,
+          "unflushed": 1
+        },
+        {
+          "shutdown_us": 101407,
+          "unflushed": 1
+        },
+        {
+          "shutdown_us": 101415,
+          "unflushed": 1
+        },
+        {
+          "shutdown_us": 101480,
+          "unflushed": 1
+        },
+        {
+          "shutdown_us": 101461,
+          "unflushed": 1
+        },
+        {
+          "shutdown_us": 101460,
+          "unflushed": 1
+        },
+        {
+          "shutdown_us": 101457,
+          "unflushed": 1
+        },
+        {
+          "shutdown_us": 101465,
+          "unflushed": 1
+        },
+        {
+          "shutdown_us": 101460,
+          "unflushed": 1
+        },
+        {
+          "shutdown_us": 101464,
+          "unflushed": 1
+        }
+      ],
+      "p50_us": 110048,
+      "p95_us": 110163,
+      "p99_us": 110163,
+      "run_count": 10,
+      "runs_us": [
+        110163,
+        110146,
+        109962,
+        110129,
+        109870,
+        109859,
+        109975,
+        110054,
+        110048,
+        110068
+      ],
+      "target": "grpc_network_e2e_test",
+      "test": "unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushed"
+    }
+  },
+  "schema": "druid-admin-fault-matrix-v1"
+}

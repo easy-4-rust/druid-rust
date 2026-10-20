@@ -23,7 +23,7 @@ class MethodEvidenceGateTest(unittest.TestCase):
         self.row = {field: "" for field in GATE.FIELDS}
         self.row.update(identity="javax.sql.PooledConnection#close()", owner="javax.sql.PooledConnection", name="close",
                         parameters="", rust_type_entry="druid_rdbc::connection::Connection",
-                        rust_method_entry="PooledConnection::close", spec_scenario="fixture", batch="fixture",
+                        rust_method_entry="PooledConnection::close", spec_scenario="rdbc-pooled-connection-events/spec.md#PE-02", batch="fixture",
                         backend="fixture", declaration="PASS", contract="PASS", adapter="NOT_RUN",
                         logical_proxy="NOT_RUN", real_db="NOT_RUN", capability="SUPPORTED",
                         positive_evidence="crates/druid-rdbc/tests/standard_event_contract_test.rs#connection_event_owns_the_same_source_after_callers_drop_it",
@@ -86,6 +86,7 @@ class MethodEvidenceGateTest(unittest.TestCase):
             self.check()
 
     def test_inventory_denominator_and_explicit_unassessed_rows_pass(self):
+        self.row.update({layer: "UNASSESSED" for layer in GATE.LAYERS})
         self.row.update(capability="UNASSESSED", positive_evidence="", unsupported_evidence="",
                         unsupported_result="", rust_method_entry="UNMAPPED", not_run_reason="Not assessed")
         self.row.update(positive_evidence_sha256="", unsupported_evidence_sha256="", rust_source="", rust_source_sha256="")

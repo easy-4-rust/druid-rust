@@ -1,0 +1,141 @@
+{
+  "budget": {
+    "limits": {
+      "p99_shutdown_us": 100000,
+      "peak_rss_kib": 65536
+    },
+    "violations": []
+  },
+  "coalesced_min": 2039,
+  "commit": "3279d3155c044fd1ed6031761198086c65230755",
+  "p50_shutdown_us": 86,
+  "p95_shutdown_us": 126,
+  "p99_shutdown_us": 129,
+  "peak_rss_kib": 18000,
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "run_count": 20,
+  "run_log_sha256": "edb50d4fb6897a573afc2a97d3321943b3da34a1b2773b7253a22fa124ec4ee3",
+  "runs": [
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 100,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 86,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 86,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 126,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 92,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 94,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 85,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 88,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 89,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 85,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 121,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 113,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 84,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 85,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 105,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 85,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 84,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 84,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 83,
+      "unflushed": 0
+    },
+    {
+      "active_tasks": 0,
+      "coalesced": 2039,
+      "shutdown_us": 129,
+      "unflushed": 0
+    }
+  ],
+  "schema": "druid-metrics-saturation-v1"
+}

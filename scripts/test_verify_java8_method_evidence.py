@@ -3,12 +3,15 @@ from pathlib import Path
 import contextlib
 import csv
 import io
+import hashlib
+import re
 import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
 
 import verify_java8_method_evidence as verifier
+from generate_java8_api_method_inventory import canonical_inventory_payload
 
 
 class Java8EvidenceTest(unittest.TestCase):
@@ -54,6 +57,28 @@ class Java8EvidenceTest(unittest.TestCase):
         result = self.verify()
         self.assertEqual((result["inventory"], result["ledger"], result["linked"], result["unassessed"]), (2001, 2001, 17, 1984))
         self.assertEqual(result["incomplete"], 2001)
+
+    def test_frozen_inventory_uses_committed_lf_bytes(self):
+        payload = self.inventory.read_bytes()
+        self.assertNotIn(b"\r\n", payload)
+        self.assertEqual(hashlib.sha256(payload).hexdigest(),
+                         "1facdc7c75308db0af9b023847b82b96594d75b667d694774439ed474e53a257")
+
+    def test_windows_and_linux_doclet_outputs_have_identical_canonical_bytes(self):
+        payload = self.inventory.read_bytes()
+        windows = payload.replace(b"\n", b"\r\n")
+        self.assertEqual(canonical_inventory_payload(windows), payload)
+        self.assertEqual(canonical_inventory_payload(payload), payload)
+        self.assertEqual(canonical_inventory_payload(canonical_inventory_payload(windows)), payload)
+
+    def test_stale_platform_specific_inventory_hash_is_rejected(self):
+        windows = self.inventory.read_bytes().replace(b"\n", b"\r\n")
+        wrong_hash = hashlib.sha256(windows).hexdigest().upper()
+        text = self.ledger.read_text(encoding="utf-8")
+        text = re.sub(r"inventory_sha256=[0-9A-F]{64}", "inventory_sha256=" + wrong_hash, text, count=1)
+        self.ledger.write_text(text, encoding="utf-8")
+        with self.assertRaisesRegex(verifier.EvidenceError, "inventory hash"):
+            self.verify()
 
     def test_missing_specification_is_rejected(self):
         self.change_linked(spec_scenario="missing/spec.md#DN-01")

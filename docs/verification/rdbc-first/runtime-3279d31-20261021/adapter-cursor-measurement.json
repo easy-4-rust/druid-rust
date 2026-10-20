@@ -1,0 +1,35 @@
+{
+  "budget": {
+    "limits": {
+      "first_row_p99_us": 2000.0,
+      "full_consume_p99_us": 200000.0,
+      "peak_rss_kib": 65536
+    },
+    "minimums": {
+      "full_consume_rows_per_second": 5000.0
+    },
+    "status": "ENFORCED",
+    "violations": []
+  },
+  "commit": "3279d3155c044fd1ed6031761198086c65230755",
+  "first_row": {
+    "p50_us": 459.486,
+    "p95_us": 499.905,
+    "p99_us": 509.493,
+    "sample_sha256": "8445330bc6273e8bba0677eace077640ae7e69201bba66a056a7330db6256aa6",
+    "samples": 100
+  },
+  "first_row_p99_us": 509.493,
+  "full_consume": {
+    "p50_us": 40783.401,
+    "p95_us": 43270.87,
+    "p99_us": 44861.766,
+    "sample_sha256": "5e998e4d106294c38006680114e3c7ba3500737d57ec7cc6755179be30a31736",
+    "samples": 100
+  },
+  "full_consume_p99_us": 44861.766,
+  "full_consume_rows_per_second": 24519.8,
+  "peak_rss_kib": 25484,
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "schema": "druid-adapter-cursor-benchmark-v1"
+}

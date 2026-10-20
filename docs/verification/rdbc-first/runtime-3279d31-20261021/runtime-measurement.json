@@ -1,0 +1,25 @@
+{
+  "active_peak": 8,
+  "budget": {
+    "limits": {
+      "active_peak": 8,
+      "max_wait_queue_depth": 56,
+      "p99_ms": 100.0,
+      "peak_rss_kib": 65536,
+      "shutdown_ms": 250
+    },
+    "violations": []
+  },
+  "commit": "3279d3155c044fd1ed6031761198086c65230755",
+  "max_wait_queue_depth": 56,
+  "p50_ms": 25.169,
+  "p95_ms": 25.246,
+  "p99_ms": 25.509,
+  "peak_rss_kib": 19120,
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "sample_sha256": "50a4bf43193b7774eb6d8e044a9c38af26fa7fd05dd814ea7e952761e22cc74e",
+  "samples": 100,
+  "schema": "druid-runtime-benchmark-v1",
+  "shutdown_ms": 1,
+  "waits": 24338
+}

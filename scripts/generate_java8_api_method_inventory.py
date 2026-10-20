@@ -72,6 +72,11 @@ def selected_sources(archive: Path, destination: Path) -> list[Path]:
     return files
 
 
+def canonical_inventory_payload(payload: bytes) -> bytes:
+    """Keep doclet fields intact while publishing canonical LF bytes on every platform."""
+    return payload.replace(b"\r\n", b"\n")
+
+
 def generate(archive: Path, output: Path) -> None:
     """Compile and invoke the JDK 8 doclet, then atomically publish its text inventory."""
     javac, javadoc, tools_jar = java8_tools()
@@ -99,7 +104,7 @@ def generate(archive: Path, output: Path) -> None:
             *map(str, sources),
         ]
         subprocess.run(command, check=True, cwd=REPO_ROOT)
-        payload = generated.read_bytes()
+        payload = canonical_inventory_payload(generated.read_bytes())
         rows = payload.decode("utf-8").splitlines()
         if not rows or rows[0] != f"# schema=jdbc-java-method-inventory-v1\tsource_commit=openjdk/jdk8u@{ORACLE_COMMIT}":
             raise RuntimeError("doclet output does not identify the pinned source commit")
