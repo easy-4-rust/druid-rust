@@ -68,6 +68,11 @@
 - **THEN** 每例独立观察异常类别、错误码、SQLState、消息、错误计数、活动/空闲连接和关闭后复用；全部输入和两端输出保留
 - **AND** 两项已批准 closeOnCompletion 差异保留分母并独立标记，其他差异不得以泛化白名单放行
 
+#### Scenario: Prepared 缓存原始单例的完整观测
+- **WHEN** 执行冻结 DruidPooledPreparedStatementTest 的完整 test_hitCount，两次借出相同 SQL 并按原值设置五项属性及绑定字符串
+- **THEN** 保留五项属性初始值、修改值、第二次恢复值、两次结果遍历、SQL、语句级命中/key 和补充池级命中计数
+- **AND** 标准入口未暴露某项 Java 专有诊断时记录 NOT_EXPOSED，不能以池级计数替代语句级证据或静默删去该字段；未批准差异保持失败
+
 #### Scenario: Mock 分类器与物理关闭清理实时差分
 - **WHEN** 执行冻结 ExceptionSorterTest 的原始 test_exceptionSorter，并在相同 MockDriver、mysql 类型及预编译缓存配置下关闭物理连接后关闭语句
 - **THEN** 原断言必须运行通过；两端分别记录分类器、异常类、错误码、可空 SQLState/消息、丢弃计数及逻辑连接关闭后的活动/空闲计数

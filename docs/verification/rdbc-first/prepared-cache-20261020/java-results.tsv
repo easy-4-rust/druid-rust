@@ -1,0 +1,2 @@
+case_id	before_first	mutated	before_second	first_rows	second_rows	sql	first_hit	second_hit	key_present	pool_hits	active_count	idle_count
+test_hitCount	0,0,0,0,0	1,2,3,4,5	0,0,0,0,0	true,false	true,false	select ?	0	1	true	1	0	1

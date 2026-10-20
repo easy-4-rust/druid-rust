@@ -1,0 +1,2 @@
+case_id	sql	parameter	mutated_properties
+test_hitCount	select ?	xx	1,2,3,4,5

@@ -322,3 +322,16 @@ Unified validation after code completion:
 Log SHA-256, respectively: `05da62cb1b572785854883f0905d614bcf78db61b16e87b202eb74868d55c1c6`, `3d35d0b64436045d6034bda696f05017dcfc2ad14ac06571dba4a70680bfc870`, `47d57be123833d30601bc0ef874fadfddfbbeb3d0be5dbf1764661ca8d2e7962`, `aca30cf6e25bf7446a72a934bb1d1d803fe9ba98e213a23ba5cb59f04c960575`.
 
 The original 59-case manifest now has **46 MATCH, 2 approved standard differences, 9 MISMATCH and 2 NOT_PAIRED**. Prepared cache hitCount and WallFilter table statistics remain unpaired. Other unapproved differences and the broader P07/global matrix requirements remain open; this single mock case does not close Task 3 or establish production readiness.
+
+
+## Live original PreparedStatement cache case — 2026-10-20
+
+The new `java_rust_prepared_cache_differential` runs the unchanged frozen DruidPooledPreparedStatementTest#test_hitCount assertions, then observes the same two-borrow sequence on a fresh setup. The raw Java mock direction values 0 and 2 remain intact through the existing typed DriverValue representation. Rust's real pool restores all five properties to zero before the second borrow, and both result traversals, SQL, pool hit count 1, active count 0 and idle count 1 match Java. No product source or API was changed.
+
+The complete original case remains **MISMATCH**: Java's statement-specific hit counts are 0/1 and second key is present; the canonical Rust PreparedStatement entry exposes neither diagnostic, so its corresponding fields are NOT_EXPOSED. Pool-level hits are a separate observation, not a substitute. The existing approved pre-release `key` removal does not silently approve this behavioral acceptance gap. No allowance was added. This is an observable-surface gap, not evidence that the matching underlying cache-reuse sequence failed.
+
+[Complete comparison](prepared-cache-20261020/comparison.tsv). Raw retained artifacts: `D:/druid-rust-tooling/prepared-cache-live-55752-1792511371341247500`. The original Java assertions passed, but the explicit live comparator correctly returned **101** for the unapproved difference. Unified `cargo +1.97.1 test -p druid-bench --locked --tests` passed **10 tests, 0 failed, 8 ignored across 10 reported targets**; strict all-test druid-bench Clippy returned 0. Default skips do not prove Java parity.
+
+Log SHA-256: module `8df7593cc76bd4273a8616aa532b7958ab3711f6ddc9f41937bab43dd34e0389`; live `cbab2c791049796cd5fe315a406dbd808f40b992352ee29759a49b551f1c9356`; clippy `cbb8c662151958ed5ed92a87ca13c8d2443ebbac67a46d232ae84ff1170efea1`.
+
+The fixed 59-case manifest is now **46 MATCH, 2 approved differences, 10 MISMATCH, 1 NOT_PAIRED**. Only WallFilter table statistics remains unpaired in this named selection. Broader P07/JDBC method coverage, pending compatibility decisions and the latest complete platform matrix remain required; the full release verdict remains NOT_READY.
