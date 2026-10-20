@@ -306,6 +306,17 @@ impl Statement for CallableStatementView {
             .is_closed()
     }
 
+    fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, RdbcError> {
+        self.resource.ensure_open()?;
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .warnings()
+    }
+
     fn warning_messages(&self) -> Result<Vec<String>, RdbcError> {
         self.resource
             .statement
@@ -822,18 +833,9 @@ impl Statement for DruidPooledCallableStatement {
     fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, RdbcError> {
         self.ensure_open()?;
         let result = self
-            .shared
-            .resource
-            .statement
-            .try_lock()
-            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-            .warnings();
-        self.statement_base
-            .inner
-            .policy
-            .classify(result, Some(&self.shared.sql))
+            .statement_base
+            .warnings_with_sql(Some(&self.shared.sql));
+        self.retain_cacheable_result(result)
     }
 
     fn warning_messages(&self) -> Result<Vec<String>, RdbcError> {
@@ -849,18 +851,9 @@ impl Statement for DruidPooledCallableStatement {
     fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
         let result = self
-            .shared
-            .resource
-            .statement
-            .try_lock()
-            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
-            .as_mut()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-            .clear_warnings();
-        self.statement_base
-            .inner
-            .policy
-            .classify(result, Some(&self.shared.sql))
+            .statement_base
+            .clear_warnings_with_sql(Some(&self.shared.sql));
+        self.retain_cacheable_result(result)
     }
 }
 

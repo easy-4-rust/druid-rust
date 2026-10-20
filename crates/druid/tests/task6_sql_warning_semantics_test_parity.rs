@@ -12,7 +12,7 @@ use druid_rdbc::metadata::{
     ColumnDescriptor, ColumnNullability, ResultSetMetaData, ResultSetMetaDataSnapshot,
 };
 use druid_rdbc::result_set::ResultSet;
-use druid_rdbc::statement::{PreparedStatement, Statement, StatementOptions};
+use druid_rdbc::statement::{CallableStatement, PreparedStatement, Statement, StatementOptions};
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -352,7 +352,7 @@ struct WarningPrepared {
     state: WarningState,
     closed: bool,
 }
-druid_rdbc::impl_standard_wrapper!(WarningPrepared => PreparedStatement);
+druid_rdbc::impl_standard_wrapper!(WarningPrepared => CallableStatement);
 
 #[async_trait::async_trait]
 impl Statement for WarningPrepared {
@@ -378,6 +378,9 @@ impl PreparedStatement for WarningPrepared {
     }
 }
 
+// 警告夹具通过同一底层预编译对象提供继承方法；OUT 方法保持标准不支持默认值。
+impl druid_rdbc::statement::CallableStatement for WarningPrepared {}
+
 struct WarningConnection {
     connection_state: WarningState,
     statement_state: WarningState,
@@ -401,6 +404,16 @@ impl Connection for WarningConnection {
         _sql: &str,
         _options: StatementOptions,
     ) -> Result<Box<dyn PreparedStatement>, RdbcError> {
+        Ok(Box::new(WarningPrepared {
+            state: self.statement_state.clone(),
+            closed: false,
+        }))
+    }
+    async fn prepare_call(
+        &mut self,
+        _sql: &str,
+        _options: StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::CallableStatement>, RdbcError> {
         Ok(Box::new(WarningPrepared {
             state: self.statement_state.clone(),
             closed: false,
@@ -831,5 +844,53 @@ async fn task6_sql_warning_semantics_test_prepared_warning_filter_errors_enter_f
             discarded.load(Ordering::Acquire),
             "{operation} must discard"
         );
+    }
+}
+
+#[tokio::test]
+async fn callable_warning_raw_chain_and_clear_preserve_java_filter_order() {
+    let (mut connection, log) = task6_warning_connection_with_filter_log().await;
+    let mut callable = connection
+        .prepare_call("SELECT ?", StatementOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(callable.warning_messages().unwrap(), vec!["outer", "inner"]);
+    callable.clear_warnings().unwrap();
+    assert_eq!(
+        *log.lock().unwrap(),
+        vec![
+            "outer-statement-get-before",
+            "inner-statement-get-before",
+            "inner-statement-get-after",
+            "outer-statement-get-after",
+            "outer-statement-clear-before",
+            "inner-statement-clear-before",
+            "inner-statement-clear-after",
+            "outer-statement-clear-after",
+        ]
+    );
+    assert!(callable.warnings().unwrap().is_none());
+    callable.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn callable_warning_raw_errors_enter_fatal_sorter_for_get_and_clear() {
+    for fail_get in [true, false] {
+        let (mut connection, discarded) =
+            task6_warning_connection(false, false, fail_get, !fail_get).await;
+        let mut callable = connection
+            .prepare_call("SELECT ?", StatementOptions::default())
+            .await
+            .unwrap();
+        let error = if fail_get {
+            callable.warnings().unwrap_err()
+        } else {
+            callable.clear_warnings().unwrap_err()
+        };
+        assert_eq!(error, fatal_warning_error());
+        assert!(discarded.load(Ordering::Acquire));
+        callable.close().await.unwrap();
+        connection.close().await.unwrap();
     }
 }

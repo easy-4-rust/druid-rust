@@ -311,6 +311,17 @@ impl Statement for PreparedStatementView {
             .is_closed()
     }
 
+    fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, RdbcError> {
+        self.resource.ensure_open()?;
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .warnings()
+    }
+
     fn warning_messages(&self) -> Result<Vec<String>, RdbcError> {
         self.resource
             .statement
@@ -955,28 +966,9 @@ impl Statement for DruidPooledPreparedStatement {
 
     fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, RdbcError> {
         self.ensure_open()?;
-        let result = {
-            let mut statement = self
-                .shared
-                .resource
-                .statement
-                .try_lock()
-                .map_err(|_| RdbcError::Other("prepared statement is busy".to_owned()))?;
-            match statement.as_mut() {
-                Some(statement) => match &self.statement_base.inner.filter_chain {
-                    Some(chain) => chain
-                        .standard_statement_get_warnings(statement.as_mut())
-                        .map_err(RdbcError::from),
-                    None => statement.warnings(),
-                },
-                None => Err(RdbcError::ConnectionDiscarded),
-            }
-        };
         let result = self
             .statement_base
-            .inner
-            .policy
-            .classify(result, Some(&self.shared.sql));
+            .warnings_with_sql(Some(&self.shared.sql));
         self.retain_cacheable_result(result)
     }
 
@@ -992,28 +984,9 @@ impl Statement for DruidPooledPreparedStatement {
 
     fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
-        let result = {
-            let mut statement = self
-                .shared
-                .resource
-                .statement
-                .try_lock()
-                .map_err(|_| RdbcError::Other("prepared statement is busy".to_owned()))?;
-            match statement.as_mut() {
-                Some(statement) => match &self.statement_base.inner.filter_chain {
-                    Some(chain) => chain
-                        .standard_statement_clear_warnings(statement.as_mut())
-                        .map_err(RdbcError::from),
-                    None => statement.clear_warnings(),
-                },
-                None => Err(RdbcError::ConnectionDiscarded),
-            }
-        };
         let result = self
             .statement_base
-            .inner
-            .policy
-            .classify(result, Some(&self.shared.sql));
+            .clear_warnings_with_sql(Some(&self.shared.sql));
         self.retain_cacheable_result(result)
     }
 }
