@@ -299,6 +299,20 @@ impl DruidPooledStatement {
         result
     }
 
+    /// 在结果状态访问前执行过滤器，拒绝时不得处置已有游标。
+    /// 对应 Java: DruidPooledStatement#getUpdateCount/getMoreResults。
+    fn check_result_property(&self, event: StatementPropertyEvent) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        if let Some(chain) = &self.inner.filter_chain {
+            self.classify_statement_mutation(
+                chain
+                    .standard_statement_property_read(&event)
+                    .map_err(RdbcError::from),
+            )?;
+        }
+        Ok(())
+    }
+
     fn read_statement_property<T>(
         &self,
         event: StatementPropertyEvent,
@@ -1147,7 +1161,7 @@ impl Statement for DruidPooledStatement {
     }
 
     fn get_update_count(&self) -> Result<Option<i64>, RdbcError> {
-        self.ensure_open()?;
+        self.check_result_property(StatementPropertyEvent::GetUpdateCount)?;
         let raw = {
             let statement = self
                 .inner
@@ -1182,7 +1196,7 @@ impl Statement for DruidPooledStatement {
         &mut self,
         disposition: CurrentResultDisposition,
     ) -> Result<bool, RdbcError> {
-        self.ensure_open()?;
+        self.check_result_property(StatementPropertyEvent::GetMoreResults)?;
         let (has_sequence, current) = {
             let sequence = self
                 .inner
