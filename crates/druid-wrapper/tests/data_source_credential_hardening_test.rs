@@ -117,3 +117,49 @@ async fn unconfigured_credentials_still_reject_explicit_login() {
     ));
     source.inner().close().await;
 }
+
+#[tokio::test]
+async fn nullable_credentials_distinguish_empty_pairs_and_reject_partial_null_without_borrow() {
+    let data_source = DruidDatabasePoolBuilder::new("sqlite", "sqlite::memory:")
+        .name("nullable-credential-gate")
+        .pool(|builder| builder.max_open(1).max_idle(1))
+        .build_data_source()
+        .await
+        .expect("build native pool");
+    let source = DruidRdbcDataSource::with_credentials(data_source, "", "");
+    let standard: &dyn StandardDataSource = &source;
+    for (user, password) in [
+        (None, Some("")),
+        (Some(""), None),
+        (None, Some("secret")),
+        (Some("user"), None),
+        (Some("user"), Some("secret")),
+    ] {
+        let before = source.inner().state();
+        let error = standard
+            .connection_with_nullable_credentials(user, password)
+            .await
+            .err()
+            .expect("partial or wrong credentials must fail");
+        let exception = error.sql_exception().unwrap();
+        assert_eq!(exception.sql_state(), Some("28000"));
+        assert_eq!(
+            exception.class_name(),
+            "java.sql.SQLInvalidAuthorizationSpecException"
+        );
+        assert!(!format!("{error}").contains("secret"));
+        assert_eq!(source.inner().state().active_count, before.active_count);
+        assert_eq!(source.inner().state().create_count, before.create_count);
+    }
+    for (user, password) in [(None, None), (Some(""), Some(""))] {
+        let mut connection = standard
+            .connection_with_nullable_credentials(user, password)
+            .await
+            .expect("ordinary or exactly configured empty pair");
+        connection.close().await.unwrap();
+        assert_eq!(source.inner().state().active_count, 0);
+        assert_eq!(source.inner().state().idle_count, 1);
+    }
+    assert_eq!(source.inner().state().create_count, 1);
+    source.inner().close().await;
+}

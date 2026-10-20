@@ -80,6 +80,23 @@ impl DruidRdbcDataSource {
         &self.inner
     }
 
+    // 复用同一脱敏诊断路径，部分 NULL 也不能绕过既有认证边界。
+    fn reject_credentials(&self) -> RdbcError {
+        let error = Self::authorization_error();
+        if let Err(log_error) = druid_rdbc::data_source::CommonDataSource::write_diagnostic(
+            self,
+            "connection_credentials",
+            &error,
+        ) {
+            tracing::warn!(
+                operation = "connection_credentials",
+                error_kind = ?log_error.kind(),
+                "ordinary data-source diagnostic writer failed; preserving the authorization error"
+            );
+        }
+        error
+    }
+
     fn authorization_error() -> RdbcError {
         RdbcError::SqlException(Box::new(
             SqlException::new(
@@ -148,6 +165,18 @@ impl druid_rdbc::data_source::DataSource for DruidRdbcDataSource {
         Ok(Box::new(connection))
     }
 
+    async fn connection_with_nullable_credentials(
+        &self,
+        user: Option<&str>,
+        password: Option<&str>,
+    ) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        match (user, password) {
+            (None, None) => self.connection().await,
+            (Some(user), Some(password)) => self.connection_with_credentials(user, password).await,
+            _ => Err(self.reject_credentials()),
+        }
+    }
+
     async fn connection_with_credentials(
         &self,
         user: &str,
@@ -177,19 +206,7 @@ impl DataSource for DruidRdbcDataSource {
         {
             self.get_connection().await
         } else {
-            let error = Self::authorization_error();
-            if let Err(log_error) = druid_rdbc::data_source::CommonDataSource::write_diagnostic(
-                self,
-                "connection_credentials",
-                &error,
-            ) {
-                tracing::warn!(
-                    operation = "connection_credentials",
-                    error_kind = ?log_error.kind(),
-                    "ordinary data-source diagnostic writer failed; preserving the authorization error"
-                );
-            }
-            Err(error)
+            Err(self.reject_credentials())
         }
     }
 }

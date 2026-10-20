@@ -105,3 +105,38 @@ async fn standard_wrapper_identity_and_unsupported_credentials() {
     assert_eq!(source.state().active_count, 0);
     source.close().await;
 }
+
+#[tokio::test]
+async fn nullable_credentials_reuse_native_pool_and_reject_supplied_components_before_borrow() {
+    let creates = Arc::new(AtomicUsize::new(0));
+    let source = source(Arc::clone(&creates)).await;
+    let standard: &dyn StandardDataSource = &source;
+    for (user, password) in [
+        (Some("caller"), None),
+        (None, Some("secret")),
+        (Some(""), None),
+        (None, Some("")),
+        (Some(""), Some("")),
+    ] {
+        let error = standard
+            .connection_with_nullable_credentials(user, password)
+            .await
+            .err()
+            .expect("core cannot verify supplied credentials");
+        assert_eq!(error.sql_exception().unwrap().sql_state(), Some("0A000"));
+    }
+    assert_eq!(creates.load(Ordering::SeqCst), 0);
+    assert_eq!(source.state().active_count, 0);
+    for _ in 0..2 {
+        let mut connection = standard
+            .connection_with_nullable_credentials(None, None)
+            .await
+            .expect("NULL/NULL uses ordinary pool");
+        assert_eq!(source.state().active_count, 1);
+        connection.close().await.unwrap();
+        assert_eq!(source.state().active_count, 0);
+        assert_eq!(source.state().idle_count, 1);
+    }
+    assert_eq!(creates.load(Ordering::SeqCst), 1);
+    source.close().await;
+}

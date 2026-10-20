@@ -136,3 +136,20 @@ An existing dynamic Druid data source SHALL implement the canonical RDBC `DataSo
 #### Scenario: Standard inspection and unsupported credentials
 - **WHEN** the consumer inspects standard data-source views or requests per-call credentials
 - **THEN** inspection returns the same object, while the credential request fails with `0A000` without a borrow
+
+
+### Requirement: CD-09 Nullable ordinary acquisition preserves credential boundaries
+
+The canonical ordinary DataSource SHALL offer an additive nullable credential method without changing the existing non-null overload. None/None SHALL use the same source's no-credential connection method, Some/Some SHALL delegate unchanged to its existing credential verifier, and partial NULL SHALL NOT be replaced with an empty string or routed to no-credential acquisition. The default partial-NULL behavior SHALL fail with SQLState 0A000 before borrowing. A configured Druid wrapper SHALL reject partial NULL with its existing redacted authorization error (28000) before borrowing or creating a second pool. Custom implementations MAY override the nullable entry to preserve driver-specific nullable semantics.
+
+#### Scenario: No supplied credentials versus explicit empty strings
+- **WHEN** a consumer passes None/None or Some("")/Some("") through the nullable standard entry
+- **THEN** the first request uses ordinary acquisition and the second reaches the existing explicit credential verifier with both empty strings intact
+
+#### Scenario: Partial NULL cannot bypass verification
+- **WHEN** a caller supplies only a username or only a password, including a non-null empty component
+- **THEN** the default implementation returns 0A000 without acquisition, while DruidRdbcDataSource returns its redacted 28000 authorization error without acquisition
+
+#### Scenario: Legacy implementation and custom nullable override
+- **WHEN** an existing implementor only provides ordinary/non-null acquisition, or a custom implementor overrides nullable acquisition
+- **THEN** the legacy implementation compiles with the default method, and trait-object dispatch preserves the custom override and original nullable input
