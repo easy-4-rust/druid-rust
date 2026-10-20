@@ -834,6 +834,32 @@ druid_rdbc::impl_standard_wrapper!(TrackingPreparedStatement => PreparedStatemen
 
 #[async_trait::async_trait]
 impl Statement for TrackingPreparedStatement {
+    fn max_field_size(&self) -> Result<i32, RdbcError> {
+        self.state
+            .check_plain_sql_failure("statement_max_field_size")?;
+        Err(RdbcError::UnsupportedOperation {
+            operation: "statement_max_field_size",
+        })
+    }
+    fn max_rows(&self) -> Result<i64, RdbcError> {
+        self.state.check_plain_sql_failure("statement_max_rows")?;
+        Err(RdbcError::UnsupportedOperation {
+            operation: "statement_max_rows",
+        })
+    }
+    fn fetch_direction(&self) -> Result<druid_rdbc::statement::FetchDirection, RdbcError> {
+        self.state
+            .check_plain_sql_failure("statement_fetch_direction")?;
+        Err(RdbcError::UnsupportedOperation {
+            operation: "statement_fetch_direction",
+        })
+    }
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
+        self.state.check_plain_sql_failure("statement_fetch_size")?;
+        Err(RdbcError::UnsupportedOperation {
+            operation: "statement_fetch_size",
+        })
+    }
     fn result_set_type(&self) -> Result<druid_rdbc::statement::ResultSetType, RdbcError> {
         self.state.record("result_set_type");
         self.state
@@ -875,6 +901,8 @@ impl Statement for TrackingPreparedStatement {
     }
 
     fn query_timeout(&self) -> Result<i32, RdbcError> {
+        self.state
+            .check_plain_sql_failure("statement_query_timeout")?;
         Ok(self.query_timeout)
     }
 
@@ -1053,6 +1081,18 @@ druid_rdbc::impl_standard_wrapper!(TrackingCallableStatement => CallableStatemen
 
 #[async_trait::async_trait]
 impl Statement for TrackingCallableStatement {
+    fn max_field_size(&self) -> Result<i32, RdbcError> {
+        Statement::max_field_size(&self.prepared)
+    }
+    fn max_rows(&self) -> Result<i64, RdbcError> {
+        Statement::max_rows(&self.prepared)
+    }
+    fn fetch_direction(&self) -> Result<druid_rdbc::statement::FetchDirection, RdbcError> {
+        Statement::fetch_direction(&self.prepared)
+    }
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
+        Statement::fetch_size(&self.prepared)
+    }
     fn result_set_type(&self) -> Result<druid_rdbc::statement::ResultSetType, RdbcError> {
         Statement::result_set_type(&self.prepared)
     }

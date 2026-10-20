@@ -12,7 +12,9 @@ use super::prepared_statement_key::PreparedStatementKey;
 use super::standard_prepared_statement_cache::StandardPreparedStatementCache;
 use super::standard_resource_admission::StandardResourceAdmission;
 use super::standard_resource_registry::StandardResourceRegistry;
-use super::statement_state_delegates::delegate_statement_state_methods;
+use super::statement_state_delegates::{
+    delegate_cached_statement_property_reads, delegate_statement_state_methods,
+};
 use super::{DruidPooledResultSet, DruidPooledStatement, ExecResult, FilterChain, RdbcError};
 use crate::stats::StatsCollector;
 use druid_rdbc::metadata::{ParameterMetaData, ResultSetMetaData};
@@ -646,10 +648,11 @@ impl Statement for DruidPooledCallableStatement {
     }
 
     delegate_statement_state_methods!(statement_base);
+    delegate_cached_statement_property_reads!(statement_base);
 
     fn query_timeout(&self) -> Result<i32, RdbcError> {
         self.ensure_open()?;
-        Statement::query_timeout(&self.statement_base)
+        self.retain_cacheable_result(Statement::query_timeout(&self.statement_base))
     }
 
     fn set_query_timeout(&mut self, seconds: i32) -> Result<(), RdbcError> {

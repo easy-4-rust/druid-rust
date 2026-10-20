@@ -8,34 +8,8 @@ macro_rules! delegate_statement_state_methods {
             druid_rdbc::statement::Statement::options(&self.$base)
         }
 
-        fn result_set_type(
-            &self,
-        ) -> Result<druid_rdbc::statement::ResultSetType, druid_rdbc::error::RdbcError> {
-            druid_rdbc::statement::Statement::result_set_type(&self.$base)
-        }
-
-        fn result_set_concurrency(
-            &self,
-        ) -> Result<druid_rdbc::statement::ResultSetConcurrency, druid_rdbc::error::RdbcError> {
-            druid_rdbc::statement::Statement::result_set_concurrency(&self.$base)
-        }
-
-        fn result_set_holdability(
-            &self,
-        ) -> Result<druid_rdbc::statement::ResultSetHoldability, druid_rdbc::error::RdbcError> {
-            druid_rdbc::statement::Statement::result_set_holdability(&self.$base)
-        }
-
-        fn max_field_size(&self) -> Result<i32, druid_rdbc::error::RdbcError> {
-            druid_rdbc::statement::Statement::max_field_size(&self.$base)
-        }
-
         fn set_max_field_size(&mut self, max: i32) -> Result<(), druid_rdbc::error::RdbcError> {
             druid_rdbc::statement::Statement::set_max_field_size(&mut self.$base, max)
-        }
-
-        fn max_rows(&self) -> Result<i64, druid_rdbc::error::RdbcError> {
-            druid_rdbc::statement::Statement::max_rows(&self.$base)
         }
 
         fn set_max_rows(&mut self, max: i64) -> Result<(), druid_rdbc::error::RdbcError> {
@@ -80,18 +54,8 @@ macro_rules! delegate_statement_state_methods {
             druid_rdbc::statement::Statement::set_fetch_direction(&mut self.$base, direction)
         }
 
-        fn fetch_direction(
-            &self,
-        ) -> Result<druid_rdbc::statement::FetchDirection, druid_rdbc::error::RdbcError> {
-            druid_rdbc::statement::Statement::fetch_direction(&self.$base)
-        }
-
         fn set_fetch_size(&mut self, rows: i32) -> Result<(), druid_rdbc::error::RdbcError> {
             druid_rdbc::statement::Statement::set_fetch_size(&mut self.$base, rows)
-        }
-
-        fn fetch_size(&self) -> Result<i32, druid_rdbc::error::RdbcError> {
-            druid_rdbc::statement::Statement::fetch_size(&self.$base)
         }
 
         fn set_poolable(&mut self, poolable: bool) -> Result<(), druid_rdbc::error::RdbcError> {
@@ -111,6 +75,59 @@ macro_rules! delegate_statement_state_methods {
         }
     };
 }
+
+/// 属性读取已经由标准基类分类；这里只取消失败句柄的缓存资格，避免重复计错。
+macro_rules! delegate_cached_statement_property_reads {
+    ($base:ident) => {
+        fn result_set_type(
+            &self,
+        ) -> Result<druid_rdbc::statement::ResultSetType, druid_rdbc::error::RdbcError> {
+            self.retain_cacheable_result(druid_rdbc::statement::Statement::result_set_type(
+                &self.$base,
+            ))
+        }
+
+        fn result_set_concurrency(
+            &self,
+        ) -> Result<druid_rdbc::statement::ResultSetConcurrency, druid_rdbc::error::RdbcError> {
+            self.retain_cacheable_result(druid_rdbc::statement::Statement::result_set_concurrency(
+                &self.$base,
+            ))
+        }
+
+        fn result_set_holdability(
+            &self,
+        ) -> Result<druid_rdbc::statement::ResultSetHoldability, druid_rdbc::error::RdbcError> {
+            self.retain_cacheable_result(druid_rdbc::statement::Statement::result_set_holdability(
+                &self.$base,
+            ))
+        }
+
+        fn max_field_size(&self) -> Result<i32, druid_rdbc::error::RdbcError> {
+            self.retain_cacheable_result(druid_rdbc::statement::Statement::max_field_size(
+                &self.$base,
+            ))
+        }
+
+        fn max_rows(&self) -> Result<i64, druid_rdbc::error::RdbcError> {
+            self.retain_cacheable_result(druid_rdbc::statement::Statement::max_rows(&self.$base))
+        }
+
+        fn fetch_direction(
+            &self,
+        ) -> Result<druid_rdbc::statement::FetchDirection, druid_rdbc::error::RdbcError> {
+            self.retain_cacheable_result(druid_rdbc::statement::Statement::fetch_direction(
+                &self.$base,
+            ))
+        }
+
+        fn fetch_size(&self) -> Result<i32, druid_rdbc::error::RdbcError> {
+            self.retain_cacheable_result(druid_rdbc::statement::Statement::fetch_size(&self.$base))
+        }
+    };
+}
+
+pub(crate) use delegate_cached_statement_property_reads;
 
 pub(crate) use delegate_statement_state_methods;
 
