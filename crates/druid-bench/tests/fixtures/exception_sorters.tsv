@@ -1,0 +1,578 @@
+# cases=576
+# id	sorter	code	sql_state(-=null)	message(-=null)	recoverable	cause_chain	custom_codes
+mysql_plain	mysql	0	-	ordinary	false	-	-
+mysql_null_message	mysql	0	-	-	false	-	-
+mysql_empty_message	mysql	0	-		false	-	-
+mysql_recoverable	mysql	0	-	ordinary	true	-	-
+mysql_state_08001	mysql	0	08001	ordinary	false	-	-
+mysql_state_08003	mysql	0	08003	ordinary	false	-	-
+mysql_state_08006	mysql	0	08006	ordinary	false	-	-
+mysql_state_08xx	mysql	0	08xx	ordinary	false	-	-
+mysql_state_42601	mysql	0	42601	ordinary	false	-	-
+mysql_state_23000	mysql	0	23000	ordinary	false	-	-
+mysql_state_40001	mysql	0	40001	ordinary	false	-	-
+mysql_state_empty	mysql	0		ordinary	false	-	-
+mysql_socket_depth_1	mysql	1	-	ordinary	false	socket	-
+mysql_socket_depth_2	mysql	1	-	ordinary	false	ordinary,socket	-
+mysql_socket_depth_3	mysql	1	-	ordinary	false	ordinary,ordinary,socket	-
+mysql_socket_depth_4	mysql	1	-	ordinary	false	ordinary,ordinary,ordinary,socket	-
+mysql_socket_depth_5	mysql	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,socket	-
+mysql_socket_depth_6	mysql	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+mysql_socket_depth_7	mysql	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+pg_plain	pg	0	-	ordinary	false	-	-
+pg_null_message	pg	0	-	-	false	-	-
+pg_empty_message	pg	0	-		false	-	-
+pg_recoverable	pg	0	-	ordinary	true	-	-
+pg_state_08001	pg	0	08001	ordinary	false	-	-
+pg_state_08003	pg	0	08003	ordinary	false	-	-
+pg_state_08006	pg	0	08006	ordinary	false	-	-
+pg_state_08xx	pg	0	08xx	ordinary	false	-	-
+pg_state_42601	pg	0	42601	ordinary	false	-	-
+pg_state_23000	pg	0	23000	ordinary	false	-	-
+pg_state_40001	pg	0	40001	ordinary	false	-	-
+pg_state_empty	pg	0		ordinary	false	-	-
+pg_socket_depth_1	pg	1	-	ordinary	false	socket	-
+pg_socket_depth_2	pg	1	-	ordinary	false	ordinary,socket	-
+pg_socket_depth_3	pg	1	-	ordinary	false	ordinary,ordinary,socket	-
+pg_socket_depth_4	pg	1	-	ordinary	false	ordinary,ordinary,ordinary,socket	-
+pg_socket_depth_5	pg	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,socket	-
+pg_socket_depth_6	pg	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+pg_socket_depth_7	pg	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+db2_plain	db2	0	-	ordinary	false	-	-
+db2_null_message	db2	0	-	-	false	-	-
+db2_empty_message	db2	0	-		false	-	-
+db2_recoverable	db2	0	-	ordinary	true	-	-
+db2_state_08001	db2	0	08001	ordinary	false	-	-
+db2_state_08003	db2	0	08003	ordinary	false	-	-
+db2_state_08006	db2	0	08006	ordinary	false	-	-
+db2_state_08xx	db2	0	08xx	ordinary	false	-	-
+db2_state_42601	db2	0	42601	ordinary	false	-	-
+db2_state_23000	db2	0	23000	ordinary	false	-	-
+db2_state_40001	db2	0	40001	ordinary	false	-	-
+db2_state_empty	db2	0		ordinary	false	-	-
+db2_socket_depth_1	db2	1	-	ordinary	false	socket	-
+db2_socket_depth_2	db2	1	-	ordinary	false	ordinary,socket	-
+db2_socket_depth_3	db2	1	-	ordinary	false	ordinary,ordinary,socket	-
+db2_socket_depth_4	db2	1	-	ordinary	false	ordinary,ordinary,ordinary,socket	-
+db2_socket_depth_5	db2	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,socket	-
+db2_socket_depth_6	db2	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+db2_socket_depth_7	db2	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+informix_plain	informix	0	-	ordinary	false	-	-
+informix_null_message	informix	0	-	-	false	-	-
+informix_empty_message	informix	0	-		false	-	-
+informix_recoverable	informix	0	-	ordinary	true	-	-
+informix_state_08001	informix	0	08001	ordinary	false	-	-
+informix_state_08003	informix	0	08003	ordinary	false	-	-
+informix_state_08006	informix	0	08006	ordinary	false	-	-
+informix_state_08xx	informix	0	08xx	ordinary	false	-	-
+informix_state_42601	informix	0	42601	ordinary	false	-	-
+informix_state_23000	informix	0	23000	ordinary	false	-	-
+informix_state_40001	informix	0	40001	ordinary	false	-	-
+informix_state_empty	informix	0		ordinary	false	-	-
+informix_socket_depth_1	informix	1	-	ordinary	false	socket	-
+informix_socket_depth_2	informix	1	-	ordinary	false	ordinary,socket	-
+informix_socket_depth_3	informix	1	-	ordinary	false	ordinary,ordinary,socket	-
+informix_socket_depth_4	informix	1	-	ordinary	false	ordinary,ordinary,ordinary,socket	-
+informix_socket_depth_5	informix	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,socket	-
+informix_socket_depth_6	informix	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+informix_socket_depth_7	informix	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+sybase_plain	sybase	0	-	ordinary	false	-	-
+sybase_null_message	sybase	0	-	-	false	-	-
+sybase_empty_message	sybase	0	-		false	-	-
+sybase_recoverable	sybase	0	-	ordinary	true	-	-
+sybase_state_08001	sybase	0	08001	ordinary	false	-	-
+sybase_state_08003	sybase	0	08003	ordinary	false	-	-
+sybase_state_08006	sybase	0	08006	ordinary	false	-	-
+sybase_state_08xx	sybase	0	08xx	ordinary	false	-	-
+sybase_state_42601	sybase	0	42601	ordinary	false	-	-
+sybase_state_23000	sybase	0	23000	ordinary	false	-	-
+sybase_state_40001	sybase	0	40001	ordinary	false	-	-
+sybase_state_empty	sybase	0		ordinary	false	-	-
+sybase_socket_depth_1	sybase	1	-	ordinary	false	socket	-
+sybase_socket_depth_2	sybase	1	-	ordinary	false	ordinary,socket	-
+sybase_socket_depth_3	sybase	1	-	ordinary	false	ordinary,ordinary,socket	-
+sybase_socket_depth_4	sybase	1	-	ordinary	false	ordinary,ordinary,ordinary,socket	-
+sybase_socket_depth_5	sybase	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,socket	-
+sybase_socket_depth_6	sybase	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+sybase_socket_depth_7	sybase	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+oracle_plain	oracle	0	-	ordinary	false	-	-
+oracle_null_message	oracle	0	-	-	false	-	-
+oracle_empty_message	oracle	0	-		false	-	-
+oracle_recoverable	oracle	0	-	ordinary	true	-	-
+oracle_state_08001	oracle	0	08001	ordinary	false	-	-
+oracle_state_08003	oracle	0	08003	ordinary	false	-	-
+oracle_state_08006	oracle	0	08006	ordinary	false	-	-
+oracle_state_08xx	oracle	0	08xx	ordinary	false	-	-
+oracle_state_42601	oracle	0	42601	ordinary	false	-	-
+oracle_state_23000	oracle	0	23000	ordinary	false	-	-
+oracle_state_40001	oracle	0	40001	ordinary	false	-	-
+oracle_state_empty	oracle	0		ordinary	false	-	-
+oracle_socket_depth_1	oracle	1	-	ordinary	false	socket	-
+oracle_socket_depth_2	oracle	1	-	ordinary	false	ordinary,socket	-
+oracle_socket_depth_3	oracle	1	-	ordinary	false	ordinary,ordinary,socket	-
+oracle_socket_depth_4	oracle	1	-	ordinary	false	ordinary,ordinary,ordinary,socket	-
+oracle_socket_depth_5	oracle	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,socket	-
+oracle_socket_depth_6	oracle	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+oracle_socket_depth_7	oracle	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+oceanbase_oracle_plain	oceanbase_oracle	0	-	ordinary	false	-	-
+oceanbase_oracle_null_message	oceanbase_oracle	0	-	-	false	-	-
+oceanbase_oracle_empty_message	oceanbase_oracle	0	-		false	-	-
+oceanbase_oracle_recoverable	oceanbase_oracle	0	-	ordinary	true	-	-
+oceanbase_oracle_state_08001	oceanbase_oracle	0	08001	ordinary	false	-	-
+oceanbase_oracle_state_08003	oceanbase_oracle	0	08003	ordinary	false	-	-
+oceanbase_oracle_state_08006	oceanbase_oracle	0	08006	ordinary	false	-	-
+oceanbase_oracle_state_08xx	oceanbase_oracle	0	08xx	ordinary	false	-	-
+oceanbase_oracle_state_42601	oceanbase_oracle	0	42601	ordinary	false	-	-
+oceanbase_oracle_state_23000	oceanbase_oracle	0	23000	ordinary	false	-	-
+oceanbase_oracle_state_40001	oceanbase_oracle	0	40001	ordinary	false	-	-
+oceanbase_oracle_state_empty	oceanbase_oracle	0		ordinary	false	-	-
+oceanbase_oracle_socket_depth_1	oceanbase_oracle	1	-	ordinary	false	socket	-
+oceanbase_oracle_socket_depth_2	oceanbase_oracle	1	-	ordinary	false	ordinary,socket	-
+oceanbase_oracle_socket_depth_3	oceanbase_oracle	1	-	ordinary	false	ordinary,ordinary,socket	-
+oceanbase_oracle_socket_depth_4	oceanbase_oracle	1	-	ordinary	false	ordinary,ordinary,ordinary,socket	-
+oceanbase_oracle_socket_depth_5	oceanbase_oracle	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,socket	-
+oceanbase_oracle_socket_depth_6	oceanbase_oracle	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+oceanbase_oracle_socket_depth_7	oceanbase_oracle	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+null_plain	null	0	-	ordinary	false	-	-
+null_null_message	null	0	-	-	false	-	-
+null_empty_message	null	0	-		false	-	-
+null_recoverable	null	0	-	ordinary	true	-	-
+null_state_08001	null	0	08001	ordinary	false	-	-
+null_state_08003	null	0	08003	ordinary	false	-	-
+null_state_08006	null	0	08006	ordinary	false	-	-
+null_state_08xx	null	0	08xx	ordinary	false	-	-
+null_state_42601	null	0	42601	ordinary	false	-	-
+null_state_23000	null	0	23000	ordinary	false	-	-
+null_state_40001	null	0	40001	ordinary	false	-	-
+null_state_empty	null	0		ordinary	false	-	-
+null_socket_depth_1	null	1	-	ordinary	false	socket	-
+null_socket_depth_2	null	1	-	ordinary	false	ordinary,socket	-
+null_socket_depth_3	null	1	-	ordinary	false	ordinary,ordinary,socket	-
+null_socket_depth_4	null	1	-	ordinary	false	ordinary,ordinary,ordinary,socket	-
+null_socket_depth_5	null	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,socket	-
+null_socket_depth_6	null	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+null_socket_depth_7	null	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+phoenix_plain	phoenix	0	-	ordinary	false	-	-
+phoenix_null_message	phoenix	0	-	-	false	-	-
+phoenix_empty_message	phoenix	0	-		false	-	-
+phoenix_recoverable	phoenix	0	-	ordinary	true	-	-
+phoenix_state_08001	phoenix	0	08001	ordinary	false	-	-
+phoenix_state_08003	phoenix	0	08003	ordinary	false	-	-
+phoenix_state_08006	phoenix	0	08006	ordinary	false	-	-
+phoenix_state_08xx	phoenix	0	08xx	ordinary	false	-	-
+phoenix_state_42601	phoenix	0	42601	ordinary	false	-	-
+phoenix_state_23000	phoenix	0	23000	ordinary	false	-	-
+phoenix_state_40001	phoenix	0	40001	ordinary	false	-	-
+phoenix_state_empty	phoenix	0		ordinary	false	-	-
+phoenix_socket_depth_1	phoenix	1	-	ordinary	false	socket	-
+phoenix_socket_depth_2	phoenix	1	-	ordinary	false	ordinary,socket	-
+phoenix_socket_depth_3	phoenix	1	-	ordinary	false	ordinary,ordinary,socket	-
+phoenix_socket_depth_4	phoenix	1	-	ordinary	false	ordinary,ordinary,ordinary,socket	-
+phoenix_socket_depth_5	phoenix	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,socket	-
+phoenix_socket_depth_6	phoenix	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+phoenix_socket_depth_7	phoenix	1	-	ordinary	false	ordinary,ordinary,ordinary,ordinary,ordinary,ordinary,socket	-
+mysql_code_1004	mysql	1004	-	ordinary	false	-	-
+mysql_code_1005	mysql	1005	-	ordinary	false	-	-
+mysql_code_1015	mysql	1015	-	ordinary	false	-	-
+mysql_code_1021	mysql	1021	-	ordinary	false	-	-
+mysql_code_1023	mysql	1023	-	ordinary	false	-	-
+mysql_code_1037	mysql	1037	-	ordinary	false	-	-
+mysql_code_1038	mysql	1038	-	ordinary	false	-	-
+mysql_code_1040	mysql	1040	-	ordinary	false	-	-
+mysql_code_1041	mysql	1041	-	ordinary	false	-	-
+mysql_code_1042	mysql	1042	-	ordinary	false	-	-
+mysql_code_1043	mysql	1043	-	ordinary	false	-	-
+mysql_code_1045	mysql	1045	-	ordinary	false	-	-
+mysql_code_1047	mysql	1047	-	ordinary	false	-	-
+mysql_code_1081	mysql	1081	-	ordinary	false	-	-
+mysql_code_1129	mysql	1129	-	ordinary	false	-	-
+mysql_code_1130	mysql	1130	-	ordinary	false	-	-
+mysql_code_1142	mysql	1142	-	ordinary	false	-	-
+mysql_code_1227	mysql	1227	-	ordinary	false	-	-
+mysql_code_1290	mysql	1290	-	ordinary	false	-	-
+mysql_code_-9000	mysql	-9000	-	ordinary	false	-	-
+mysql_code_-8500	mysql	-8500	-	ordinary	false	-	-
+mysql_code_-8000	mysql	-8000	-	ordinary	false	-	-
+mysql_code_-9001	mysql	-9001	-	ordinary	false	-	-
+mysql_code_-7999	mysql	-7999	-	ordinary	false	-	-
+mysql_code_-10001	mysql	-10001	-	ordinary	false	-	-
+mysql_code_-9100	mysql	-9100	-	ordinary	false	-	-
+mysql_code_0	mysql	0	-	ordinary	false	-	-
+mysql_code_1044	mysql	1044	-	ordinary	false	-	-
+mysql_code_1046	mysql	1046	-	ordinary	false	-	-
+mysql_code_1048	mysql	1048	-	ordinary	false	-	-
+mysql_code_1049	mysql	1049	-	ordinary	false	-	-
+mysql_code_1050	mysql	1050	-	ordinary	false	-	-
+mysql_code_1051	mysql	1051	-	ordinary	false	-	-
+mysql_code_1052	mysql	1052	-	ordinary	false	-	-
+mysql_code_1053	mysql	1053	-	ordinary	false	-	-
+mysql_code_1062	mysql	1062	-	ordinary	false	-	-
+mysql_message_0_code_0	mysql	0	-	Communications link failure	false	-	-
+mysql_message_0_code_1	mysql	1	-	Communications link failure	false	-	-
+mysql_message_1_code_0	mysql	0	-	communications link failure	false	-	-
+mysql_message_1_code_1	mysql	1	-	communications link failure	false	-	-
+mysql_message_2_code_0	mysql	0	-	Could not create connection	false	-	-
+mysql_message_2_code_1	mysql	1	-	Could not create connection	false	-	-
+mysql_message_3_code_0	mysql	0	-	No datasource configured	false	-	-
+mysql_message_3_code_1	mysql	1	-	No datasource configured	false	-	-
+mysql_message_4_code_0	mysql	0	-	No alive datasource	false	-	-
+mysql_message_4_code_1	mysql	1	-	No alive datasource	false	-	-
+mysql_streaming_jdbc	mysql	0	-	Streaming result set com.mysql.jdbc.RowDataDynamic is still active. No statements may be issued when any streaming result sets are open and in use on a given connection. Ensure that you have called .close() on any active streaming result sets before attempting more queries.	false	-	-
+mysql_streaming_rdbc	mysql	0	-	Streaming result set com.mysql.rdbc.RowDataDynamic is still active. No statements may be issued when any streaming result sets are open and in use on a given connection. Ensure that you have called .close() on any active streaming result sets before attempting more queries.	false	-	-
+db2_code_-512	db2	-512	-	ordinary	false	-	-
+db2_code_-514	db2	-514	-	ordinary	false	-	-
+db2_code_-516	db2	-516	-	ordinary	false	-	-
+db2_code_-518	db2	-518	-	ordinary	false	-	-
+db2_code_-525	db2	-525	-	ordinary	false	-	-
+db2_code_-909	db2	-909	-	ordinary	false	-	-
+db2_code_-918	db2	-918	-	ordinary	false	-	-
+db2_code_-924	db2	-924	-	ordinary	false	-	-
+db2_code_-911	db2	-911	-	ordinary	false	-	-
+informix_code_-710	informix	-710	-	ordinary	false	-	-
+informix_code_-79716	informix	-79716	-	ordinary	false	-	-
+informix_code_-79730	informix	-79730	-	ordinary	false	-	-
+informix_code_-79734	informix	-79734	-	ordinary	false	-	-
+informix_code_-79735	informix	-79735	-	ordinary	false	-	-
+informix_code_-79736	informix	-79736	-	ordinary	false	-	-
+informix_code_-79756	informix	-79756	-	ordinary	false	-	-
+informix_code_-79757	informix	-79757	-	ordinary	false	-	-
+informix_code_-79758	informix	-79758	-	ordinary	false	-	-
+informix_code_-79759	informix	-79759	-	ordinary	false	-	-
+informix_code_-79760	informix	-79760	-	ordinary	false	-	-
+informix_code_-79788	informix	-79788	-	ordinary	false	-	-
+informix_code_-79811	informix	-79811	-	ordinary	false	-	-
+informix_code_-79812	informix	-79812	-	ordinary	false	-	-
+informix_code_-79836	informix	-79836	-	ordinary	false	-	-
+informix_code_-79837	informix	-79837	-	ordinary	false	-	-
+informix_code_-79879	informix	-79879	-	ordinary	false	-	-
+informix_code_-746	informix	-746	-	ordinary	false	-	-
+informix_code_100	informix	100	-	ordinary	false	-	-
+sybase_message_0	sybase	0	-	JZ0C0	false	-	-
+sybase_message_1	sybase	0	-	JZ0C1	false	-	-
+sybase_message_2	sybase	0	-	jZ0c0 connection dead	false	-	-
+sybase_message_3	sybase	0	-	ordinary	false	-	-
+oracle_code_28	oracle	28	-	ordinary	false	-	-
+oracle_code_-28	oracle	-28	-	ordinary	false	-	-
+oracle_code_600	oracle	600	-	ordinary	false	-	-
+oracle_code_-600	oracle	-600	-	ordinary	false	-	-
+oracle_code_1012	oracle	1012	-	ordinary	false	-	-
+oracle_code_-1012	oracle	-1012	-	ordinary	false	-	-
+oracle_code_1014	oracle	1014	-	ordinary	false	-	-
+oracle_code_-1014	oracle	-1014	-	ordinary	false	-	-
+oracle_code_1033	oracle	1033	-	ordinary	false	-	-
+oracle_code_-1033	oracle	-1033	-	ordinary	false	-	-
+oracle_code_1034	oracle	1034	-	ordinary	false	-	-
+oracle_code_-1034	oracle	-1034	-	ordinary	false	-	-
+oracle_code_1035	oracle	1035	-	ordinary	false	-	-
+oracle_code_-1035	oracle	-1035	-	ordinary	false	-	-
+oracle_code_1089	oracle	1089	-	ordinary	false	-	-
+oracle_code_-1089	oracle	-1089	-	ordinary	false	-	-
+oracle_code_1090	oracle	1090	-	ordinary	false	-	-
+oracle_code_-1090	oracle	-1090	-	ordinary	false	-	-
+oracle_code_1092	oracle	1092	-	ordinary	false	-	-
+oracle_code_-1092	oracle	-1092	-	ordinary	false	-	-
+oracle_code_1094	oracle	1094	-	ordinary	false	-	-
+oracle_code_-1094	oracle	-1094	-	ordinary	false	-	-
+oracle_code_2396	oracle	2396	-	ordinary	false	-	-
+oracle_code_-2396	oracle	-2396	-	ordinary	false	-	-
+oracle_code_3106	oracle	3106	-	ordinary	false	-	-
+oracle_code_-3106	oracle	-3106	-	ordinary	false	-	-
+oracle_code_3111	oracle	3111	-	ordinary	false	-	-
+oracle_code_-3111	oracle	-3111	-	ordinary	false	-	-
+oracle_code_3113	oracle	3113	-	ordinary	false	-	-
+oracle_code_-3113	oracle	-3113	-	ordinary	false	-	-
+oracle_code_3114	oracle	3114	-	ordinary	false	-	-
+oracle_code_-3114	oracle	-3114	-	ordinary	false	-	-
+oracle_code_3134	oracle	3134	-	ordinary	false	-	-
+oracle_code_-3134	oracle	-3134	-	ordinary	false	-	-
+oracle_code_3135	oracle	3135	-	ordinary	false	-	-
+oracle_code_-3135	oracle	-3135	-	ordinary	false	-	-
+oracle_code_3136	oracle	3136	-	ordinary	false	-	-
+oracle_code_-3136	oracle	-3136	-	ordinary	false	-	-
+oracle_code_3138	oracle	3138	-	ordinary	false	-	-
+oracle_code_-3138	oracle	-3138	-	ordinary	false	-	-
+oracle_code_3142	oracle	3142	-	ordinary	false	-	-
+oracle_code_-3142	oracle	-3142	-	ordinary	false	-	-
+oracle_code_3143	oracle	3143	-	ordinary	false	-	-
+oracle_code_-3143	oracle	-3143	-	ordinary	false	-	-
+oracle_code_3144	oracle	3144	-	ordinary	false	-	-
+oracle_code_-3144	oracle	-3144	-	ordinary	false	-	-
+oracle_code_3145	oracle	3145	-	ordinary	false	-	-
+oracle_code_-3145	oracle	-3145	-	ordinary	false	-	-
+oracle_code_3149	oracle	3149	-	ordinary	false	-	-
+oracle_code_-3149	oracle	-3149	-	ordinary	false	-	-
+oracle_code_6801	oracle	6801	-	ordinary	false	-	-
+oracle_code_-6801	oracle	-6801	-	ordinary	false	-	-
+oracle_code_6802	oracle	6802	-	ordinary	false	-	-
+oracle_code_-6802	oracle	-6802	-	ordinary	false	-	-
+oracle_code_6805	oracle	6805	-	ordinary	false	-	-
+oracle_code_-6805	oracle	-6805	-	ordinary	false	-	-
+oracle_code_9918	oracle	9918	-	ordinary	false	-	-
+oracle_code_-9918	oracle	-9918	-	ordinary	false	-	-
+oracle_code_9920	oracle	9920	-	ordinary	false	-	-
+oracle_code_-9920	oracle	-9920	-	ordinary	false	-	-
+oracle_code_9921	oracle	9921	-	ordinary	false	-	-
+oracle_code_-9921	oracle	-9921	-	ordinary	false	-	-
+oracle_code_17001	oracle	17001	-	ordinary	false	-	-
+oracle_code_-17001	oracle	-17001	-	ordinary	false	-	-
+oracle_code_17002	oracle	17002	-	ordinary	false	-	-
+oracle_code_-17002	oracle	-17002	-	ordinary	false	-	-
+oracle_code_17008	oracle	17008	-	ordinary	false	-	-
+oracle_code_-17008	oracle	-17008	-	ordinary	false	-	-
+oracle_code_17009	oracle	17009	-	ordinary	false	-	-
+oracle_code_-17009	oracle	-17009	-	ordinary	false	-	-
+oracle_code_17024	oracle	17024	-	ordinary	false	-	-
+oracle_code_-17024	oracle	-17024	-	ordinary	false	-	-
+oracle_code_17089	oracle	17089	-	ordinary	false	-	-
+oracle_code_-17089	oracle	-17089	-	ordinary	false	-	-
+oracle_code_17401	oracle	17401	-	ordinary	false	-	-
+oracle_code_-17401	oracle	-17401	-	ordinary	false	-	-
+oracle_code_17409	oracle	17409	-	ordinary	false	-	-
+oracle_code_-17409	oracle	-17409	-	ordinary	false	-	-
+oracle_code_17410	oracle	17410	-	ordinary	false	-	-
+oracle_code_-17410	oracle	-17410	-	ordinary	false	-	-
+oracle_code_17416	oracle	17416	-	ordinary	false	-	-
+oracle_code_-17416	oracle	-17416	-	ordinary	false	-	-
+oracle_code_17438	oracle	17438	-	ordinary	false	-	-
+oracle_code_-17438	oracle	-17438	-	ordinary	false	-	-
+oracle_code_17442	oracle	17442	-	ordinary	false	-	-
+oracle_code_-17442	oracle	-17442	-	ordinary	false	-	-
+oracle_code_25407	oracle	25407	-	ordinary	false	-	-
+oracle_code_-25407	oracle	-25407	-	ordinary	false	-	-
+oracle_code_25408	oracle	25408	-	ordinary	false	-	-
+oracle_code_-25408	oracle	-25408	-	ordinary	false	-	-
+oracle_code_25409	oracle	25409	-	ordinary	false	-	-
+oracle_code_-25409	oracle	-25409	-	ordinary	false	-	-
+oracle_code_25425	oracle	25425	-	ordinary	false	-	-
+oracle_code_-25425	oracle	-25425	-	ordinary	false	-	-
+oracle_code_29276	oracle	29276	-	ordinary	false	-	-
+oracle_code_-29276	oracle	-29276	-	ordinary	false	-	-
+oracle_code_30676	oracle	30676	-	ordinary	false	-	-
+oracle_code_-30676	oracle	-30676	-	ordinary	false	-	-
+oracle_boundary_12100	oracle	12100	-	ordinary	false	-	-
+oracle_boundary_12101	oracle	12101	-	ordinary	false	-	-
+oracle_boundary_12200	oracle	12200	-	ordinary	false	-	-
+oracle_boundary_12298	oracle	12298	-	ordinary	false	-	-
+oracle_boundary_12299	oracle	12299	-	ordinary	false	-	-
+oracle_boundary_0	oracle	0	-	ordinary	false	-	-
+oracle_boundary_27	oracle	27	-	ordinary	false	-	-
+oracle_boundary_29	oracle	29	-	ordinary	false	-	-
+oracle_boundary_12099	oracle	12099	-	ordinary	false	-	-
+oracle_boundary_12300	oracle	12300	-	ordinary	false	-	-
+oracle_boundary_19999	oracle	19999	-	ordinary	false	-	-
+oracle_boundary_20000	oracle	20000	-	ordinary	false	-	-
+oracle_boundary_20999	oracle	20999	-	ordinary	false	-	-
+oracle_boundary_21000	oracle	21000	-	ordinary	false	-	-
+oracle_boundary_-2147483648	oracle	-2147483648	-	ordinary	false	-	-
+oracle_message_0_code_1	oracle	1	-	socket read failed	false	-	-
+oracle_message_0_code_20000	oracle	20000	-	socket read failed	false	-	-
+oracle_message_0_code_20999	oracle	20999	-	socket read failed	false	-	-
+oracle_message_0_code_21000	oracle	21000	-	socket read failed	false	-	-
+oracle_message_1_code_1	oracle	1	-	控制套接字错误	false	-	-
+oracle_message_1_code_20000	oracle	20000	-	控制套接字错误	false	-	-
+oracle_message_1_code_20999	oracle	20999	-	控制套接字错误	false	-	-
+oracle_message_1_code_21000	oracle	21000	-	控制套接字错误	false	-	-
+oracle_message_2_code_1	oracle	1	-	connection has already been closed	false	-	-
+oracle_message_2_code_20000	oracle	20000	-	connection has already been closed	false	-	-
+oracle_message_2_code_20999	oracle	20999	-	connection has already been closed	false	-	-
+oracle_message_2_code_21000	oracle	21000	-	connection has already been closed	false	-	-
+oracle_message_3_code_1	oracle	1	-	broken pipe	false	-	-
+oracle_message_3_code_20000	oracle	20000	-	broken pipe	false	-	-
+oracle_message_3_code_20999	oracle	20999	-	broken pipe	false	-	-
+oracle_message_3_code_21000	oracle	21000	-	broken pipe	false	-	-
+oracle_message_4_code_1	oracle	1	-	管道已结束	false	-	-
+oracle_message_4_code_20000	oracle	20000	-	管道已结束	false	-	-
+oracle_message_4_code_20999	oracle	20999	-	管道已结束	false	-	-
+oracle_message_4_code_21000	oracle	21000	-	管道已结束	false	-	-
+oracle_message_5_code_1	oracle	1	-	communications link failure	false	-	-
+oracle_message_5_code_20000	oracle	20000	-	communications link failure	false	-	-
+oracle_message_5_code_20999	oracle	20999	-	communications link failure	false	-	-
+oracle_message_5_code_21000	oracle	21000	-	communications link failure	false	-	-
+oracle_message_6_code_1	oracle	1	-	could not create connection	false	-	-
+oracle_message_6_code_20000	oracle	20000	-	could not create connection	false	-	-
+oracle_message_6_code_20999	oracle	20999	-	could not create connection	false	-	-
+oracle_message_6_code_21000	oracle	21000	-	could not create connection	false	-	-
+oracle_message_7_code_1	oracle	1	-	access denied for user	false	-	-
+oracle_message_7_code_20000	oracle	20000	-	access denied for user	false	-	-
+oracle_message_7_code_20999	oracle	20999	-	access denied for user	false	-	-
+oracle_message_7_code_21000	oracle	21000	-	access denied for user	false	-	-
+oracle_message_8_code_1	oracle	1	-	no datasource	false	-	-
+oracle_message_8_code_20000	oracle	20000	-	no datasource	false	-	-
+oracle_message_8_code_20999	oracle	20999	-	no datasource	false	-	-
+oracle_message_8_code_21000	oracle	21000	-	no datasource	false	-	-
+oracle_message_9_code_1	oracle	1	-	no alive datasource	false	-	-
+oracle_message_9_code_20000	oracle	20000	-	no alive datasource	false	-	-
+oracle_message_9_code_20999	oracle	20999	-	no alive datasource	false	-	-
+oracle_message_9_code_21000	oracle	21000	-	no alive datasource	false	-	-
+oracle_custom_1	oracle	1	-	ordinary	false	-	1,2,3,-5
+oracle_custom_2	oracle	2	-	ordinary	false	-	1,2,3,-5
+oracle_custom_3	oracle	3	-	ordinary	false	-	1,2,3,-5
+oracle_custom_-1	oracle	-1	-	ordinary	false	-	1,2,3,-5
+oracle_custom_-2	oracle	-2	-	ordinary	false	-	1,2,3,-5
+oracle_custom_-3	oracle	-3	-	ordinary	false	-	1,2,3,-5
+oracle_custom_4	oracle	4	-	ordinary	false	-	1,2,3,-5
+oracle_custom_-5	oracle	-5	-	ordinary	false	-	1,2,3,-5
+oceanbase_oracle_code_28	oceanbase_oracle	28	-	ordinary	false	-	-
+oceanbase_oracle_code_-28	oceanbase_oracle	-28	-	ordinary	false	-	-
+oceanbase_oracle_code_600	oceanbase_oracle	600	-	ordinary	false	-	-
+oceanbase_oracle_code_-600	oceanbase_oracle	-600	-	ordinary	false	-	-
+oceanbase_oracle_code_1012	oceanbase_oracle	1012	-	ordinary	false	-	-
+oceanbase_oracle_code_-1012	oceanbase_oracle	-1012	-	ordinary	false	-	-
+oceanbase_oracle_code_1014	oceanbase_oracle	1014	-	ordinary	false	-	-
+oceanbase_oracle_code_-1014	oceanbase_oracle	-1014	-	ordinary	false	-	-
+oceanbase_oracle_code_1033	oceanbase_oracle	1033	-	ordinary	false	-	-
+oceanbase_oracle_code_-1033	oceanbase_oracle	-1033	-	ordinary	false	-	-
+oceanbase_oracle_code_1034	oceanbase_oracle	1034	-	ordinary	false	-	-
+oceanbase_oracle_code_-1034	oceanbase_oracle	-1034	-	ordinary	false	-	-
+oceanbase_oracle_code_1035	oceanbase_oracle	1035	-	ordinary	false	-	-
+oceanbase_oracle_code_-1035	oceanbase_oracle	-1035	-	ordinary	false	-	-
+oceanbase_oracle_code_1089	oceanbase_oracle	1089	-	ordinary	false	-	-
+oceanbase_oracle_code_-1089	oceanbase_oracle	-1089	-	ordinary	false	-	-
+oceanbase_oracle_code_1090	oceanbase_oracle	1090	-	ordinary	false	-	-
+oceanbase_oracle_code_-1090	oceanbase_oracle	-1090	-	ordinary	false	-	-
+oceanbase_oracle_code_1092	oceanbase_oracle	1092	-	ordinary	false	-	-
+oceanbase_oracle_code_-1092	oceanbase_oracle	-1092	-	ordinary	false	-	-
+oceanbase_oracle_code_1094	oceanbase_oracle	1094	-	ordinary	false	-	-
+oceanbase_oracle_code_-1094	oceanbase_oracle	-1094	-	ordinary	false	-	-
+oceanbase_oracle_code_2396	oceanbase_oracle	2396	-	ordinary	false	-	-
+oceanbase_oracle_code_-2396	oceanbase_oracle	-2396	-	ordinary	false	-	-
+oceanbase_oracle_code_3106	oceanbase_oracle	3106	-	ordinary	false	-	-
+oceanbase_oracle_code_-3106	oceanbase_oracle	-3106	-	ordinary	false	-	-
+oceanbase_oracle_code_3111	oceanbase_oracle	3111	-	ordinary	false	-	-
+oceanbase_oracle_code_-3111	oceanbase_oracle	-3111	-	ordinary	false	-	-
+oceanbase_oracle_code_3113	oceanbase_oracle	3113	-	ordinary	false	-	-
+oceanbase_oracle_code_-3113	oceanbase_oracle	-3113	-	ordinary	false	-	-
+oceanbase_oracle_code_3114	oceanbase_oracle	3114	-	ordinary	false	-	-
+oceanbase_oracle_code_-3114	oceanbase_oracle	-3114	-	ordinary	false	-	-
+oceanbase_oracle_code_3134	oceanbase_oracle	3134	-	ordinary	false	-	-
+oceanbase_oracle_code_-3134	oceanbase_oracle	-3134	-	ordinary	false	-	-
+oceanbase_oracle_code_3135	oceanbase_oracle	3135	-	ordinary	false	-	-
+oceanbase_oracle_code_-3135	oceanbase_oracle	-3135	-	ordinary	false	-	-
+oceanbase_oracle_code_3136	oceanbase_oracle	3136	-	ordinary	false	-	-
+oceanbase_oracle_code_-3136	oceanbase_oracle	-3136	-	ordinary	false	-	-
+oceanbase_oracle_code_3138	oceanbase_oracle	3138	-	ordinary	false	-	-
+oceanbase_oracle_code_-3138	oceanbase_oracle	-3138	-	ordinary	false	-	-
+oceanbase_oracle_code_3142	oceanbase_oracle	3142	-	ordinary	false	-	-
+oceanbase_oracle_code_-3142	oceanbase_oracle	-3142	-	ordinary	false	-	-
+oceanbase_oracle_code_3143	oceanbase_oracle	3143	-	ordinary	false	-	-
+oceanbase_oracle_code_-3143	oceanbase_oracle	-3143	-	ordinary	false	-	-
+oceanbase_oracle_code_3144	oceanbase_oracle	3144	-	ordinary	false	-	-
+oceanbase_oracle_code_-3144	oceanbase_oracle	-3144	-	ordinary	false	-	-
+oceanbase_oracle_code_3145	oceanbase_oracle	3145	-	ordinary	false	-	-
+oceanbase_oracle_code_-3145	oceanbase_oracle	-3145	-	ordinary	false	-	-
+oceanbase_oracle_code_3149	oceanbase_oracle	3149	-	ordinary	false	-	-
+oceanbase_oracle_code_-3149	oceanbase_oracle	-3149	-	ordinary	false	-	-
+oceanbase_oracle_code_6801	oceanbase_oracle	6801	-	ordinary	false	-	-
+oceanbase_oracle_code_-6801	oceanbase_oracle	-6801	-	ordinary	false	-	-
+oceanbase_oracle_code_6802	oceanbase_oracle	6802	-	ordinary	false	-	-
+oceanbase_oracle_code_-6802	oceanbase_oracle	-6802	-	ordinary	false	-	-
+oceanbase_oracle_code_6805	oceanbase_oracle	6805	-	ordinary	false	-	-
+oceanbase_oracle_code_-6805	oceanbase_oracle	-6805	-	ordinary	false	-	-
+oceanbase_oracle_code_9918	oceanbase_oracle	9918	-	ordinary	false	-	-
+oceanbase_oracle_code_-9918	oceanbase_oracle	-9918	-	ordinary	false	-	-
+oceanbase_oracle_code_9920	oceanbase_oracle	9920	-	ordinary	false	-	-
+oceanbase_oracle_code_-9920	oceanbase_oracle	-9920	-	ordinary	false	-	-
+oceanbase_oracle_code_9921	oceanbase_oracle	9921	-	ordinary	false	-	-
+oceanbase_oracle_code_-9921	oceanbase_oracle	-9921	-	ordinary	false	-	-
+oceanbase_oracle_code_17001	oceanbase_oracle	17001	-	ordinary	false	-	-
+oceanbase_oracle_code_-17001	oceanbase_oracle	-17001	-	ordinary	false	-	-
+oceanbase_oracle_code_17002	oceanbase_oracle	17002	-	ordinary	false	-	-
+oceanbase_oracle_code_-17002	oceanbase_oracle	-17002	-	ordinary	false	-	-
+oceanbase_oracle_code_17008	oceanbase_oracle	17008	-	ordinary	false	-	-
+oceanbase_oracle_code_-17008	oceanbase_oracle	-17008	-	ordinary	false	-	-
+oceanbase_oracle_code_17009	oceanbase_oracle	17009	-	ordinary	false	-	-
+oceanbase_oracle_code_-17009	oceanbase_oracle	-17009	-	ordinary	false	-	-
+oceanbase_oracle_code_17024	oceanbase_oracle	17024	-	ordinary	false	-	-
+oceanbase_oracle_code_-17024	oceanbase_oracle	-17024	-	ordinary	false	-	-
+oceanbase_oracle_code_17089	oceanbase_oracle	17089	-	ordinary	false	-	-
+oceanbase_oracle_code_-17089	oceanbase_oracle	-17089	-	ordinary	false	-	-
+oceanbase_oracle_code_17401	oceanbase_oracle	17401	-	ordinary	false	-	-
+oceanbase_oracle_code_-17401	oceanbase_oracle	-17401	-	ordinary	false	-	-
+oceanbase_oracle_code_17409	oceanbase_oracle	17409	-	ordinary	false	-	-
+oceanbase_oracle_code_-17409	oceanbase_oracle	-17409	-	ordinary	false	-	-
+oceanbase_oracle_code_17410	oceanbase_oracle	17410	-	ordinary	false	-	-
+oceanbase_oracle_code_-17410	oceanbase_oracle	-17410	-	ordinary	false	-	-
+oceanbase_oracle_code_17416	oceanbase_oracle	17416	-	ordinary	false	-	-
+oceanbase_oracle_code_-17416	oceanbase_oracle	-17416	-	ordinary	false	-	-
+oceanbase_oracle_code_17438	oceanbase_oracle	17438	-	ordinary	false	-	-
+oceanbase_oracle_code_-17438	oceanbase_oracle	-17438	-	ordinary	false	-	-
+oceanbase_oracle_code_17442	oceanbase_oracle	17442	-	ordinary	false	-	-
+oceanbase_oracle_code_-17442	oceanbase_oracle	-17442	-	ordinary	false	-	-
+oceanbase_oracle_code_25407	oceanbase_oracle	25407	-	ordinary	false	-	-
+oceanbase_oracle_code_-25407	oceanbase_oracle	-25407	-	ordinary	false	-	-
+oceanbase_oracle_code_25408	oceanbase_oracle	25408	-	ordinary	false	-	-
+oceanbase_oracle_code_-25408	oceanbase_oracle	-25408	-	ordinary	false	-	-
+oceanbase_oracle_code_25409	oceanbase_oracle	25409	-	ordinary	false	-	-
+oceanbase_oracle_code_-25409	oceanbase_oracle	-25409	-	ordinary	false	-	-
+oceanbase_oracle_code_25425	oceanbase_oracle	25425	-	ordinary	false	-	-
+oceanbase_oracle_code_-25425	oceanbase_oracle	-25425	-	ordinary	false	-	-
+oceanbase_oracle_code_29276	oceanbase_oracle	29276	-	ordinary	false	-	-
+oceanbase_oracle_code_-29276	oceanbase_oracle	-29276	-	ordinary	false	-	-
+oceanbase_oracle_code_30676	oceanbase_oracle	30676	-	ordinary	false	-	-
+oceanbase_oracle_code_-30676	oceanbase_oracle	-30676	-	ordinary	false	-	-
+oceanbase_oracle_boundary_12100	oceanbase_oracle	12100	-	ordinary	false	-	-
+oceanbase_oracle_boundary_12101	oceanbase_oracle	12101	-	ordinary	false	-	-
+oceanbase_oracle_boundary_12200	oceanbase_oracle	12200	-	ordinary	false	-	-
+oceanbase_oracle_boundary_12298	oceanbase_oracle	12298	-	ordinary	false	-	-
+oceanbase_oracle_boundary_12299	oceanbase_oracle	12299	-	ordinary	false	-	-
+oceanbase_oracle_boundary_0	oceanbase_oracle	0	-	ordinary	false	-	-
+oceanbase_oracle_boundary_27	oceanbase_oracle	27	-	ordinary	false	-	-
+oceanbase_oracle_boundary_29	oceanbase_oracle	29	-	ordinary	false	-	-
+oceanbase_oracle_boundary_12099	oceanbase_oracle	12099	-	ordinary	false	-	-
+oceanbase_oracle_boundary_12300	oceanbase_oracle	12300	-	ordinary	false	-	-
+oceanbase_oracle_boundary_19999	oceanbase_oracle	19999	-	ordinary	false	-	-
+oceanbase_oracle_boundary_20000	oceanbase_oracle	20000	-	ordinary	false	-	-
+oceanbase_oracle_boundary_20999	oceanbase_oracle	20999	-	ordinary	false	-	-
+oceanbase_oracle_boundary_21000	oceanbase_oracle	21000	-	ordinary	false	-	-
+oceanbase_oracle_boundary_-2147483648	oceanbase_oracle	-2147483648	-	ordinary	false	-	-
+oceanbase_oracle_message_0_code_1	oceanbase_oracle	1	-	socket read failed	false	-	-
+oceanbase_oracle_message_0_code_20000	oceanbase_oracle	20000	-	socket read failed	false	-	-
+oceanbase_oracle_message_0_code_20999	oceanbase_oracle	20999	-	socket read failed	false	-	-
+oceanbase_oracle_message_0_code_21000	oceanbase_oracle	21000	-	socket read failed	false	-	-
+oceanbase_oracle_message_1_code_1	oceanbase_oracle	1	-	控制套接字错误	false	-	-
+oceanbase_oracle_message_1_code_20000	oceanbase_oracle	20000	-	控制套接字错误	false	-	-
+oceanbase_oracle_message_1_code_20999	oceanbase_oracle	20999	-	控制套接字错误	false	-	-
+oceanbase_oracle_message_1_code_21000	oceanbase_oracle	21000	-	控制套接字错误	false	-	-
+oceanbase_oracle_message_2_code_1	oceanbase_oracle	1	-	connection has already been closed	false	-	-
+oceanbase_oracle_message_2_code_20000	oceanbase_oracle	20000	-	connection has already been closed	false	-	-
+oceanbase_oracle_message_2_code_20999	oceanbase_oracle	20999	-	connection has already been closed	false	-	-
+oceanbase_oracle_message_2_code_21000	oceanbase_oracle	21000	-	connection has already been closed	false	-	-
+oceanbase_oracle_message_3_code_1	oceanbase_oracle	1	-	broken pipe	false	-	-
+oceanbase_oracle_message_3_code_20000	oceanbase_oracle	20000	-	broken pipe	false	-	-
+oceanbase_oracle_message_3_code_20999	oceanbase_oracle	20999	-	broken pipe	false	-	-
+oceanbase_oracle_message_3_code_21000	oceanbase_oracle	21000	-	broken pipe	false	-	-
+oceanbase_oracle_message_4_code_1	oceanbase_oracle	1	-	管道已结束	false	-	-
+oceanbase_oracle_message_4_code_20000	oceanbase_oracle	20000	-	管道已结束	false	-	-
+oceanbase_oracle_message_4_code_20999	oceanbase_oracle	20999	-	管道已结束	false	-	-
+oceanbase_oracle_message_4_code_21000	oceanbase_oracle	21000	-	管道已结束	false	-	-
+oceanbase_oracle_message_5_code_1	oceanbase_oracle	1	-	communications link failure	false	-	-
+oceanbase_oracle_message_5_code_20000	oceanbase_oracle	20000	-	communications link failure	false	-	-
+oceanbase_oracle_message_5_code_20999	oceanbase_oracle	20999	-	communications link failure	false	-	-
+oceanbase_oracle_message_5_code_21000	oceanbase_oracle	21000	-	communications link failure	false	-	-
+oceanbase_oracle_message_6_code_1	oceanbase_oracle	1	-	could not create connection	false	-	-
+oceanbase_oracle_message_6_code_20000	oceanbase_oracle	20000	-	could not create connection	false	-	-
+oceanbase_oracle_message_6_code_20999	oceanbase_oracle	20999	-	could not create connection	false	-	-
+oceanbase_oracle_message_6_code_21000	oceanbase_oracle	21000	-	could not create connection	false	-	-
+oceanbase_oracle_message_7_code_1	oceanbase_oracle	1	-	access denied for user	false	-	-
+oceanbase_oracle_message_7_code_20000	oceanbase_oracle	20000	-	access denied for user	false	-	-
+oceanbase_oracle_message_7_code_20999	oceanbase_oracle	20999	-	access denied for user	false	-	-
+oceanbase_oracle_message_7_code_21000	oceanbase_oracle	21000	-	access denied for user	false	-	-
+oceanbase_oracle_message_8_code_1	oceanbase_oracle	1	-	no datasource	false	-	-
+oceanbase_oracle_message_8_code_20000	oceanbase_oracle	20000	-	no datasource	false	-	-
+oceanbase_oracle_message_8_code_20999	oceanbase_oracle	20999	-	no datasource	false	-	-
+oceanbase_oracle_message_8_code_21000	oceanbase_oracle	21000	-	no datasource	false	-	-
+oceanbase_oracle_message_9_code_1	oceanbase_oracle	1	-	no alive datasource	false	-	-
+oceanbase_oracle_message_9_code_20000	oceanbase_oracle	20000	-	no alive datasource	false	-	-
+oceanbase_oracle_message_9_code_20999	oceanbase_oracle	20999	-	no alive datasource	false	-	-
+oceanbase_oracle_message_9_code_21000	oceanbase_oracle	21000	-	no alive datasource	false	-	-
+oceanbase_oracle_custom_1	oceanbase_oracle	1	-	ordinary	false	-	1,2,3,-5
+oceanbase_oracle_custom_2	oceanbase_oracle	2	-	ordinary	false	-	1,2,3,-5
+oceanbase_oracle_custom_3	oceanbase_oracle	3	-	ordinary	false	-	1,2,3,-5
+oceanbase_oracle_custom_-1	oceanbase_oracle	-1	-	ordinary	false	-	1,2,3,-5
+oceanbase_oracle_custom_-2	oceanbase_oracle	-2	-	ordinary	false	-	1,2,3,-5
+oceanbase_oracle_custom_-3	oceanbase_oracle	-3	-	ordinary	false	-	1,2,3,-5
+oceanbase_oracle_custom_4	oceanbase_oracle	4	-	ordinary	false	-	1,2,3,-5
+oceanbase_oracle_custom_-5	oceanbase_oracle	-5	-	ordinary	false	-	1,2,3,-5
+phoenix_message_0	phoenix	0	-	Phoenix: Connection is null or closed	false	-	-
+phoenix_message_1	phoenix	0	-	connection is null or closed	false	-	-
+phoenix_message_2	phoenix	0	-	Phoenix: Connection is null or closed: details	false	-	-

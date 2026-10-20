@@ -1,0 +1,12 @@
+# Java Druid 1.2.28 commit 33824c3dec1612711f9bb4e409319bcab2e4cd0e; SHA-256 of original source bytes
+core/src/main/java/com/alibaba/druid/pool/ExceptionSorter.java	27286fcec67731b152268567b8b60a8de8d2aa1973966b762c8500a500307e2a
+core/src/main/java/com/alibaba/druid/pool/vendor/AbstractOracleExceptionSorter.java	a75af49bb8602d7dadc83b36b9b469170818f8c12e7b478d23fcb067602ff2e2
+core/src/main/java/com/alibaba/druid/pool/vendor/DB2ExceptionSorter.java	3cf8df42bec0af20f0e74b77cca7efb653df07a3770983430b764fc26a467952
+core/src/main/java/com/alibaba/druid/pool/vendor/InformixExceptionSorter.java	b1c7e8894c7c67710349cc3052319ac5e0dac30aeb1c4cddf6381eb40cc7fab4
+core/src/main/java/com/alibaba/druid/pool/vendor/MySqlExceptionSorter.java	7485c8ccac8aa3e8d2192cfd9b0f78f17566d5dee3b0c4e3b32a810b6394fd8c
+core/src/main/java/com/alibaba/druid/pool/vendor/NullExceptionSorter.java	50934c4a7fa6938dc926e7a9e38f6e1635294c2d5975b738f9320085df3a2b74
+core/src/main/java/com/alibaba/druid/pool/vendor/OceanBaseOracleExceptionSorter.java	63d8dd463289e3c9cf165817f94823b651b64b84ea454353629645d68eab41d7
+core/src/main/java/com/alibaba/druid/pool/vendor/OracleExceptionSorter.java	894376bc437d1411dcf558f53b702f8fd92a61e0eafc1f5de1cfdc63d8f90b1e
+core/src/main/java/com/alibaba/druid/pool/vendor/PGExceptionSorter.java	be062a1e78b3795ad593ff8ef38fd2a53432f45297ad5f889aecc2b6a31f56df
+core/src/main/java/com/alibaba/druid/pool/vendor/PhoenixExceptionSorter.java	fe1c4d2cafc6cfe406a697d234ebd62d2e39794ac3df0152f874980f6a5f99ef
+core/src/main/java/com/alibaba/druid/pool/vendor/SybaseExceptionSorter.java	608f1480ea6494c2b3dee99e6a40a4ae221e47b6daaf5422e6f4cc813b603abd
