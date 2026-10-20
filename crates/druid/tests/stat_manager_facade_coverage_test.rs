@@ -5,6 +5,10 @@
 //! `data_source_by_name/sql_stat_data/pooling_connection_info` 空数据源路径。
 
 use druid::stats::DruidStatManagerFacade;
+use std::sync::Mutex;
+
+// 这些用例共享进程级 reset_enable；串行化整个读写序列以免测试线程相互覆盖。
+static RESET_ENABLE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 // ===========================================================================
 // 1. reset_enable / reset_count
@@ -13,6 +17,7 @@ use druid::stats::DruidStatManagerFacade;
 /// Java isResetEnable/setResetEnable：全局 reset 门禁。
 #[test]
 fn facade_reset_enable_toggle() {
+    let _guard = RESET_ENABLE_TEST_LOCK.lock().unwrap();
     let facade = DruidStatManagerFacade::global();
     facade.set_reset_enable(false);
     assert!(!facade.is_reset_enable());
@@ -23,23 +28,20 @@ fn facade_reset_enable_toggle() {
 /// Java `resetAll：reset_enable=false` 时 `reset_all` 不递增 resetCount。
 #[test]
 fn facade_reset_all_disabled() {
+    let _guard = RESET_ENABLE_TEST_LOCK.lock().unwrap();
     let facade = DruidStatManagerFacade::global();
     facade.set_reset_enable(false);
     let before = facade.reset_count();
     facade.reset_all();
-    // reset_enable=false 时 reset_all 不应递增 resetCount
-    // 但由于是全局单例，其他测试可能已经改变了 count
-    // 所以只验证不递增（before == after 或 after > before 由其他测试引起）
     let after = facade.reset_count();
-    // 核心断言：disabled 时 reset_all 自身不递增
-    // 如果 before < after，说明有并发测试在跑，这是可接受的
-    assert!(after >= before, "reset_count must not decrease");
+    assert_eq!(after, before, "disabled reset_all must not increment");
     facade.set_reset_enable(true);
 }
 
 /// Java `resetAll：reset_enable=true` 时 `reset_all` 递增 resetCount。
 #[test]
 fn facade_reset_all_increments_count() {
+    let _guard = RESET_ENABLE_TEST_LOCK.lock().unwrap();
     let facade = DruidStatManagerFacade::global();
     facade.set_reset_enable(true);
     let before = facade.reset_count();
@@ -50,6 +52,7 @@ fn facade_reset_all_increments_count() {
 /// Java `logAndResetDataSource：reset_enable=false` 时无副作用。
 #[test]
 fn facade_log_and_reset_disabled() {
+    let _guard = RESET_ENABLE_TEST_LOCK.lock().unwrap();
     let facade = DruidStatManagerFacade::global();
     facade.set_reset_enable(false);
     facade.log_and_reset_data_source();
@@ -59,6 +62,7 @@ fn facade_log_and_reset_disabled() {
 /// Java `logAndResetDataSource：reset_enable=true` 时执行。
 #[test]
 fn facade_log_and_reset_enabled() {
+    let _guard = RESET_ENABLE_TEST_LOCK.lock().unwrap();
     let facade = DruidStatManagerFacade::global();
     facade.set_reset_enable(true);
     facade.log_and_reset_data_source();
@@ -252,6 +256,7 @@ fn facade_wall_stat_data_returns_object() {
 /// Java `综合：reset_all` 后 `basic_stat` 中的 `ResetCount` 递增。
 #[test]
 fn facade_reset_then_basic_stat_count() {
+    let _guard = RESET_ENABLE_TEST_LOCK.lock().unwrap();
     let facade = DruidStatManagerFacade::global();
     facade.set_reset_enable(true);
     let before = facade.basic_stat()["ResetCount"].as_u64().unwrap();
