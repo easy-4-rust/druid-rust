@@ -1,0 +1,7 @@
+# Java Druid 1.2.28 original ResultSet tests; class-qualified fixed identities
+# case_id	class_name	scenario	stat_filter	sql	parameter	argument	actions
+DruidPooledResultSetTest.testWrap	DruidPooledResultSetTest	UNWRAP	true	select ?	xxx	java.sql.ResultSet	unwrap
+DruidPooledResultSetTest.test_notSupport	DruidPooledResultSetTest	TYPED_INDEX	true	select ?	xxx	1	getObject_String
+DruidPooledResultSetTest.test_notSupport_1	DruidPooledResultSetTest	TYPED_LABEL	true	select ?	xxx	1	getObject_String
+DruidPooledResultSetTest.test_rowCount	DruidPooledResultSetTest	NAVIGATION	true	select ?	xxx	-	next,next,fetch_count,previous,previous,fetch_count,next,next,fetch_count,row_updated
+DruidPooledResultSetTest2.testWrap	DruidPooledResultSetTest2	UNWRAP	false	select ?	xxx	java.sql.ResultSet	unwrap

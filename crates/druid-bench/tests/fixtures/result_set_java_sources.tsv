@@ -1,0 +1,8 @@
+# frozen Druid 1.2.28; test setup and mirrored raw/canonical implementations
+core/src/test/java/com/alibaba/druid/bvt/pool/DruidPooledResultSetTest.java	ee85b18a97544245482be0e2d451f9edcc440f2a79efdd51584da40d6fbf136a
+core/src/test/java/com/alibaba/druid/bvt/pool/DruidPooledResultSetTest2.java	de82d133e82c70c4569a0a2c2c73a3bad17f45906d41dd5269c4d0dcaef5f088
+core/src/main/java/com/alibaba/druid/mock/MockResultSet.java	4a415e134731d395231612a9f8348268ddb60917f2b53a4b22202594e0818bbc
+core/src/main/java/com/alibaba/druid/util/jdbc/ResultSetBase.java	2dd54f23a92b859934bef15e990187bb5ff934a2c39aa0d820d75e5aa8b75ec2
+core/src/main/java/com/alibaba/druid/mock/MockPreparedStatement.java	da89f99924bfdb1e1ad52f90d88146e9d9df63555ba26827f3e5ed54b354002e
+core/src/main/java/com/alibaba/druid/mock/MockDriver.java	f1631a579b577cb0f7aba2d4ae6c30302d9bede52b7b49ee35c139072869c132
+core/src/main/java/com/alibaba/druid/pool/DruidPooledResultSet.java	c55d6108f3fe8c0d24cb1269684727b1f7e03f752d45d6e08e894e7972f095a0

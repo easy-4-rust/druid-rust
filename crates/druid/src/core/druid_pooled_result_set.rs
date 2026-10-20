@@ -764,11 +764,7 @@ impl DruidPooledResultSet {
             }
             .map_err(RdbcError::from)
         });
-        if result.is_err() {
-            // access_core已按租约策略分类，创建语句只记录本次读取失败一次。
-            self.statement.record_exception();
-        }
-        result
+        self.record_operation_result(result)
     }
 
     /// 在唯一资源锁内治理字节流读取，不消费句柄；返回同一流或已分类错误。
@@ -795,10 +791,7 @@ impl DruidPooledResultSet {
             }
             .map_err(RdbcError::from)
         });
-        if result.is_err() {
-            self.statement.record_exception();
-        }
-        result
+        self.record_operation_result(result)
     }
 
     /// 在唯一资源锁内治理字符流读取，保留原Reader游标；返回原句柄或错误。
@@ -825,10 +818,7 @@ impl DruidPooledResultSet {
             }
             .map_err(RdbcError::from)
         });
-        if result.is_err() {
-            self.statement.record_exception();
-        }
-        result
+        self.record_operation_result(result)
     }
 
     /// 在配置映射或隐藏列时先验证标签可见性；下标返回治理后的驱动列。
@@ -1186,11 +1176,7 @@ impl ResultSet for DruidPooledResultSet {
                 self.filter_context.add_read_string_length(value);
             }
         }
-        if result.is_err() {
-            // 底层错误已完成策略分类；本次读取只向创建语句记录一次异常。
-            self.statement.record_exception();
-        }
-        result
+        self.record_operation_result(result)
     }
 
     /// 按原列名读取，配置列治理时先验证可见性；返回资源或标量。
@@ -1262,11 +1248,7 @@ impl ResultSet for DruidPooledResultSet {
                 self.filter_context.add_read_string_length(value);
             }
         }
-        if result.is_err() {
-            // 底层错误已完成策略分类；本次读取只向创建语句记录一次异常。
-            self.statement.record_exception();
-        }
-        result
+        self.record_operation_result(result)
     }
 
     /// 按驱动下标转发可空类型映射；返回原对象或原错误，并记录创建语句失败。

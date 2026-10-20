@@ -1,0 +1,6 @@
+case_id	trace	outcome	error_class	error_code	sql_state_utf16	message_utf16	errors_after	active_during	idle_during	cursor_closed_after	statement_closed_after	active_after	idle_after	reused
+DruidPooledResultSetTest.testWrap	raw=false,logical=true	RETURN	-	-	-	-	0	1	0	true	true	0	1	true
+DruidPooledResultSetTest.test_notSupport	-	THROW	java.sql.SQLFeatureNotSupportedException	0	-	-	1	1	0	true	true	0	1	true
+DruidPooledResultSetTest.test_notSupport_1	-	THROW	java.sql.SQLFeatureNotSupportedException	0	-	-	1	1	0	true	true	0	1	true
+DruidPooledResultSetTest.test_rowCount	true,false,1,true,false,1,true,false,1,false	RETURN	-	-	-	-	0	1	0	true	true	0	1	true
+DruidPooledResultSetTest2.testWrap	raw=false,logical=true	RETURN	-	-	-	-	0	1	0	true	true	0	1	true
