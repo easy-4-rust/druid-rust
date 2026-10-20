@@ -459,6 +459,7 @@ pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatemen
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -631,6 +632,7 @@ pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatemen
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -770,6 +772,7 @@ pub fn druid::core::druid_pooled_statement::DruidPooledStatement::max_rows(&self
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -4169,6 +4172,7 @@ pub enum druid::core::StatementMutation
 pub druid::core::StatementMutation::Cancel
 pub druid::core::StatementMutation::CloseOnCompletion
 pub druid::core::StatementMutation::SetCursorName(alloc::string::String)
+pub druid::core::StatementMutation::SetCursorNameNullable(core::option::Option<alloc::string::String>)
 pub druid::core::StatementMutation::SetEscapeProcessing(bool)
 pub druid::core::StatementMutation::SetFetchDirection(druid_rdbc::statement::statement::FetchDirection)
 pub druid::core::StatementMutation::SetFetchSize(i32)
@@ -4682,6 +4686,7 @@ pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatemen
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -4848,6 +4853,7 @@ pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatemen
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -4985,6 +4991,7 @@ pub fn druid::core::druid_pooled_statement::DruidPooledStatement::max_rows(&self
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -9626,6 +9633,7 @@ pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatemen
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -10499,6 +10507,7 @@ pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatemen
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -11091,6 +11100,7 @@ pub fn druid::core::druid_pooled_statement::DruidPooledStatement::max_rows(&self
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -12978,6 +12988,7 @@ pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatemen
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_callable_statement::DruidPooledCallableStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -13428,6 +13439,7 @@ pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatemen
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_prepared_statement::DruidPooledPreparedStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
@@ -13761,6 +13773,7 @@ pub fn druid::core::druid_pooled_statement::DruidPooledStatement::max_rows(&self
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_cursor_name_nullable(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
 pub fn druid::core::druid_pooled_statement::DruidPooledStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>

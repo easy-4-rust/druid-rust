@@ -40,6 +40,11 @@ macro_rules! delegate_optional_statement_state_methods {
             self.$first$(.$rest)*.try_lock().map_err(|_| druid_rdbc::error::RdbcError::Other($busy.to_owned()))?
                 .as_mut().ok_or(druid_rdbc::error::RdbcError::ConnectionDiscarded)?.set_cursor_name(name)
         }
+        fn set_cursor_name_nullable(&mut self, name: Option<&str>) -> Result<(), druid_rdbc::error::RdbcError> {
+            self.ensure_open()?;
+            self.$first$(.$rest)*.try_lock().map_err(|_| druid_rdbc::error::RdbcError::Other($busy.to_owned()))?
+                .as_mut().ok_or(druid_rdbc::error::RdbcError::ConnectionDiscarded)?.set_cursor_name_nullable(name)
+        }
         fn set_fetch_direction(&mut self, direction: druid_rdbc::statement::FetchDirection) -> Result<(), druid_rdbc::error::RdbcError> {
             self.ensure_open()?;
             self.$first$(.$rest)*.try_lock().map_err(|_| druid_rdbc::error::RdbcError::Other($busy.to_owned()))?

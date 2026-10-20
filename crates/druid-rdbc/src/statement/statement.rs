@@ -342,6 +342,18 @@ pub trait Statement: Wrapper + Send + 'static {
         })
     }
 
+    /// 设置可空游标名称。对应 Java: java.sql.Statement#setCursorName(String)。
+    /// 参数 name 区分 NULL、空字符串和非空名称；返回驱动结果，默认 NULL 明确不支持。
+    /// Some 委托既有入口，保证已有外部实现无须修改即可继续处理非空值。
+    fn set_cursor_name_nullable(&mut self, name: Option<&str>) -> Result<(), RdbcError> {
+        match name {
+            Some(name) => self.set_cursor_name(name),
+            None => Err(RdbcError::feature_not_supported(
+                "statement_set_cursor_name_nullable",
+            )),
+        }
+    }
+
     /// 设置 fetch direction hint。
     fn set_fetch_direction(&mut self, _direction: FetchDirection) -> Result<(), RdbcError> {
         Err(RdbcError::UnsupportedOperation {

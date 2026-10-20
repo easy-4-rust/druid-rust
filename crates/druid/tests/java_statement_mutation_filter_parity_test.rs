@@ -141,8 +141,8 @@ async fn all_statement_kinds_preserve_eight_filter_sql_errors_and_original_prope
                 1 => statement.set_max_rows(0),
                 2 => statement.set_escape_processing(true),
                 3 => statement.set_query_timeout(-1),
-                4 => statement.set_cursor_name("cursor"),
-                5 => statement.set_fetch_direction(FetchDirection::Reverse),
+                4 => statement.set_cursor_name_nullable(None),
+                5 => statement.set_fetch_direction(FetchDirection::DriverValue(0)),
                 6 => statement.set_fetch_size(0),
                 _ => statement.cancel(),
             };
@@ -159,6 +159,7 @@ async fn all_statement_kinds_preserve_eight_filter_sql_errors_and_original_prope
         assert_eq!(statement.query_timeout().unwrap(), 0);
         assert_eq!(statement.fetch_size().unwrap(), 0);
         assert!(state.statement_query_timeouts.lock().unwrap().is_empty());
+        assert!(state.cursor_names.lock().unwrap().is_empty());
         let calls = trace.lock().unwrap().len();
         statement.close().await.unwrap();
         assert!(statement.set_max_rows(1).is_err());
@@ -208,6 +209,13 @@ async fn rewrites_preserve_wide_values_around_order_and_do_not_mask_filter_error
         }
         assert_eq!(pool.stat_value_and_reset().error_count, 0);
         mode.store(6, Ordering::Release);
+        statement.set_cursor_name_nullable(None).unwrap();
+        statement.set_cursor_name_nullable(Some("")).unwrap();
+        statement.set_cursor_name_nullable(Some("cursor")).unwrap();
+        assert_eq!(
+            *state.cursor_names.lock().unwrap(),
+            vec![None, Some(String::new()), Some("cursor".to_owned())]
+        );
         assert!(matches!(
             statement.cancel(),
             Err(druid_rdbc::error::RdbcError::UnsupportedOperation {

@@ -41,6 +41,7 @@ pub struct TrackingState {
         )>,
     >,
     pub statement_query_timeouts: Mutex<Vec<i32>>,
+    pub cursor_names: Mutex<Vec<Option<String>>>,
     pub result_set_close_count: AtomicUsize,
     pub result_set_close_attempt_count: AtomicUsize,
     pub result_set_next_count: AtomicUsize,
@@ -561,6 +562,16 @@ druid_rdbc::impl_standard_wrapper!(TrackingStatement => Statement);
 
 #[async_trait::async_trait]
 impl Statement for TrackingStatement {
+    fn set_cursor_name_nullable(&mut self, name: Option<&str>) -> Result<(), RdbcError> {
+        self.state
+            .check_failure("statement_set_cursor_name_nullable")?;
+        self.state
+            .cursor_names
+            .lock()
+            .unwrap()
+            .push(name.map(str::to_owned));
+        Ok(())
+    }
     fn max_field_size(&self) -> Result<i32, RdbcError> {
         self.state
             .check_plain_sql_failure("statement_max_field_size")?;
@@ -801,6 +812,16 @@ druid_rdbc::impl_standard_wrapper!(TrackingPreparedStatement => PreparedStatemen
 
 #[async_trait::async_trait]
 impl Statement for TrackingPreparedStatement {
+    fn set_cursor_name_nullable(&mut self, name: Option<&str>) -> Result<(), RdbcError> {
+        self.state
+            .check_failure("statement_set_cursor_name_nullable")?;
+        self.state
+            .cursor_names
+            .lock()
+            .unwrap()
+            .push(name.map(str::to_owned));
+        Ok(())
+    }
     async fn generated_keys(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.state.record("prepared.generated_keys");
         Ok(Box::new(TrackingResultSet::rows(
@@ -988,6 +1009,9 @@ druid_rdbc::impl_standard_wrapper!(TrackingCallableStatement => CallableStatemen
 
 #[async_trait::async_trait]
 impl Statement for TrackingCallableStatement {
+    fn set_cursor_name_nullable(&mut self, name: Option<&str>) -> Result<(), RdbcError> {
+        self.prepared.set_cursor_name_nullable(name)
+    }
     async fn generated_keys(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         Statement::generated_keys(&mut self.prepared).await
     }

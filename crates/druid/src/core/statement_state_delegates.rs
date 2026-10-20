@@ -48,6 +48,13 @@ macro_rules! delegate_statement_state_methods {
             druid_rdbc::statement::Statement::set_cursor_name(&mut self.$base, name)
         }
 
+        fn set_cursor_name_nullable(
+            &mut self,
+            name: Option<&str>,
+        ) -> Result<(), druid_rdbc::error::RdbcError> {
+            druid_rdbc::statement::Statement::set_cursor_name_nullable(&mut self.$base, name)
+        }
+
         fn set_fetch_direction(
             &mut self,
             direction: druid_rdbc::statement::FetchDirection,

@@ -424,6 +424,7 @@ impl DruidPooledStatement {
             StatementMutation::SetEscapeProcessing(value) => state.escape_processing = value,
             StatementMutation::SetQueryTimeout(value) => state.query_timeout = value,
             StatementMutation::SetCursorName(value) => state.cursor_name = Some(value),
+            StatementMutation::SetCursorNameNullable(value) => state.cursor_name = value,
             StatementMutation::SetFetchDirection(value) => state.fetch_direction = value,
             StatementMutation::SetFetchSize(value) => state.fetch_size = value,
             StatementMutation::SetPoolable(value) => state.poolable = value,
@@ -842,6 +843,12 @@ impl Statement for DruidPooledStatement {
 
     fn set_cursor_name(&mut self, name: &str) -> Result<(), RdbcError> {
         self.apply_statement_mutation(StatementMutation::SetCursorName(name.to_owned()))
+    }
+
+    fn set_cursor_name_nullable(&mut self, name: Option<&str>) -> Result<(), RdbcError> {
+        self.apply_statement_mutation(StatementMutation::SetCursorNameNullable(
+            name.map(str::to_owned),
+        ))
     }
 
     fn set_fetch_direction(&mut self, direction: FetchDirection) -> Result<(), RdbcError> {

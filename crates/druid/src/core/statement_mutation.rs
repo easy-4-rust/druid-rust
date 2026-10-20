@@ -14,6 +14,8 @@ pub enum StatementMutation {
     SetQueryTimeout(i32),
     /// 设置游标名称。
     SetCursorName(String),
+    /// 设置可空游标名称，None 与空字符串保持可区分。
+    SetCursorNameNullable(Option<String>),
     /// 设置抓取方向。
     SetFetchDirection(FetchDirection),
     /// 设置抓取行数提示。

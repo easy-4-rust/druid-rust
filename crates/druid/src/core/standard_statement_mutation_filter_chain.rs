@@ -80,6 +80,10 @@ impl<'a> StandardStatementMutationFilterChain<'a> {
                 "statement_set_cursor_name",
                 self.statement.set_cursor_name(value),
             ),
+            StatementMutation::SetCursorNameNullable(value) => (
+                "statement_set_cursor_name_nullable",
+                self.statement.set_cursor_name_nullable(value.as_deref()),
+            ),
             StatementMutation::SetFetchDirection(value) => (
                 "statement_set_fetch_direction",
                 self.statement.set_fetch_direction(*value),
@@ -105,7 +109,13 @@ impl<'a> StandardStatementMutationFilterChain<'a> {
                 Ok(mutation)
             }
             Err(RdbcError::UnsupportedOperation { operation: actual })
-                if actual == operation && !matches!(mutation, StatementMutation::Cancel) =>
+                if (actual == operation
+                    || (matches!(mutation, StatementMutation::SetCursorNameNullable(Some(_)))
+                        && actual == "statement_set_cursor_name"))
+                    && !matches!(
+                        mutation,
+                        StatementMutation::Cancel | StatementMutation::SetCursorNameNullable(None)
+                    ) =>
             {
                 self.applied = Some(mutation.clone());
                 Ok(mutation)
@@ -129,5 +139,40 @@ impl<'a> StandardStatementMutationFilterChain<'a> {
         } else {
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod nullable_tests {
+    use super::StandardStatementMutationFilterChain;
+    use crate::core::StatementMutation;
+    use druid_rdbc::error::RdbcError;
+    use druid_rdbc::statement::Statement;
+
+    struct UnsupportedNullable;
+    druid_rdbc::impl_standard_wrapper!(UnsupportedNullable => Statement);
+
+    #[async_trait::async_trait]
+    impl Statement for UnsupportedNullable {
+        fn set_cursor_name_nullable(&mut self, _name: Option<&str>) -> Result<(), RdbcError> {
+            Err(RdbcError::UnsupportedOperation {
+                operation: "statement_set_cursor_name_nullable",
+            })
+        }
+    }
+
+    #[test]
+    fn null_cursor_unsupported_cannot_take_cached_property_success_fallback() {
+        let mut driver = UnsupportedNullable;
+        let mutation = StatementMutation::SetCursorNameNullable(None);
+        let error = StandardStatementMutationFilterChain::new(&[], &mut driver, mutation.clone())
+            .apply(mutation)
+            .unwrap_err();
+        assert_eq!(
+            RdbcError::from(error),
+            RdbcError::UnsupportedOperation {
+                operation: "statement_set_cursor_name_nullable"
+            }
+        );
     }
 }
