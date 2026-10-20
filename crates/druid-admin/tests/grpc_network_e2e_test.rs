@@ -4623,6 +4623,7 @@ async fn initial_connect_rpc_and_hello_ack_share_one_configured_deadline() {
 struct ReconnectDeadlineProbe {
     connections: Arc<AtomicUsize>,
     changed: Arc<Notify>,
+    stalled_rpc_entered: Arc<Notify>,
 }
 
 #[tonic::async_trait]
@@ -4636,6 +4637,8 @@ impl MetricsIngest for ReconnectDeadlineProbe {
         let connection = self.connections.fetch_add(1, Ordering::AcqRel);
         self.changed.notify_waiters();
         if connection == 1 {
+            // 保存通知许可，测试即使稍后才等待也不会错过故障实际进入的边界。
+            self.stalled_rpc_entered.notify_one();
             std::future::pending::<()>().await;
             unreachable!("the stalled reconnect RPC is cancelled by its deadline");
         }
@@ -4685,13 +4688,77 @@ impl MetricsIngest for ReconnectDeadlineProbe {
     }
 }
 
+// 故障进入前只受夹具准备预算约束；重试窗口从服务端确实卡住 RPC 后开始。
+async fn successor_starts_after_stalled_rpc(
+    stalled_rpc_entered: &Notify,
+    changed: &Notify,
+    connections: &AtomicUsize,
+) -> bool {
+    if tokio::time::timeout(TEST_TIMEOUT, stalled_rpc_entered.notified())
+        .await
+        .is_err()
+    {
+        return false;
+    }
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            // 先注册通知再检查计数，避免重连恰好发生在检查与等待之间时丢失唤醒。
+            let notified = changed.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if connections.load(Ordering::Acquire) >= 3 {
+                break;
+            }
+            notified.await;
+        }
+    })
+    .await
+    .is_ok()
+}
+
+#[tokio::test(start_paused = true)]
+async fn reconnect_observation_excludes_setup_but_keeps_the_retry_deadline() {
+    let stalled = Notify::new();
+    let changed = Notify::new();
+    let connections = AtomicUsize::new(1);
+    let observation = successor_starts_after_stalled_rpc(&stalled, &changed, &connections);
+    tokio::pin!(observation);
+    // 超过旧的两秒窗口，但尚未进入故障时，不能误判重试失败。
+    assert!(
+        tokio::time::timeout(Duration::from_secs(3), observation.as_mut())
+            .await
+            .is_err()
+    );
+    connections.store(2, Ordering::Release);
+    stalled.notify_one();
+    // 故障进入后仍须严格在原有两秒内看到后继连接。
+    let fault_started = tokio::time::Instant::now();
+    assert!(!observation.await);
+    assert_eq!(fault_started.elapsed(), Duration::from_secs(2));
+
+    let stalled = Notify::new();
+    stalled.notify_one();
+    let observation = successor_starts_after_stalled_rpc(&stalled, &changed, &connections);
+    tokio::pin!(observation);
+    assert!(
+        tokio::time::timeout(Duration::from_secs(1), observation.as_mut())
+            .await
+            .is_err()
+    );
+    connections.store(3, Ordering::Release);
+    changed.notify_waiters();
+    assert!(observation.await);
+}
+
 #[tokio::test]
 async fn reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries() {
     let connections = Arc::new(AtomicUsize::new(0));
     let changed = Arc::new(Notify::new());
+    let stalled_rpc_entered = Arc::new(Notify::new());
     let service = ReconnectDeadlineProbe {
         connections: Arc::clone(&connections),
         changed: Arc::clone(&changed),
+        stalled_rpc_entered: Arc::clone(&stalled_rpc_entered),
     };
     let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
     let mut config = grpc_config(&endpoint, "reconnect-deadline");
@@ -4707,20 +4774,8 @@ async fn reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries() {
         .await
         .expect("queue one replayable batch");
 
-    let retried_after_stall = tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            // 先注册通知再检查计数，避免重连恰好发生在检查与等待之间时丢失唤醒。
-            let notified = changed.notified();
-            tokio::pin!(notified);
-            notified.as_mut().enable();
-            if connections.load(Ordering::Acquire) >= 3 {
-                break;
-            }
-            notified.await;
-        }
-    })
-    .await
-    .is_ok();
+    let retried_after_stall =
+        successor_starts_after_stalled_rpc(&stalled_rpc_entered, &changed, &connections).await;
     let shutdown_result = client.shutdown(TEST_TIMEOUT).await;
     shutdown.cancel();
     server_handle
@@ -4730,7 +4785,8 @@ async fn reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries() {
 
     assert!(
         retried_after_stall,
-        "a stalled reconnect Connect RPC must expire so a successor attempt can start"
+        "a stalled reconnect Connect RPC must expire so a successor attempt can start; observed connections={}",
+        connections.load(Ordering::Acquire)
     );
     assert!(
         shutdown_result.is_ok(),
