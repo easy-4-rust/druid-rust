@@ -68,6 +68,11 @@
 - **THEN** 每例独立观察异常类别、错误码、SQLState、消息、错误计数、活动/空闲连接和关闭后复用；全部输入和两端输出保留
 - **AND** 两项已批准 closeOnCompletion 差异保留分母并独立标记，其他差异不得以泛化白名单放行
 
+#### Scenario: Mock 分类器与物理关闭清理实时差分
+- **WHEN** 执行冻结 ExceptionSorterTest 的原始 test_exceptionSorter，并在相同 MockDriver、mysql 类型及预编译缓存配置下关闭物理连接后关闭语句
+- **THEN** 原断言必须运行通过；两端分别记录分类器、异常类、错误码、可空 SQLState/消息、丢弃计数及逻辑连接关闭后的活动/空闲计数
+- **AND** 完整原始单例分母和来源哈希保持冻结，任何未批准的差异使实时比较失败
+
 #### Scenario: 固定七例 Callable 实时差分
 - **WHEN** 对冻结 Java Druid 1.2.28 的 DruidPooledCallableStatementTest 执行全部七例
 - **THEN** 保留原 SQL、执行标志、过滤器启停、wasNull 拒绝标志、按索引/名称 String 目标及 Callable/Prepared 解包角色；运行原断言并保留错误字段、计数、关闭与连接复用观测

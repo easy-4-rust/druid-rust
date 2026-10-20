@@ -304,3 +304,21 @@ Raw evidence: D:\druid-rust-tooling\callable-seven-live-2680-1792510181665659700
 | callable-seven-pairing-tests-20261020.log | b905297367dac58af553ad03e400fb8406546ed1e244d34b9f200d87f52010a2 |
 
 No approval request is repeated or inferred from elapsed time. The new five cases remain failed while the remaining baseline observations are collected for review. The full production-ready goal remains NOT_READY and still needs the final global source matrix and all other required gates.
+
+
+## Live Mock sorter cleanup differential — 2026-10-20
+
+Implemented `java_rust_mock_sorter_differential` for the one original ExceptionSorterTest method, using the frozen Java 1.2.28 source and unchanged original setup/teardown and assertions. Both observations enable MockDriver selection over mysql, prepared caching, borrow validation and stat filtering. The complete SQL cleanup error and discard/active/idle counters are compared with no allowance path. The initial live comparison exposed a test-fixture error: Rust supplied a message for MockConnectionClosedException(), whereas Java's no-argument constructor leaves message and SQLState null. Correcting that shared mock fixture leaves product code and APIs unchanged. The first failed artifacts remain on D:; the successful final run is retained in [mock-sorter-20261020](mock-sorter-20261020/comparison.tsv).
+
+Final live output: **1 MATCH, 0 differences**, exit 0. The helper compiles the original test against the configured frozen build classpath; this is not an attestation of a full rebuild of every Java production class. Raw receipt directory: `D:/druid-rust-tooling/mock-sorter-live-46604-1792511081037042800`.
+
+Unified validation after code completion:
+
+- `cargo +1.97.1 test -p druid-bench --locked --tests`: 9 passed, 0 failed, 7 ignored across 9 reported targets. Environment-dependent Java tests are explicitly ignored by default; the new live test was separately executed successfully.
+- All 17 Druid integration targets importing the changed shared fixture: 98 passed, 0 failed, 0 ignored.
+- `cargo +1.97.1 test -p druid-bench --locked --test java_rust_mock_sorter_differential -- --ignored --nocapture`: 1 passed, exit 0.
+- `cargo +1.97.1 clippy -p druid-bench --locked --tests -- -D warnings`: exit 0.
+
+Log SHA-256, respectively: `05da62cb1b572785854883f0905d614bcf78db61b16e87b202eb74868d55c1c6`, `3d35d0b64436045d6034bda696f05017dcfc2ad14ac06571dba4a70680bfc870`, `47d57be123833d30601bc0ef874fadfddfbbeb3d0be5dbf1764661ca8d2e7962`, `aca30cf6e25bf7446a72a934bb1d1d803fe9ba98e213a23ba5cb59f04c960575`.
+
+The original 59-case manifest now has **46 MATCH, 2 approved standard differences, 9 MISMATCH and 2 NOT_PAIRED**. Prepared cache hitCount and WallFilter table statistics remain unpaired. Other unapproved differences and the broader P07/global matrix requirements remain open; this single mock case does not close Task 3 or establish production readiness.

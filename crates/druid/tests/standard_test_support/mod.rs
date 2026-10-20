@@ -1010,7 +1010,8 @@ impl PreparedStatement for TrackingPreparedStatement {
             .fetch_add(1, Ordering::AcqRel);
         if self.state.mock_physical_closed.load(Ordering::Acquire) {
             return Err(RdbcError::SqlException(Box::new(
-                SqlException::new(0, None, Some("mock connection closed".to_owned()))
+                // 对应 Java MockConnectionClosedException()：保留 NULL 消息与 SQLState。
+                SqlException::new(0, None, None)
                     .with_class_name("com.alibaba.druid.mock.MockConnectionClosedException"),
             )));
         }
