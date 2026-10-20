@@ -286,10 +286,16 @@ impl DruidPooledStatement {
     }
 
     fn classify_statement_mutation<T>(&self, result: Result<T, RdbcError>) -> Result<T, RdbcError> {
-        let result = self
-            .inner
-            .policy
-            .classify(result, self.last_sql().as_deref());
+        self.classify_statement_access(result, self.last_sql().as_deref())
+    }
+
+    /// 记录非执行操作的 SQL 错误，并保留调用点的 SQL 上下文及致命错误分类。
+    fn classify_statement_access<T>(
+        &self,
+        result: Result<T, RdbcError>,
+        sql: Option<&str>,
+    ) -> Result<T, RdbcError> {
+        let result = self.inner.policy.classify(result, sql);
         if let Err(error) = &result {
             self.inner.policy.record_statement_access_error(error);
         }
@@ -1005,7 +1011,7 @@ impl Statement for DruidPooledStatement {
 
     fn add_batch(&mut self, sql: String) -> Result<(), RdbcError> {
         self.ensure_open()?;
-        let effective_sql = self.inner.policy.classify(
+        let effective_sql = self.classify_statement_access(
             DruidExecutionFilterPolicy::statement_add_batch_sql(
                 self.inner.filter_chain.as_deref(),
                 &sql,
@@ -1019,7 +1025,7 @@ impl Statement for DruidPooledStatement {
             .try_lock()
             .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
             .add_batch(effective_sql.clone());
-        self.inner.policy.classify(result, Some(&effective_sql))?;
+        self.classify_statement_access(result, Some(&effective_sql))?;
         self.state_mut().batch.push(effective_sql);
         Ok(())
     }
@@ -1032,7 +1038,7 @@ impl Statement for DruidPooledStatement {
             .try_lock()
             .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
             .clear_batch();
-        self.inner.policy.classify(result, None)?;
+        self.classify_statement_access(result, None)?;
         self.state_mut().batch.clear();
         Ok(())
     }

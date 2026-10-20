@@ -115,6 +115,95 @@ impl AfterFilter for StatementGetterErrorFilter {
 
 impl ResultSetFilter for StatementGetterErrorFilter {}
 
+/// 对应 Java `ErrorFilter#statement_addBatch` 的非执行操作异常。
+struct StatementBatchAdmissionErrorFilter;
+
+#[async_trait::async_trait]
+impl BeforeFilter for StatementBatchAdmissionErrorFilter {
+    fn name(&self) -> &str {
+        "java-statement-batch-admission-error"
+    }
+
+    fn statement_add_batch_sql(&self, sql: &str) -> Result<String, DruidError> {
+        if sql == "REJECT BATCH" {
+            return Err(DruidError::SqlException(Box::new(SqlException::new(
+                0,
+                None,
+                Some("injected batch admission error".to_owned()),
+            ))));
+        }
+        Ok(sql.to_owned())
+    }
+
+    async fn before(&self, _context: &mut ExecContext<'_>) -> Result<(), DruidError> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn java_batch_management_sql_errors_count_once_without_consuming_pending_batch() {
+    let state = TrackingState::configured();
+    let mut chain = FilterChain::new();
+    chain.add_before(Arc::new(StatementBatchAdmissionErrorFilter));
+    let pool = DruidPool::new_standard(
+        "java-batch-management-parity".to_owned(),
+        "mock".to_owned(),
+        Arc::new(TrackingFactory::new(Arc::clone(&state))),
+        PoolInnerConfig {
+            max_open: 1,
+            max_idle: 1,
+            acquire_timeout: Duration::from_secs(2),
+            ..PoolInnerConfig::default()
+        },
+        Some(Arc::new(chain)),
+    );
+    pool.init().await.expect("pool init");
+    let mut connection = pool.get().await.expect("borrow");
+    let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .expect("statement");
+    statement.add_batch("SELECT 1".to_owned()).unwrap();
+
+    let filter_error = statement.add_batch("REJECT BATCH".to_owned()).unwrap_err();
+    let sql_error = filter_error.sql_exception().expect("plain SQL exception");
+    assert_eq!(sql_error.class_name(), "java.sql.SQLException");
+    assert_eq!(sql_error.error_code(), 0);
+    assert_eq!(sql_error.sql_state(), None);
+    assert_eq!(
+        state
+            .statement_batch_add_attempt_count
+            .load(Ordering::Acquire),
+        1
+    );
+
+    state.fail_next("statement_add_batch");
+    let add_error = statement.add_batch("SELECT 2".to_owned()).unwrap_err();
+    state.fail_next("statement_clear_batch");
+    let clear_error = statement.clear_batch().unwrap_err();
+    for error in [add_error, clear_error] {
+        let sql_error = error.sql_exception().expect("driver SQL exception");
+        assert_eq!(sql_error.error_code(), 9002);
+        assert_eq!(sql_error.sql_state(), Some("08006"));
+    }
+    assert_eq!(statement.batch().unwrap(), vec!["SELECT 1"]);
+    assert_eq!(pool.stat_value_and_reset().error_count, 3);
+    assert_eq!(
+        state.statement_batch_execute_count.load(Ordering::Acquire),
+        0
+    );
+
+    statement.clear_batch().expect("clear retry");
+    assert!(statement.batch().unwrap().is_empty());
+    statement.close().await.expect("statement close");
+    connection.close().await.expect("logical close");
+    assert_eq!(pool.state().active_count, 0);
+    assert_eq!(pool.state().idle_count, 1);
+    let mut replacement = pool.get().await.expect("reuse after batch errors");
+    assert_eq!(state.factory_create_count.load(Ordering::Acquire), 1);
+    replacement.close().await.expect("replacement close");
+    pool.close().await;
+}
+
 #[tokio::test]
 async fn java_statement_filter_getter_errors_count_once_and_keep_pool_reusable() {
     let state = TrackingState::configured();
