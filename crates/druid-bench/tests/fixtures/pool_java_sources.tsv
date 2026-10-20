@@ -1,0 +1,4 @@
+path	sha256
+core/src/test/java/com/alibaba/druid/bvt/pool/DruidDataSourceTest_getConnection.java	01a2d7f4b70a496106658e8432e548dd290826735d50f0a14cf960450518aee1
+core/src/test/java/com/alibaba/druid/bvt/pool/DruidDataSourceTest_recycle.java	b07f002a59d0e11b5a733708c23fffe219104b5add788c4a6a91d6b54e7ac8a3
+core/src/test/java/com/alibaba/druid/bvt/pool/DruidDataSourceTest_recycle2.java	dc1e44307479831f7511dc01f4a9c50fbf302fae3a4054cb397524864a50cc0d

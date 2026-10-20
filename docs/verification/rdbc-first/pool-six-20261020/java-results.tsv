@@ -1,0 +1,7 @@
+case_id	outcome	error_class	error_code	sql_state_utf16	message_utf16	active_during	idle_during	active_after_close	idle_after_close	statement_closed	connection_closed	replacement_same	active_final	idle_final
+DruidDataSourceTest_getConnection.test_conn_ok	RETURN	-	-	-	-	1	0	0	1	-	true	true	0	1
+DruidDataSourceTest_getConnection.test_conn_user_error	THROW	java.lang.UnsupportedOperationException	-	-	004e006f007400200073007500700070006f007200740065006400200062007900200044007200750069006400440061007400610053006f0075007200630065	0	0	0	0	-	-	-	0	0
+DruidDataSourceTest_getConnection.test_conn_password_error	THROW	java.lang.UnsupportedOperationException	-	-	004e006f007400200073007500700070006f007200740065006400200062007900200044007200750069006400440061007400610053006f0075007200630065	0	0	0	0	-	-	-	0	0
+DruidDataSourceTest_recycle.test_recycle	RETURN	-	-	-	-	1	0	0	1	true	true	true	0	1
+DruidDataSourceTest_recycle2.test_recycle	RETURN	-	-	-	-	1	0	0	1	true	true	true	0	1
+DruidDataSourceTest_recycle2.test_recycle_error	RETURN	-	-	-	-	1	0	0	0	false	true	false	0	1

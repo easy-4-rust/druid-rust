@@ -64,7 +64,7 @@ def verify(root: Path = ROOT, java_root: Path | None = None) -> Counter[str]:
                 raise ValueError("duplicate comparison case identity")
             comparisons[evidence] = indexed
         name = row["java_class"].rsplit(".", 1)[-1]
-        case_id = (name + "." + row["java_method"] if name == "DruidPooledResultSetTest" else row["java_method"])
+        case_id = (name + "." + row["java_method"] if name == "DruidPooledResultSetTest" or name.startswith("DruidDataSourceTest_") else row["java_method"])
         if comparisons[evidence].get(case_id) != status:
             raise ValueError(f"case status differs from actual paired output: {name}.{row['java_method']}")
     return Counter(row["status"] for row in rows)

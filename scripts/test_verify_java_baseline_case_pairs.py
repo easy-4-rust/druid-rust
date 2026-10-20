@@ -16,13 +16,13 @@ class FrozenCasePairsTest(unittest.TestCase):
         destination = self.root / verifier.DIRECTORY
         destination.mkdir(parents=True)
         shutil.copyfile(source / verifier.MANIFEST.name, destination / verifier.MANIFEST.name)
-        for directory in ("statement-errors-20261020", "resultset-five-20261020", "wall-multi-20261020"):
+        for directory in ("statement-errors-20261020", "resultset-five-20261020", "wall-multi-20261020", "pool-six-20261020"):
             (destination / directory).mkdir()
             shutil.copyfile(source / directory / "comparison.tsv", destination / directory / "comparison.tsv")
 
     def test_actual_evidence_keeps_unpaired_and_mismatch_counts(self):
         counts = verifier.verify(self.root)
-        self.assertEqual(dict(counts), {"NOT_PAIRED": 16, "MATCH": 40, "APPROVED_STANDARD_DIFFERENCE": 2, "MISMATCH": 1})
+        self.assertEqual(dict(counts), {"NOT_PAIRED": 10, "MATCH": 43, "APPROVED_STANDARD_DIFFERENCE": 2, "MISMATCH": 4})
 
     def test_removed_case_is_rejected(self):
         path = self.root / verifier.MANIFEST

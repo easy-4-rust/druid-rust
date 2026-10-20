@@ -68,6 +68,11 @@
 - **THEN** 每例独立观察异常类别、错误码、SQLState、消息、错误计数、活动/空闲连接和关闭后复用；全部输入和两端输出保留
 - **AND** 两项已批准 closeOnCompletion 差异保留分母并独立标记，其他差异不得以泛化白名单放行
 
+#### Scenario: 固定六例 Pool 获取与回收实时差分
+- **WHEN** 对冻结 Java Druid 1.2.28 的 getConnection、recycle、recycle2 三个原始测试类执行全部六例
+- **THEN** 保留 NULL 凭据、最大活动连接数、SQL、事务状态及回滚过滤器输入；运行原断言后逐例比较异常字段、借出/归还计数、逻辑关闭和替换连接复用
+- **AND** 原始类中的非 test 方法不加入 JUnit 分母，新增补充观测在两端对称执行；未经批准的错误分类或资源关闭差异使实时比较失败
+
 #### Scenario: 固定两例 Wall 多语句拒绝实时差分
 - **WHEN** 对冻结 Java Druid 1.2.28 的 WallMultiStatementTest 两个原始方法执行相同 SQL 及 Oracle/MySQL 方言入口
 - **THEN** 保留原始断言、SQL 和两例分母，分别记录并逐项比较两端布尔校验结果，任何未一致结果使实时差分失败
