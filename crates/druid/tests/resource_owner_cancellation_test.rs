@@ -6727,10 +6727,14 @@ async fn task7_xml_binding_fatal_error_discards_and_notifies_exactly_once() {
     assert!(connection.is_closed().unwrap());
     assert_eq!(control.sorter_calls.load(Ordering::SeqCst), 1);
     assert_eq!(control.discards.load(Ordering::SeqCst), 1);
-    assert!(matches!(
-        xml.validate_for_binding().await.unwrap_err(),
-        RdbcError::ConnectionDiscarded
-    ));
+    let rejected = xml.validate_for_binding().await.unwrap_err();
+    assert_eq!(rejected.class_name(), "druid::ConnectionDiscarded");
+    assert_eq!(
+        std::error::Error::source(&rejected).and_then(|source| source.downcast_ref::<RdbcError>()),
+        Some(&error),
+        "rejected resource binding must preserve the original typed fatal cause"
+    );
+    assert_eq!(rejected.sql_exception(), error.sql_exception());
     assert_eq!(probe.validations.load(Ordering::SeqCst), 1);
     assert_eq!(control.sorter_calls.load(Ordering::SeqCst), 1);
     xml.free().await.unwrap();
