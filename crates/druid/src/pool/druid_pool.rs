@@ -654,9 +654,12 @@ impl DruidPool {
             // Java 每次进入 getConnectionInternal 的锁内循环都递增，而非每个
             // 公共 get 调用只递增一次；无效 holder 后的重试也形成新一轮。
             self.inner.connect_count.fetch_add(1, Ordering::Relaxed);
+            // 对应 Java: DruidDataSource#pollLast 取数组尾部，即“后归还者先复用”（LIFO）。
+            // 该顺序决定热连接复用率、testWhileIdle 的实际校验对象与 shrink 的驱逐次序，
+            // 不能退化为 FIFO；语义见 SEM-POOL-001。
             let (idle_connection, remaining_idle) = {
                 let mut idle = self.inner.idle.lock();
-                let connection = idle.pop_front();
+                let connection = idle.pop_back();
                 (connection, idle.len())
             };
             if let Some(holder) = idle_connection {

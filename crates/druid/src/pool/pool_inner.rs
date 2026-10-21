@@ -1198,6 +1198,8 @@ impl PoolInner {
             } else {
                 // 锁内完成复用决定并移除本次通知，后续租约不会继承旧等待者。
                 return_completion = holder.take_return_completion();
+                // 对应 Java: DruidDataSource#putLast 追加到数组尾部；借用侧 pop_back，
+                // 共同构成“后归还者先复用”的 LIFO 语义（SEM-POOL-001）。
                 queue.push_back(holder);
                 Ok(queue.len())
             }

@@ -249,9 +249,20 @@ async fn task6_maintenance_semantics_test_keep_alive_validates_due_connections_a
         2
     );
 
-    let first_id = pool.get().await.unwrap().id();
-    let second_id = pool.get().await.unwrap().id();
-    assert!(first_id < second_id, "keepAlive 必须保留原空闲队列顺序");
+    // 必须同时持有两个租约，否则临时值在语句结束即归还，第二次借到同一连接。
+    let first = pool.get().await.unwrap();
+    let second = pool.get().await.unwrap();
+    let first_id = first.id();
+    let second_id = second.id();
+    // Java DruidDataSource#pollLast 从数组尾部取连接：后归还者先复用（LIFO）。
+    // 同一 idle 队列 [低 id, 高 id] 的借出顺序因此是 高 id → 低 id；
+    // 断言方向同时证明 keepAlive 没有打乱原队列，只是按 Java 语义反向消费。
+    assert!(
+        first_id > second_id,
+        "keepAlive 必须保留原空闲队列顺序（Java pollLast 以 LIFO 消费），实际 {first_id} vs {second_id}"
+    );
+    drop(first);
+    drop(second);
 }
 
 #[tokio::test]
