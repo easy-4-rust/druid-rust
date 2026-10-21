@@ -79,7 +79,11 @@
   2. 提交“结构性例外”：记录对象、行数、不可拆原因、审批人与复审日期。
 - **例外不得静默**：在例外被批准前，对象表继续把该文件计为 `FILE_OVER_800`，路线图 P6 不得标记完成。
 
-## 5. 本轮结论
+## 5. 执行进度
 
-- 本轮尝试对 `druid_pooled_connection.rs` 做“固有方法 + trait impl”拆分，验证了 **trait impl 单块约 930 行**这一硬约束；为避免把 1 个超长文件变成 2 个超长文件，已**回滚该拆分**并保留本文作为后续执行计划。
-- P6 当前状态：**PLANNED**；`crates/druid-test` 整仓验收包在 B1–B3 完成后启动。
+- 2026-10-22（首轮尝试）：对 `druid_pooled_connection.rs` 做“固有方法 + trait impl”拆分，验证了 **trait impl 单块约 930 行**这一硬约束；为避免把 1 个超长文件变成 2 个超长文件，已**回滚**该拆分。
+- 2026-10-22（B1 第一批，已提交）：
+  - `diagnostic_tests/filter_defaults_chain_harness.rs` 808 → 385 + 433（按读取值族拆出 `decorated_reads.rs`）；
+  - `core/log_filter.rs` 966 → 578 + 401（拆出 `options.rs` 承载 Java 同名 getter/setter）。
+  - 超 800 行文件：**28 → 26**；`cargo test -p druid --lib` 161 passed。
+- P6 状态：**IN_PROGRESS**；`crates/druid-test` 整仓验收包在 B1–B3 完成后启动。
