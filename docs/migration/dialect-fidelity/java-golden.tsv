@@ -1,0 +1,33 @@
+dialect	case	parse	format	reparse	parameterized	sql
+oracle	oracle-date-literal	ok	SELECT * FROM emp WHERE hiredate > DATE '2020-01-01'	ok	SELECT * FROM emp WHERE hiredate > DATE '2020-01-01'	SELECT * FROM emp WHERE hiredate > DATE '2020-01-01'
+oracle	oracle-rownum	ok	SELECT * FROM t WHERE ROWNUM <= 10	ok	SELECT * FROM t WHERE ROWNUM <= ?	SELECT * FROM t WHERE ROWNUM <= 10
+oracle	oracle-connect-by	ok	SELECT LEVEL, SYS_CONNECT_BY_PATH(name, '/') FROM t START WITH id = 1 CONNECT BY PRIOR id = parent_id	ok	SELECT LEVEL, SYS_CONNECT_BY_PATH(name, ?) FROM t START WITH id = ? CONNECT BY PRIOR id = parent_id	SELECT LEVEL, SYS_CONNECT_BY_PATH(name, '/') FROM t START WITH id = 1 CONNECT BY PRIOR id = parent_id
+oracle	oracle-merge	ok	MERGE INTO t USING s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.v = s.v WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v)	ok	MERGE INTO t USING s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.v = s.v WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v)	MERGE INTO t USING s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.v = s.v WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v)
+oracle	oracle-returning-into	ok	INSERT INTO t (id) VALUES (1) RETURNING id INTO :out_id	ok	INSERT INTO t (id) VALUES (?) RETURNING id INTO :out_id	INSERT INTO t (id) VALUES (1) RETURNING id INTO :out_id
+oracle	oracle-table-function	ok	SELECT * FROM TABLE(fn(1))	ok	SELECT * FROM TABLE(fn(?))	SELECT * FROM TABLE(fn(1))
+oracle	oracle-decode-nvl	ok	SELECT NVL(a, 0)  , DECODE(b, 1, 'x', 'y') FROM dual	ok	SELECT NVL(a, ?)  , DECODE(b, ?, ?, ?) FROM dual	SELECT NVL(a, 0), DECODE(b, 1, 'x', 'y') FROM dual
+oracle	oracle-identity	err	ERR:ParserException:syntax error, expect (, actual , pos 59, line 1, column 59, token ,	n/a	ERR:ParserException:syntax error, expect (, actual , pos 59, line 1, column 59, token ,	CREATE TABLE t (id NUMBER(10) GENERATED ALWAYS AS IDENTITY, v VARCHAR2(20))
+odps	odps-lateral-view	ok	SELECT * FROM t  LATERAL VIEW EXPLODE(arr) v AS x	ok	SELECT * FROM t LATERAL VIEW explode(arr) v AS x	SELECT * FROM t LATERAL VIEW explode(arr) v AS x
+odps	odps-distribute-sort	ok	SELECT * FROM t DISTRIBUTE BY k SORT BY v	ok	SELECT * FROM t DISTRIBUTE BY k SORT BY v	SELECT * FROM t DISTRIBUTE BY k SORT BY v
+odps	odps-insert-overwrite-partition	ok	INSERT OVERWRITE TABLE t PARTITION (ds='2020') SELECT * FROM s	ok	INSERT OVERWRITE t PARTITION (ds = ?) SELECT * FROM s	INSERT OVERWRITE TABLE t PARTITION (ds='2020') SELECT * FROM s
+odps	odps-create-partitioned	ok	CREATE TABLE t (  a STRING ) PARTITIONED BY (  ds STRING )	ok	CREATE TABLE t (  a STRING ) PARTITIONED BY (  ds STRING )	CREATE TABLE t (a STRING) PARTITIONED BY (ds STRING)
+odps	odps-mapjoin-hint	ok	SELECT /*+ MAPJOIN(b) */ * FROM a JOIN b ON a.id = b.id	ok	SELECT /*+ MAPJOIN(b) */ * FROM a JOIN b ON a.id = b.id	SELECT /*+ MAPJOIN(b) */ * FROM a JOIN b ON a.id = b.id
+odps	odps-trans-array	ok	SELECT TRANS_ARRAY(1, ',', arr, ',') FROM t	ok	SELECT TRANS_ARRAY(?, ?, arr, ?) FROM t	SELECT TRANS_ARRAY(1, ',', arr, ',') FROM t
+odps	odps-limit	ok	SELECT * FROM t LIMIT 10	ok	SELECT * FROM t LIMIT ?	SELECT * FROM t LIMIT 10
+odps	odps-cast	ok	SELECT CAST(a AS BIGINT) FROM t	ok	SELECT CAST(a AS BIGINT) FROM t	SELECT CAST(a AS BIGINT) FROM t
+hive	hive-lateral-view	ok	SELECT * FROM t  LATERAL VIEW explode(arr) v AS x	ok	SELECT * FROM t LATERAL VIEW explode(arr) v AS x	SELECT * FROM t LATERAL VIEW explode(arr) v AS x
+hive	hive-insert-partition	ok	INSERT OVERWRITE TABLE t PARTITION (ds='2020') SELECT * FROM s	ok	INSERT OVERWRITE t PARTITION (ds = ?) SELECT * FROM s	INSERT OVERWRITE TABLE t PARTITION (ds='2020') SELECT * FROM s
+hive	hive-mapjoin	ok	SELECT/*+ MAPJOIN(b) */  a.* FROM a  JOIN b ON a.id = b.id	ok	SELECT /*+ MAPJOIN(b) */ a.* FROM a JOIN b ON a.id = b.id	SELECT /*+ MAPJOIN(b) */ a.* FROM a JOIN b ON a.id = b.id
+hive	hive-stored-parquet	ok	CREATE TABLE t (  a STRING ) STORED AS PARQUET	ok	CREATE TABLE t (  a STRING ) STORE AS PARQUET	CREATE TABLE t (a STRING) STORED AS PARQUET
+hive	hive-cluster-by	ok	SELECT * FROM t CLUSTER BY k	ok	SELECT * FROM t CLUSTER BY k	SELECT * FROM t CLUSTER BY k
+hive	hive-tablesample	ok	SELECT * FROM t TABLESAMPLE (10 PERCENT)	ok	SELECT * FROM t TABLESAMPLE (? PERCENT)	SELECT * FROM t TABLESAMPLE (10 PERCENT)
+hive	hive-named-struct	ok	SELECT named_struct('a', 1) FROM t	ok	SELECT named_struct(?, ?) FROM t	SELECT named_struct('a', 1) FROM t
+hive	hive-partition-filter	ok	SELECT * FROM t WHERE ds = '2020'	ok	SELECT * FROM t WHERE ds = ?	SELECT * FROM t WHERE ds = '2020'
+doris	doris-select	ok	SELECT * FROM t WHERE k1 = 1	ok	SELECT * FROM t WHERE k1 = ?	SELECT * FROM t WHERE k1 = 1
+doris	doris-create-unique-key	ok	CREATE TABLE t (  k1 INT,  v INT ) UNIQUE KEY (k1) DISTRIBUTED BY HASH (k1) BUCKETS 3 PROPERTIES (  "replication_num" = "1" )	ok	CREATE TABLE t (  k1 INT,  v INT ) INTO 3 BUCKETS OPTIONS (  "replication_num" = "1" )	CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES ("replication_num" = "1")
+doris	doris-distribute-buckets	err	ERR:ParserException:not supported. pos 46, line 1, column 40, token IDENTIFIER BUCKETS	n/a	ERR:ParserException:not supported. pos 46, line 1, column 40, token IDENTIFIER BUCKETS	SELECT * FROM t DISTRIBUTE BY HASH(k1) BUCKETS 10
+doris	doris-in-subquery	ok	SELECT * FROM t WHERE k1 IN (  SELECT k1  FROM s )	ok	SELECT * FROM t WHERE k1 IN (SELECT k1 FROM s)	SELECT * FROM t WHERE k1 IN (SELECT k1 FROM s)
+doris	doris-insert-select	ok	INSERT INTO t SELECT * FROM s	ok	INSERT INTO t SELECT * FROM s	INSERT INTO t SELECT * FROM s
+doris	doris-bitmap-agg	ok	SELECT bitmap_union_count(b) FROM t GROUP BY k	ok	SELECT bitmap_union_count(b) FROM t GROUP BY k	SELECT bitmap_union_count(b) FROM t GROUP BY k
+doris	doris-order-limit	ok	SELECT * FROM t ORDER BY k1 LIMIT 10	ok	SELECT * FROM t ORDER BY k1 LIMIT ?	SELECT * FROM t ORDER BY k1 LIMIT 10
+doris	doris-alter-add-column	err	ERR:ParserException:not supported. pos 17, line 1, column 15, token ADD	n/a	ERR:ParserException:not supported. pos 17, line 1, column 15, token ADD	ALTER TABLE t ADD COLUMN c INT

@@ -1,0 +1,33 @@
+﻿dialect	case	parse	format	reparse	parameterized	wall_violations	sql
+Oracle	oracle-date-literal	ok	SELECT * FROM emp WHERE hiredate > DATE '2020-01-01'	ok	SELECT * FROM emp WHERE hiredate > DATE ?	0	SELECT * FROM emp WHERE hiredate > DATE '2020-01-01'
+Oracle	oracle-rownum	ok	SELECT * FROM t WHERE ROWNUM <= 10	ok	SELECT * FROM t WHERE ROWNUM <= ?	0	SELECT * FROM t WHERE ROWNUM <= 10
+Oracle	oracle-connect-by	ok	SELECT LEVEL, SYS_CONNECT_BY_PATH(name, '/') FROM t START WITH id = 1 CONNECT BY PRIOR id = parent_id	ok	SELECT LEVEL, SYS_CONNECT_BY_PATH(name, ?) FROM t START WITH id = ? CONNECT BY PRIOR id = parent_id	0	SELECT LEVEL, SYS_CONNECT_BY_PATH(name, '/') FROM t START WITH id = 1 CONNECT BY PRIOR id = parent_id
+Oracle	oracle-merge	ok	MERGE INTO t USING s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.v = s.v WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v)	ok	MERGE INTO t USING s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.v = s.v WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v)	1	MERGE INTO t USING s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.v = s.v WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v)
+Oracle	oracle-returning-into	err	ERR:SQL parse error: sql parser error: Expected: end of statement, found: INTO at Line: 1, Column: 44	n/a	INSERT INTO t (id) VALUES (?) RETURNING id INTO :out_id	1	INSERT INTO t (id) VALUES (1) RETURNING id INTO :out_id
+Oracle	oracle-table-function	ok	SELECT * FROM TABLE(fn(1))	ok	SELECT * FROM TABLE(fn(?))	0	SELECT * FROM TABLE(fn(1))
+Oracle	oracle-decode-nvl	ok	SELECT NVL(a, 0), DECODE(b, 1, 'x', 'y') FROM dual	ok	SELECT NVL(a, ?), DECODE(b, ?, ?, ?) FROM dual	0	SELECT NVL(a, 0), DECODE(b, 1, 'x', 'y') FROM dual
+Oracle	oracle-identity	ok	CREATE TABLE t (id NUMBER(10) GENERATED ALWAYS AS IDENTITY, v VARCHAR2(20))	ok	CREATE TABLE t (id NUMBER(?) GENERATED ALWAYS AS IDENTITY, v VARCHAR2(?))	0	CREATE TABLE t (id NUMBER(10) GENERATED ALWAYS AS IDENTITY, v VARCHAR2(20))
+Odps	odps-lateral-view	ok	SELECT * FROM t LATERAL VIEW explode(arr) v AS x	ok	SELECT * FROM t LATERAL VIEW explode(arr) v AS x	0	SELECT * FROM t LATERAL VIEW explode(arr) v AS x
+Odps	odps-distribute-sort	ok	SELECT * FROM t DISTRIBUTE BY k SORT BY v	ok	SELECT * FROM t DISTRIBUTE BY k SORT BY v	0	SELECT * FROM t DISTRIBUTE BY k SORT BY v
+Odps	odps-insert-overwrite-partition	ok	INSERT OVERWRITE TABLE t PARTITION (ds = '2020') SELECT * FROM s	ok	INSERT OVERWRITE TABLE t PARTITION (ds=?) SELECT * FROM s	0	INSERT OVERWRITE TABLE t PARTITION (ds='2020') SELECT * FROM s
+Odps	odps-create-partitioned	ok	CREATE TABLE t (a STRING) PARTITIONED BY (ds STRING)	ok	CREATE TABLE t (a STRING) PARTITIONED BY (ds STRING)	0	CREATE TABLE t (a STRING) PARTITIONED BY (ds STRING)
+Odps	odps-mapjoin-hint	ok	SELECT * FROM a JOIN b ON a.id = b.id	ok	SELECT /*+ MAPJOIN(b) */ * FROM a JOIN b ON a.id = b.id	0	SELECT /*+ MAPJOIN(b) */ * FROM a JOIN b ON a.id = b.id
+Odps	odps-trans-array	ok	SELECT TRANS_ARRAY(1, ',', arr, ',') FROM t	ok	SELECT TRANS_ARRAY(?, ?, arr, ?) FROM t	0	SELECT TRANS_ARRAY(1, ',', arr, ',') FROM t
+Odps	odps-limit	ok	SELECT * FROM t LIMIT 10	ok	SELECT * FROM t LIMIT ?	0	SELECT * FROM t LIMIT 10
+Odps	odps-cast	ok	SELECT CAST(a AS BIGINT) FROM t	ok	SELECT CAST(a AS BIGINT) FROM t	0	SELECT CAST(a AS BIGINT) FROM t
+Hive	hive-lateral-view	ok	SELECT * FROM t LATERAL VIEW explode(arr) v AS x	ok	SELECT * FROM t LATERAL VIEW explode(arr) v AS x	0	SELECT * FROM t LATERAL VIEW explode(arr) v AS x
+Hive	hive-insert-partition	ok	INSERT OVERWRITE TABLE t PARTITION (ds = '2020') SELECT * FROM s	ok	INSERT OVERWRITE TABLE t PARTITION (ds=?) SELECT * FROM s	0	INSERT OVERWRITE TABLE t PARTITION (ds='2020') SELECT * FROM s
+Hive	hive-mapjoin	ok	SELECT a.* FROM a JOIN b ON a.id = b.id	ok	SELECT /*+ MAPJOIN(b) */ a.* FROM a JOIN b ON a.id = b.id	0	SELECT /*+ MAPJOIN(b) */ a.* FROM a JOIN b ON a.id = b.id
+Hive	hive-stored-parquet	ok	CREATE TABLE t (a STRING) STORED AS PARQUET	ok	CREATE TABLE t (a STRING) STORED AS PARQUET	0	CREATE TABLE t (a STRING) STORED AS PARQUET
+Hive	hive-cluster-by	ok	SELECT * FROM t CLUSTER BY k	ok	SELECT * FROM t CLUSTER BY k	0	SELECT * FROM t CLUSTER BY k
+Hive	hive-tablesample	err	ERR:SQL parse error: sql parser error: Expected: identifier, found: 10 at Line: 1, Column: 30	n/a	SELECT * FROM t TABLESAMPLE (? PERCENT)	1	SELECT * FROM t TABLESAMPLE (10 PERCENT)
+Hive	hive-named-struct	ok	SELECT named_struct('a', 1) FROM t	ok	SELECT named_struct(?, ?) FROM t	0	SELECT named_struct('a', 1) FROM t
+Hive	hive-partition-filter	ok	SELECT * FROM t WHERE ds = '2020'	ok	SELECT * FROM t WHERE ds = ?	0	SELECT * FROM t WHERE ds = '2020'
+Doris	doris-select	ok	SELECT * FROM t WHERE k1 = 1	ok	SELECT * FROM t WHERE k1 = ?	0	SELECT * FROM t WHERE k1 = 1
+Doris	doris-create-unique-key	err	ERR:SQL parse error: sql parser error: Expected: end of statement, found: UNIQUE at Line: 1, Column: 32	n/a	CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS ? PROPERTIES ("replication_num" = "1")	1	CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES ("replication_num" = "1")
+Doris	doris-distribute-buckets	err	ERR:SQL parse error: sql parser error: Expected: end of statement, found: BUCKETS at Line: 1, Column: 40	n/a	SELECT * FROM t DISTRIBUTE BY HASH(k1) BUCKETS ?	1	SELECT * FROM t DISTRIBUTE BY HASH(k1) BUCKETS 10
+Doris	doris-in-subquery	ok	SELECT * FROM t WHERE k1 IN (SELECT k1 FROM s)	ok	SELECT * FROM t WHERE k1 IN (SELECT k1 FROM s)	0	SELECT * FROM t WHERE k1 IN (SELECT k1 FROM s)
+Doris	doris-insert-select	ok	INSERT INTO t SELECT * FROM s	ok	INSERT INTO t SELECT * FROM s	0	INSERT INTO t SELECT * FROM s
+Doris	doris-bitmap-agg	ok	SELECT bitmap_union_count(b) FROM t GROUP BY k	ok	SELECT bitmap_union_count(b) FROM t GROUP BY k	0	SELECT bitmap_union_count(b) FROM t GROUP BY k
+Doris	doris-order-limit	ok	SELECT * FROM t ORDER BY k1 LIMIT 10	ok	SELECT * FROM t ORDER BY k1 LIMIT ?	0	SELECT * FROM t ORDER BY k1 LIMIT 10
+Doris	doris-alter-add-column	ok	ALTER TABLE t ADD COLUMN c INT	ok	ALTER TABLE t ADD COLUMN c INT	0	ALTER TABLE t ADD COLUMN c INT

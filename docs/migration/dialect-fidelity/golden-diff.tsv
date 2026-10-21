@@ -1,0 +1,33 @@
+dialect	case	parse_match	parameterized_match	reparse_match	java_parse	rust_parse	java_parameterized	rust_parameterized
+doris	doris-alter-add-column	false	false	false	err	ok	ERR:ParserException:not supported. pos 17, line 1, column 15, token ADD	ALTER TABLE t ADD COLUMN c INT
+doris	doris-bitmap-agg	true	true	true	ok	ok	SELECT bitmap_union_count(b) FROM t GROUP BY k	SELECT bitmap_union_count(b) FROM t GROUP BY k
+doris	doris-create-unique-key	false	false	false	ok	err	CREATE TABLE t (  k1 INT,  v INT ) INTO 3 BUCKETS OPTIONS (  "replication_num" = "1" )	CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS ? PROPERTIES ("replication_num" = "1")
+doris	doris-distribute-buckets	true	false	true	err	err	ERR:ParserException:not supported. pos 46, line 1, column 40, token IDENTIFIER BUCKETS	SELECT * FROM t DISTRIBUTE BY HASH(k1) BUCKETS ?
+doris	doris-in-subquery	true	true	true	ok	ok	SELECT * FROM t WHERE k1 IN (SELECT k1 FROM s)	SELECT * FROM t WHERE k1 IN (SELECT k1 FROM s)
+doris	doris-insert-select	true	true	true	ok	ok	INSERT INTO t SELECT * FROM s	INSERT INTO t SELECT * FROM s
+doris	doris-order-limit	true	true	true	ok	ok	SELECT * FROM t ORDER BY k1 LIMIT ?	SELECT * FROM t ORDER BY k1 LIMIT ?
+doris	doris-select	true	true	true	ok	ok	SELECT * FROM t WHERE k1 = ?	SELECT * FROM t WHERE k1 = ?
+hive	hive-cluster-by	true	true	true	ok	ok	SELECT * FROM t CLUSTER BY k	SELECT * FROM t CLUSTER BY k
+hive	hive-insert-partition	true	false	true	ok	ok	INSERT OVERWRITE t PARTITION (ds = ?) SELECT * FROM s	INSERT OVERWRITE TABLE t PARTITION (ds=?) SELECT * FROM s
+hive	hive-lateral-view	true	true	true	ok	ok	SELECT * FROM t LATERAL VIEW explode(arr) v AS x	SELECT * FROM t LATERAL VIEW explode(arr) v AS x
+hive	hive-mapjoin	true	true	true	ok	ok	SELECT /*+ MAPJOIN(b) */ a.* FROM a JOIN b ON a.id = b.id	SELECT /*+ MAPJOIN(b) */ a.* FROM a JOIN b ON a.id = b.id
+hive	hive-named-struct	true	true	true	ok	ok	SELECT named_struct(?, ?) FROM t	SELECT named_struct(?, ?) FROM t
+hive	hive-partition-filter	true	true	true	ok	ok	SELECT * FROM t WHERE ds = ?	SELECT * FROM t WHERE ds = ?
+hive	hive-stored-parquet	true	false	true	ok	ok	CREATE TABLE t (  a STRING ) STORE AS PARQUET	CREATE TABLE t (a STRING) STORED AS PARQUET
+hive	hive-tablesample	false	true	false	ok	err	SELECT * FROM t TABLESAMPLE (? PERCENT)	SELECT * FROM t TABLESAMPLE (? PERCENT)
+odps	odps-cast	true	true	true	ok	ok	SELECT CAST(a AS BIGINT) FROM t	SELECT CAST(a AS BIGINT) FROM t
+odps	odps-create-partitioned	true	true	true	ok	ok	CREATE TABLE t (  a STRING ) PARTITIONED BY (  ds STRING )	CREATE TABLE t (a STRING) PARTITIONED BY (ds STRING)
+odps	odps-distribute-sort	true	true	true	ok	ok	SELECT * FROM t DISTRIBUTE BY k SORT BY v	SELECT * FROM t DISTRIBUTE BY k SORT BY v
+odps	odps-insert-overwrite-partition	true	false	true	ok	ok	INSERT OVERWRITE t PARTITION (ds = ?) SELECT * FROM s	INSERT OVERWRITE TABLE t PARTITION (ds=?) SELECT * FROM s
+odps	odps-lateral-view	true	true	true	ok	ok	SELECT * FROM t LATERAL VIEW explode(arr) v AS x	SELECT * FROM t LATERAL VIEW explode(arr) v AS x
+odps	odps-limit	true	true	true	ok	ok	SELECT * FROM t LIMIT ?	SELECT * FROM t LIMIT ?
+odps	odps-mapjoin-hint	true	true	true	ok	ok	SELECT /*+ MAPJOIN(b) */ * FROM a JOIN b ON a.id = b.id	SELECT /*+ MAPJOIN(b) */ * FROM a JOIN b ON a.id = b.id
+odps	odps-trans-array	true	true	true	ok	ok	SELECT TRANS_ARRAY(?, ?, arr, ?) FROM t	SELECT TRANS_ARRAY(?, ?, arr, ?) FROM t
+oracle	oracle-connect-by	true	true	true	ok	ok	SELECT LEVEL, SYS_CONNECT_BY_PATH(name, ?) FROM t START WITH id = ? CONNECT BY PRIOR id = parent_id	SELECT LEVEL, SYS_CONNECT_BY_PATH(name, ?) FROM t START WITH id = ? CONNECT BY PRIOR id = parent_id
+oracle	oracle-date-literal	true	false	true	ok	ok	SELECT * FROM emp WHERE hiredate > DATE '2020-01-01'	SELECT * FROM emp WHERE hiredate > DATE ?
+oracle	oracle-decode-nvl	true	true	true	ok	ok	SELECT NVL(a, ?)  , DECODE(b, ?, ?, ?) FROM dual	SELECT NVL(a, ?), DECODE(b, ?, ?, ?) FROM dual
+oracle	oracle-identity	false	false	false	err	ok	ERR:ParserException:syntax error, expect (, actual , pos 59, line 1, column 59, token ,	CREATE TABLE t (id NUMBER(?) GENERATED ALWAYS AS IDENTITY, v VARCHAR2(?))
+oracle	oracle-merge	true	true	true	ok	ok	MERGE INTO t USING s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.v = s.v WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v)	MERGE INTO t USING s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.v = s.v WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v)
+oracle	oracle-returning-into	false	true	false	ok	err	INSERT INTO t (id) VALUES (?) RETURNING id INTO :out_id	INSERT INTO t (id) VALUES (?) RETURNING id INTO :out_id
+oracle	oracle-rownum	true	true	true	ok	ok	SELECT * FROM t WHERE ROWNUM <= ?	SELECT * FROM t WHERE ROWNUM <= ?
+oracle	oracle-table-function	true	true	true	ok	ok	SELECT * FROM TABLE(fn(?))	SELECT * FROM TABLE(fn(?))
