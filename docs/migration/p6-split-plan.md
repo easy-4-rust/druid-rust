@@ -125,8 +125,8 @@
   - `druid_pooled_prepared_statement.rs` 1,188 → 762 + 449；
   - `druid_pooled_result_set.rs` 1,586 → 683 + 687 + 110 + 215（再拆 resource impl）。
   - 超 800 行文件：**9 → 3**。
-- 剩余 3 个进入[结构性例外申请](p6-structural-exceptions.md)：
-  - `druid_pooled_connection.rs`（单 trait impl ~930 行）；
+- 2026-10-22（EX-001 解决）：`druid_pooled_connection.rs` 2,254 → 169 + 525 + 547 + 776（helper 下沉后 trait impl 776）；超 800 行文件 **3 → 2**。
+- 剩余 2 个进入[结构性例外申请](p6-structural-exceptions.md)：
   - `row_set.rs` / `result_set_ext.rs`（单 trait 定义）。
 - 结构性例外候选：`rdbc/src/extensions/row_set.rs`（`trait RowSet` 单定义，1,128 行）与 `result_set_ext.rs`（`trait ResultSetExt` 单定义，1,216 行）无法在不改变公共 trait 形态的前提下拆文件，需按计划申请例外或改 supertrait 设计。
 - P6 状态：**IN_PROGRESS**；`crates/druid-test` 整仓验收包在 B1–B3 完成后启动。

@@ -7,7 +7,7 @@
 
 迁移技能规定 authored `.rs` 不超过 800 行。批量拆分后剩余 3 个文件无法在不改变公共 API 或 Rust 语言规则的前提下继续拆分，故按技能要求提交“结构性例外”，逐项给出证据、可选方案与风险。
 
-## EX-001 `crates/druid/src/core/druid_pooled_connection.rs`（2,254 行）
+## EX-001 `crates/druid/src/core/druid_pooled_connection.rs`（2,254 行）— **RESOLVED 2026-10-22**
 
 | 项 | 事实 |
 |---|---|
@@ -16,6 +16,7 @@
 | 已尝试 | 拆固有方法（成功方向）；把 trait impl 拆成两个文件（**不可行**，语言规则） |
 | 可选方案 | A. 把长方法体委托给子模块 helper（需改 ~130+ 行方法体，行为不变）；B. 批准例外并记录复审日期；C. 拆 `Connection` trait 为 supertrait（**破坏公共 API**，不建议） |
 | 建议 | **A + 短期 B**：先批准例外，再用 helper 下沉把 trait impl 压到 800 行以内 |
+| 结果 | **已按 A 解决**：`database_meta_data` 与 `prepare_statement_with_generated_keys` 方法体下沉到 `standard_connection_helpers.rs`；trait impl 776 行；固有 impl 拆为 525/547；父文件 169 行。无需例外。 |
 
 ## EX-002 `crates/druid-rdbc/src/extensions/row_set.rs`（1,128 行）
 
@@ -44,6 +45,6 @@
 
 ## 当前进度
 
-- 已完成拆分：**25 / 28**（超 800 行文件从 28 降到 3）；
-- 剩余 3 个：EX-001、EX-002、EX-003；
+- 已完成拆分：**26 / 28**（超 800 行文件从 28 降到 2）；
+- 剩余 2 个：EX-002、EX-003（均为单 trait 定义）；
 - 所有拆分后 `cargo clippy -D warnings`、`cargo test -p druid --lib`（161）与 wrapper all-features（69）通过。

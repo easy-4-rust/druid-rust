@@ -1,7 +1,7 @@
 kind	path	detail
-FILE_OVER_800	crates/druid/src/core/druid_pooled_connection.rs	2254 lines
 FILE_OVER_800	crates/druid-rdbc/src/result_set/result_set_ext.rs	1216 lines
 FILE_OVER_800	crates/druid-rdbc/src/extensions/row_set.rs	1128 lines
+FILE_OVER_800	crates/druid/src/core/druid_pooled_connection/standard_connection.rs	803 lines
 MULTI_PUBLIC_OBJECT	crates/druid/src/core/filter.rs	15 public objects
 MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/compat/exceptions.rs	14 public objects
 MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/statement/statement.rs	11 public objects
