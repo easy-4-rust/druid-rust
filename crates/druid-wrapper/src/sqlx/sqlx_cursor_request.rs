@@ -8,7 +8,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 
 /// 一次标准 next 请求；同一游标最多保存一个未消费响应。
 /// 对应 Java: java.sql.ResultSet#next 的异步驱动适配。
-pub(super) struct SqlxCursorRequest {
+pub(crate) struct SqlxCursorRequest {
     pub(super) reply: oneshot::Sender<Result<Option<Row>, RdbcError>>,
 }
 
