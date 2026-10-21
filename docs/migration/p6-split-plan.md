@@ -123,7 +123,7 @@
   - `druid_pooled_statement.rs` 1,353 → 797 + 559；
   - `druid_pooled_callable_statement.rs` 1,323 → 647 + 734；
   - `druid_pooled_prepared_statement.rs` 1,188 → 762 + 449；
-  - `druid_pooled_result_set.rs` 1,586 → ~789 + 687 + 110。
+  - `druid_pooled_result_set.rs` 1,586 → 683 + 687 + 110 + 215（再拆 resource impl）。
   - 超 800 行文件：**9 → 3**。
 - 剩余 3 个进入[结构性例外申请](p6-structural-exceptions.md)：
   - `druid_pooled_connection.rs`（单 trait impl ~930 行）；
