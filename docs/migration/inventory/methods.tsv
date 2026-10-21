@@ -15320,9 +15320,9 @@ Lexer	reset	1	public	sql/parser	reset	CANDIDATE
 Lexer	reset	0	public	sql/parser	reset	CANDIDATE
 Lexer	reset	1	public	sql/parser	reset	CANDIDATE
 Lexer	initDialectFeature	0	protected	sql/parser		MISSING
-Lexer	scanChar	0	protected	sql/parser		MISSING
+Lexer	scanChar	0	protected	sql/parser	scan_char	CANDIDATE
 Lexer	unscan	0	protected	sql/parser		MISSING
-Lexer	isEOF	0	public	sql/parser		MISSING
+Lexer	isEOF	0	public	sql/parser	is_eof	CANDIDATE
 Lexer	lexError	2	protected	sql/parser		MISSING
 Lexer	token	0	public	sql/parser	token	CANDIDATE
 Lexer	nextIf	1	public	sql/parser	next_if	CANDIDATE
@@ -15350,21 +15350,21 @@ Lexer	skipToNextLineOrParameter	1	public	sql/parser		MISSING
 Lexer	nextTokenQues	0	protected	sql/parser		MISSING
 Lexer	nextToken	0	public	sql/parser	next_token	CANDIDATE
 Lexer	scanLBracket	0	protected	sql/parser		MISSING
-Lexer	scanString	0	protected	sql/parser		MISSING
+Lexer	scanString	0	protected	sql/parser	scan_string	CANDIDATE
 Lexer	scanString2	0	protected	sql/parser		MISSING
 Lexer	scanString2_d	0	protected	sql/parser		MISSING
 Lexer	scanAlias	0	protected	sql/parser		MISSING
 Lexer	scanSharp	0	public	sql/parser		MISSING
-Lexer	scanVariable	0	public	sql/parser		MISSING
+Lexer	scanVariable	0	public	sql/parser	scan_variable	CANDIDATE
 Lexer	scanVariable_at	0	protected	sql/parser		MISSING
-Lexer	scanComment	0	public	sql/parser		MISSING
+Lexer	scanComment	0	public	sql/parser	scan_comment	CANDIDATE
 Lexer	scanLineArgument	0	public	sql/parser		MISSING
 Lexer	scanMultiLineComment	0	protected	sql/parser		MISSING
 Lexer	scanSingleLineComment	0	protected	sql/parser		MISSING
-Lexer	scanIdentifier	0	public	sql/parser		MISSING
+Lexer	scanIdentifier	0	public	sql/parser	scan_identifier	CANDIDATE
 Lexer	isFirstIdentifierChar0	1	protected	sql/parser		MISSING
 Lexer	scanIdentifier0	0	protected	sql/parser		MISSING
-Lexer	scanNumber	0	public	sql/parser		MISSING
+Lexer	scanNumber	0	public	sql/parser	scan_number	CANDIDATE
 Lexer	scanHexaDecimal	0	public	sql/parser		MISSING
 Lexer	hexString	0	public	sql/parser		MISSING
 Lexer	isDigit	1	public	sql/parser		MISSING
@@ -15394,8 +15394,8 @@ Lexer	isSafeComment	1	protected	sql/parser		MISSING
 Lexer	addComment	1	protected	sql/parser		MISSING
 Lexer	getComments	0	public	sql/parser		MISSING
 Lexer	getLine	0	public	sql/parser		MISSING
-Lexer	computeRowAndColumn	1	public	sql/parser		MISSING
-Lexer	computeRowAndColumn	0	public	sql/parser		MISSING
+Lexer	computeRowAndColumn	1	public	sql/parser	compute_row_and_column	CANDIDATE
+Lexer	computeRowAndColumn	0	public	sql/parser	compute_row_and_column	CANDIDATE
 Lexer	getPosLine	0	public	sql/parser		MISSING
 Lexer	getPosColumn	0	public	sql/parser		MISSING
 Lexer	config	2	public	sql/parser	config	CANDIDATE

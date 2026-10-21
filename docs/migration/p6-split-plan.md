@@ -109,5 +109,13 @@
   - `shared_row_set.rs` 1,060 → 413 + 649（trait impl 分离）。
   - `clippy -D warnings`（三 crate）exit 0；lib tests：rdbc 5、metrics 6、admin 6 全通过；
   - 超 800 行文件：**20 → 14**。
+- 2026-10-22（B5：sql/core 中等文件，已提交）：
+  - `xa.rs` 1,013 → 764 + 两个状态机子模块；
+  - `lexer.rs` 1,072 → 170 + 两个扫描子模块；
+  - `standard_resource_registry.rs` 1,308 → 505 + 两个注册表子模块；
+  - `grpc_client.rs` 963 → 611 + `transport_helpers`（354）；
+  - `wall.rs` 983 → 734 + `rules`（251）。
+  - `jdbc_agent_connection.rs` 第二次拆分仍失败：批量提升可见性时命中了 trait 方法签名（`E0449`），已再次回滚；下次必须只对 `impl` 块内方法做提升，并显式重导出类型。
+  - 超 800 行文件：**14 → 9**。
 - 结构性例外候选：`rdbc/src/extensions/row_set.rs`（`trait RowSet` 单定义，1,128 行）与 `result_set_ext.rs`（`trait ResultSetExt` 单定义，1,216 行）无法在不改变公共 trait 形态的前提下拆文件，需按计划申请例外或改 supertrait 设计。
 - P6 状态：**IN_PROGRESS**；`crates/druid-test` 整仓验收包在 B1–B3 完成后启动。
