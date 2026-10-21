@@ -44,7 +44,27 @@ cargo clippy -p druid-rdbc --lib -- -D warnings -A clippy::pedantic
 5. `phyTimeout` 优先于空闲判定；
 6. 保活到期 → `KeepAlive`，距上次保活不足 → 保留。
 
-## 4. 未做（下一批）
+## 4. P3.2：调用点切换（同日完成）
 
-- P3.2：`druid::pool::pool_inner::recycle` 的 shrink 调用改为委托 `druid_rdbc::governance::shrink_policy`，并跑 `task6_pool_maintenance_semantics_test_parity` 差分；
-- 等待队列公平性、统计聚合、熔断/限流仍留在原处，后续按同一方式迁入 `governance/`。
+`crates/druid/src/pool/pool_inner/recycle.rs` 的 shrink 循环已改为委托：
+
+- 循环内构造一次 `ShrinkPolicy`（`min_idle`、`idle_timeout`、`max_evictable_idle_time`、`keep_alive`、`keep_alive_between_time`、`phyl` 超时来自 `effective_driver_connection_timeout()`）；
+- 每个空闲 holder 调用 `classify(index, pooling_count, idle, age, since_last_keep, &policy)`；
+- `StopScan` 精确对应 Java 的 `break`（保留当前 holder 并把剩余队列原样接回）；
+- `index` 只在 `Evict/KeepAlive/Retain` 分支递增，与拆分前一致。
+
+验证（行为等价）：
+
+```
+cargo test -p druid --lib                                    161 passed
+cargo test -p druid-rdbc --lib                                10 passed
+cargo test -p druid --test task6_pool_maintenance_semantics_test_parity  14 passed
+cargo test -p druid --test task6_pool_test_parity                        13 passed
+cargo test -p druid --test pool_idle_reuse_order_test                     1 passed
+cargo clippy -p druid -p druid-rdbc --lib -- -D warnings    exit 0
+```
+
+## 5. 未做（下一批）
+
+- 等待队列公平性、统计聚合、熔断/限流仍留在原处，后续按同一方式迁入 `governance/`；
+- `check_time == false` 分支仍使用本地 `check_count`，暂未策略化。
