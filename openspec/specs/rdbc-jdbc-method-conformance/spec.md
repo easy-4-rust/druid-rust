@@ -470,3 +470,17 @@ The Agent SHALL close callable statements and dependent cursors on explicit clos
 
 - **WHEN** a caller closes a callable statement or sends its handle through another session
 - **THEN** the Agent rejects subsequent operations and releases the original driver resources exactly once
+
+### Requirement: MC-08 Rust 完整实现 JDBC 接口及行为
+
+实现 SHALL 以冻结 Java 8 / JDBC 4.2 的 java.sql 与 javax.sql 公共来源为完整接口分母，使用 Rust 实现。每个签名、重载、继承入口、默认方法及类型/常量 SHALL 保留可追溯映射；类型化描述符合并 Rust 入口不得消除 Java 签名身份。参数、NULL、返回值、异常/SQLState、资源生命周期及对象身份 SHALL 有对应实际行为证据。
+
+#### Scenario: 已批准 Java Druid 差异
+- **WHEN** 用户批准十四项 Java Druid 行为差异及 GetResultSet 枚举变更
+- **THEN** 只逐项允许确切已观察的 Java Druid 差异，仍独立检验 JDBC 标准行为
+- **AND** 不得据此豁免缺失的 JDBC 接口、错误的 Wrapper 语义或未验证方法
+
+#### Scenario: 声称百分之百对齐
+- **WHEN** 发布报告声称 JDBC 接口及行为完整对齐
+- **THEN** 完整冻结分母中的每项均有入口映射和适用层的实际验证证据，不以声明或编译通过代替
+- **AND** JDBC 允许的可选能力不支持须有对应精确标准异常证据，不得以统一不支持占位实现必需能力
