@@ -1,0 +1,21 @@
+[package]
+name         = "druid-test"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description  = "Whole-project acceptance and parity tests for druid-rust"
+publish      = false
+
+[lints]
+workspace = true
+
+[dependencies]
+druid        = { version = "0.0.0-design", path = "../druid" }
+druid-rdbc   = { version = "0.0.0-design", path = "../druid-rdbc" }
+async-trait  = { workspace = true }
+tokio        = { workspace = true }
+serde_json   = { workspace = true }
+
+[dev-dependencies]
+druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false, features = ["toasty"] }

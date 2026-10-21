@@ -1810,6 +1810,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "druid-test"
+version = "0.0.0-design"
+dependencies = [
+ "async-trait",
+ "druid",
+ "druid-rdbc",
+ "druid-wrapper",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "druid-wrapper"
 version = "0.0.0-design"
 dependencies = [

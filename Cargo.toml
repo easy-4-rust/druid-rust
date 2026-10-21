@@ -7,6 +7,7 @@ members = [
     "crates/druid-wrapper",
     "crates/druid-metrics",
     "crates/druid-bench",
+    "crates/druid-test",
 ]
 exclude = ["vendor/toasty-driver-sqlite", "vendor/libsql-http1"]
 
