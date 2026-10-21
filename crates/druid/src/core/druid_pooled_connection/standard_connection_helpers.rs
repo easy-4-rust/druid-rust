@@ -153,3 +153,23 @@ pub(crate) async fn prepare_statement_with_generated_keys(
     conn.classify_result(event_result)?;
     Ok(Box::new(statement))
 }
+
+/// 连接有效性检查；对应 Java `DruidPooledConnection#isValid`。
+pub(crate) async fn is_valid(
+    conn: &mut DruidPooledConnection,
+    timeout_seconds: u32,
+) -> Result<bool, RdbcError> {
+    let event = ConnectionEvent::IsValid;
+    let started_at = Instant::now();
+    conn.before_connection_event(&event).await?;
+    let result = conn.standard_mut()?.is_valid(timeout_seconds).await;
+    let valid = conn.classify_result(result)?;
+    conn.after_connection_event(&event, started_at).await?;
+    Ok(valid)
+}
+
+/// 连接存活探测；对应 Java `DruidPooledConnection#ping`。
+pub(crate) async fn ping(conn: &mut DruidPooledConnection) -> Result<(), RdbcError> {
+    let result = conn.standard_mut()?.ping().await;
+    conn.classify_result(result)
+}

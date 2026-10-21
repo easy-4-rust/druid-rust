@@ -770,18 +770,11 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
     }
 
     async fn is_valid(&mut self, timeout_seconds: u32) -> Result<bool, RdbcError> {
-        let event = ConnectionEvent::IsValid;
-        let started_at = Instant::now();
-        self.before_connection_event(&event).await?;
-        let result = self.standard_mut()?.is_valid(timeout_seconds).await;
-        let valid = self.classify_result(result)?;
-        self.after_connection_event(&event, started_at).await?;
-        Ok(valid)
+        super::standard_connection_helpers::is_valid(self, timeout_seconds).await
     }
 
     async fn ping(&mut self) -> Result<(), RdbcError> {
-        let result = self.standard_mut()?.ping().await;
-        self.classify_result(result)
+        super::standard_connection_helpers::ping(self).await
     }
 
     async fn abort(&mut self) -> Result<(), RdbcError> {
