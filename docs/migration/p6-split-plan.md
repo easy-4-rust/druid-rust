@@ -86,4 +86,8 @@
   - `diagnostic_tests/filter_defaults_chain_harness.rs` 808 → 385 + 433（按读取值族拆出 `decorated_reads.rs`）；
   - `core/log_filter.rs` 966 → 578 + 401（拆出 `options.rs` 承载 Java 同名 getter/setter）。
   - 超 800 行文件：**28 → 26**；`cargo test -p druid --lib` 161 passed。
+- 2026-10-22（B1 第二批，已提交）：
+  - `diagnostic_tests.rs` 9,851 → 父模块 121 行 + `harness.rs` 159 行 + **17 个行为族模块**（每个 ≤800 行，最大 797）；
+  - 81 个测试逐用例保留（`cargo test -p druid --lib diagnostic` = 81 passed），共享 SQLite 夹具集中到 `harness.rs`；
+  - 超 800 行文件：**26 → 25**。
 - P6 状态：**IN_PROGRESS**；`crates/druid-test` 整仓验收包在 B1–B3 完成后启动。
