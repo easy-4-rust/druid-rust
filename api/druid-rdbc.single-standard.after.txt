@@ -77,6 +77,7 @@ pub fn druid_rdbc::connection::Connection::capabilities(&self) -> druid_rdbc::ex
 pub fn druid_rdbc::connection::Connection::catalog(&self) -> core::result::Result<core::option::Option<alloc::string::String>, druid_rdbc::RdbcError>
 pub fn druid_rdbc::connection::Connection::clear_warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::connection::Connection::client_info(&self, &str) -> core::result::Result<core::option::Option<alloc::string::String>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::connection::Connection::client_info_properties<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::connection::Connection::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::connection::Connection::commit<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::connection::Connection::create_array_of<'life0, 'life1, 'async_trait>(&'life0 mut self, core::option::Option<&'life1 str>, core::option::Option<alloc::vec::Vec<druid_rdbc::types::RdbcObject>>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::resource::Array>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
@@ -114,6 +115,7 @@ pub fn druid_rdbc::connection::Connection::schema(&self) -> core::result::Result
 pub fn druid_rdbc::connection::Connection::set_auto_commit<'life0, 'async_trait>(&'life0 mut self, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::connection::Connection::set_catalog<'life0, 'life1, 'async_trait>(&'life0 mut self, core::option::Option<&'life1 str>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
 pub fn druid_rdbc::connection::Connection::set_client_info<'life0, 'life1, 'life2, 'async_trait>(&'life0 mut self, &'life1 str, core::option::Option<&'life2 str>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait, 'life2: 'async_trait
+pub fn druid_rdbc::connection::Connection::set_client_info_properties<'life0, 'life1, 'async_trait>(&'life0 mut self, core::option::Option<&'life1 std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
 pub fn druid_rdbc::connection::Connection::set_holdability<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::ResultSetHoldability) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::connection::Connection::set_network_timeout<'life0, 'async_trait>(&'life0 mut self, core::time::Duration) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::connection::Connection::set_read_only<'life0, 'async_trait>(&'life0 mut self, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -361,6 +363,9 @@ pub druid_rdbc::error::RdbcError::AcquireTimeout
 pub druid_rdbc::error::RdbcError::BatchUpdateException
 pub druid_rdbc::error::RdbcError::BatchUpdateException::cause: alloc::boxed::Box<druid_rdbc::RdbcError>
 pub druid_rdbc::error::RdbcError::BatchUpdateException::update_counts: druid_rdbc::error::BatchUpdateCounts
+pub druid_rdbc::error::RdbcError::ClientInfoException
+pub druid_rdbc::error::RdbcError::ClientInfoException::cause: alloc::boxed::Box<druid_rdbc::RdbcError>
+pub druid_rdbc::error::RdbcError::ClientInfoException::failed_properties: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
 pub druid_rdbc::error::RdbcError::ConnectionDiscarded
 pub druid_rdbc::error::RdbcError::ConnectionLeaked
 pub druid_rdbc::error::RdbcError::ConnectionLeaked::held_for: core::time::Duration
@@ -401,10 +406,12 @@ pub druid_rdbc::error::RdbcError::WallViolation(alloc::string::String)
 impl druid_rdbc::RdbcError
 pub fn druid_rdbc::RdbcError::batch_update_counts(&self) -> core::option::Option<&druid_rdbc::error::BatchUpdateCounts>
 pub fn druid_rdbc::RdbcError::class_name(&self) -> &str
+pub fn druid_rdbc::RdbcError::failed_client_info_properties(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>>
 pub fn druid_rdbc::RdbcError::feature_not_supported(&'static str) -> Self
 pub fn druid_rdbc::RdbcError::kind(&self) -> druid_rdbc::error::RdbcErrorKind
 pub fn druid_rdbc::RdbcError::rdbc_resource_closed(&'static str) -> Self
 pub fn druid_rdbc::RdbcError::sql_exception(&self) -> core::option::Option<&druid_rdbc::error::SqlException>
+pub fn druid_rdbc::RdbcError::with_client_info_failure(self, std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> Self
 impl core::convert::From<&str> for druid_rdbc::RdbcError
 pub fn druid_rdbc::RdbcError::from(&str) -> Self
 impl core::convert::From<alloc::string::String> for druid_rdbc::RdbcError
@@ -4439,6 +4446,9 @@ pub druid_rdbc::RdbcError::AcquireTimeout
 pub druid_rdbc::RdbcError::BatchUpdateException
 pub druid_rdbc::RdbcError::BatchUpdateException::cause: alloc::boxed::Box<druid_rdbc::RdbcError>
 pub druid_rdbc::RdbcError::BatchUpdateException::update_counts: druid_rdbc::error::BatchUpdateCounts
+pub druid_rdbc::RdbcError::ClientInfoException
+pub druid_rdbc::RdbcError::ClientInfoException::cause: alloc::boxed::Box<druid_rdbc::RdbcError>
+pub druid_rdbc::RdbcError::ClientInfoException::failed_properties: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
 pub druid_rdbc::RdbcError::ConnectionDiscarded
 pub druid_rdbc::RdbcError::ConnectionLeaked
 pub druid_rdbc::RdbcError::ConnectionLeaked::held_for: core::time::Duration
@@ -4479,10 +4489,12 @@ pub druid_rdbc::RdbcError::WallViolation(alloc::string::String)
 impl druid_rdbc::RdbcError
 pub fn druid_rdbc::RdbcError::batch_update_counts(&self) -> core::option::Option<&druid_rdbc::error::BatchUpdateCounts>
 pub fn druid_rdbc::RdbcError::class_name(&self) -> &str
+pub fn druid_rdbc::RdbcError::failed_client_info_properties(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>>
 pub fn druid_rdbc::RdbcError::feature_not_supported(&'static str) -> Self
 pub fn druid_rdbc::RdbcError::kind(&self) -> druid_rdbc::error::RdbcErrorKind
 pub fn druid_rdbc::RdbcError::rdbc_resource_closed(&'static str) -> Self
 pub fn druid_rdbc::RdbcError::sql_exception(&self) -> core::option::Option<&druid_rdbc::error::SqlException>
+pub fn druid_rdbc::RdbcError::with_client_info_failure(self, std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> Self
 impl core::convert::From<&str> for druid_rdbc::RdbcError
 pub fn druid_rdbc::RdbcError::from(&str) -> Self
 impl core::convert::From<alloc::string::String> for druid_rdbc::RdbcError

@@ -32,3 +32,13 @@ All files below are plain logs in `D:/druid-rust-tooling/`; SHA-256 binds their 
 | `jdbc-client-info-evidence-controls-20261021.log` | `28d33ab9e887418d505f7dc6a75a12537f63db79e2fc600914ab070ff905621a` |
 
 Standard references: [Connection](https://docs.oracle.com/javase/8/docs/api/java/sql/Connection.html), [SQLClientInfoException](https://docs.oracle.com/javase/8/docs/api/java/sql/SQLClientInfoException.html).
+
+## Native Darwin public-API review follow-up
+
+[Source 9a3ae7d, public-api job 119014891519](https://github.com/easy-4-rust/druid-rust/actions/runs/39536705024/job/119014891519) completed with the expected stale-snapshot failure. Its uploaded `public-api-observed-9a3ae7d3d337e060f198d1607c0120e5590844df` artifact was downloaded and reviewed using the pinned cargo-public-api 0.52.0/nightly-2026-08-07/aarch64-apple-darwin configuration. Compared with the reviewed snapshots, RDBC adds exactly 12 lines and Druid exactly 20 lines; no line is removed. Every addition is a ClientInfo property overload, structured non-exhaustive error variant/field, helper, or its existing reexport/implementation path. Wrapper is byte-identical. The reviewed native bytes and hash manifest are now updated. The old job's failure remains historical; a later CI check must verify the refreshed baseline before the current API gate is promoted to green. This additive API review is not JDBC behavioral certification.
+
+| Crate | Native SHA-256 |
+| --- | --- |
+| druid-rdbc | `cbf9661c7e8391f2641a12a5528bb26c49dc87780c255de75808c410a2f4c3a0` |
+| druid | `e0cfb4181d5bf06c8564b5f3511c1c6f88c4a1a378c0b75ae743897b7ed166ab` |
+| druid-wrapper | `d074cc5d097f74e339292a4cdcda1e008c85de2b5d2faeadb1918dd7041ba13c` |
