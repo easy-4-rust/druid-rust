@@ -10,6 +10,7 @@ use crate::statement::{
 use crate::types::RdbcTypeMap;
 use crate::types::{RdbcObject, Row, Savepoint, Value};
 use crate::wrapper::Wrapper;
+use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
 /// JDBC transaction isolation level。
@@ -314,14 +315,14 @@ pub trait Connection: Wrapper + Send + 'static {
     }
 
     /// 设置一个 client-info property；`None` 表示删除。
-    async fn set_client_info(
-        &mut self,
-        _name: &str,
-        _value: Option<&str>,
-    ) -> Result<(), RdbcError> {
-        Err(RdbcError::UnsupportedOperation {
-            operation: "connection_set_client_info",
-        })
+    async fn set_client_info(&mut self, name: &str, _value: Option<&str>) -> Result<(), RdbcError> {
+        Err(
+            RdbcError::feature_not_supported("connection_set_client_info")
+                .with_client_info_failure(HashMap::from([(
+                    name.to_owned(),
+                    "REASON_UNKNOWN_PROPERTY".to_owned(),
+                )])),
+        )
     }
 
     /// 返回一个 client-info property。
@@ -329,6 +330,63 @@ pub trait Connection: Wrapper + Send + 'static {
         Err(RdbcError::UnsupportedOperation {
             operation: "connection_client_info",
         })
+    }
+
+    /// 读取全部客户端信息的独立快照，无参数，返回属性集合或原始 SQL 错误。
+    /// 对应 Java: Connection#getClientInfo()；不能用空集合冒充未实现的驱动能力。
+    async fn client_info_properties(&mut self) -> Result<HashMap<String, String>, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "connection_client_info_properties",
+        ))
+    }
+
+    /// 用参数 properties 完整替换客户端信息；None 保留 NULL 输入并明确拒绝。
+    /// 对应 Java: Connection#setClientInfo(Properties)。空集合清除全部旧属性。
+    /// 默认实现读取当前快照后按属性名稳定顺序委托单项写入；错误保留失败和未尝试属性，
+    /// 不回滚已成功的写入，也不将部分设置状态宣称为原子成功。原生驱动可覆盖整组操作。
+    async fn set_client_info_properties(
+        &mut self,
+        properties: Option<&HashMap<String, String>>,
+    ) -> Result<(), RdbcError> {
+        let Some(properties) = properties else {
+            return Err(RdbcError::InvalidArgument(
+                "client info properties must not be NULL".to_owned(),
+            )
+            .with_client_info_failure(HashMap::new()));
+        };
+        let unknown = || {
+            properties
+                .keys()
+                .map(|name| (name.clone(), "REASON_UNKNOWN".to_owned()))
+                .collect()
+        };
+        let current = self
+            .client_info_properties()
+            .await
+            .map_err(|error| client_info_batch_failure(error, unknown()))?;
+        let mut operations: BTreeMap<String, Option<&str>> = current
+            .keys()
+            .filter(|name| !properties.contains_key(*name))
+            .map(|name| (name.clone(), None))
+            .collect();
+        operations.extend(
+            properties
+                .iter()
+                .map(|(name, value)| (name.clone(), Some(value.as_str()))),
+        );
+        let pending: Vec<_> = operations.into_iter().collect();
+        for (index, (name, value)) in pending.iter().enumerate() {
+            if let Err(error) = self.set_client_info(name, *value).await {
+                return Err(client_info_batch_failure(
+                    error,
+                    pending[index..]
+                        .iter()
+                        .map(|(name, _)| (name.clone(), "REASON_UNKNOWN".to_owned()))
+                        .collect(),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// 把 SQL 转成 driver-native SQL；默认 identity，禁止猜测重写。
@@ -529,5 +587,22 @@ pub trait Connection: Wrapper + Send + 'static {
         Err(RdbcError::UnsupportedOperation {
             operation: "connection_driver_name",
         })
+    }
+}
+
+// 只有标准逐项算法知道哪些属性未尝试，代理不能自行扩张驱动失败清单。
+fn client_info_batch_failure(error: RdbcError, mut pending: HashMap<String, String>) -> RdbcError {
+    match error {
+        RdbcError::ClientInfoException {
+            failed_properties,
+            cause,
+        } => {
+            pending.extend(failed_properties);
+            RdbcError::ClientInfoException {
+                failed_properties: pending,
+                cause,
+            }
+        }
+        error => error.with_client_info_failure(pending),
     }
 }

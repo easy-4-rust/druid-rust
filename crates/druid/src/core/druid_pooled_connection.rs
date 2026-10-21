@@ -94,6 +94,9 @@ pub struct DruidPooledConnection {
     close_count: u64,
     last_validate_time_millis: u64,
     attributes: ProxyAttributes,
+    /// 当前租约首次修改前的客户端信息；缺少快照时禁止污染连接复用。
+    initial_client_info: Option<HashMap<String, String>>,
+    client_info_touched: bool,
 }
 
 #[allow(clippy::missing_fields_in_debug)]
@@ -246,6 +249,8 @@ impl DruidPooledConnection {
             close_count: 0,
             last_validate_time_millis: 0,
             attributes: ProxyAttributes::default(),
+            initial_client_info: None,
+            client_info_touched: false,
         }
     }
 
@@ -495,6 +500,10 @@ impl DruidPooledConnection {
 
     /// 将 owner 保留的已复位 holder 通过一次性 native callback 归还池。
     pub(crate) fn return_from_pooled_owner(&mut self) {
+        if self.client_info_touched {
+            self.discard_from_pooled_owner();
+            return;
+        }
         self.owner_managed = false;
         self.recycle_once(ConnectionRecycleDisposition::Reusable);
     }
@@ -510,7 +519,11 @@ impl DruidPooledConnection {
 
     /// 为标准 owner 开启一个新的逻辑租约；旧租约的 policy generation 保持失效。
     pub(crate) fn activate_owner_logical_lease(&mut self) -> Result<(), RdbcError> {
-        if !self.owner_managed || self.recycled || self.owner_disposition.is_signaled() {
+        if !self.owner_managed
+            || self.recycled
+            || self.owner_disposition.is_signaled()
+            || self.client_info_touched
+        {
             return Err(RdbcError::ConnectionDiscarded);
         }
         let holder = self.holder.as_ref().ok_or(RdbcError::ConnectionDiscarded)?;
@@ -976,6 +989,7 @@ impl DruidPooledConnection {
             .standard_policy
             .as_ref()
             .is_some_and(|policy| policy.is_discarded())
+            || self.client_info_touched
             || holder.has_open_standard_resources()
             || holder.standard_connection().is_none_or(|connection| {
                 connection.is_closed().unwrap_or(true)
@@ -1002,6 +1016,43 @@ impl DruidPooledConnection {
             return ConnectionRecycleDisposition::discard();
         }
         self.prepare_standard_for_recycle().await
+    }
+
+    /// 首次修改前捕获客户端属性；旧驱动不提供快照时允许原操作，但归还只能丢弃。
+    async fn prepare_client_info_mutation(&mut self) -> Result<(), RdbcError> {
+        if self.client_info_touched {
+            return Ok(());
+        }
+        let result = self.standard_mut()?.client_info_properties().await;
+        self.initial_client_info = match result {
+            Ok(properties) => Some(properties),
+            Err(error)
+                if error.kind() == druid_rdbc::error::RdbcErrorKind::SqlFeatureNotSupported
+                    || matches!(error, RdbcError::UnsupportedOperation { .. }) =>
+            {
+                None
+            }
+            Err(error) => return self.classify_result::<(), _>(Err(error)),
+        };
+        // 必须先标记再进入驱动；Future 被取消或驱动部分成功也不能遗漏复位。
+        self.client_info_touched = true;
+        Ok(())
+    }
+
+    async fn reset_client_info_for_return(&mut self) -> Result<(), RdbcError> {
+        if !self.client_info_touched {
+            return Ok(());
+        }
+        let original = self
+            .initial_client_info
+            .clone()
+            .ok_or(RdbcError::ConnectionDiscarded)?;
+        self.standard_mut()?
+            .set_client_info_properties(Some(&original))
+            .await?;
+        self.client_info_touched = false;
+        self.initial_client_info = None;
+        Ok(())
     }
 
     async fn prepare_standard_for_recycle(&mut self) -> ConnectionRecycleDisposition {
@@ -1051,6 +1102,7 @@ impl DruidPooledConnection {
                     .await?;
                 self.standard_mut()?.rollback().await?;
             }
+            self.reset_client_info_for_return().await?;
             self.holder
                 .as_mut()
                 .ok_or(RdbcError::ConnectionDiscarded)?
@@ -2005,12 +2057,60 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
     }
 
     async fn set_client_info(&mut self, name: &str, value: Option<&str>) -> Result<(), RdbcError> {
-        let result = self.standard_mut()?.set_client_info(name, value).await;
+        self.prepare_client_info_mutation().await.map_err(|error| {
+            error.with_client_info_failure(HashMap::from([(
+                name.to_owned(),
+                "REASON_UNKNOWN".to_owned(),
+            )]))
+        })?;
+        let result = match self.standard_mut() {
+            Ok(connection) => connection.set_client_info(name, value).await,
+            Err(error) => Err(error),
+        }
+        .map_err(|error| {
+            error.with_client_info_failure(HashMap::from([(
+                name.to_owned(),
+                "REASON_UNKNOWN".to_owned(),
+            )]))
+        });
         self.classify_result(result)
     }
 
     fn client_info(&self, name: &str) -> Result<Option<String>, RdbcError> {
         self.standard_ref()?.client_info(name)
+    }
+
+    async fn client_info_properties(&mut self) -> Result<HashMap<String, String>, RdbcError> {
+        let result = self.standard_mut()?.client_info_properties().await;
+        self.classify_result(result)
+    }
+
+    async fn set_client_info_properties(
+        &mut self,
+        properties: Option<&HashMap<String, String>>,
+    ) -> Result<(), RdbcError> {
+        self.prepare_client_info_mutation().await.map_err(|error| {
+            error.with_client_info_failure(
+                properties
+                    .into_iter()
+                    .flat_map(|values| values.keys())
+                    .map(|name| (name.clone(), "REASON_UNKNOWN".to_owned()))
+                    .collect(),
+            )
+        })?;
+        let pending = || {
+            properties
+                .into_iter()
+                .flat_map(|values| values.keys())
+                .map(|name| (name.clone(), "REASON_UNKNOWN".to_owned()))
+                .collect()
+        };
+        let result = match self.standard_mut() {
+            Ok(connection) => connection.set_client_info_properties(properties).await,
+            Err(error) => Err(error),
+        }
+        .map_err(|error| error.with_client_info_failure(pending()));
+        self.classify_result(result)
     }
 
     async fn native_sql(&mut self, sql: &str) -> Result<String, RdbcError> {

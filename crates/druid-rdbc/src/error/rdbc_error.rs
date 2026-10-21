@@ -1,5 +1,6 @@
 //! RDBC standard 与数据库 adapter 共享的错误合同。
 
+use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
 
@@ -112,6 +113,14 @@ pub enum RdbcError {
         /// 原始驱动或 SQL 异常。
         cause: Box<RdbcError>,
     },
+    /// 客户端信息设置失败，保留各失败属性的 JDBC 状态名及原始驱动错误。
+    /// 对应 Java: java.sql.SQLClientInfoException；不包含请求属性值。
+    ClientInfoException {
+        /// 失败或尚未尝试的属性名与 ClientInfoStatus 标准名称。
+        failed_properties: HashMap<String, String>,
+        /// 原始错误；部分写入状态由驱动决定，不伪造回滚成功。
+        cause: Box<RdbcError>,
+    },
     /// 调用参数不满足标准合同。
     InvalidArgument(String),
     /// SQL 文本解析失败。
@@ -185,7 +194,7 @@ impl RdbcError {
             {
                 RdbcErrorKind::SqlFeatureNotSupported
             }
-            Self::SqlException(_) => RdbcErrorKind::SqlException,
+            Self::SqlException(_) | Self::ClientInfoException { .. } => RdbcErrorKind::SqlException,
             Self::BatchUpdateException { .. } => RdbcErrorKind::BatchUpdateException,
             Self::InvalidArgument(_) => RdbcErrorKind::InvalidArgument,
             Self::SqlParseError(_) => RdbcErrorKind::SqlParse,
@@ -203,6 +212,7 @@ impl RdbcError {
         match self {
             Self::SqlException(exception) => Some(exception),
             Self::BatchUpdateException { cause, .. }
+            | Self::ClientInfoException { cause, .. }
             | Self::GetConnectionTimeout {
                 cause: Some(cause), ..
             }
@@ -210,6 +220,34 @@ impl RdbcError {
             Self::ProductBoundary(boundary) => {
                 boundary.source_error().and_then(Self::sql_exception)
             }
+            _ => None,
+        }
+    }
+
+    /// 将原错误转换为客户端属性设置错误；参数为失败属性及状态，返回保留原 cause 的错误。
+    /// 已有 SQLClientInfoException 完整保留驱动明细；仅包装尚未分类的原错误。
+    /// 对应 Java: SQLClientInfoException 的 failedProperties/cause 构造器。
+    pub fn with_client_info_failure(self, pending: HashMap<String, String>) -> Self {
+        // 驱动已经提供整组失败明细时不能补入成功属性；代理只负责包装未分类错误。
+        if matches!(self, Self::ClientInfoException { .. }) {
+            return self;
+        }
+        Self::ClientInfoException {
+            failed_properties: pending,
+            cause: Box::new(self),
+        }
+    }
+
+    /// 返回当前客户端属性错误中的失败状态；无参数，非此错误返回 None。
+    /// 对应 Java: SQLClientInfoException#getFailedProperties；不包含请求属性值。
+    pub fn failed_client_info_properties(&self) -> Option<&HashMap<String, String>> {
+        match self {
+            Self::ClientInfoException {
+                failed_properties, ..
+            } => Some(failed_properties),
+            Self::ProductBoundary(boundary) => boundary
+                .source_error()
+                .and_then(Self::failed_client_info_properties),
             _ => None,
         }
     }
@@ -248,6 +286,7 @@ impl RdbcError {
             Self::DriverError(_) => "rdbc::DriverError",
             Self::SqlException(exception) => exception.class_name(),
             Self::BatchUpdateException { .. } => "java.sql.BatchUpdateException",
+            Self::ClientInfoException { .. } => "java.sql.SQLClientInfoException",
             Self::InvalidArgument(_) => "rdbc::InvalidArgument",
             Self::SqlParseError(_) => "rdbc::SqlParseError",
             Self::WallViolation(_) => "rdbc::WallViolation",
@@ -334,6 +373,14 @@ impl fmt::Display for RdbcError {
                 "batch update failed after {} result(s): {cause}",
                 update_counts.large().len()
             ),
+            Self::ClientInfoException {
+                failed_properties,
+                cause,
+            } => write!(
+                formatter,
+                "client info update failed for {} property/properties: {cause}",
+                failed_properties.len()
+            ),
             Self::InvalidArgument(message) => write!(formatter, "invalid argument: {message}"),
             Self::SqlParseError(message) => write!(formatter, "SQL parse error: {message}"),
             Self::WallViolation(message) => write!(formatter, "wall violation: {message}"),
@@ -355,6 +402,7 @@ impl std::error::Error for RdbcError {
         match self {
             Self::SqlException(exception) => Some(exception.as_ref()),
             Self::BatchUpdateException { cause, .. }
+            | Self::ClientInfoException { cause, .. }
             | Self::GetConnectionTimeout {
                 cause: Some(cause), ..
             }

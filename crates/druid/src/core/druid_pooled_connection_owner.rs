@@ -468,11 +468,46 @@ impl Connection for DruidPooledConnectionOwnerLogicalConnection {
     }
 
     async fn set_client_info(&mut self, name: &str, value: Option<&str>) -> Result<(), RdbcError> {
-        self.lock().await?.set_client_info(name, value).await
+        let result: Result<(), RdbcError> =
+            async { self.lock().await?.set_client_info(name, value).await }.await;
+        result.map_err(|error| {
+            error.with_client_info_failure(std::collections::HashMap::from([(
+                name.to_owned(),
+                "REASON_UNKNOWN".to_owned(),
+            )]))
+        })
     }
 
     fn client_info(&self, name: &str) -> Result<Option<String>, RdbcError> {
         self.try_lock()?.client_info(name)
+    }
+
+    async fn client_info_properties(
+        &mut self,
+    ) -> Result<std::collections::HashMap<String, String>, RdbcError> {
+        self.lock().await?.client_info_properties().await
+    }
+
+    async fn set_client_info_properties(
+        &mut self,
+        properties: Option<&std::collections::HashMap<String, String>>,
+    ) -> Result<(), RdbcError> {
+        let result: Result<(), RdbcError> = async {
+            self.lock()
+                .await?
+                .set_client_info_properties(properties)
+                .await
+        }
+        .await;
+        result.map_err(|error| {
+            error.with_client_info_failure(
+                properties
+                    .into_iter()
+                    .flat_map(|values| values.keys())
+                    .map(|name| (name.clone(), "REASON_UNKNOWN".to_owned()))
+                    .collect(),
+            )
+        })
     }
 
     async fn native_sql(&mut self, sql: &str) -> Result<String, RdbcError> {
@@ -621,3 +656,7 @@ impl Connection for DruidPooledConnectionOwnerLogicalConnection {
         self.try_lock()?.driver_name()
     }
 }
+
+#[cfg(test)]
+#[path = "druid_pooled_connection_owner/client_info_tests.rs"]
+mod client_info_tests;

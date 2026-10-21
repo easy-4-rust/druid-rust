@@ -40,3 +40,13 @@
 
 /crates/druid-rdbc/src/extensions/buffered_row_set.rs text eol=lf
 /crates/druid-rdbc/tests/strong_getter_default_contract_test.rs text eol=lf
+
+/crates/druid-rdbc/src/connection/connection.rs text eol=lf
+/crates/druid-rdbc/src/error/rdbc_error.rs text eol=lf
+/crates/druid/src/core/druid_pooled_connection.rs text eol=lf
+/crates/druid/src/core/druid_pooled_connection_owner.rs text eol=lf
+/crates/druid/src/core/external_connection_lease.rs text eol=lf
+/crates/druid-rdbc/tests/connection_client_info_properties_contract_test.rs text eol=lf
+/crates/druid-rdbc/tests/client_info_support/connection.rs text eol=lf
+/crates/druid/tests/client_info_lease_contract_test.rs text eol=lf
+/crates/druid/src/core/druid_pooled_connection_owner/client_info_tests.rs text eol=lf

@@ -1,5 +1,7 @@
 # RDBC-first release gate verdict
 
+Latest ClientInfo batch: complete property overloads, structured partial-failure errors, pooled reset/discard and owner/external delegation are implemented. The unified module run exposed six obsolete scalar-error assertions; all three corrected targets passed their 176-test closure, and final strict all-target Clippy passed. [Exact passing/failing run scope](jdbc-client-info-20261021.md). Frozen JDBC inventory remains incomplete (23 PARTIAL, 1,978 unassessed); native adapter/real-database coverage and generated Darwin API review remain open. Overall verdict: **NOT_READY**.
+
 Latest scalar-conversion batch: complete RDBC module 659 passed, zero failed/ignored; strict Clippy and 24 tool controls passed. [Scoped current evidence](jdbc-scalar-conversion-20261021.md). Full JDBC inventory remains incomplete (21 PARTIAL, 1,980 unassessed); current whole-workspace/platform gates remain independent. Overall verdict: **NOT_READY**.
 
 ## Latest approved-difference implementation — 2026-10-21

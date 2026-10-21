@@ -839,10 +839,12 @@ async fn task6_strong_typed_getter_conversion_errors_follow_statement_check_exce
     .unwrap();
     drop(admission);
     assert!(result_set.next().await.unwrap());
-    assert!(matches!(
-        result_set.date_by_label("event_date", &RdbcCalendarArgument::Unspecified),
-        Err(crate::core::RdbcError::DriverError(message)) if message.contains("cannot be converted to Date")
-    ));
+    let error = result_set
+        .date_by_label("event_date", &RdbcCalendarArgument::Unspecified)
+        .unwrap_err();
+    assert_eq!(error.class_name(), "java.sql.SQLDataException");
+    assert_eq!(error.sql_exception().unwrap().sql_state(), Some("22007"));
+    assert!(!error.to_string().contains("not-a-date"));
     assert!(matches!(
         result_set.blob(ColumnIndex::new(1).unwrap()),
         Err(crate::core::RdbcError::UnsupportedOperation {
@@ -1437,13 +1439,13 @@ async fn task6_string_reads_count_utf16_without_counting_generic_values() {
             .unwrap(),
             None
         );
-        assert!(matches!(
-            druid_rdbc::result_set::ResultSetExt::string(
-                standard.as_ref(),
-                ColumnIndex::new(3).unwrap()
-            ),
-            Err(druid_rdbc::error::RdbcError::DriverError(_))
-        ));
+        let error = druid_rdbc::result_set::ResultSetExt::string(
+            standard.as_ref(),
+            ColumnIndex::new(3).unwrap(),
+        )
+        .unwrap_err();
+        assert_eq!(error.class_name(), "java.sql.SQLDataException");
+        assert_eq!(error.sql_exception().unwrap().sql_state(), Some("22005"));
         assert!(matches!(
             druid_rdbc::result_set::ResultSetExt::string_by_label(standard.as_ref(), "missing"),
             Err(druid_rdbc::error::RdbcError::InvalidArgument(_))
@@ -2832,10 +2834,11 @@ async fn task6_sqlite_typed_get_object_converts_all_standard_scalar_targets() {
     );
     assert!(result_set.was_null().unwrap());
 
-    assert!(matches!(
-        result_set.object_as(ColumnIndex::new(15).unwrap(), &RdbcTargetType::Byte),
-        Err(RdbcError::DriverError(_))
-    ));
+    let error = result_set
+        .object_as(ColumnIndex::new(15).unwrap(), &RdbcTargetType::Byte)
+        .unwrap_err();
+    assert_eq!(error.class_name(), "java.sql.SQLDataException");
+    assert_eq!(error.sql_exception().unwrap().sql_state(), Some("22003"));
     assert!(matches!(
         result_set.object_as(
             ColumnIndex::new(12).unwrap(),

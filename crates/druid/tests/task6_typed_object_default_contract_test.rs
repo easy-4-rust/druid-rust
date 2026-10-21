@@ -21,6 +21,15 @@ fn task6_column(index: usize) -> ColumnIndex {
     ColumnIndex::new(index).unwrap()
 }
 
+/// 验证标准转换错误，原驱动失败仍由独立优先级用例逐值比较。
+fn task6_assert_data_error<T>(result: Result<T, RdbcError>, sql_state: &str) {
+    let Err(error) = result else {
+        panic!("invalid conversion must fail");
+    };
+    assert_eq!(error.class_name(), "java.sql.SQLDataException");
+    assert_eq!(error.sql_exception().unwrap().sql_state(), Some(sql_state));
+}
+
 #[tokio::test]
 async fn resource_read_defaults_preserve_family_errors_nulls_and_driver_priority() {
     let families = [
@@ -243,18 +252,9 @@ fn task6_assert_default_decimal_and_date_conversions(result_set: &BufferedRowSet
         result_set.big_decimal(task6_column(5)).unwrap(),
         Some(BigDecimal::from_str("3.75").unwrap())
     );
-    assert!(matches!(
-        result_set.big_decimal(task6_column(4)),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
-        result_set.big_decimal(task6_column(6)),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
-        result_set.big_decimal(task6_column(7)),
-        Err(RdbcError::DriverError(_))
-    ));
+    task6_assert_data_error(result_set.big_decimal(task6_column(4)), "22003");
+    task6_assert_data_error(result_set.big_decimal(task6_column(6)), "22018");
+    task6_assert_data_error(result_set.big_decimal(task6_column(7)), "22005");
 
     assert_eq!(
         result_set
@@ -270,14 +270,14 @@ fn task6_assert_default_decimal_and_date_conversions(result_set: &BufferedRowSet
         .date(task6_column(11), &RdbcCalendarArgument::Unspecified)
         .unwrap()
         .is_some());
-    assert!(matches!(
+    task6_assert_data_error(
         result_set.date(task6_column(6), &RdbcCalendarArgument::Unspecified),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
+        "22007",
+    );
+    task6_assert_data_error(
         result_set.date(task6_column(7), &RdbcCalendarArgument::Unspecified),
-        Err(RdbcError::DriverError(_))
-    ));
+        "22005",
+    );
 }
 
 fn task6_assert_default_time_and_timestamp_conversions(result_set: &BufferedRowSet) {
@@ -295,14 +295,14 @@ fn task6_assert_default_time_and_timestamp_conversions(result_set: &BufferedRowS
         .time(task6_column(14), &RdbcCalendarArgument::Unspecified)
         .unwrap()
         .is_some());
-    assert!(matches!(
+    task6_assert_data_error(
         result_set.time(task6_column(6), &RdbcCalendarArgument::Unspecified),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
+        "22007",
+    );
+    task6_assert_data_error(
         result_set.time(task6_column(7), &RdbcCalendarArgument::Unspecified),
-        Err(RdbcError::DriverError(_))
-    ));
+        "22005",
+    );
 
     assert_eq!(
         result_set
@@ -316,14 +316,14 @@ fn task6_assert_default_time_and_timestamp_conversions(result_set: &BufferedRowS
             .unwrap()
             .is_some());
     }
-    assert!(matches!(
+    task6_assert_data_error(
         result_set.timestamp(task6_column(6), &RdbcCalendarArgument::Unspecified),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
+        "22007",
+    );
+    task6_assert_data_error(
         result_set.timestamp(task6_column(7), &RdbcCalendarArgument::Unspecified),
-        Err(RdbcError::DriverError(_))
-    ));
+        "22005",
+    );
 }
 
 /// 自定义目标类型先检查实际列，保留驱动错误并且只读取一次。
@@ -425,14 +425,14 @@ async fn standard_typed_scalar_targets_preserve_values_nulls_and_errors() {
         );
         assert!(rows.was_null().unwrap());
     }
-    assert!(matches!(
+    task6_assert_data_error(
         rows.object_as(task6_column(15), &RdbcTargetType::Byte),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
+        "22003",
+    );
+    task6_assert_data_error(
         rows.object_as(task6_column(16), &RdbcTargetType::String),
-        Err(RdbcError::DriverError(_))
-    ));
+        "22021",
+    );
     rows.close().await.unwrap();
     assert!(matches!(
         rows.object_as(task6_column(1), &RdbcTargetType::Boolean),

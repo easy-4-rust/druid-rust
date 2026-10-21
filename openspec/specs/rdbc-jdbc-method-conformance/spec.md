@@ -512,3 +512,21 @@ Standard Rust ResultSet scalar conversions SHALL return SQLDataException for con
 #### Scenario: Driver fails before conversion
 - **WHEN** the backend getter fails while the requested conversion would also be invalid
 - **THEN** the original error is returned unchanged and the backend is read exactly once
+
+### Requirement: MC-09 Connection client information includes the complete property overloads
+
+The Rust Connection contract SHALL expose both single-property and whole-property-set client information access. Whole-set writes SHALL replace the current set, remove omitted old properties and clear all properties for an empty set. Whole-set reads SHALL return independent snapshots; unsupported snapshots SHALL NOT masquerade as empty success. NULL input SHALL remain distinguishable from an empty set.
+
+#### Scenario: Partial property update fails
+- **WHEN** a driver fails while replacing client properties
+- **THEN** SQLClientInfoException retains the original cause, SQL diagnostics, driver-specific failed-property reasons and unknown status for unattempted properties
+- **AND** earlier successful writes remain observable; no rollback or atomicity is fabricated
+
+#### Scenario: Dirty pooled connection ends its lease
+- **WHEN** a logical connection changed client info or its setter future was cancelled after driver entry
+- **THEN** explicit asynchronous close restores the initial property set before reuse; missing snapshots, failed restoration or dirty Drop cause discard
+- **AND** native pooled owners and external leases delegate the complete overloads and preserve closed-setter SQLClientInfoException semantics
+
+#### Scenario: Proxy receives a complete driver failure map
+- **WHEN** an underlying bulk setter reports failed and unattempted names after an earlier successful write
+- **THEN** pooled and external proxy layers preserve that exact map, without adding successful request names as failures

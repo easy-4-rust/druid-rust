@@ -205,42 +205,48 @@ fn task6_assert_default_scalar_successes(result_set: &BufferedRowSet) {
 }
 
 fn task6_assert_default_scalar_failures(result_set: &BufferedRowSet) {
-    assert!(matches!(
-        result_set.string(ColumnIndex::new(11).unwrap()),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
-        result_set.boolean(ColumnIndex::new(7).unwrap()),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
-        result_set.long(ColumnIndex::new(12).unwrap()),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
-        result_set.long(ColumnIndex::new(14).unwrap()),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
-        result_set.double(ColumnIndex::new(12).unwrap()),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
-        result_set.double(ColumnIndex::new(14).unwrap()),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
-        result_set.int(ColumnIndex::new(13).unwrap()),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
-        result_set.short(ColumnIndex::new(13).unwrap()),
-        Err(RdbcError::DriverError(_))
-    ));
-    assert!(matches!(
-        result_set.byte(ColumnIndex::new(13).unwrap()),
-        Err(RdbcError::DriverError(_))
-    ));
+    for (result, sql_state) in [
+        (
+            result_set.string(ColumnIndex::new(11).unwrap()).map(|_| ()),
+            "22021",
+        ),
+        (
+            result_set.boolean(ColumnIndex::new(7).unwrap()).map(|_| ()),
+            "22005",
+        ),
+        (
+            result_set.long(ColumnIndex::new(12).unwrap()).map(|_| ()),
+            "22018",
+        ),
+        (
+            result_set.long(ColumnIndex::new(14).unwrap()).map(|_| ()),
+            "22005",
+        ),
+        (
+            result_set.double(ColumnIndex::new(12).unwrap()).map(|_| ()),
+            "22018",
+        ),
+        (
+            result_set.double(ColumnIndex::new(14).unwrap()).map(|_| ()),
+            "22005",
+        ),
+        (
+            result_set.int(ColumnIndex::new(13).unwrap()).map(|_| ()),
+            "22003",
+        ),
+        (
+            result_set.short(ColumnIndex::new(13).unwrap()).map(|_| ()),
+            "22003",
+        ),
+        (
+            result_set.byte(ColumnIndex::new(13).unwrap()).map(|_| ()),
+            "22003",
+        ),
+    ] {
+        let error = result.unwrap_err();
+        assert_eq!(error.class_name(), "java.sql.SQLDataException");
+        assert_eq!(error.sql_exception().unwrap().sql_state(), Some(sql_state));
+    }
     assert!(matches!(
         result_set.value(ColumnIndex::new(15).unwrap()),
         Err(RdbcError::InvalidArgument(message)) if message.contains("exceeds row width")
@@ -266,10 +272,11 @@ fn task6_assert_default_stream_conversions(result_set: &BufferedRowSet) {
             .unwrap()
             .is_some());
     }
-    assert!(matches!(
-        result_set.character_stream(ColumnIndex::new(11).unwrap()),
-        Err(RdbcError::DriverError(_))
-    ));
+    let Err(error) = result_set.character_stream(ColumnIndex::new(11).unwrap()) else {
+        panic!("invalid UTF-8 must fail");
+    };
+    assert_eq!(error.class_name(), "java.sql.SQLDataException");
+    assert_eq!(error.sql_exception().unwrap().sql_state(), Some("22021"));
 }
 
 /// 与原稀疏后端对应的独立实例；明确拒绝推进，不冒充成功行。
