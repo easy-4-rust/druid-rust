@@ -117,5 +117,16 @@
   - `wall.rs` 983 → 734 + `rules`（251）。
   - `jdbc_agent_connection.rs` 第二次拆分仍失败：批量提升可见性时命中了 trait 方法签名（`E0449`），已再次回滚；下次必须只对 `impl` 块内方法做提升，并显式重导出类型。
   - 超 800 行文件：**14 → 9**。
+- 2026-10-22（B6：statement / result-set / jdbc / filter-chain，已提交）：
+  - `filter_chain_impl.rs` 1,333 → 463 + 433 + 440；
+  - `jdbc_agent_connection.rs` 1,335 → 764 + 578（成功重做：只对 impl 内方法/字段提升，trait 定义保持）；
+  - `druid_pooled_statement.rs` 1,353 → 797 + 559；
+  - `druid_pooled_callable_statement.rs` 1,323 → 647 + 734；
+  - `druid_pooled_prepared_statement.rs` 1,188 → 762 + 449；
+  - `druid_pooled_result_set.rs` 1,586 → ~789 + 687 + 110。
+  - 超 800 行文件：**9 → 3**。
+- 剩余 3 个进入[结构性例外申请](p6-structural-exceptions.md)：
+  - `druid_pooled_connection.rs`（单 trait impl ~930 行）；
+  - `row_set.rs` / `result_set_ext.rs`（单 trait 定义）。
 - 结构性例外候选：`rdbc/src/extensions/row_set.rs`（`trait RowSet` 单定义，1,128 行）与 `result_set_ext.rs`（`trait ResultSetExt` 单定义，1,216 行）无法在不改变公共 trait 形态的前提下拆文件，需按计划申请例外或改 supertrait 设计。
 - P6 状态：**IN_PROGRESS**；`crates/druid-test` 整仓验收包在 B1–B3 完成后启动。

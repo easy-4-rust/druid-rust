@@ -168,7 +168,7 @@ IngestHandler	struct	crates/druid-metrics/src/ingest_handler.rs
 IngestService	struct	crates/druid-admin/src/ingest/ingest_service.rs
 InstalledDriver	struct	crates/druid-wrapper/src/driver_admin/installed_driver.rs
 JavaRuntimeInstallation	struct	crates/druid-wrapper/src/driver_admin/java_runtime_installation.rs
-JdbcAgentConnection	struct	crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs
+JdbcAgentConnection	struct	crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection/jdbc_agent_support.rs
 JdbcAgentConnectionFactory	struct	crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection_factory.rs
 JdbcAgentDatabaseMetaData	struct	crates/druid-wrapper/src/jdbc_agent/jdbc_agent_database_meta_data.rs
 JdbcAgentOptions	struct	crates/druid-wrapper/src/jdbc_agent/jdbc_agent_options.rs
