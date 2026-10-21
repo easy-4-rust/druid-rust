@@ -1,4 +1,5 @@
 //! 整仓验收共享夹具：带序号的 mock 物理连接与工厂。
+#![allow(dead_code)]
 
 use druid::core::{Connection, ConnectionFactory, ExecResult, RdbcError, Row, Value};
 use std::sync::atomic::{AtomicU64, Ordering};
