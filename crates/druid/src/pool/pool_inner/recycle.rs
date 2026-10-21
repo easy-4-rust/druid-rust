@@ -1,4 +1,5 @@
 use super::*;
+use druid_rdbc::governance::shrink_policy::{classify, ShrinkDecision, ShrinkPolicy};
 
 impl PoolInner {
     /// 归还连接到空闲队列。
@@ -317,6 +318,20 @@ impl PoolInner {
             let mut queue = self.idle.lock();
 
             let check_count = queue.len().saturating_sub(self.config.min_idle);
+            let pooling_count = queue.len();
+            let shrink_policy = ShrinkPolicy {
+                min_idle: self.config.min_idle,
+                min_evictable_idle_millis: duration_millis(self.config.idle_timeout),
+                max_evictable_idle_millis: duration_millis(self.config.max_evictable_idle_time),
+                keep_alive,
+                keep_alive_between_millis: duration_millis(self.config.keep_alive_between_time),
+                phy_timeout_millis: self
+                    .config
+                    .effective_driver_connection_timeout()
+                    .filter(|timeout| !timeout.is_zero())
+                    .map(duration_millis)
+                    .unwrap_or(0),
+            };
             let mut retained = VecDeque::with_capacity(queue.len());
             let mut evicted = Vec::new();
             let mut keep_alive_candidates = Vec::new();
@@ -347,43 +362,36 @@ impl PoolInner {
                     continue;
                 }
 
-                let driver_timeout_expired = self
-                    .config
-                    .effective_driver_connection_timeout()
-                    .is_some_and(|timeout| !timeout.is_zero() && holder.connection_age() > timeout);
-                if driver_timeout_expired {
-                    evicted.push(holder);
-                    index += 1;
-                    continue;
+                let decision = classify(
+                    index,
+                    pooling_count,
+                    duration_millis(holder.idle_duration()),
+                    duration_millis(holder.connection_age()),
+                    duration_millis(holder.last_keep_elapsed().unwrap_or(Duration::MAX)),
+                    &shrink_policy,
+                );
+                match decision {
+                    ShrinkDecision::StopScan => {
+                        retained.push_back(holder);
+                        retained.append(&mut queue);
+                        break;
+                    }
+                    ShrinkDecision::Evict => {
+                        evicted.push(holder);
+                        index += 1;
+                        continue;
+                    }
+                    ShrinkDecision::KeepAlive => {
+                        keep_alive_candidates.push(holder);
+                        index += 1;
+                        continue;
+                    }
+                    ShrinkDecision::Retain => {
+                        retained.push_back(holder);
+                        index += 1;
+                        continue;
+                    }
                 }
-
-                let idle_duration = holder.idle_duration();
-                if idle_duration < self.config.idle_timeout
-                    && idle_duration < self.config.keep_alive_between_time
-                {
-                    retained.push_back(holder);
-                    retained.append(&mut queue);
-                    break;
-                }
-
-                if idle_duration >= self.config.idle_timeout
-                    && (index < check_count || idle_duration > self.config.max_evictable_idle_time)
-                {
-                    evicted.push(holder);
-                    index += 1;
-                    continue;
-                }
-
-                let keep_alive_due = keep_alive
-                    && idle_duration >= self.config.keep_alive_between_time
-                    && holder.last_keep_elapsed().unwrap_or(Duration::MAX)
-                        >= self.config.keep_alive_between_time;
-                if keep_alive_due {
-                    keep_alive_candidates.push(holder);
-                } else {
-                    retained.push_back(holder);
-                }
-                index += 1;
             }
 
             *queue = retained;
@@ -501,4 +509,9 @@ impl PoolInner {
             notified.await;
         }
     }
+}
+
+/// 将 `Duration` 转为毫秒 `u64`；超出范围时饱和。
+fn duration_millis(duration: Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }

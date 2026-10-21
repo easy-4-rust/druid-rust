@@ -12,6 +12,8 @@ pub enum ShrinkDecision {
     KeepAlive,
     /// 保留在池中（含移动到 `remaining` 位置）。
     Retain,
+    /// 停止扫描：Java 在“两个阈值都未达到”时 `break`，后续连接原样保留。
+    StopScan,
 }
 
 /// 收缩策略参数，字段名与 Java 属性一一对应。
@@ -70,7 +72,7 @@ pub fn classify(
     if idle_millis < policy.min_evictable_idle_millis
         && idle_millis < policy.keep_alive_between_millis
     {
-        return ShrinkDecision::Retain;
+        return ShrinkDecision::StopScan;
     }
 
     if idle_millis >= policy.min_evictable_idle_millis
@@ -107,7 +109,7 @@ mod tests {
     #[test]
     fn below_both_thresholds_retains_without_scanning_further() {
         let decision = classify(0, 4, 40, 1_000, 0, &policy());
-        assert_eq!(decision, ShrinkDecision::Retain);
+        assert_eq!(decision, ShrinkDecision::StopScan);
     }
 
     #[test]
@@ -141,7 +143,7 @@ mod tests {
         let mut policy = policy();
         policy.phy_timeout_millis = 500;
         assert_eq!(classify(3, 4, 0, 501, 0, &policy), ShrinkDecision::Evict);
-        assert_eq!(classify(3, 4, 0, 500, 0, &policy), ShrinkDecision::Retain);
+        assert_eq!(classify(3, 4, 0, 500, 0, &policy), ShrinkDecision::StopScan);
     }
 
     #[test]
