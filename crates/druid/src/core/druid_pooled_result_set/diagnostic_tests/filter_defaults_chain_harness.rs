@@ -381,4 +381,5 @@ impl FilterDefaultsChainHarness {
                 "unexpected scalar {other:?}"
             )))),
         }
-    }}
+    }
+}
