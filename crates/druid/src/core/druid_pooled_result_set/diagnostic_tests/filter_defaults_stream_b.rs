@@ -2,7 +2,6 @@
 //!
 //! 自 `diagnostic_tests.rs` 按行为族拆分；共享夹具见 `harness`。
 
-use super::harness::*;
 use super::*;
 
 /// 完整保留原十三家族双重载与二十六条默认委托事件。

@@ -2,7 +2,6 @@
 //!
 //! 自 `diagnostic_tests.rs` 按行为族拆分；共享夹具见 `harness`。
 
-use super::harness::*;
 use super::*;
 
 /// 恢复完整原Filter开放、next、close错误退出、短路与标量叠加合同。

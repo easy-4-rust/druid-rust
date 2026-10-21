@@ -2,7 +2,6 @@
 //!
 //! 自 `diagnostic_tests.rs` 按行为族拆分；共享夹具见 `harness`。
 
-use super::harness::*;
 use super::*;
 
 /// 保留 Blob、Clob、NClob 的十二个默认重载和共享流不预读、不关闭合同。
