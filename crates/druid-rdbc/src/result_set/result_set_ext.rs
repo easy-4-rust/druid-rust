@@ -763,26 +763,28 @@ fn boolean_object(object: RdbcObject) -> Result<bool, RdbcError> {
 }
 
 fn long_object(object: RdbcObject) -> Result<i64, RdbcError> {
-    integer_value(scalar_value(object, "long")?, "long")
+    match scalar_value(object, "long")? {
+        Value::Null => Ok(0),
+        value => typed_long(value),
+    }
 }
 
 fn int_object(object: RdbcObject) -> Result<i32, RdbcError> {
-    i32::try_from(long_object(object)?).map_err(|_| typed_numeric_error("22003", "int"))
+    i32::try_from(long_object(object)?).map_err(|_| conversion_data_error("22003", "int"))
 }
 
 fn short_object(object: RdbcObject) -> Result<i16, RdbcError> {
-    i16::try_from(long_object(object)?).map_err(|_| typed_numeric_error("22003", "short"))
+    i16::try_from(long_object(object)?).map_err(|_| conversion_data_error("22003", "short"))
 }
 
 fn byte_object(object: RdbcObject) -> Result<i8, RdbcError> {
-    i8::try_from(long_object(object)?).map_err(|_| typed_numeric_error("22003", "byte"))
+    i8::try_from(long_object(object)?).map_err(|_| conversion_data_error("22003", "byte"))
 }
 
 fn double_object(object: RdbcObject) -> Result<f64, RdbcError> {
     match scalar_value(object, "double")? {
         Value::Null => Ok(0.0),
-        Value::Float(value) => Ok(value),
-        other => Err(result_set_type_error("double", &RdbcObject::Scalar(other))),
+        value => typed_double(value),
     }
 }
 
@@ -796,14 +798,6 @@ fn bytes_object(object: RdbcObject) -> Result<Option<Vec<u8>>, RdbcError> {
         Value::Null => Ok(None),
         Value::Bytes(value) => Ok(Some(value)),
         other => Err(result_set_type_error("bytes", &RdbcObject::Scalar(other))),
-    }
-}
-
-fn integer_value(value: Value, expected: &str) -> Result<i64, RdbcError> {
-    match value {
-        Value::Null => Ok(0),
-        Value::Int(value) => Ok(value),
-        other => Err(result_set_type_error(expected, &RdbcObject::Scalar(other))),
     }
 }
 
@@ -829,20 +823,13 @@ pub(crate) fn decimal_object(object: RdbcObject) -> Result<Option<BigDecimal>, R
             Ok(Some(value))
         }
         RdbcObject::Scalar(Value::Int(value)) => Ok(Some(BigDecimal::from(value))),
-        RdbcObject::Scalar(Value::Float(value)) => {
-            decimal_from_f64(value).map(Some).ok_or_else(|| {
-                RdbcError::DriverError(format!(
-                    "ResultSet floating point value {value} cannot be represented as BigDecimal"
-                ))
-            })
-        }
-        RdbcObject::Scalar(Value::String(value)) => {
-            value.parse::<BigDecimal>().map(Some).map_err(|error| {
-                RdbcError::DriverError(format!(
-                    "ResultSet value {value:?} cannot be converted to BigDecimal: {error}"
-                ))
-            })
-        }
+        RdbcObject::Scalar(Value::Float(value)) => decimal_from_f64(value)
+            .map(Some)
+            .ok_or_else(|| conversion_data_error("22003", "BigDecimal")),
+        RdbcObject::Scalar(Value::String(value)) => value
+            .parse::<BigDecimal>()
+            .map(Some)
+            .map_err(|_| conversion_data_error("22018", "BigDecimal")),
         other => Err(result_set_type_error("BigDecimal", &other)),
     }
 }
@@ -916,11 +903,7 @@ pub(crate) fn date_object(object: RdbcObject) -> Result<Option<NaiveDate>, RdbcE
         }
         RdbcObject::Scalar(Value::String(value)) => NaiveDate::parse_from_str(&value, "%Y-%m-%d")
             .map(Some)
-            .map_err(|error| {
-                RdbcError::DriverError(format!(
-                    "ResultSet value {value:?} cannot be converted to Date: {error}"
-                ))
-            }),
+            .map_err(|_| conversion_data_error("22007", "Date")),
         other => Err(result_set_type_error("Date", &other)),
     }
 }
@@ -937,11 +920,7 @@ pub(crate) fn time_object(object: RdbcObject) -> Result<Option<NaiveTime>, RdbcE
         RdbcObject::Scalar(Value::String(value)) => {
             NaiveTime::parse_from_str(&value, "%H:%M:%S%.f")
                 .map(Some)
-                .map_err(|error| {
-                    RdbcError::DriverError(format!(
-                        "ResultSet value {value:?} cannot be converted to Time: {error}"
-                    ))
-                })
+                .map_err(|_| conversion_data_error("22007", "Time"))
         }
         other => Err(result_set_type_error("Time", &other)),
     }
@@ -962,11 +941,7 @@ pub(crate) fn timestamp_object(object: RdbcObject) -> Result<Option<NaiveDateTim
             NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S%.f")
                 .or_else(|_| NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S%.f"))
                 .map(Some)
-                .map_err(|error| {
-                    RdbcError::DriverError(format!(
-                        "ResultSet value {value:?} cannot be converted to Timestamp: {error}"
-                    ))
-                })
+                .map_err(|_| conversion_data_error("22007", "Timestamp"))
         }
         other => Err(result_set_type_error("Timestamp", &other)),
     }
@@ -982,10 +957,8 @@ pub(crate) fn n_string_object(object: RdbcObject) -> Result<Option<String>, Rdbc
     }
 }
 
-pub(crate) fn result_set_type_error(expected: &str, actual: &RdbcObject) -> RdbcError {
-    RdbcError::DriverError(format!(
-        "ResultSet expected {expected} column value, got {actual}"
-    ))
+pub(crate) fn result_set_type_error(expected: &str, _actual: &RdbcObject) -> RdbcError {
+    conversion_data_error("22005", expected)
 }
 
 /// 将单次读取的 SQL 标量转换为指定目标；参数为原值和目标，返回对象或错误。
@@ -1012,13 +985,13 @@ pub(crate) fn typed_scalar_object(
         }
         RdbcTargetType::Byte => i8::try_from(typed_long(value)?)
             .map(RdbcObject::Byte)
-            .map_err(|_| typed_numeric_error("22003", "Byte")),
+            .map_err(|_| conversion_data_error("22003", "Byte")),
         RdbcTargetType::Short => i16::try_from(typed_long(value)?)
             .map(RdbcObject::Short)
-            .map_err(|_| typed_numeric_error("22003", "Short")),
+            .map_err(|_| conversion_data_error("22003", "Short")),
         RdbcTargetType::Integer => i32::try_from(typed_long(value)?)
             .map(RdbcObject::Integer)
-            .map_err(|_| typed_numeric_error("22003", "Integer")),
+            .map_err(|_| conversion_data_error("22003", "Integer")),
         RdbcTargetType::Long => typed_long(value).map(RdbcObject::Long),
         RdbcTargetType::Float => typed_double(value).map(|value| RdbcObject::Float(value as f32)),
         RdbcTargetType::Double => typed_double(value).map(RdbcObject::Double),
@@ -1049,7 +1022,7 @@ fn typed_string(value: Value) -> Result<String, RdbcError> {
     match value {
         Value::String(value) => Ok(value),
         Value::Bytes(value) => {
-            String::from_utf8(value).map_err(|error| RdbcError::DriverError(error.to_string()))
+            String::from_utf8(value).map_err(|_| conversion_data_error("22021", "String"))
         }
         Value::Bool(value) => Ok(value.to_string()),
         Value::Int(value) => Ok(value.to_string()),
@@ -1074,12 +1047,12 @@ fn typed_long(value: Value) -> Result<i64, RdbcError> {
                 || truncated < i64::MIN as f64
                 || truncated >= -(i64::MIN as f64)
             {
-                return Err(typed_numeric_error("22003", "Long"));
+                return Err(conversion_data_error("22003", "Long"));
             }
             Ok(truncated as i64)
         }
         Value::Decimal(value) => {
-            decimal_to_i64(&value).ok_or_else(|| typed_numeric_error("22003", "Long"))
+            decimal_to_i64(&value).ok_or_else(|| conversion_data_error("22003", "Long"))
         }
         Value::String(value) => value.parse::<i64>().map_err(|error| {
             let state = match error.kind() {
@@ -1088,19 +1061,19 @@ fn typed_long(value: Value) -> Result<i64, RdbcError> {
                 }
                 _ => "22018",
             };
-            typed_numeric_error(state, "Long")
+            conversion_data_error(state, "Long")
         }),
         actual => Err(typed_value_error("Long", &actual)),
     }
 }
 
 // 返回准确的数据异常类型及 SQLState；错误消息不回显列值。
-fn typed_numeric_error(state: &str, target: &str) -> RdbcError {
+fn conversion_data_error(state: &str, target: &str) -> RdbcError {
     RdbcError::SqlException(Box::new(
         crate::error::SqlException::new(
             0,
             Some(state.to_owned()),
-            Some(format!("ResultSet numeric conversion to {target} failed")),
+            Some(format!("ResultSet conversion to {target} failed")),
         )
         .with_class_name("java.sql.SQLDataException")
         .with_assignable_type("java.sql.SQLNonTransientException"),
@@ -1113,10 +1086,30 @@ fn typed_double(value: Value) -> Result<f64, RdbcError> {
         Value::Int(value) => Ok(value as f64),
         Value::Float(value) => Ok(value),
         Value::Decimal(value) => decimal_to_f64(&value)
-            .ok_or_else(|| typed_value_error("Double", &Value::Decimal(value))),
-        Value::String(value) => value
-            .parse::<f64>()
-            .map_err(|error| RdbcError::DriverError(error.to_string())),
+            .filter(|value| value.is_finite())
+            .ok_or_else(|| conversion_data_error("22003", "Double")),
+        Value::String(value) => {
+            let parsed = value
+                .parse::<f64>()
+                .map_err(|_| conversion_data_error("22018", "Double"))?;
+            // 显式 IEEE 特殊字面值保持既有语义；普通数字文本溢出不能伪装成无穷值。
+            let explicit_special = [
+                "nan",
+                "inf",
+                "+inf",
+                "-inf",
+                "infinity",
+                "+infinity",
+                "-infinity",
+            ]
+            .iter()
+            .any(|literal| value.eq_ignore_ascii_case(literal));
+            if parsed.is_finite() || explicit_special {
+                Ok(parsed)
+            } else {
+                Err(conversion_data_error("22003", "Double"))
+            }
+        }
         actual => Err(typed_value_error("Double", &actual)),
     }
 }
@@ -1125,8 +1118,8 @@ fn typed_unexpected_null() -> RdbcError {
     RdbcError::DriverError("unexpected SQL NULL".to_owned())
 }
 
-fn typed_value_error(expected: &str, actual: &Value) -> RdbcError {
-    RdbcError::DriverError(format!("ResultSet expected {expected} value, got {actual}"))
+fn typed_value_error(expected: &str, _actual: &Value) -> RdbcError {
+    conversion_data_error("22005", expected)
 }
 
 #[cfg(test)]

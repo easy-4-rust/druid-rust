@@ -1,5 +1,7 @@
 # RDBC-first release gate verdict
 
+Latest scalar-conversion batch: complete RDBC module 659 passed, zero failed/ignored; strict Clippy and 24 tool controls passed. [Scoped current evidence](jdbc-scalar-conversion-20261021.md). Full JDBC inventory remains incomplete (21 PARTIAL, 1,980 unassessed); current whole-workspace/platform gates remain independent. Overall verdict: **NOT_READY**.
+
 ## Latest approved-difference implementation — 2026-10-21
 
 The fourteen Java Druid differences approved by the user are now matched by exact scope, case identity and both complete observed records. All nine live comparator targets passed in one unified benchmark module run: 25 tests passed, zero failed/ignored; strict benchmark test Clippy passed. [Current paired observations](approved-differences-20261021/README.md) retain 636 cases: 620 MATCH and 16 approved differences. The original 59-case denominator is unchanged: 47 MATCH and 12 approved differences. Five pairing-verifier mutation checks also pass. The GetResultSet SemVer allowance was separately approved and its full frozen report replay passed.

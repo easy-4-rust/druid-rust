@@ -202,7 +202,7 @@ impl ResultSet for BufferedRowSet {
         Ok(value)
     }
 
-    /// 按列读取缓冲结果的字符串表示，SQL NULL 保持 NULL，非法 UTF-8 返回驱动错误。
+    /// 按列读取缓冲结果的字符串表示，SQL NULL 保持 NULL，非法 UTF-8 返回 SQLDataException/22021。
     /// 参数为 1-based 列下标；返回转换后的字符串值。
     /// 对应 Java: java.sql.ResultSet#getString；原 RowSetResultSet 标量合同。
     fn string_value(&self, column: ColumnIndex) -> Result<Value, RdbcError> {
@@ -261,14 +261,13 @@ impl ResultSet for BufferedRowSet {
         column: ColumnIndex,
         _national: bool,
     ) -> Result<Option<RdbcReader>, RdbcError> {
-        match self.value(column)? {
+        // 字符流与 getString 使用同一单次转换，保留 UTF-8 数据异常及 NULL 状态。
+        match self.string_value(column)? {
             Value::Null => Ok(None),
             Value::String(value) => Ok(Some(RdbcReader::from_string(value))),
-            Value::Bytes(value) => String::from_utf8(value)
-                .map(RdbcReader::from_string)
-                .map(Some)
-                .map_err(|error| RdbcError::DriverError(error.to_string())),
-            other => Ok(Some(RdbcReader::from_string(other.to_string()))),
+            _ => Err(RdbcError::Other(
+                "buffered string conversion returned a non-string".to_owned(),
+            )),
         }
     }
 

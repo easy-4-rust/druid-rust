@@ -496,3 +496,19 @@ The Rust standard ResultSet typed integer conversion SHALL reject non-finite flo
 #### Scenario: Rounded floating upper boundary
 - **WHEN** the source floating value is 2^63, including a value obtained by rounding i64::MAX to f64
 - **THEN** the Long conversion fails rather than returning i64::MAX; the exactly representable lower boundary remains valid
+
+### Requirement: Scalar conversion errors preserve JDBC data categories and confidentiality
+
+Standard Rust ResultSet scalar conversions SHALL return SQLDataException for conversion errors: 22003 for numeric range, 22018 for invalid numeric text, 22007 for invalid date/time text, 22021 for invalid UTF-8, and 22005 for incompatible value families. Messages SHALL NOT echo the original column value. Ordinary default long/double getters SHALL apply the same standard scalar conversion as typed getObject, reading the backend once; SQL NULL retains primitive zero semantics. Original backend errors SHALL propagate unchanged before conversion.
+
+#### Scenario: Failed numeric or temporal parsing
+- **WHEN** ordinary or typed access encounters invalid decimal, double, date, time or timestamp text
+- **THEN** the result carries the specific SQL data-exception state without the original text, and index and label entries agree
+
+#### Scenario: Floating text exceeds Double range
+- **WHEN** a finite numeric literal overflows Double, such as 1e9999
+- **THEN** it fails with 22003; explicit supported IEEE NaN/Infinity literals preserve their prior value semantics
+
+#### Scenario: Driver fails before conversion
+- **WHEN** the backend getter fails while the requested conversion would also be invalid
+- **THEN** the original error is returned unchanged and the backend is read exactly once

@@ -54,6 +54,6 @@ async fn boolean_default_preserves_all_base_conversions_and_error_priority() {
     assert!(bytes.next().await.unwrap());
     assert!(matches!(
         bytes.boolean(ColumnIndex::new(1).unwrap()),
-        Err(RdbcError::DriverError(_))
+        Err(RdbcError::SqlException(error)) if error.class_name() == "java.sql.SQLDataException" && error.sql_state() == Some("22005")
     ));
 }

@@ -207,11 +207,11 @@ fn task6_assert_default_scalar_successes(result_set: &BufferedRowSet) {
 fn task6_assert_default_scalar_failures(result_set: &BufferedRowSet) {
     assert!(matches!(
         result_set.string(ColumnIndex::new(11).unwrap()),
-        Err(RdbcError::DriverError(_))
+        Err(RdbcError::SqlException(error)) if error.class_name() == "java.sql.SQLDataException" && error.sql_state() == Some("22021")
     ));
     assert!(matches!(
         result_set.boolean(ColumnIndex::new(7).unwrap()),
-        Err(RdbcError::DriverError(_))
+        Err(RdbcError::SqlException(error)) if error.class_name() == "java.sql.SQLDataException" && error.sql_state() == Some("22005")
     ));
     assert!(matches!(
         result_set.long(ColumnIndex::new(12).unwrap()),
@@ -221,15 +221,15 @@ fn task6_assert_default_scalar_failures(result_set: &BufferedRowSet) {
     ));
     assert!(matches!(
         result_set.long(ColumnIndex::new(14).unwrap()),
-        Err(RdbcError::DriverError(_))
+        Err(RdbcError::SqlException(error)) if error.class_name() == "java.sql.SQLDataException" && error.sql_state() == Some("22005")
     ));
     assert!(matches!(
         result_set.double(ColumnIndex::new(12).unwrap()),
-        Err(RdbcError::DriverError(_))
+        Err(RdbcError::SqlException(error)) if error.class_name() == "java.sql.SQLDataException" && error.sql_state() == Some("22018")
     ));
     assert!(matches!(
         result_set.double(ColumnIndex::new(14).unwrap()),
-        Err(RdbcError::DriverError(_))
+        Err(RdbcError::SqlException(error)) if error.class_name() == "java.sql.SQLDataException" && error.sql_state() == Some("22005")
     ));
     assert!(matches!(
         result_set.int(ColumnIndex::new(13).unwrap()),
@@ -276,7 +276,7 @@ fn task6_assert_default_stream_conversions(result_set: &BufferedRowSet) {
     }
     assert!(matches!(
         result_set.character_stream(ColumnIndex::new(11).unwrap()),
-        Err(RdbcError::DriverError(_))
+        Err(RdbcError::SqlException(error)) if error.class_name() == "java.sql.SQLDataException" && error.sql_state() == Some("22021")
     ));
 }
 

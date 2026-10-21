@@ -9,7 +9,6 @@ use druid_rdbc::types::{
 /// 对应 Java: java.sql.ResultSet#getNString(int/String)。
 #[tokio::test]
 async fn buffered_n_string_defaults_preserve_unicode_null_strict_type_and_errors() {
-    use druid_rdbc::error::RdbcError;
     use druid_rdbc::result_set::ResultSetRead;
     use druid_rdbc::types::RdbcObject;
     let mut rows = BufferedRowSet::with_column_labels(
@@ -43,10 +42,9 @@ async fn buffered_n_string_defaults_preserve_unicode_null_strict_type_and_errors
     assert_eq!(standard.n_string_by_label("null").unwrap(), None);
     assert!(standard.was_null().unwrap());
     let wrong_type = standard.n_string_by_label("int").unwrap_err();
-    assert_eq!(
-        wrong_type,
-        RdbcError::DriverError("ResultSet expected NString column value, got 7".to_owned())
-    );
+    let error = wrong_type.sql_exception().expect("SQLDataException");
+    assert_eq!(error.class_name(), "java.sql.SQLDataException");
+    assert_eq!(error.sql_state(), Some("22005"));
     assert!(!standard.was_null().unwrap());
     let missing = standard.find_column("missing").unwrap_err();
     assert_eq!(standard.n_string_by_label("missing"), Err(missing));
@@ -245,15 +243,21 @@ async fn buffered_defaults_convert_alternate_temporal_values_and_preserve_errors
     for column in [6, 7] {
         assert!(matches!(
             rows.date(ColumnIndex::new(column).unwrap(), &calendar),
-            Err(druid_rdbc::error::RdbcError::DriverError(_))
+            Err(druid_rdbc::error::RdbcError::SqlException(error))
+                if error.class_name() == "java.sql.SQLDataException"
+                    && error.sql_state() == Some(if column == 6 { "22007" } else { "22005" })
         ));
         assert!(matches!(
             rows.time(ColumnIndex::new(column).unwrap(), &calendar),
-            Err(druid_rdbc::error::RdbcError::DriverError(_))
+            Err(druid_rdbc::error::RdbcError::SqlException(error))
+                if error.class_name() == "java.sql.SQLDataException"
+                    && error.sql_state() == Some(if column == 6 { "22007" } else { "22005" })
         ));
         assert!(matches!(
             rows.timestamp(ColumnIndex::new(column).unwrap(), &calendar),
-            Err(druid_rdbc::error::RdbcError::DriverError(_))
+            Err(druid_rdbc::error::RdbcError::SqlException(error))
+                if error.class_name() == "java.sql.SQLDataException"
+                    && error.sql_state() == Some(if column == 6 { "22007" } else { "22005" })
         ));
     }
     assert_eq!(
