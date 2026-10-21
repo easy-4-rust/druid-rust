@@ -86,6 +86,21 @@
 | Doris | doris-create-unique-key | CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIE... | ERR:SQL parse error: sql parser error: Expected: end of statement, found: UNIQUE at Line: 1, Column: 32 |
 | Doris | doris-distribute-buckets | SELECT * FROM t DISTRIBUTE BY HASH(k1) BUCKETS 10 | ERR:SQL parse error: sql parser error: Expected: end of statement, found: BUCKETS at Line: 1, Column: 40 |
 
+## 差异处置
+
+| 方言 | 用例 | 维度 | 处置 | 理由 | 下一步 |
+|---|---|---|---|---|---|
+| oracle | oracle-returning-into | parse | PREPROCESS | Druid 接受 RETURNING ... INTO；sqlparser 0.52 无该扩展 | P2.1：解析前重写为占位并保留出参绑定元数据，补差分用例 |
+| hive | hive-tablesample | parse | SQLPARSER_UPSTREAM | Hive 旧式 TABLESAMPLE (n PERCENT) 未被 sqlparser 接受 | P2.2：先升级/验证 sqlparser 上游支持，否则走预处理并记录 |
+| doris | doris-create-unique-key | parse | DRUID_EXTENSION | Doris UNIQUE KEY / DISTRIBUTED BY ... BUCKETS DDL 为 Doris 方言扩展 | P2.3：在 Doris 方言层做 DDL 预解析，保留表模型信息 |
+| doris | doris-alter-add-column | parse | JAVA_QUIRK | Druid 1.2.28 的 Doris 方言不接受 ALTER TABLE ADD COLUMN；Rust 接受更合理 | 无代码动作；在矩阵 README 标注 Java 侧限制 |
+| oracle | oracle-identity | parse | JAVA_QUIRK | Druid 1.2.28 不接受 GENERATED ALWAYS AS IDENTITY；Rust 支持 | 无代码动作；保留 Rust 能力 |
+| hive | hive-stored-parquet | parameterized | JAVA_QUIRK | Druid 参数化输出 STORE AS，Rust 保持 STORED AS | 无代码动作；视为 Java 输出瑕疵 |
+| oracle | oracle-date-literal | parameterized | JAVA_QUIRK | Druid 不参数化 DATE 字面量，Rust 参数化为 DATE ? | 保留 Rust 行为；差异记入矩阵 |
+| odps | odps-insert-overwrite-partition | parameterized | RUST_KEEP | Rust 保留 INSERT OVERWRITE TABLE 的 TABLE 关键字 | 保留；不影响执行语义 |
+| hive | hive-insert-partition | parameterized | RUST_KEEP | 同上 | 保留 |
+| doris | doris-create-unique-key | parameterized | DRUID_EXTENSION | Druid 把 UNIQUE KEY 重写为 INTO/BUCKETS OPTIONS，丢失表模型 | 随 P2.3 一起修 |
+
 ## 结论与下一步
 
 1. **ODPS/Hive 的查询面**已由 sqlparser 覆盖到可解析；缺口集中在 Hive 采样语法。

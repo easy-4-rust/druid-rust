@@ -9,6 +9,7 @@ TSV = ROOT / "docs" / "migration" / "dialect-fidelity" / "rust-observations.tsv"
 OUT = ROOT / "docs" / "migration" / "dialect-fidelity" / "README.md"
 GOLDEN = ROOT / "docs" / "migration" / "dialect-fidelity" / "golden-diff.tsv"
 GOLDEN_SUMMARY = ROOT / "docs" / "migration" / "dialect-fidelity" / "golden-summary.json"
+DISPOSITIONS = ROOT / "docs" / "migration" / "dialect-fidelity" / "dispositions.tsv"
 
 
 def clip(text: str, limit: int = 72) -> str:
@@ -58,6 +59,14 @@ def golden_cell(row):
     param = "MATCH" if record["parameterized_match"] == "true" else "DIFF"
     return "parse:" + parse + ", param:" + param
 
+
+dispositions = []
+if DISPOSITIONS.exists():
+    d_lines = DISPOSITIONS.read_text(encoding="utf-8").splitlines()
+    d_head = d_lines[0].split("\t")
+    for d_line in d_lines[1:]:
+        if d_line.strip():
+            dispositions.append(dict(zip(d_head, d_line.split("\t"))))
 
 by_dialect = defaultdict(list)
 for row in rows:
@@ -121,6 +130,10 @@ lines += [
 for r in rows:
     if r["parse"] != "ok":
         lines.append("| %s | %s | %s | %s |" % (r["dialect"], r["case"], clip(r["sql"], 90), clip(r["format"], 110)))
+
+lines += ["", "## 差异处置", "", "| 方言 | 用例 | 维度 | 处置 | 理由 | 下一步 |", "|---|---|---|---|---|---|"]
+for item in dispositions:
+    lines.append("| %s | %s | %s | %s | %s | %s |" % (item["dialect"], item["case"], item["dimension"], item["disposition"], item["rationale"], item["next_action"]))
 
 lines += [
     "",
