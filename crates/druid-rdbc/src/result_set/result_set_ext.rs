@@ -1017,8 +1017,9 @@ pub(crate) fn typed_scalar_object(
     }
 }
 
-// 保留 BASE 原标量转换规则；不重新读取游标，也不调用可能覆盖的其他标量 getter。
-fn typed_string(value: Value) -> Result<String, RdbcError> {
+/// 将参数 value 转换为字符串并返回转换值或数据异常，不重新读取游标。
+/// 对应 Java: java.sql.ResultSet#getString 与 getObject(String.class) 的 Rust 默认映射。
+pub(crate) fn typed_string(value: Value) -> Result<String, RdbcError> {
     match value {
         Value::String(value) => Ok(value),
         Value::Bytes(value) => {

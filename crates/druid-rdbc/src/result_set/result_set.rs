@@ -193,15 +193,13 @@ pub trait ResultSet: Wrapper + Send + 'static {
     }
 
     /// 读取 getString 对应的原始标量；参数为 1-based 列，返回 String 或 SQL NULL。
-    /// 默认实现复用值读取并拒绝其他类型；适配器可覆盖驱动原生字符串转换。
+    /// 默认实现单次读取并转换布尔、数值及日期时间；适配器可覆盖驱动原生字符串表示。
+    /// SQL NULL 保持 NULL；字节沿用标准 typed String 的 UTF-8 策略，非法编码返回 22021。
     /// 对应 Java: java.sql.ResultSet#getString(int)。
     fn string_value(&self, column: ColumnIndex) -> Result<Value, RdbcError> {
         match self.value(column)? {
-            value @ (Value::Null | Value::String(_)) => Ok(value),
-            other => Err(super::result_set_ext::result_set_type_error(
-                "String",
-                &RdbcObject::Scalar(other),
-            )),
+            Value::Null => Ok(Value::Null),
+            value => super::result_set_ext::typed_string(value).map(Value::String),
         }
     }
 

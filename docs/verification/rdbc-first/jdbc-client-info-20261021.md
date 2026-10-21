@@ -42,3 +42,5 @@ Standard references: [Connection](https://docs.oracle.com/javase/8/docs/api/java
 | druid-rdbc | `cbf9661c7e8391f2641a12a5528bb26c49dc87780c255de75808c410a2f4c3a0` |
 | druid | `e0cfb4181d5bf06c8564b5f3511c1c6f88c4a1a378c0b75ae743897b7ed166ab` |
 | druid-wrapper | `d074cc5d097f74e339292a4cdcda1e008c85de2b5d2faeadb1918dd7041ba13c` |
+
+Subsequent native verification: source `2ed019b` passed [public-api job 119019411297](https://github.com/easy-4-rust/druid-rust/actions/runs/39538079323/job/119019411297), confirming all three refreshed snapshots against native generation. The earlier 9a3ae7d job failure is retained as historical evidence; this success does not promote the whole source matrix or JDBC behavior gate.

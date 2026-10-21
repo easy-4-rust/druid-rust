@@ -530,3 +530,16 @@ The Rust Connection contract SHALL expose both single-property and whole-propert
 #### Scenario: Proxy receives a complete driver failure map
 - **WHEN** an underlying bulk setter reports failed and unattempted names after an earlier successful write
 - **THEN** pooled and external proxy layers preserve that exact map, without adding successful request names as failures
+
+### Requirement: MC-10 Standard getString converts scalar SQL values
+
+The Rust standard ResultSet getString default SHALL convert supported Boolean, numeric, decimal and temporal scalar values to their String representation, preserve SQL NULL and Unicode, and read the backend once. Index and label entries SHALL agree. The Rust fallback SHALL retain the existing typed-String UTF-8 byte decoding policy and exact SQLDataException/22021 for invalid UTF-8; native driver string_value overrides SHALL retain their original representations and errors.
+
+#### Scenario: Numeric value is read as String
+- **WHEN** a driver implements scalar value reading without a native string override
+- **THEN** getString converts the scalar instead of rejecting its non-String source type, with one backend read per getter
+- **AND** original driver errors propagate before conversion and NULL observation comes from that same read
+
+#### Scenario: Pool records converted String reads
+- **WHEN** native and filtered pooled ResultSets read numeric or Unicode values as Strings by index or label
+- **THEN** successful String outputs contribute their UTF-16 length once, failed reads contribute nothing, and ordinary value/object access remains uncounted

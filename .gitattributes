@@ -50,3 +50,5 @@
 /crates/druid-rdbc/tests/client_info_support/connection.rs text eol=lf
 /crates/druid/tests/client_info_lease_contract_test.rs text eol=lf
 /crates/druid/src/core/druid_pooled_connection_owner/client_info_tests.rs text eol=lf
+
+/crates/druid-rdbc/tests/string_read_support/native_string_result_set.rs text eol=lf

@@ -1400,7 +1400,7 @@ async fn task6_string_reads_count_utf16_without_counting_generic_values() {
         };
         let (mut rows, mut statement, mut connection) =
             task6_sqlite_diagnostic_cursor_with_sql_and_filters(
-                "SELECT 'A😀' AS text_value, NULL AS absent, 7 AS number",
+                "SELECT 'A😀' AS text_value, NULL AS absent, 7 AS number, X'FF' AS bad_encoding",
                 filters,
             )
             .await;
@@ -1439,24 +1439,40 @@ async fn task6_string_reads_count_utf16_without_counting_generic_values() {
             .unwrap(),
             None
         );
+        assert_eq!(
+            druid_rdbc::result_set::ResultSetExt::string(
+                standard.as_ref(),
+                ColumnIndex::new(3).unwrap(),
+            )
+            .unwrap()
+            .as_deref(),
+            Some("7")
+        );
+        assert_eq!(rows.filter_context.read_string_length(), 7);
+        assert_eq!(
+            druid_rdbc::result_set::ResultSetExt::string_by_label(standard.as_ref(), "number")
+                .unwrap()
+                .as_deref(),
+            Some("7")
+        );
         let error = druid_rdbc::result_set::ResultSetExt::string(
             standard.as_ref(),
-            ColumnIndex::new(3).unwrap(),
+            ColumnIndex::new(4).unwrap(),
         )
         .unwrap_err();
         assert_eq!(error.class_name(), "java.sql.SQLDataException");
-        assert_eq!(error.sql_exception().unwrap().sql_state(), Some("22005"));
+        assert_eq!(error.sql_exception().unwrap().sql_state(), Some("22021"));
         assert!(matches!(
             druid_rdbc::result_set::ResultSetExt::string_by_label(standard.as_ref(), "missing"),
             Err(druid_rdbc::error::RdbcError::InvalidArgument(_))
         ));
-        assert_eq!(rows.filter_context.read_string_length(), 6);
+        assert_eq!(rows.filter_context.read_string_length(), 8);
         standard.close().await.unwrap();
         assert!(matches!(
             druid_rdbc::result_set::ResultSetExt::string(standard.as_ref(), text),
             Err(druid_rdbc::error::RdbcError::ConnectionDiscarded)
         ));
-        assert_eq!(rows.filter_context.read_string_length(), 6);
+        assert_eq!(rows.filter_context.read_string_length(), 8);
         rows.close().await.unwrap();
         statement.close().await.unwrap();
         connection.close().await.unwrap();
