@@ -129,4 +129,4 @@
 - 剩余 2 个进入[结构性例外申请](p6-structural-exceptions.md)：
   - `row_set.rs` / `result_set_ext.rs`（单 trait 定义）。
 - 结构性例外候选：`rdbc/src/extensions/row_set.rs`（`trait RowSet` 单定义，1,128 行）与 `result_set_ext.rs`（`trait ResultSetExt` 单定义，1,216 行）无法在不改变公共 trait 形态的前提下拆文件，需按计划申请例外或改 supertrait 设计。
-- P6 状态：**IN_PROGRESS**；`crates/druid-test` 整仓验收包在 B1–B3 完成后启动。
+- P6 状态：**IN_PROGRESS（26/28）**；`crates/druid-test` 已创建并扩展到 8 个验收用例（池 LIFO、标准 Connection、shrink minIdle、四方言 parse/format 往返、3 个已登记缺口断言）。
