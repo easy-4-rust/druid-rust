@@ -1,10 +1,6 @@
 kind	path	detail
 FILE_OVER_800	crates/druid/src/core/druid_pooled_connection.rs	2254 lines
-FILE_OVER_800	crates/druid/src/pool/pool_inner.rs	1796 lines
-FILE_OVER_800	crates/druid/src/pool/druid_pool.rs	1777 lines
 FILE_OVER_800	crates/druid/src/core/druid_pooled_result_set.rs	1690 lines
-FILE_OVER_800	crates/druid-metrics/src/push_worker.rs	1424 lines
-FILE_OVER_800	crates/druid-admin/src/servlet/monitor_view_servlet.rs	1420 lines
 FILE_OVER_800	crates/druid/src/core/druid_pooled_callable_statement.rs	1378 lines
 FILE_OVER_800	crates/druid/src/core/druid_pooled_statement.rs	1353 lines
 FILE_OVER_800	crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs	1335 lines
@@ -12,10 +8,8 @@ FILE_OVER_800	crates/druid/src/core/filter_chain_impl.rs	1333 lines
 FILE_OVER_800	crates/druid/src/core/standard_resource_registry.rs	1308 lines
 FILE_OVER_800	crates/druid-rdbc/src/result_set/result_set_ext.rs	1216 lines
 FILE_OVER_800	crates/druid/src/core/druid_pooled_prepared_statement.rs	1208 lines
-FILE_OVER_800	crates/druid/src/pool/config.rs	1208 lines
 FILE_OVER_800	crates/druid-rdbc/src/extensions/row_set.rs	1128 lines
 FILE_OVER_800	crates/druid/src/sql/lexer.rs	1072 lines
-FILE_OVER_800	crates/druid-rdbc/src/extensions/shared_row_set.rs	1060 lines
 FILE_OVER_800	crates/druid/src/core/xa.rs	1013 lines
 FILE_OVER_800	crates/druid/src/sql/wall.rs	983 lines
 FILE_OVER_800	crates/druid-metrics/src/grpc_client.rs	963 lines

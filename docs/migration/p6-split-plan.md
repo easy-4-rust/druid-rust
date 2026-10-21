@@ -100,4 +100,14 @@
   - `cargo test -p druid-wrapper --all-features --lib` 69 passed；`clippy -D warnings` exit 0；
   - 超 800 行文件：**25 → 20**。
 - 未完成：`jdbc_agent_connection.rs`（1,329）首次拆分因属性/可见性边界失败，已回滚，留待下一批用“support/impl 分文件”方案重做。
+- 2026-10-22（B3 + B4，已提交）：
+  - `pool_inner.rs` 1,796 → 292 + 581/426/500（state / create / recycle）；
+  - `druid_pool.rs` 1,777 → 363 + 247/417/753（construct / acquire / state）；
+  - `config.rs` 1,208 → 321 + 438/450（builder / builder_advanced）；
+  - `monitor_view_servlet.rs` 1,400 → 536 + 434/451；
+  - `push_worker.rs` 1,424 → 460 + 469/496；
+  - `shared_row_set.rs` 1,060 → 413 + 649（trait impl 分离）。
+  - `clippy -D warnings`（三 crate）exit 0；lib tests：rdbc 5、metrics 6、admin 6 全通过；
+  - 超 800 行文件：**20 → 14**。
+- 结构性例外候选：`rdbc/src/extensions/row_set.rs`（`trait RowSet` 单定义，1,128 行）与 `result_set_ext.rs`（`trait ResultSetExt` 单定义，1,216 行）无法在不改变公共 trait 形态的前提下拆文件，需按计划申请例外或改 supertrait 设计。
 - P6 状态：**IN_PROGRESS**；`crates/druid-test` 整仓验收包在 B1–B3 完成后启动。
