@@ -90,4 +90,14 @@
   - `diagnostic_tests.rs` 9,851 → 父模块 121 行 + `harness.rs` 159 行 + **17 个行为族模块**（每个 ≤800 行，最大 797）；
   - 81 个测试逐用例保留（`cargo test -p druid --lib diagnostic` = 81 passed），共享 SQLite 夹具集中到 `harness.rs`；
   - 超 800 行文件：**26 → 25**。
+- 2026-10-22（B2 wrapper 批次，已提交）：
+  - `sqlx_connection_adapter.rs` 1,949 → 475 + 764 + 747（`adapter_core` / `adapter_queries`）；
+  - `sqlx_prepared_statement.rs` 1,041 → 554 + 307 + 210（`statement` / `prepared_statement`）；
+  - `sqlx_connection_actor.rs` 952 → 781 + 60 + 149（`sqlite_cleanup_guard` / 测试模块）；
+  - `toasty_connection_adapter.rs` 975 → 640 + 358（`standard_connection`）；
+  - `driver_installer.rs` 1,099 → 40 + 505 + 565（安装 / 校验与清单）。
+  - 跨模块可见性统一为 `pub(crate)`；`#[async_trait]` 随 impl 一起迁移。
+  - `cargo test -p druid-wrapper --all-features --lib` 69 passed；`clippy -D warnings` exit 0；
+  - 超 800 行文件：**25 → 20**。
+- 未完成：`jdbc_agent_connection.rs`（1,329）首次拆分因属性/可见性边界失败，已回滚，留待下一批用“support/impl 分文件”方案重做。
 - P6 状态：**IN_PROGRESS**；`crates/druid-test` 整仓验收包在 B1–B3 完成后启动。

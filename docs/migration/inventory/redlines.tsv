@@ -1,6 +1,5 @@
 kind	path	detail
 FILE_OVER_800	crates/druid/src/core/druid_pooled_connection.rs	2254 lines
-FILE_OVER_800	crates/druid-wrapper/src/sqlx/sqlx_connection_adapter.rs	1975 lines
 FILE_OVER_800	crates/druid/src/pool/pool_inner.rs	1796 lines
 FILE_OVER_800	crates/druid/src/pool/druid_pool.rs	1777 lines
 FILE_OVER_800	crates/druid/src/core/druid_pooled_result_set.rs	1690 lines
@@ -15,13 +14,9 @@ FILE_OVER_800	crates/druid-rdbc/src/result_set/result_set_ext.rs	1216 lines
 FILE_OVER_800	crates/druid/src/core/druid_pooled_prepared_statement.rs	1208 lines
 FILE_OVER_800	crates/druid/src/pool/config.rs	1208 lines
 FILE_OVER_800	crates/druid-rdbc/src/extensions/row_set.rs	1128 lines
-FILE_OVER_800	crates/druid-wrapper/src/driver_admin/driver_installer.rs	1099 lines
 FILE_OVER_800	crates/druid/src/sql/lexer.rs	1072 lines
 FILE_OVER_800	crates/druid-rdbc/src/extensions/shared_row_set.rs	1060 lines
-FILE_OVER_800	crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs	1058 lines
 FILE_OVER_800	crates/druid/src/core/xa.rs	1013 lines
-FILE_OVER_800	crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs	992 lines
-FILE_OVER_800	crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs	991 lines
 FILE_OVER_800	crates/druid/src/sql/wall.rs	983 lines
 FILE_OVER_800	crates/druid-metrics/src/grpc_client.rs	963 lines
 MULTI_PUBLIC_OBJECT	crates/druid/src/core/filter.rs	15 public objects
