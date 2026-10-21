@@ -1,0 +1,94 @@
+kind	path	detail
+FILE_OVER_800	crates/druid/src/core/druid_pooled_result_set/diagnostic_tests.rs	10000 lines
+FILE_OVER_800	crates/druid/src/core/druid_pooled_connection.rs	2253 lines
+FILE_OVER_800	crates/druid-wrapper/src/sqlx/sqlx_connection_adapter.rs	1975 lines
+FILE_OVER_800	crates/druid/src/pool/pool_inner.rs	1796 lines
+FILE_OVER_800	crates/druid/src/pool/druid_pool.rs	1777 lines
+FILE_OVER_800	crates/druid/src/core/druid_pooled_result_set.rs	1690 lines
+FILE_OVER_800	crates/druid-metrics/src/push_worker.rs	1424 lines
+FILE_OVER_800	crates/druid-admin/src/servlet/monitor_view_servlet.rs	1420 lines
+FILE_OVER_800	crates/druid/src/core/druid_pooled_callable_statement.rs	1378 lines
+FILE_OVER_800	crates/druid/src/core/druid_pooled_statement.rs	1353 lines
+FILE_OVER_800	crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs	1335 lines
+FILE_OVER_800	crates/druid/src/core/filter_chain_impl.rs	1333 lines
+FILE_OVER_800	crates/druid/src/core/standard_resource_registry.rs	1308 lines
+FILE_OVER_800	crates/druid-rdbc/src/result_set/result_set_ext.rs	1216 lines
+FILE_OVER_800	crates/druid/src/core/druid_pooled_prepared_statement.rs	1208 lines
+FILE_OVER_800	crates/druid/src/pool/config.rs	1208 lines
+FILE_OVER_800	crates/druid-rdbc/src/extensions/row_set.rs	1128 lines
+FILE_OVER_800	crates/druid-wrapper/src/driver_admin/driver_installer.rs	1099 lines
+FILE_OVER_800	crates/druid/src/sql/lexer.rs	1072 lines
+FILE_OVER_800	crates/druid-rdbc/src/extensions/shared_row_set.rs	1060 lines
+FILE_OVER_800	crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs	1058 lines
+FILE_OVER_800	crates/druid/src/core/xa.rs	1013 lines
+FILE_OVER_800	crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs	992 lines
+FILE_OVER_800	crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs	991 lines
+FILE_OVER_800	crates/druid/src/sql/wall.rs	983 lines
+FILE_OVER_800	crates/druid/src/core/log_filter.rs	966 lines
+FILE_OVER_800	crates/druid-metrics/src/grpc_client.rs	963 lines
+FILE_OVER_800	crates/druid/src/core/druid_pooled_result_set/diagnostic_tests/filter_defaults_chain_harness.rs	808 lines
+MULTI_PUBLIC_OBJECT	crates/druid/src/core/filter.rs	15 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/compat/exceptions.rs	14 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/statement/statement.rs	11 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/types/resource_handle.rs	10 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/core/filter_chain_impl.rs	9 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/metadata/result_set_meta_data.rs	8 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-metrics/src/push_worker.rs	7 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/stats/table_stat.rs	6 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/core/xa.rs	5 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-admin/src/model/dto/wall_result.rs	5 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/core/druid_pooled_connection.rs	4 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/sql/lexer.rs	4 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/stats/druid_telemetry_snapshot.rs	4 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-metrics/src/registry.rs	4 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/metadata/parameter_meta_data.rs	4 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/result_set/result_set.rs	4 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/statement/callable_statement.rs	4 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/types/sql_scalar.rs	4 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/dynamic/load_balancer.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/sql/parameter_meta_data.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/sql/sql_insert_value_handler.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/stats/merge.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/stats/rdbc_connection_stat.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-admin/src/repository/metrics_repository.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-metrics/src/aggregator.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-metrics/src/config.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-metrics/src/prometheus.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-metrics/src/sequence_window.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-metrics/src/timeline.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/driver/driver.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/metadata/database_meta_data_request.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/statement/prepared_statement.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/types/rdbc_parameter.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-wrapper/src/task4_runtime_trace.rs	3 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/core/config.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/core/druid_connection_holder.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/core/exception_sorter.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/core/filter_event_adapter.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/core/proxy_attributes.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/pool/config.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/sql/dialect_feature.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/sql/sql_utils.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/sql/tenant_call_back.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/sql/wall_config.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid/src/sql/wall_provider_creator.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-admin/src/model/dto/connection_result.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-admin/src/model/dto/data_source_result.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-admin/src/model/dto/sql_detail_result.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-admin/src/model/dto/sql_list_result.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-admin/src/model/dto/web_result.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-metrics/src/error.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-metrics/src/grpc_client.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/connection/connection.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/data_source/common_data_source.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/data_source/connection_event.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/data_source/statement_event.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/error/rdbc_error.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/error/sql_exception.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/metadata/database_meta_data.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/resource/rdbc_input_stream.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/resource/rdbc_reader.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/statement/prepared_input_parameter.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/types/rdbc_calendar.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/types/rdbc_opaque_object.rs	2 public objects
+MULTI_PUBLIC_OBJECT	crates/druid-rdbc/src/wrapper/wrapper.rs	2 public objects
