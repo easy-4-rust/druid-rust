@@ -12,6 +12,7 @@ pub mod data_source;
 pub mod driver;
 /// Rust 专用的标准扩展。
 pub mod extensions;
+pub mod governance;
 /// JDBC-like metadata 合同。
 pub mod metadata;
 /// JDBC-like 游标合同。
