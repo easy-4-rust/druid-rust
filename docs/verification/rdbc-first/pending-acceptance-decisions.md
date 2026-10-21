@@ -1,6 +1,6 @@
 # Pending acceptance decisions — 2026-10-21
 
-Status: **AWAITING_USER_DECISION**. This is a review index of existing observations, not an approved specification or an allowance file. Existing live comparators and release gates continue to fail on the differences below. Previously submitted confirmation requests remain pending; an answer applies only to its stated scope.
+Status: **USER_APPROVED_2026_10_21 — exact comparator allowances pending implementation**. The user approved all fourteen listed Java Druid behavioral differences and the GetResultSet enum addition, then required 100% JDBC alignment in Rust. Historical pending descriptions below are retained as pre-approval observations. This approval waives no JDBC interface or behavioral requirement. This is a review index of existing observations, not an approved specification or an allowance file. Existing live comparators and release gates continue to fail on the differences below. Previously submitted confirmation requests remain pending; an answer applies only to its stated scope.
 
 ## Behavioral observations
 
@@ -30,3 +30,7 @@ Consumers matching the previously exhaustive enum may need to add the new arm. T
 ## Previously approved scope
 
 Only the two closeOnCompletion/isCloseOnCompletion Statement differences are approved in the 59-case behavioral comparator. Their approval does not extend to any case above. The [frozen manifest](java-baseline-59-cases.tsv), comparisons and OpenSpec acceptance remain authoritative until a directly applicable human decision is recorded.
+
+## Current approval boundary
+
+D01–D04 are approved only as the fourteen exact observed Java Druid differences. Their historical MISMATCH outputs remain unchanged until exact field-bound comparator allowances are implemented and rerun. D05 is now bound to its two exact export findings in the SemVer allowlist. The Java 8 / JDBC 4.2 inventory remains the complete interface denominator; unassessed entries are incomplete evidence. JDBC Wrapper identities require independent standard-contract validation. Druid-only cache diagnostics and vendor-sorter behavior do not define JDBC completeness.
