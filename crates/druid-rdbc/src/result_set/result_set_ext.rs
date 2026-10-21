@@ -767,18 +767,15 @@ fn long_object(object: RdbcObject) -> Result<i64, RdbcError> {
 }
 
 fn int_object(object: RdbcObject) -> Result<i32, RdbcError> {
-    i32::try_from(long_object(object)?)
-        .map_err(|_| RdbcError::DriverError("ResultSet value exceeds int".to_owned()))
+    i32::try_from(long_object(object)?).map_err(|_| typed_numeric_error("22003", "int"))
 }
 
 fn short_object(object: RdbcObject) -> Result<i16, RdbcError> {
-    i16::try_from(long_object(object)?)
-        .map_err(|_| RdbcError::DriverError("ResultSet value exceeds short".to_owned()))
+    i16::try_from(long_object(object)?).map_err(|_| typed_numeric_error("22003", "short"))
 }
 
 fn byte_object(object: RdbcObject) -> Result<i8, RdbcError> {
-    i8::try_from(long_object(object)?)
-        .map_err(|_| RdbcError::DriverError("ResultSet value exceeds byte".to_owned()))
+    i8::try_from(long_object(object)?).map_err(|_| typed_numeric_error("22003", "byte"))
 }
 
 fn double_object(object: RdbcObject) -> Result<f64, RdbcError> {
@@ -1015,13 +1012,13 @@ pub(crate) fn typed_scalar_object(
         }
         RdbcTargetType::Byte => i8::try_from(typed_long(value)?)
             .map(RdbcObject::Byte)
-            .map_err(|error| RdbcError::DriverError(error.to_string())),
+            .map_err(|_| typed_numeric_error("22003", "Byte")),
         RdbcTargetType::Short => i16::try_from(typed_long(value)?)
             .map(RdbcObject::Short)
-            .map_err(|error| RdbcError::DriverError(error.to_string())),
+            .map_err(|_| typed_numeric_error("22003", "Short")),
         RdbcTargetType::Integer => i32::try_from(typed_long(value)?)
             .map(RdbcObject::Integer)
-            .map_err(|error| RdbcError::DriverError(error.to_string())),
+            .map_err(|_| typed_numeric_error("22003", "Integer")),
         RdbcTargetType::Long => typed_long(value).map(RdbcObject::Long),
         RdbcTargetType::Float => typed_double(value).map(|value| RdbcObject::Float(value as f32)),
         RdbcTargetType::Double => typed_double(value).map(RdbcObject::Double),
@@ -1069,15 +1066,45 @@ fn typed_long(value: Value) -> Result<i64, RdbcError> {
     match value {
         Value::Bool(value) => Ok(i64::from(value)),
         Value::Int(value) => Ok(value),
-        Value::Float(value) => Ok(value as i64),
-        Value::Decimal(value) => {
-            decimal_to_i64(&value).ok_or_else(|| typed_value_error("Long", &Value::Decimal(value)))
+        Value::Float(value) => {
+            // Rust 的 as 会饱和并将 NaN 转为零；JDBC 数值读取必须显式拒绝越界。
+            // i64::MAX 转 f64 会舍入至 2^63，因此上界必须使用严格小于。
+            let truncated = value.trunc();
+            if !truncated.is_finite()
+                || truncated < i64::MIN as f64
+                || truncated >= -(i64::MIN as f64)
+            {
+                return Err(typed_numeric_error("22003", "Long"));
+            }
+            Ok(truncated as i64)
         }
-        Value::String(value) => value
-            .parse::<i64>()
-            .map_err(|error| RdbcError::DriverError(error.to_string())),
+        Value::Decimal(value) => {
+            decimal_to_i64(&value).ok_or_else(|| typed_numeric_error("22003", "Long"))
+        }
+        Value::String(value) => value.parse::<i64>().map_err(|error| {
+            let state = match error.kind() {
+                std::num::IntErrorKind::PosOverflow | std::num::IntErrorKind::NegOverflow => {
+                    "22003"
+                }
+                _ => "22018",
+            };
+            typed_numeric_error(state, "Long")
+        }),
         actual => Err(typed_value_error("Long", &actual)),
     }
+}
+
+// 返回准确的数据异常类型及 SQLState；错误消息不回显列值。
+fn typed_numeric_error(state: &str, target: &str) -> RdbcError {
+    RdbcError::SqlException(Box::new(
+        crate::error::SqlException::new(
+            0,
+            Some(state.to_owned()),
+            Some(format!("ResultSet numeric conversion to {target} failed")),
+        )
+        .with_class_name("java.sql.SQLDataException")
+        .with_assignable_type("java.sql.SQLNonTransientException"),
+    ))
 }
 
 fn typed_double(value: Value) -> Result<f64, RdbcError> {
@@ -1100,4 +1127,96 @@ fn typed_unexpected_null() -> RdbcError {
 
 fn typed_value_error(expected: &str, actual: &Value) -> RdbcError {
     RdbcError::DriverError(format!("ResultSet expected {expected} value, got {actual}"))
+}
+
+#[cfg(test)]
+mod typed_numeric_contract_tests {
+    use super::{typed_scalar_object, RdbcError, RdbcObject, RdbcTargetType, Value};
+
+    fn assert_data_error(value: Value, target: RdbcTargetType, state: &str) {
+        let error = typed_scalar_object(value, &target).unwrap_err();
+        let RdbcError::SqlException(error) = error else {
+            panic!("expected SQLDataException")
+        };
+        assert_eq!(error.class_name(), "java.sql.SQLDataException");
+        assert_eq!(error.sql_state(), Some(state));
+    }
+
+    #[test]
+    fn nonfinite_and_overflowing_floats_never_saturate_to_integer_success() {
+        for value in [
+            f64::NAN,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            9223372036854775808.0,
+            -18446744073709551616.0,
+        ] {
+            for target in [
+                RdbcTargetType::Byte,
+                RdbcTargetType::Short,
+                RdbcTargetType::Integer,
+                RdbcTargetType::Long,
+            ] {
+                assert_data_error(Value::Float(value), target, "22003");
+            }
+        }
+    }
+
+    #[test]
+    fn integer_narrowing_reports_range_and_preserves_valid_boundaries() {
+        for (target, minimum, maximum) in [
+            (RdbcTargetType::Byte, -128, 127),
+            (RdbcTargetType::Short, -32768, 32767),
+            (
+                RdbcTargetType::Integer,
+                i64::from(i32::MIN),
+                i64::from(i32::MAX),
+            ),
+        ] {
+            assert!(typed_scalar_object(Value::Int(minimum), &target).is_ok());
+            assert!(typed_scalar_object(Value::Int(maximum), &target).is_ok());
+            assert_data_error(Value::Int(minimum - 1), target.clone(), "22003");
+            assert_data_error(Value::Int(maximum + 1), target, "22003");
+        }
+        assert_eq!(
+            typed_scalar_object(Value::Int(i64::MAX), &RdbcTargetType::Long).unwrap(),
+            RdbcObject::Long(i64::MAX)
+        );
+    }
+
+    #[test]
+    fn fractional_truncation_null_and_float_lower_boundary_are_preserved() {
+        for (value, expected) in [
+            (17.9, 17),
+            (-17.9, -17),
+            (-0.0, 0),
+            (i64::MIN as f64, i64::MIN),
+            (9223372036854774784.0, 9223372036854774784),
+        ] {
+            assert_eq!(
+                typed_scalar_object(Value::Float(value), &RdbcTargetType::Long).unwrap(),
+                RdbcObject::Long(expected)
+            );
+        }
+        assert_eq!(
+            typed_scalar_object(Value::Null, &RdbcTargetType::Long).unwrap(),
+            RdbcObject::Scalar(Value::Null)
+        );
+    }
+
+    #[test]
+    fn numeric_text_distinguishes_range_from_invalid_representation() {
+        for value in ["9223372036854775808", "-9223372036854775809"] {
+            assert_data_error(
+                Value::String(value.to_owned()),
+                RdbcTargetType::Long,
+                "22003",
+            );
+        }
+        assert_data_error(
+            Value::String("sensitive-invalid-value".to_owned()),
+            RdbcTargetType::Long,
+            "22018",
+        );
+    }
 }

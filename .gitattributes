@@ -30,3 +30,7 @@
 /crates/druid/src/core/druid_pooled_prepared_statement.rs text eol=lf
 /crates/druid/src/core/druid_pooled_result_set.rs text eol=lf
 /crates/druid/tests/prepared_result_set_wall_context_test.rs text eol=lf
+
+/crates/druid-rdbc/src/result_set/result_set.rs text eol=lf
+/crates/druid-rdbc/src/result_set/result_set_ext.rs text eol=lf
+/crates/druid-rdbc/tests/task7_shared_result_set_contract_test.rs text eol=lf

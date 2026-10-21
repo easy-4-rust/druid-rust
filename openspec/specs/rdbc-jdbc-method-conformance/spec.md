@@ -484,3 +484,15 @@ The Agent SHALL close callable statements and dependent cursors on explicit clos
 - **WHEN** 发布报告声称 JDBC 接口及行为完整对齐
 - **THEN** 完整冻结分母中的每项均有入口映射和适用层的实际验证证据，不以声明或编译通过代替
 - **AND** JDBC 允许的可选能力不支持须有对应精确标准异常证据，不得以统一不支持占位实现必需能力
+
+### Requirement: Typed JDBC integer conversions reject numeric overflow
+
+The Rust standard ResultSet typed integer conversion SHALL reject non-finite floating values, numeric overflow and out-of-range integer narrowing with SQLDataException and SQLState 22003, instead of silently saturating or returning zero. Invalid integer text SHALL report SQLDataException with SQLState 22018 without exposing the original column value.
+
+#### Scenario: Float cannot fit the integer target
+- **WHEN** a typed Byte, Short, Integer or Long read receives NaN, infinity or a value outside the integer target range
+- **THEN** conversion fails with the exact data-exception category and 22003; valid fractional values still truncate toward zero and SQL NULL remains NULL
+
+#### Scenario: Rounded floating upper boundary
+- **WHEN** the source floating value is 2^63, including a value obtained by rounding i64::MAX to f64
+- **THEN** the Long conversion fails rather than returning i64::MAX; the exactly representable lower boundary remains valid

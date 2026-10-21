@@ -215,7 +215,9 @@ fn task6_assert_default_scalar_failures(result_set: &BufferedRowSet) {
     ));
     assert!(matches!(
         result_set.long(ColumnIndex::new(12).unwrap()),
-        Err(RdbcError::DriverError(_))
+        Err(RdbcError::SqlException(error))
+            if error.class_name() == "java.sql.SQLDataException"
+                && error.sql_state() == Some("22018")
     ));
     assert!(matches!(
         result_set.long(ColumnIndex::new(14).unwrap()),
@@ -231,15 +233,21 @@ fn task6_assert_default_scalar_failures(result_set: &BufferedRowSet) {
     ));
     assert!(matches!(
         result_set.int(ColumnIndex::new(13).unwrap()),
-        Err(RdbcError::DriverError(_))
+        Err(RdbcError::SqlException(error))
+            if error.class_name() == "java.sql.SQLDataException"
+                && error.sql_state() == Some("22003")
     ));
     assert!(matches!(
         result_set.short(ColumnIndex::new(13).unwrap()),
-        Err(RdbcError::DriverError(_))
+        Err(RdbcError::SqlException(error))
+            if error.class_name() == "java.sql.SQLDataException"
+                && error.sql_state() == Some("22003")
     ));
     assert!(matches!(
         result_set.byte(ColumnIndex::new(13).unwrap()),
-        Err(RdbcError::DriverError(_))
+        Err(RdbcError::SqlException(error))
+            if error.class_name() == "java.sql.SQLDataException"
+                && error.sql_state() == Some("22003")
     ));
     assert!(matches!(
         result_set.value(ColumnIndex::new(15).unwrap()),
@@ -448,4 +456,58 @@ fn shared_close_cancelled_queue_head_wakes_next_without_runtime() {
     ));
     assert_eq!(head_wake.0.load(Ordering::Acquire), cancelled_head_wakes);
     assert!(first.is_closed().unwrap());
+}
+
+/// 通过真实公开 ResultSet/RowSet 入口检查下标与列名两条类型化转换路径。
+#[tokio::test]
+async fn buffered_typed_integer_reads_preserve_data_errors_and_null_state() {
+    use druid_rdbc::types::{RdbcObject, RdbcTargetType};
+    let mut result = BufferedRowSet::with_column_labels(
+        vec![Row::new(vec![
+            Value::Float(f64::NAN),
+            Value::Float(9223372036854775808.0),
+            Value::Int(128),
+            Value::String("private-invalid-number".to_owned()),
+            Value::Null,
+            Value::Float(-17.9),
+        ])],
+        ["nan", "overflow", "byte", "invalid", "null", "fraction"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+    );
+    assert!(result.next().await.unwrap());
+    for (index, label, target, state) in [
+        (1, "nan", RdbcTargetType::Long, "22003"),
+        (2, "overflow", RdbcTargetType::Long, "22003"),
+        (3, "byte", RdbcTargetType::Byte, "22003"),
+        (4, "invalid", RdbcTargetType::Long, "22018"),
+    ] {
+        for read in [
+            result.object_as(ColumnIndex::new(index).unwrap(), &target),
+            result.object_as_by_label(label, &target),
+        ] {
+            let RdbcError::SqlException(error) = read.unwrap_err() else {
+                panic!("expected SQLDataException")
+            };
+            assert_eq!(error.class_name(), "java.sql.SQLDataException");
+            assert_eq!(error.sql_state(), Some(state));
+            assert!(!format!("{error:?}").contains("private-invalid-number"));
+        }
+    }
+    assert_eq!(
+        result
+            .object_as_by_label("null", &RdbcTargetType::Long)
+            .unwrap(),
+        RdbcObject::Scalar(Value::Null)
+    );
+    assert!(result.was_null().unwrap());
+    assert_eq!(
+        result
+            .object_as_by_label("fraction", &RdbcTargetType::Long)
+            .unwrap(),
+        RdbcObject::Long(-17)
+    );
+    assert!(!result.was_null().unwrap());
+    result.close().await.unwrap();
 }
