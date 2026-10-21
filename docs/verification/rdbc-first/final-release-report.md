@@ -1,5 +1,12 @@
 # RDBC-first release gate verdict
 
+## Latest approved-difference implementation — 2026-10-21
+
+The fourteen Java Druid differences approved by the user are now matched by exact scope, case identity and both complete observed records. All nine live comparator targets passed in one unified benchmark module run: 25 tests passed, zero failed/ignored; strict benchmark test Clippy passed. [Current paired observations](approved-differences-20261021/README.md) retain 636 cases: 620 MATCH and 16 approved differences. The original 59-case denominator is unchanged: 47 MATCH and 12 approved differences. Five pairing-verifier mutation checks also pass. The GetResultSet SemVer allowance was separately approved and its full frozen report replay passed.
+
+Earlier pending/failure statements below describe historical evidence. These approvals concern Java Druid implementation differences, not JDBC exceptions. Full Rust JDBC completion under MC-08 and production readiness remain **NOT_READY**; unassessed JDBC identities are not certified by these comparators.
+
+
 Current-source driver matrix run 39466380279, attempt 1, is terminal: **42 success, 1 failure (SemVer), 1 cancelled (macOS/JDK 17 HSQLDB, no runner/steps)**. [Per-job receipt](matrix-59d8246-attempt1-20261021.tsv). The cancelled job alone was resubmitted as attempt 2 and passed: the final combined result is **43 success, 1 SemVer failure**, with no cancelled or unfinished jobs. [Final per-job receipt](matrix-59d8246-attempt2-20261021.tsv). All other configured platform/database, supply-chain and API jobs succeeded in attempt 1. SemVer continues to reject the unapproved GetResultSet exhaustive-enum addition.
 
 Status on 2026-10-21: **NOT_READY** for the full P07 plan. Current product source `5bb051f` passed the complete local default Druid module: **3,004 tests, zero failed/ignored**. The original same-version H2 WallFilter comparison matches all ten checkpoints. The frozen 59-case Java selection is fully paired but still has 47 exact matches, two approved standard differences and ten unapproved mismatches. The public-API evidence ledger has 17 PARTIAL links and 1,984 unassessed identities; integrity validation is not complete behavioral coverage. [Current commands and evidence](final-semantic-report.md#method-evidence-integrity-closure-and-full-default-druid-module--2026-10-21) retain these limits.

@@ -16,13 +16,16 @@ class FrozenCasePairsTest(unittest.TestCase):
         destination = self.root / verifier.DIRECTORY
         destination.mkdir(parents=True)
         shutil.copyfile(source / verifier.MANIFEST.name, destination / verifier.MANIFEST.name)
-        for directory in ("statement-errors-20261020", "resultset-five-20261020", "wall-multi-20261020", "pool-six-20261020", "callable-seven-20261020", "mock-sorter-20261020", "prepared-cache-20261020", "wall-table-20261021"):
-            (destination / directory).mkdir()
-            shutil.copyfile(source / directory / "comparison.tsv", destination / directory / "comparison.tsv")
+        _, rows = verifier.records(source / verifier.MANIFEST.name)
+        for reference in {row["comparison"] for row in rows if row["comparison"] != "-"}:
+            target = destination / reference
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source / reference, target)
 
-    def test_actual_evidence_keeps_full_denominator_and_mismatch_counts(self):
+
+    def test_actual_evidence_keeps_full_denominator_and_approved_counts(self):
         counts = verifier.verify(self.root)
-        self.assertEqual(dict(counts), {"MATCH": 47, "APPROVED_STANDARD_DIFFERENCE": 2, "MISMATCH": 10})
+        self.assertEqual(dict(counts), {"MATCH": 47, "APPROVED_STANDARD_DIFFERENCE": 12})
 
     def test_removed_case_is_rejected(self):
         path = self.root / verifier.MANIFEST
@@ -31,9 +34,9 @@ class FrozenCasePairsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "59 cases"):
             verifier.verify(self.root)
 
-    def test_falsely_promoted_mismatch_is_rejected(self):
+    def test_falsely_promoted_approved_difference_is_rejected(self):
         path = self.root / verifier.MANIFEST
-        path.write_text(path.read_text(encoding="utf-8").replace("\tMISMATCH\t", "\tMATCH\t"), encoding="utf-8")
+        path.write_text(path.read_text(encoding="utf-8").replace("\tAPPROVED_STANDARD_DIFFERENCE\t", "\tMATCH\t", 1), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "actual paired output"):
             verifier.verify(self.root)
 

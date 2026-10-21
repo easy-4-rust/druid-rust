@@ -1,4 +1,6 @@
 //! 冻结 PreparedStatement 缓存用例：属性恢复、结果遍历及语句诊断可观察性。
+#[path = "approved_difference_support/allowance.rs"]
+mod approved_difference_support;
 #[path = "../../druid/tests/standard_test_support/mod.rs"]
 mod standard_test_support;
 use druid_rdbc::connection::Connection;
@@ -267,6 +269,9 @@ async fn pinned_java_and_rust_compare_original_prepared_cache_case() {
     for (id, valid) in &rust {
         let status = if observed[id] == *valid {
             "MATCH"
+        } else if approved_difference_support::approved("prepared_cache", id, &observed[id], valid)
+        {
+            "APPROVED_STANDARD_DIFFERENCE"
         } else {
             "MISMATCH"
         };
@@ -275,9 +280,10 @@ async fn pinned_java_and_rust_compare_original_prepared_cache_case() {
     }
     std::fs::write(output.join("comparison.tsv"), comparison).unwrap();
     std::fs::write(output.join("rust-results.tsv"), rust_tsv).unwrap();
-    assert_eq!(
-        observed, rust,
+    assert!(
+        rust.iter().all(|(id, value)| observed[id] == *value
+            || approved_difference_support::approved("prepared_cache", id, &observed[id], value)),
         "unapproved prepared cache observation difference"
     );
-    println!("1 original prepared cache case: 1 exact match, 0 allowed differences");
+    println!("1 original prepared cache case compared with exact approved records");
 }

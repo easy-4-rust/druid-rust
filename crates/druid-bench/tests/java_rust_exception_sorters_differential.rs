@@ -1,4 +1,6 @@
 //! 从冻结源码重编译 Java 分类器，与 Rust 对共享异常语料逐例比较。
+#[path = "approved_difference_support/allowance.rs"]
+mod approved_difference_support;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -254,9 +256,15 @@ fn pinned_java_and_rust_match_every_shared_exception_case() {
     let mut records = String::from("case\tjava\trust\tstatus\n");
     for (id, rust) in &rust_results {
         let java = java_results.get(id).expect("same case identity");
-        let status = if java == rust { "MATCH" } else { "MISMATCH" };
+        let status = if java == rust {
+            "MATCH"
+        } else if approved_difference_support::approved("exception_sorters", id, java, rust) {
+            "APPROVED_STANDARD_DIFFERENCE"
+        } else {
+            "MISMATCH"
+        };
         writeln!(records, "{id}\t{java}\t{rust}\t{status}").expect("write comparison row");
-        if java != rust {
+        if status == "MISMATCH" {
             mismatches.push(id);
         }
     }

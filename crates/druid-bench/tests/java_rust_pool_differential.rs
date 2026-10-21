@@ -1,4 +1,6 @@
 //! 冻结三类六例 Pool 输入的实时 Java/Rust 对照；差异保留为失败。
+#[path = "approved_difference_support/allowance.rs"]
+mod approved_difference_support;
 #[path = "pool_case_support/cases.rs"]
 mod pool_case_support;
 #[path = "../../druid/tests/standard_test_support/mod.rs"]
@@ -180,6 +182,8 @@ async fn pinned_java_and_rust_compare_all_six_pool_cases() {
     for (id, valid) in &rust {
         let status = if &observed[id] == valid {
             "MATCH"
+        } else if approved_difference_support::approved("pool", id, &observed[id], valid) {
+            "APPROVED_STANDARD_DIFFERENCE"
         } else {
             "MISMATCH"
         };
@@ -188,6 +192,10 @@ async fn pinned_java_and_rust_compare_all_six_pool_cases() {
     }
     std::fs::write(output.join("comparison.tsv"), comparison).unwrap();
     std::fs::write(output.join("rust-results.tsv"), rust_tsv).unwrap();
-    assert_eq!(observed, rust, "unapproved Pool difference");
-    println!("6 original Pool cases compared with no allowance path");
+    assert!(
+        rust.iter().all(|(id, value)| observed[id] == *value
+            || approved_difference_support::approved("pool", id, &observed[id], value)),
+        "unapproved Pool difference"
+    );
+    println!("6 original Pool cases compared with exact approved records");
 }

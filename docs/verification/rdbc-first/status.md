@@ -1,5 +1,12 @@
 # 当前验证状态（2026-10-21）
 
+## Latest approved-difference implementation — 2026-10-21
+
+The fourteen Java Druid differences approved by the user are now matched by exact scope, case identity and both complete observed records. All nine live comparator targets passed in one unified benchmark module run: 25 tests passed, zero failed/ignored; strict benchmark test Clippy passed. [Current paired observations](approved-differences-20261021/README.md) retain 636 cases: 620 MATCH and 16 approved differences. The original 59-case denominator is unchanged: 47 MATCH and 12 approved differences. Five pairing-verifier mutation checks also pass. The GetResultSet SemVer allowance was separately approved and its full frozen report replay passed.
+
+Earlier pending/failure statements below describe historical evidence. These approvals concern Java Druid implementation differences, not JDBC exceptions. Full Rust JDBC completion under MC-08 and production readiness remain **NOT_READY**; unassessed JDBC identities are not certified by these comparators.
+
+
 **总判定：NOT_READY。** 当前事实以 [最终门禁报告](final-release-report.md)、正式 OpenSpec 和逐项运行证据为准。下面的历史记录保留原冻结输入与原失败，不表示旧进程仍在运行，也不表示已通过的修复仍然失败。
 
 | 范围 | 已验证进展 | 尚未闭合 |

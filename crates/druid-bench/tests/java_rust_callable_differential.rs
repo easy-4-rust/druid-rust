@@ -1,4 +1,6 @@
 //! 冻结 Callable 七例实时差分；未批准的身份、错误和计数差异保持失败。
+#[path = "approved_difference_support/allowance.rs"]
+mod approved_difference_support;
 #[path = "callable_case_support/cases.rs"]
 mod callable_case_support;
 #[path = "../../druid/tests/standard_test_support/mod.rs"]
@@ -187,6 +189,8 @@ async fn pinned_java_and_rust_compare_all_seven_callable_cases() {
     for (id, valid) in &rust {
         let status = if &observed[id] == valid {
             "MATCH"
+        } else if approved_difference_support::approved("callable", id, &observed[id], valid) {
+            "APPROVED_STANDARD_DIFFERENCE"
         } else {
             "MISMATCH"
         };
@@ -195,6 +199,10 @@ async fn pinned_java_and_rust_compare_all_seven_callable_cases() {
     }
     std::fs::write(output.join("comparison.tsv"), comparison).unwrap();
     std::fs::write(output.join("rust-results.tsv"), rust_tsv).unwrap();
-    assert_eq!(observed, rust, "unapproved Callable difference");
-    println!("7 original Callable cases compared with no allowance path");
+    assert!(
+        rust.iter().all(|(id, value)| observed[id] == *value
+            || approved_difference_support::approved("callable", id, &observed[id], value)),
+        "unapproved Callable difference"
+    );
+    println!("7 original Callable cases compared with exact approved records");
 }

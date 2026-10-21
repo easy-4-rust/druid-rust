@@ -1,4 +1,6 @@
 //! 冻结五例 ResultSet 的实时双端对照；未经确认的差异保持失败。
+#[path = "approved_difference_support/allowance.rs"]
+mod approved_difference_support;
 mod result_set_case_support;
 #[path = "../../druid/tests/standard_test_support/mod.rs"]
 mod standard_test_support;
@@ -202,6 +204,8 @@ async fn pinned_java_and_rust_compare_all_five_result_set_inputs() {
         let java = &java_records[id];
         let status = if java == value {
             "MATCH"
+        } else if approved_difference_support::approved("result_set", id, java, value) {
+            "APPROVED_STANDARD_DIFFERENCE"
         } else {
             mismatches.push(id.clone());
             "MISMATCH"
@@ -213,7 +217,7 @@ async fn pinned_java_and_rust_compare_all_five_result_set_inputs() {
         .all(|line| line.split('\t').count() == 30));
     std::fs::write(output.join("comparison.tsv"), comparison).unwrap();
     println!(
-        "5 ResultSet cases: {} matches, {} unapproved differences",
+        "5 ResultSet cases: {} matches or exact approved differences, {} unapproved differences",
         5 - mismatches.len(),
         mismatches.len()
     );
