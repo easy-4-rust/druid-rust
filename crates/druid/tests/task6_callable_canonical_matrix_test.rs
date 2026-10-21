@@ -352,6 +352,12 @@ async fn task6_callable_errors_invalidate_cache_and_non_callable_handles_are_rej
             .out_parameter_as(&selector, &druid_rdbc::types::RdbcTargetType::String))
         .is_err());
     invalid_index.close().await.unwrap();
+    // Java: DruidPooledConnection 在 holder 创建成功后 incrementPreparedStatementCount，
+    // 关闭时 incrementClosedPreparedStatementCount；逐次断言固定第 1 次计数的归属。
+    let state = pool.state();
+    assert_eq!(state.prepared_statement_count, 1);
+    assert_eq!(state.closed_prepared_statement_count, 1);
+    assert_eq!(state.cached_prepared_statement_delete_count, 1);
 
     let mut invalid_name = connection
         .prepare_call(
@@ -520,6 +526,12 @@ async fn task6_callable_errors_invalidate_cache_and_non_callable_handles_are_rej
         )
         .is_err());
     invalid_name.close().await.unwrap();
+    // Java: DruidPooledConnection 在 holder 创建成功后 incrementPreparedStatementCount，
+    // 关闭时 incrementClosedPreparedStatementCount；逐次断言固定第 2 次计数的归属。
+    let state = pool.state();
+    assert_eq!(state.prepared_statement_count, 2);
+    assert_eq!(state.closed_prepared_statement_count, 2);
+    assert_eq!(state.cached_prepared_statement_delete_count, 2);
 
     let mut unavailable = connection
         .prepare_call(
@@ -574,6 +586,12 @@ async fn task6_callable_errors_invalidate_cache_and_non_callable_handles_are_rej
         )
         .is_err());
     unavailable.close().await.unwrap();
+    // Java: DruidPooledConnection 在 holder 创建成功后 incrementPreparedStatementCount，
+    // 关闭时 incrementClosedPreparedStatementCount；逐次断言固定第 3 次计数的归属。
+    let state = pool.state();
+    assert_eq!(state.prepared_statement_count, 3);
+    assert_eq!(state.closed_prepared_statement_count, 3);
+    assert_eq!(state.cached_prepared_statement_delete_count, 3);
 
     let mut wrong_type = connection
         .prepare_call(
@@ -619,6 +637,12 @@ async fn task6_callable_errors_invalidate_cache_and_non_callable_handles_are_rej
         .sql_xml_out_parameter(&CallableParameter::by_index(1).unwrap())
         .is_err());
     wrong_type.close().await.unwrap();
+    // Java: DruidPooledConnection 在 holder 创建成功后 incrementPreparedStatementCount，
+    // 关闭时 incrementClosedPreparedStatementCount；逐次断言固定第 4 次计数的归属。
+    let state = pool.state();
+    assert_eq!(state.prepared_statement_count, 4);
+    assert_eq!(state.closed_prepared_statement_count, 4);
+    assert_eq!(state.cached_prepared_statement_delete_count, 4);
 
     let mut byte_overflow = connection
         .prepare_call(
@@ -631,6 +655,12 @@ async fn task6_callable_errors_invalidate_cache_and_non_callable_handles_are_rej
         .byte_out_parameter(&CallableParameter::by_index(4).unwrap())
         .is_err());
     byte_overflow.close().await.unwrap();
+    // Java: DruidPooledConnection 在 holder 创建成功后 incrementPreparedStatementCount，
+    // 关闭时 incrementClosedPreparedStatementCount；逐次断言固定第 5 次计数的归属。
+    let state = pool.state();
+    assert_eq!(state.prepared_statement_count, 5);
+    assert_eq!(state.closed_prepared_statement_count, 5);
+    assert_eq!(state.cached_prepared_statement_delete_count, 5);
 
     let wrong_handle = connection
         .prepare_call(
@@ -644,6 +674,16 @@ async fn task6_callable_errors_invalidate_cache_and_non_callable_handles_are_rej
             operation: "connection_prepare_call"
         })
     ));
+    // 第 6 次计数发生在“驱动返回非 Callable 句柄”的路径：Java 在 conn.prepareCall
+    // 返回后、initStatement 之前递增 preparedStatementCount，转换失败不回滚该计数。
+    // 注：冻结对照只对 prepared=6 有证据；closed 在该步的归属是 Rust 侧回归断言。
+    let state = pool.state();
+    assert_eq!(state.prepared_statement_count, 6);
+    // 拒绝路径同样关闭刚创建的 holder，因此 closed/delete 也同步到 6；
+    // 其后 "unsupported" 在驱动层失败，不产生第 7 个 holder。
+    assert_eq!(state.closed_prepared_statement_count, 6);
+    assert_eq!(state.cached_prepared_statement_delete_count, 6);
+
     assert!(matches!(
         connection
             .prepare_call(
