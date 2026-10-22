@@ -1,0 +1,3 @@
+path	status	approved_at	review_by	reason
+crates/druid-rdbc/src/extensions/row_set.rs	APPROVED_EXCEPTION	2026-10-23	2026-12-31	single pub trait RowSet with 85 default methods; C-option measured 826 lines after moving 68 bodies
+crates/druid-rdbc/src/result_set/result_set_ext.rs	APPROVED_EXCEPTION	2026-10-23	2026-12-31	single pub trait ResultSetExt with 100 default methods; C-option projected about 899 lines
