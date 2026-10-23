@@ -12,6 +12,9 @@
 | `WallDenyStat` | `druid-rdbc::governance::wall::deny_stat` | `druid::sql::wall_deny_stat::WallDenyStat` |
 | `WallSqlFunctionStat` | `druid-rdbc::governance::wall::sql_function_stat` | `druid::sql::wall_sql_function_stat::WallSqlFunctionStat` |
 | `WallSqlTableStat` | `druid-rdbc::governance::wall::sql_table_stat` | `druid::sql::wall_sql_table_stat::WallSqlTableStat` |
+| `WallTableStatValue` | `druid-rdbc::governance::wall::table_stat_value` | `druid::sql::wall_table_stat_value::WallTableStatValue` |
+| `WallSqlStatValue` | `druid-rdbc::governance::wall::sql_stat_value` | `druid::sql::wall_sql_stat_value::WallSqlStatValue` |
+| `WallTableStat` | `druid-rdbc::governance::wall::table_stat` | `druid::sql::wall_table_stat::WallTableStat` |
 
 `crates/druid/src/sql/wall_violation.rs` 与 `wall_deny_stat.rs` 变为 `pub use` 转发模块，类型身份不变，调用方无需改动。
 
@@ -23,6 +26,10 @@ cargo test -p druid-rdbc --lib                  # 10 passed
 cargo test -p druid --lib                       # 161 passed
 cargo clippy -p druid-rdbc -p druid --lib -- -D warnings -A clippy::pedantic
 ```
+
+## 2.1 新增依赖
+
+`druid-rdbc` 增加 `serde`、`serde_json`（纯数据序列化，不涉及运行时/驱动），用于 `WallTableStatValue` 与 `WallSqlStatValue`。
 
 ## 3. 未做
 

@@ -5,5 +5,8 @@
 
 pub mod deny_stat;
 pub mod sql_function_stat;
+pub mod sql_stat_value;
 pub mod sql_table_stat;
+pub mod table_stat;
+pub mod table_stat_value;
 pub mod violation;
