@@ -99,7 +99,7 @@
 | oracle | oracle-date-literal | parameterized | JAVA_QUIRK | Druid 不参数化 DATE 字面量，Rust 参数化为 DATE ? | 保留 Rust 行为；差异记入矩阵 |
 | odps | odps-insert-overwrite-partition | parameterized | RUST_KEEP | Rust 保留 INSERT OVERWRITE TABLE 的 TABLE 关键字 | 保留；不影响执行语义 |
 | hive | hive-insert-partition | parameterized | RUST_KEEP | 同上 | 保留 |
-| doris | doris-create-unique-key | parameterized | DRUID_EXTENSION | Druid 把 UNIQUE KEY 重写为 INTO/BUCKETS OPTIONS，丢失表模型 | 随 P2.3 一起修 |
+| doris | doris-create-unique-key | parameterized | JAVA_QUIRK | Druid 把 UNIQUE KEY 重写为 INTO/BUCKETS OPTIONS，丢失表模型；Rust 保留原 DDL | 保留 Rust 行为；不追平 Java 的丢失性重写 |
 
 ## 结论与下一步
 
