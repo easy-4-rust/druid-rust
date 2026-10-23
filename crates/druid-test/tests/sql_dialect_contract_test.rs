@@ -49,10 +49,23 @@ fn doris_select_and_alter_round_trip() {
 }
 
 #[test]
+fn oracle_returning_into_preserves_the_bind_clause() {
+    let statements = SqlUtils::parse_statements(
+        "INSERT INTO t (id) VALUES (1) RETURNING id INTO :out_id",
+        DbType::Oracle,
+    )
+    .expect("RETURNING ... INTO parses");
+    let formatted = SqlUtils::to_sql_string(&statements);
+    assert!(
+        formatted.contains("RETURNING id INTO :out_id"),
+        "formatted SQL lost the INTO bind clause: {formatted}"
+    );
+}
+
+#[test]
 fn documented_gaps_remain_explicit() {
     // 这些是 P2 已登记的缺口；修复后本测试应改为 round_trip 并删除断言。
     for (db_type, sql) in [
-        (DbType::Oracle, "INSERT INTO t (id) VALUES (1) RETURNING id INTO :out_id"),
         (DbType::Hive, "SELECT * FROM t TABLESAMPLE (10 PERCENT)"),
         (
             DbType::Doris,

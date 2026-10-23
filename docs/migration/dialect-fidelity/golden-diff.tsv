@@ -28,6 +28,6 @@ oracle	oracle-date-literal	true	false	true	ok	ok	SELECT * FROM emp WHERE hiredat
 oracle	oracle-decode-nvl	true	true	true	ok	ok	SELECT NVL(a, ?)  , DECODE(b, ?, ?, ?) FROM dual	SELECT NVL(a, ?), DECODE(b, ?, ?, ?) FROM dual
 oracle	oracle-identity	false	false	false	err	ok	ERR:ParserException:syntax error, expect (, actual , pos 59, line 1, column 59, token ,	CREATE TABLE t (id NUMBER(?) GENERATED ALWAYS AS IDENTITY, v VARCHAR2(?))
 oracle	oracle-merge	true	true	true	ok	ok	MERGE INTO t USING s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.v = s.v WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v)	MERGE INTO t USING s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.v = s.v WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v)
-oracle	oracle-returning-into	false	true	false	ok	err	INSERT INTO t (id) VALUES (?) RETURNING id INTO :out_id	INSERT INTO t (id) VALUES (?) RETURNING id INTO :out_id
+oracle	oracle-returning-into	true	true	true	ok	ok	INSERT INTO t (id) VALUES (?) RETURNING id INTO :out_id	INSERT INTO t (id) VALUES (?) RETURNING id INTO :out_id
 oracle	oracle-rownum	true	true	true	ok	ok	SELECT * FROM t WHERE ROWNUM <= ?	SELECT * FROM t WHERE ROWNUM <= ?
 oracle	oracle-table-function	true	true	true	ok	ok	SELECT * FROM TABLE(fn(?))	SELECT * FROM TABLE(fn(?))

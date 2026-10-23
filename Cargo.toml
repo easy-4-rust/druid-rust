@@ -171,6 +171,7 @@ inventory       = "0.3.24"
 indexmap        = "2"
 
 [patch.crates-io]
+sqlparser = { path = "vendor/sqlparser" }
 # libSQL 0.9.30 的默认远程连接器只协商 HTTP/1；移除其未使用的
 # Hyper HTTP/2 feature，避免把尚未修复的 h2 0.3.x 纳入依赖闭包。
 # 上游迁移 Hyper 1.x 并发布后，应移除该本地源码补丁。

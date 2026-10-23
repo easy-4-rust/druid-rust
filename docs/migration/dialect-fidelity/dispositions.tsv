@@ -1,5 +1,5 @@
 dialect	case	dimension	disposition	rationale	next_action
-oracle	oracle-returning-into	parse	PREPROCESS	Druid 接受 RETURNING ... INTO；sqlparser 0.52 无该扩展	P2.1：解析前重写为占位并保留出参绑定元数据，补差分用例
+oracle	oracle-returning-into	parse	FIXED_LOCAL_PATCH	已通过 vendor/sqlparser 本地补丁支持 RETURNING ... INTO（Insert.returning_into）	保持补丁；上游支持后删除
 hive	hive-tablesample	parse	SQLPARSER_UPSTREAM	Hive 旧式 TABLESAMPLE (n PERCENT) 未被 sqlparser 接受	P2.2：先升级/验证 sqlparser 上游支持，否则走预处理并记录
 doris	doris-create-unique-key	parse	DRUID_EXTENSION	Doris UNIQUE KEY / DISTRIBUTED BY ... BUCKETS DDL 为 Doris 方言扩展	P2.3：在 Doris 方言层做 DDL 预解析，保留表模型信息
 doris	doris-alter-add-column	parse	JAVA_QUIRK	Druid 1.2.28 的 Doris 方言不接受 ALTER TABLE ADD COLUMN；Rust 接受更合理	无代码动作；在矩阵 README 标注 Java 侧限制
