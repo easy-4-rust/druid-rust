@@ -1806,9 +1806,11 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
+ "sqlparser",
  "tokio",
  "url",
  "uuid",
+ "xxhash-rust",
 ]
 
 [[package]]

@@ -15,6 +15,10 @@
 | `WallTableStatValue` | `druid-rdbc::governance::wall::table_stat_value` | `druid::sql::wall_table_stat_value::WallTableStatValue` |
 | `WallSqlStatValue` | `druid-rdbc::governance::wall::sql_stat_value` | `druid::sql::wall_sql_stat_value::WallSqlStatValue` |
 | `WallTableStat` | `druid-rdbc::governance::wall::table_stat` | `druid::sql::wall_table_stat::WallTableStat` |
+| `WallSqlStat` | `druid-rdbc::governance::wall::sql_stat` | `druid::sql::wall_sql_stat::WallSqlStat` |
+| `WallUpdateCheckItem` | `druid-rdbc::governance::wall::update_check_item` | `druid::sql::wall_update_check_item::WallUpdateCheckItem` |
+| `WallCheckResult` | `druid-rdbc::governance::wall::check_result` | `druid::sql::wall_check_result::WallCheckResult` |
+| `fingerprint`（SQL 指纹） | `druid-rdbc::governance::hashing` | `druid::stats::fingerprint`（委托） |
 
 `crates/druid/src/sql/wall_violation.rs` 与 `wall_deny_stat.rs` 变为 `pub use` 转发模块，类型身份不变，调用方无需改动。
 
@@ -29,7 +33,7 @@ cargo clippy -p druid-rdbc -p druid --lib -- -D warnings -A clippy::pedantic
 
 ## 2.1 新增依赖
 
-`druid-rdbc` 增加 `serde`、`serde_json`（纯数据序列化，不涉及运行时/驱动），用于 `WallTableStatValue` 与 `WallSqlStatValue`。
+`druid-rdbc` 增加 `serde`、`serde_json`、`xxhash-rust`、`sqlparser`（纯数据/AST，不涉及运行时/驱动），用于剩余 Wall 值对象与 `WallCheckResult`。
 
 ## 3. 未做
 

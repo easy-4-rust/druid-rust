@@ -4,5 +4,6 @@
 //! `druid` 运行时负责装配与调用；对应 Java 逻辑集中在
 //! `com.alibaba.druid.pool.DruidDataSource`。
 
+pub mod hashing;
 pub mod shrink_policy;
 pub mod wall;
