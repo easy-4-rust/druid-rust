@@ -40,6 +40,7 @@ fn hive_partitioned_insert_and_cluster_by_round_trip() {
         "INSERT OVERWRITE TABLE t PARTITION (ds='2020') SELECT * FROM s",
     );
     round_trip(DbType::Hive, "SELECT * FROM t CLUSTER BY k");
+    round_trip(DbType::Hive, "SELECT * FROM t TABLESAMPLE (10 PERCENT)");
 }
 
 #[test]
@@ -66,7 +67,6 @@ fn oracle_returning_into_preserves_the_bind_clause() {
 fn documented_gaps_remain_explicit() {
     // 这些是 P2 已登记的缺口；修复后本测试应改为 round_trip 并删除断言。
     for (db_type, sql) in [
-        (DbType::Hive, "SELECT * FROM t TABLESAMPLE (10 PERCENT)"),
         (
             DbType::Doris,
             "CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3",
