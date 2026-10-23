@@ -974,6 +974,8 @@ pub enum TableFactor {
         with_ordinality: bool,
         /// [Partition selection](https://dev.mysql.com/doc/refman/8.0/en/partitioning-selection.html), supported by MySQL.
         partitions: Vec<Ident>,
+        /// Hive legacy sampling: `TABLESAMPLE (10 PERCENT)`.
+        sample: Option<TableSample>,
     },
     Derived {
         lateral: bool,
@@ -1343,6 +1345,23 @@ impl fmt::Display for RepetitionQuantifier {
     }
 }
 
+/// Hive legacy table sampling clause.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct TableSample {
+    /// Sample size expression.
+    pub quantity: Expr,
+    /// Whether the quantity is a percentage (`TABLESAMPLE (10 PERCENT)`).
+    pub percent: bool,
+}
+
+impl fmt::Display for TableSample {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "TABLESAMPLE ({}{})", self.quantity, if self.percent { " PERCENT" } else { "" })
+    }
+}
+
 impl fmt::Display for TableFactor {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -1353,11 +1372,15 @@ impl fmt::Display for TableFactor {
                 with_hints,
                 version,
                 partitions,
+                sample,
                 with_ordinality,
             } => {
                 write!(f, "{name}")?;
                 if !partitions.is_empty() {
                     write!(f, "PARTITION ({})", display_comma_separated(partitions))?;
+                }
+                if let Some(sample) = sample {
+                    write!(f, " {sample}")?;
                 }
                 if let Some(args) = args {
                     write!(f, "(")?;

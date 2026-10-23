@@ -14,7 +14,7 @@ hive	hive-mapjoin	true	true	true	ok	ok	SELECT /*+ MAPJOIN(b) */ a.* FROM a JOIN 
 hive	hive-named-struct	true	true	true	ok	ok	SELECT named_struct(?, ?) FROM t	SELECT named_struct(?, ?) FROM t
 hive	hive-partition-filter	true	true	true	ok	ok	SELECT * FROM t WHERE ds = ?	SELECT * FROM t WHERE ds = ?
 hive	hive-stored-parquet	true	false	true	ok	ok	CREATE TABLE t (  a STRING ) STORE AS PARQUET	CREATE TABLE t (a STRING) STORED AS PARQUET
-hive	hive-tablesample	false	true	false	ok	err	SELECT * FROM t TABLESAMPLE (? PERCENT)	SELECT * FROM t TABLESAMPLE (? PERCENT)
+hive	hive-tablesample	true	true	true	ok	ok	SELECT * FROM t TABLESAMPLE (? PERCENT)	SELECT * FROM t TABLESAMPLE (? PERCENT)
 odps	odps-cast	true	true	true	ok	ok	SELECT CAST(a AS BIGINT) FROM t	SELECT CAST(a AS BIGINT) FROM t
 odps	odps-create-partitioned	true	true	true	ok	ok	CREATE TABLE t (  a STRING ) PARTITIONED BY (  ds STRING )	CREATE TABLE t (a STRING) PARTITIONED BY (ds STRING)
 odps	odps-distribute-sort	true	true	true	ok	ok	SELECT * FROM t DISTRIBUTE BY k SORT BY v	SELECT * FROM t DISTRIBUTE BY k SORT BY v

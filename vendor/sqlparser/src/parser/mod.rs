@@ -10167,6 +10167,16 @@ impl<'a> Parser<'a> {
                 vec![]
             };
 
+            let sample = if self.parse_keyword(Keyword::TABLESAMPLE) {
+                self.expect_token(&Token::LParen)?;
+                let quantity = self.parse_expr()?;
+                let percent = self.parse_keyword(Keyword::PERCENT);
+                self.expect_token(&Token::RParen)?;
+                Some(crate::ast::TableSample { quantity, percent })
+            } else {
+                None
+            };
+
             // Parse potential version qualifier
             let version = self.parse_table_version()?;
 
@@ -10200,6 +10210,7 @@ impl<'a> Parser<'a> {
                 with_hints,
                 version,
                 partitions,
+                sample,
                 with_ordinality,
             };
 

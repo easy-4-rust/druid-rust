@@ -15,6 +15,9 @@ Druid accepts Oracle `INSERT ... RETURNING <exprs> INTO <bind vars>`
 |---|---|
 | `src/ast/dml.rs` | `Insert` gains `returning_into: Option<Vec<String>>`; `Display` appends ` INTO a, b` |
 | `src/parser/mod.rs` | after `RETURNING <items>`, GenericDialect accepts `INTO` followed by `:`-prefixed bind variables or placeholders |
+| `src/ast/query.rs` + `src/ast/mod.rs` | `TableFactor::Table` gains `sample: Option<TableSample>` (`TABLESAMPLE (n PERCENT)`); `TableSample` exported |
+| `src/parser/mod.rs` | parses Hive legacy `TABLESAMPLE (n [PERCENT])` after the table name |
+| `src/test_utils.rs` | test constructors set `sample: None` |
 
 Bind variables are stored as raw strings (`":out_id"`) so formatting and
 parameterization preserve the Oracle spelling.

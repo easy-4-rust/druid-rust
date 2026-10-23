@@ -59,7 +59,7 @@ pub use self::query::{
     NamedWindowDefinition, NamedWindowExpr, NonBlock, Offset, OffsetRows, OrderBy, OrderByExpr,
     PivotValueSource, ProjectionSelect, Query, RenameSelectItem, RepetitionQuantifier,
     ReplaceSelectElement, ReplaceSelectItem, RowsPerMatch, Select, SelectInto, SelectItem, SetExpr,
-    SetOperator, SetQuantifier, Setting, SymbolDefinition, Table, TableAlias, TableFactor,
+    SetOperator, SetQuantifier, Setting, SymbolDefinition, Table, TableAlias, TableFactor, TableSample,
     TableFunctionArgs, TableVersion, TableWithJoins, Top, TopQuantity, ValueTableMode, Values,
     WildcardAdditionalOptions, With, WithFill,
 };

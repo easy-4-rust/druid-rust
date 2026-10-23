@@ -20,7 +20,7 @@ Hive	hive-insert-partition	ok	INSERT OVERWRITE TABLE t PARTITION (ds = '2020') S
 Hive	hive-mapjoin	ok	SELECT a.* FROM a JOIN b ON a.id = b.id	ok	SELECT /*+ MAPJOIN(b) */ a.* FROM a JOIN b ON a.id = b.id	0	SELECT /*+ MAPJOIN(b) */ a.* FROM a JOIN b ON a.id = b.id
 Hive	hive-stored-parquet	ok	CREATE TABLE t (a STRING) STORED AS PARQUET	ok	CREATE TABLE t (a STRING) STORED AS PARQUET	0	CREATE TABLE t (a STRING) STORED AS PARQUET
 Hive	hive-cluster-by	ok	SELECT * FROM t CLUSTER BY k	ok	SELECT * FROM t CLUSTER BY k	0	SELECT * FROM t CLUSTER BY k
-Hive	hive-tablesample	err	ERR:SQL parse error: sql parser error: Expected: identifier, found: 10 at Line: 1, Column: 30	n/a	SELECT * FROM t TABLESAMPLE (? PERCENT)	1	SELECT * FROM t TABLESAMPLE (10 PERCENT)
+Hive	hive-tablesample	ok	SELECT * FROM t TABLESAMPLE (10 PERCENT)	ok	SELECT * FROM t TABLESAMPLE (? PERCENT)	0	SELECT * FROM t TABLESAMPLE (10 PERCENT)
 Hive	hive-named-struct	ok	SELECT named_struct('a', 1) FROM t	ok	SELECT named_struct(?, ?) FROM t	0	SELECT named_struct('a', 1) FROM t
 Hive	hive-partition-filter	ok	SELECT * FROM t WHERE ds = '2020'	ok	SELECT * FROM t WHERE ds = ?	0	SELECT * FROM t WHERE ds = '2020'
 Doris	doris-select	ok	SELECT * FROM t WHERE k1 = 1	ok	SELECT * FROM t WHERE k1 = ?	0	SELECT * FROM t WHERE k1 = 1

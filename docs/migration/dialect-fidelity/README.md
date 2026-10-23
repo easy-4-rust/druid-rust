@@ -1,6 +1,6 @@
 # P2 方言保真矩阵（Oracle / ODPS / Hive / Doris）
 
-> 状态：**GOLDEN_DIFFED**。Rust 观测 + Java Druid 1.2.28 jar golden 已生成；parse 匹配 28/32，parameterized 匹配 24/32（空白与大小写不计差异）。
+> 状态：**GOLDEN_DIFFED**。Rust 观测 + Java Druid 1.2.28 jar golden 已生成；parse 匹配 29/32，parameterized 匹配 24/32（空白与大小写不计差异）。
 > 本文件由 scripts/dialect_fidelity_report.py 从 rust-observations.tsv 生成，禁止手改统计。
 
 ## 方法
@@ -60,7 +60,7 @@
 | hive-mapjoin | ok | ok | SELECT /*+ MAPJOIN(b) */ a.* FROM a JOIN b ON a.id = b.id | 0 | parse:MATCH, param:MATCH |
 | hive-stored-parquet | ok | ok | CREATE TABLE t (a STRING) STORED AS PARQUET | 0 | parse:MATCH, param:DIFF |
 | hive-cluster-by | ok | ok | SELECT * FROM t CLUSTER BY k | 0 | parse:MATCH, param:MATCH |
-| hive-tablesample | err | n/a | SELECT * FROM t TABLESAMPLE (? PERCENT) | 1 | parse:DIFF, param:MATCH |
+| hive-tablesample | err | n/a | SELECT * FROM t TABLESAMPLE (? PERCENT) | 1 | parse:MATCH, param:MATCH |
 | hive-named-struct | ok | ok | SELECT named_struct(?, ?) FROM t | 0 | parse:MATCH, param:MATCH |
 | hive-partition-filter | ok | ok | SELECT * FROM t WHERE ds = ? | 0 | parse:MATCH, param:MATCH |
 
@@ -91,7 +91,7 @@
 | 方言 | 用例 | 维度 | 处置 | 理由 | 下一步 |
 |---|---|---|---|---|---|
 | oracle | oracle-returning-into | parse | FIXED_LOCAL_PATCH | 已通过 vendor/sqlparser 本地补丁支持 RETURNING ... INTO（Insert.returning_into） | 保持补丁；上游支持后删除 |
-| hive | hive-tablesample | parse | SQLPARSER_UPSTREAM | Hive 旧式 TABLESAMPLE (n PERCENT) 未被 sqlparser 接受 | P2.2：先升级/验证 sqlparser 上游支持，否则走预处理并记录 |
+| hive | hive-tablesample | parse | FIXED_LOCAL_PATCH | 已通过 vendor/sqlparser 本地补丁支持 TABLESAMPLE (n PERCENT)（TableFactor::Table.sample） | 保持补丁；上游支持后删除 |
 | doris | doris-create-unique-key | parse | DRUID_EXTENSION | Doris UNIQUE KEY / DISTRIBUTED BY ... BUCKETS DDL 为 Doris 方言扩展 | P2.3：在 Doris 方言层做 DDL 预解析，保留表模型信息 |
 | doris | doris-alter-add-column | parse | JAVA_QUIRK | Druid 1.2.28 的 Doris 方言不接受 ALTER TABLE ADD COLUMN；Rust 接受更合理 | 无代码动作；在矩阵 README 标注 Java 侧限制 |
 | oracle | oracle-identity | parse | JAVA_QUIRK | Druid 1.2.28 不接受 GENERATED ALWAYS AS IDENTITY；Rust 支持 | 无代码动作；保留 Rust 能力 |
@@ -107,4 +107,4 @@
 2. **Doris 的 DDL 扩展**（UNIQUE KEY / BUCKETS）不被 GenericDialect 接受，属 P2 方案 C（Druid 侧扩展）的候选。
 3. **Oracle RETURNING INTO** 是 Druid Wall/解析常见语料，需在 P2 决定是补 sqlparser 扩展还是走预处理。
 4. Java golden 已由 `druid-1.2.28.jar` 生成；逐用例 Java 列显示 parse/param 的 MATCH/DIFF。
-5. 仍有 4 个 parse DIFF、8 个 parameterized DIFF；在差异收敛前，不得把本矩阵当作「方言保真通过」的证据。
+5. 仍有 3 个 parse DIFF、8 个 parameterized DIFF；在差异收敛前，不得把本矩阵当作「方言保真通过」的证据。
