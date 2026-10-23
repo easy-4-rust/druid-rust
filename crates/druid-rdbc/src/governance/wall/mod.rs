@@ -4,4 +4,6 @@
 //! 因此公共路径（`druid::sql::wall_violation::WallViolation` 等）不变。
 
 pub mod deny_stat;
+pub mod sql_function_stat;
+pub mod sql_table_stat;
 pub mod violation;

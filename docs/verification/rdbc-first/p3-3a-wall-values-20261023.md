@@ -10,6 +10,8 @@
 |---|---|---|
 | `WallViolation` | `druid-rdbc::governance::wall::violation` | `druid::sql::wall_violation::WallViolation` |
 | `WallDenyStat` | `druid-rdbc::governance::wall::deny_stat` | `druid::sql::wall_deny_stat::WallDenyStat` |
+| `WallSqlFunctionStat` | `druid-rdbc::governance::wall::sql_function_stat` | `druid::sql::wall_sql_function_stat::WallSqlFunctionStat` |
+| `WallSqlTableStat` | `druid-rdbc::governance::wall::sql_table_stat` | `druid::sql::wall_sql_table_stat::WallSqlTableStat` |
 
 `crates/druid/src/sql/wall_violation.rs` 与 `wall_deny_stat.rs` 变为 `pub use` 转发模块，类型身份不变，调用方无需改动。
 
