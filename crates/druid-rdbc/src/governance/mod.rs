@@ -5,3 +5,4 @@
 //! `com.alibaba.druid.pool.DruidDataSource`。
 
 pub mod shrink_policy;
+pub mod wall;
