@@ -158,6 +158,12 @@ pub struct CreateTable {
     /// Hive: Table clustering column list.
     /// <https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL#LanguageManualDDL-CreateTable>
     pub clustered_by: Option<ClusteredBy>,
+    /// Doris: `UNIQUE KEY (col, ...)`.
+    pub doris_unique_key: Option<Vec<Ident>>,
+    /// Doris: `DISTRIBUTED BY HASH (col, ...) [BUCKETS n]`.
+    pub doris_distribution: Option<DorisDistribution>,
+    /// Doris: `PROPERTIES ("key" = "value", ...)`.
+    pub doris_properties: Option<Vec<SqlOption>>,
     /// BigQuery: Table options list.
     /// <https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#table_option_list>
     pub options: Option<Vec<SqlOption>>,
@@ -192,6 +198,27 @@ pub struct CreateTable {
     /// Snowflake "WITH TAG" clause
     /// <https://docs.snowflake.com/en/sql-reference/sql/create-table>
     pub with_tags: Option<Vec<Tag>>,
+}
+
+/// Doris hash distribution clause.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct DorisDistribution {
+    /// Distribution columns.
+    pub columns: Vec<Ident>,
+    /// Optional bucket count.
+    pub buckets: Option<u64>,
+}
+
+impl Display for DorisDistribution {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "DISTRIBUTED BY HASH ({})", display_comma_separated(&self.columns))?;
+        if let Some(buckets) = self.buckets {
+            write!(f, " BUCKETS {buckets}")?;
+        }
+        Ok(())
+    }
 }
 
 impl Display for CreateTable {
@@ -281,6 +308,15 @@ impl Display for CreateTable {
 
         if let Some(clustered_by) = &self.clustered_by {
             write!(f, " {clustered_by}")?;
+        }
+        if let Some(unique_key) = &self.doris_unique_key {
+            write!(f, " UNIQUE KEY ({})", display_comma_separated(unique_key))?;
+        }
+        if let Some(distribution) = &self.doris_distribution {
+            write!(f, " {distribution}")?;
+        }
+        if let Some(properties) = &self.doris_properties {
+            write!(f, " PROPERTIES ({})", display_comma_separated(properties))?;
         }
 
         if let Some(HiveFormat {

@@ -47,7 +47,7 @@ pub use self::ddl::{
     Partition, ProcedureParam, ReferentialAction, TableConstraint, TagsColumnOption,
     UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation, ViewColumnDef,
 };
-pub use self::dml::{CreateIndex, CreateTable, Delete, Insert};
+pub use self::dml::{CreateIndex, CreateTable, Delete, DorisDistribution, Insert};
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
     AfterMatchSkip, ConnectBy, Cte, CteAsMaterialized, Distinct, EmptyMatchesMode,

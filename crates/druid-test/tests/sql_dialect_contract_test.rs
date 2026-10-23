@@ -64,17 +64,11 @@ fn oracle_returning_into_preserves_the_bind_clause() {
 }
 
 #[test]
-fn documented_gaps_remain_explicit() {
-    // 这些是 P2 已登记的缺口；修复后本测试应改为 round_trip 并删除断言。
-    for (db_type, sql) in [
-        (
-            DbType::Doris,
-            "CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3",
-        ),
-    ] {
-        assert!(
-            SqlUtils::parse_statements(sql, db_type).is_err(),
-            "documented gap unexpectedly parsed: {db_type:?} {sql}"
-        );
-    }
+fn doris_unique_key_ddl_round_trips() {
+    round_trip(
+        DbType::Doris,
+        "CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3 \
+         PROPERTIES (\"replication_num\" = \"1\")",
+    );
 }
+

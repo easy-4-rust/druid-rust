@@ -102,10 +102,10 @@ lines = [
     "|---|---:|---:|---:|---:|---|",
 ]
 notes = {
-    "Oracle": "RETURNING ... INTO 未支持",
-    "Odps": "无",
-    "Hive": "TABLESAMPLE (n PERCENT) 未支持",
-    "Doris": "UNIQUE KEY / DISTRIBUTED ... BUCKETS DDL 未支持",
+    "Oracle": "RETURNING ... INTO 已支持；剩余差异为 Java 1.2.28 限制",
+    "Odps": "无 Rust 侧缺口",
+    "Hive": "TABLESAMPLE (n PERCENT) 已支持；STORE AS 为 Java 输出瑕疵",
+    "Doris": "UNIQUE KEY / BUCKETS 已支持；ALTER 为 Java 侧限制",
 }
 for dialect in ("Oracle", "Odps", "Hive", "Doris"):
     group = by_dialect.get(dialect, [])

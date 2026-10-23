@@ -26,7 +26,7 @@ use sqlparser_derive::{Visit, VisitMut};
 
 use super::super::dml::CreateTable;
 use crate::ast::{
-    ClusteredBy, ColumnDef, CommentDef, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident,
+    ClusteredBy, ColumnDef, CommentDef, DorisDistribution, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident,
     ObjectName, OnCommit, OneOrManyWithParens, Query, RowAccessPolicy, SqlOption, Statement,
     TableConstraint, TableEngine, Tag, WrappedCollection,
 };
@@ -96,6 +96,9 @@ pub struct CreateTableBuilder {
     pub partition_by: Option<Box<Expr>>,
     pub cluster_by: Option<WrappedCollection<Vec<Ident>>>,
     pub clustered_by: Option<ClusteredBy>,
+    pub doris_unique_key: Option<Vec<Ident>>,
+    pub doris_distribution: Option<DorisDistribution>,
+    pub doris_properties: Option<Vec<SqlOption>>,
     pub options: Option<Vec<SqlOption>>,
     pub strict: bool,
     pub copy_grants: bool,
@@ -144,6 +147,9 @@ impl CreateTableBuilder {
             partition_by: None,
             cluster_by: None,
             clustered_by: None,
+            doris_unique_key: None,
+            doris_distribution: None,
+            doris_properties: None,
             options: None,
             strict: false,
             copy_grants: false,
@@ -310,6 +316,21 @@ impl CreateTableBuilder {
         self
     }
 
+    pub fn doris_unique_key(mut self, doris_unique_key: Option<Vec<Ident>>) -> Self {
+        self.doris_unique_key = doris_unique_key;
+        self
+    }
+
+    pub fn doris_distribution(mut self, doris_distribution: Option<DorisDistribution>) -> Self {
+        self.doris_distribution = doris_distribution;
+        self
+    }
+
+    pub fn doris_properties(mut self, doris_properties: Option<Vec<SqlOption>>) -> Self {
+        self.doris_properties = doris_properties;
+        self
+    }
+
     pub fn options(mut self, options: Option<Vec<SqlOption>>) -> Self {
         self.options = options;
         self
@@ -405,6 +426,9 @@ impl CreateTableBuilder {
             partition_by: self.partition_by,
             cluster_by: self.cluster_by,
             clustered_by: self.clustered_by,
+            doris_unique_key: self.doris_unique_key,
+            doris_distribution: self.doris_distribution,
+            doris_properties: self.doris_properties,
             options: self.options,
             strict: self.strict,
             copy_grants: self.copy_grants,
@@ -460,6 +484,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 partition_by,
                 cluster_by,
                 clustered_by,
+                doris_unique_key, doris_distribution, doris_properties,
                 options,
                 strict,
                 copy_grants,
@@ -503,6 +528,9 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 partition_by,
                 cluster_by,
                 clustered_by,
+                doris_unique_key,
+                doris_distribution,
+                doris_properties,
                 options,
                 strict,
                 copy_grants,

@@ -24,7 +24,7 @@ Hive	hive-tablesample	ok	SELECT * FROM t TABLESAMPLE (10 PERCENT)	ok	SELECT * FR
 Hive	hive-named-struct	ok	SELECT named_struct('a', 1) FROM t	ok	SELECT named_struct(?, ?) FROM t	0	SELECT named_struct('a', 1) FROM t
 Hive	hive-partition-filter	ok	SELECT * FROM t WHERE ds = '2020'	ok	SELECT * FROM t WHERE ds = ?	0	SELECT * FROM t WHERE ds = '2020'
 Doris	doris-select	ok	SELECT * FROM t WHERE k1 = 1	ok	SELECT * FROM t WHERE k1 = ?	0	SELECT * FROM t WHERE k1 = 1
-Doris	doris-create-unique-key	err	ERR:SQL parse error: sql parser error: Expected: end of statement, found: UNIQUE at Line: 1, Column: 32	n/a	CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS ? PROPERTIES ("replication_num" = "1")	1	CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES ("replication_num" = "1")
+Doris	doris-create-unique-key	ok	CREATE TABLE t (k1 INT, v INT) UNIQUE KEY (k1) DISTRIBUTED BY HASH (k1) BUCKETS 3 PROPERTIES ("replication_num" = "1")	ok	CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS ? PROPERTIES ("replication_num" = "1")	0	CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES ("replication_num" = "1")
 Doris	doris-distribute-buckets	err	ERR:SQL parse error: sql parser error: Expected: end of statement, found: BUCKETS at Line: 1, Column: 40	n/a	SELECT * FROM t DISTRIBUTE BY HASH(k1) BUCKETS ?	1	SELECT * FROM t DISTRIBUTE BY HASH(k1) BUCKETS 10
 Doris	doris-in-subquery	ok	SELECT * FROM t WHERE k1 IN (SELECT k1 FROM s)	ok	SELECT * FROM t WHERE k1 IN (SELECT k1 FROM s)	0	SELECT * FROM t WHERE k1 IN (SELECT k1 FROM s)
 Doris	doris-insert-select	ok	INSERT INTO t SELECT * FROM s	ok	INSERT INTO t SELECT * FROM s	0	INSERT INTO t SELECT * FROM s

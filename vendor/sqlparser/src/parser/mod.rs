@@ -5797,6 +5797,39 @@ impl<'a> Parser<'a> {
 
         let hive_distribution = self.parse_hive_distribution()?;
         let clustered_by = self.parse_optional_clustered_by()?;
+        let doris_unique_key = if dialect_of!(self is GenericDialect)
+            && self.parse_keywords(&[Keyword::UNIQUE, Keyword::KEY])
+        {
+            Some(self.parse_parenthesized_identifiers()?)
+        } else {
+            None
+        };
+        let doris_distribution = if dialect_of!(self is GenericDialect)
+            && self.parse_keywords(&[Keyword::DISTRIBUTED, Keyword::BY])
+        {
+            self.expect_keyword(Keyword::HASH)?;
+            let columns = self.parse_parenthesized_identifiers()?;
+            let buckets = if self.parse_keyword(Keyword::BUCKETS) {
+                let token = self.next_token();
+                match token.token {
+                    Token::Number(value, _) => value.parse::<u64>().ok(),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            Some(DorisDistribution { columns, buckets })
+        } else {
+            None
+        };
+        let doris_properties = if self.parse_keyword(Keyword::PROPERTIES) {
+            self.expect_token(&Token::LParen)?;
+            let options = self.parse_comma_separated(Parser::parse_sql_option)?;
+            self.expect_token(&Token::RParen)?;
+            Some(options)
+        } else {
+            None
+        };
         let hive_formats = self.parse_hive_formats()?;
         // PostgreSQL supports `WITH ( options )`, before `AS`
         let with_options = self.parse_options(Keyword::WITH)?;
@@ -5940,6 +5973,9 @@ impl<'a> Parser<'a> {
             .on_commit(on_commit)
             .on_cluster(on_cluster)
             .clustered_by(clustered_by)
+            .doris_unique_key(doris_unique_key)
+            .doris_distribution(doris_distribution)
+            .doris_properties(doris_properties)
             .partition_by(create_table_config.partition_by)
             .cluster_by(create_table_config.cluster_by)
             .options(create_table_config.options)

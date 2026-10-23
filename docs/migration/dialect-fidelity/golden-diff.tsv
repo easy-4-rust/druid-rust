@@ -1,7 +1,7 @@
 dialect	case	parse_match	parameterized_match	reparse_match	java_parse	rust_parse	java_parameterized	rust_parameterized
 doris	doris-alter-add-column	false	false	false	err	ok	ERR:ParserException:not supported. pos 17, line 1, column 15, token ADD	ALTER TABLE t ADD COLUMN c INT
 doris	doris-bitmap-agg	true	true	true	ok	ok	SELECT bitmap_union_count(b) FROM t GROUP BY k	SELECT bitmap_union_count(b) FROM t GROUP BY k
-doris	doris-create-unique-key	false	false	false	ok	err	CREATE TABLE t (  k1 INT,  v INT ) INTO 3 BUCKETS OPTIONS (  "replication_num" = "1" )	CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS ? PROPERTIES ("replication_num" = "1")
+doris	doris-create-unique-key	true	false	true	ok	ok	CREATE TABLE t (  k1 INT,  v INT ) INTO 3 BUCKETS OPTIONS (  "replication_num" = "1" )	CREATE TABLE t (k1 INT, v INT) UNIQUE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS ? PROPERTIES ("replication_num" = "1")
 doris	doris-distribute-buckets	true	false	true	err	err	ERR:ParserException:not supported. pos 46, line 1, column 40, token IDENTIFIER BUCKETS	SELECT * FROM t DISTRIBUTE BY HASH(k1) BUCKETS ?
 doris	doris-in-subquery	true	true	true	ok	ok	SELECT * FROM t WHERE k1 IN (SELECT k1 FROM s)	SELECT * FROM t WHERE k1 IN (SELECT k1 FROM s)
 doris	doris-insert-select	true	true	true	ok	ok	INSERT INTO t SELECT * FROM s	INSERT INTO t SELECT * FROM s
