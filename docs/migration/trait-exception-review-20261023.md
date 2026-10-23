@@ -14,7 +14,16 @@
 | `ResultSetExt` 实现方式 | **blanket**：`impl<T: ResultSet + ?Sized> ResultSetExt for T {}` | `result_set_ext.rs:735` |
 | `RowSet` 实现方式 | 手工 impl（`SharedRowSet` 等），无 blanket | `extensions/row_set` 调用点 |
 
-## 2. 结论：`ResultSetExt` 可以安全拆为 supertrait（建议 GO）
+## 2. `ResultSetExt`：技术上可拆，但调用方成本高（改为 HOLD）
+
+2026-10-23 实际尝试（已回滚）：把 79 个方法按 value/numeric/temporal/object/lob 迁入 5 个 supertrait，保留 blanket impl；编译 `druid-rdbc` 库通过，但 `druid` 的 15+ 个测试模块与生成测试通过 UFCS（`ResultSetExt::string`）或仅导入根 trait 调用方法，全部需要在每个调用点补 `ResultSetValueExt` 等导入；`cargo fix` 也无法一次性收敛。
+
+结论：**HOLD**。若未来重启，必须先做：
+1. 提供 `druid_rdbc::result_set::prelude` 并在所有测试/生成文件统一导入；
+2. 用 codemod 把 `ResultSetExt::method` 改写为对应 supertrait；
+3. 再跑 public-api 快照与全量测试。
+
+## 2.1 原可行性判断（保留）
 
 理由：
 1. 已存在 blanket impl，**调用方**只依赖 `T: ResultSetExt`；把方法定义移到 supertrait 后，通过 supertrait bound 仍可调用，源码兼容；
@@ -62,7 +71,7 @@
 
 ## 6. 本轮决定
 
-- `ResultSetExt`：**GO**（下一轮实施 supertrait 拆分，含 public-api 快照对比）；
+- `ResultSetExt`：**HOLD**（已尝试并回滚，调用点改造需要 prelude + codemod，见 §2）；
 - `RowSet`：**HOLD**（等 `ResultSetExt` 模式验证）；
 - P3.3：**P3.3a GO**（值对象下沉），P3.3b HOLD；
 - P3.4：HOLD。
