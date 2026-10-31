@@ -396,5 +396,4 @@ impl LogFilter {
         self.statement_sql_pretty_format
             .store(enabled, Ordering::Release);
     }
-
 }

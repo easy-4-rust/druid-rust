@@ -2,8 +2,8 @@
 mod support;
 
 use druid::pool::DruidPool;
-use support::MockFactory;
 use std::time::Duration;
+use support::MockFactory;
 
 #[tokio::test]
 async fn shrink_keeps_exactly_min_idle() {

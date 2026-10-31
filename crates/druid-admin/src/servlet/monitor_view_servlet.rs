@@ -70,7 +70,6 @@ pub fn endpoint_list() -> &'static str {
     MonitorViewServlet::endpoint_list()
 }
 
-
 fn required_json_string<'a>(body: &'a Value, field: &str) -> Result<&'a str, String> {
     body.get(field)
         .and_then(Value::as_str)

@@ -178,7 +178,6 @@ pub(super) fn redacted_diagnostic_url(url: &str) -> String {
     )
 }
 
-
 /// idle holder 借出/校验期间的取消守卫。
 ///
 /// 在异步 validation 完成并转为 active 前，future 被取消会立即丢弃候选 holder，

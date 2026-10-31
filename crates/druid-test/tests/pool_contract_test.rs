@@ -2,8 +2,8 @@
 mod support;
 
 use druid::pool::DruidPool;
-use support::{connection_id, MockFactory};
 use std::time::Duration;
+use support::{connection_id, MockFactory};
 
 #[tokio::test]
 async fn pool_reuses_the_last_returned_holder_and_closes_cleanly() {
@@ -25,12 +25,22 @@ async fn pool_reuses_the_last_returned_holder_and_closes_cleanly() {
     let second_id = connection_id(&mut second).await;
     assert_ne!(first_id, second_id);
 
-    druid::core::Connection::close(&mut first).await.expect("first returns");
-    druid::core::Connection::close(&mut second).await.expect("second returns");
+    druid::core::Connection::close(&mut first)
+        .await
+        .expect("first returns");
+    druid::core::Connection::close(&mut second)
+        .await
+        .expect("second returns");
 
     let mut third = pool.get().await.expect("third borrow");
-    assert_eq!(connection_id(&mut third).await, second_id, "Java pollLast is LIFO");
-    druid::core::Connection::close(&mut third).await.expect("third returns");
+    assert_eq!(
+        connection_id(&mut third).await,
+        second_id,
+        "Java pollLast is LIFO"
+    );
+    druid::core::Connection::close(&mut third)
+        .await
+        .expect("third returns");
 
     pool.close().await;
     assert_eq!(pool.state().active_count, 0);

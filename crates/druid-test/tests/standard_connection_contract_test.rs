@@ -3,8 +3,8 @@ mod support;
 
 use druid::core::Connection;
 use druid::pool::DruidPool;
-use support::{connection_id, MockFactory};
 use std::time::Duration;
+use support::{connection_id, MockFactory};
 
 #[tokio::test]
 async fn pooled_connection_implements_the_standard_connection_contract() {
@@ -23,7 +23,13 @@ async fn pooled_connection_implements_the_standard_connection_contract() {
     assert!(!conn.is_closed().expect("is_closed"));
     assert_eq!(conn.driver_name().expect("driver name"), "mock");
     assert_eq!(connection_id(&mut conn).await, 1);
-    assert_eq!(conn.fetch("select 1", Vec::new()).await.expect("fetch").len(), 1);
+    assert_eq!(
+        conn.fetch("select 1", Vec::new())
+            .await
+            .expect("fetch")
+            .len(),
+        1
+    );
 
     conn.close().await.expect("close");
     assert!(conn.is_closed().expect("closed"));

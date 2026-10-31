@@ -375,7 +375,6 @@ impl Default for PushProgress {
     }
 }
 
-
 fn ownership_error(error: PipelineOwnershipError) -> PushWorkerError {
     PushWorkerError::Ownership(error.to_string())
 }

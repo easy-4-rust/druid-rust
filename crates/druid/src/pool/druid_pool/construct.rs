@@ -247,5 +247,4 @@ impl DruidPool {
     ) -> Result<DruidPooledConnection, DruidError> {
         self.get_with_timeout(max_wait).await
     }
-
 }

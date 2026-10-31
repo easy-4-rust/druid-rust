@@ -119,7 +119,6 @@ pub struct PoolInner {
     pub(crate) refill_target: AtomicUsize,
 }
 
-
 impl FatalErrorHandler for PoolInner {
     fn handle_fatal_error(&self, error: &DruidError, sql: Option<&str>) -> bool {
         let mut state = self.fatal_error_state.lock();

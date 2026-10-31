@@ -340,7 +340,10 @@ impl DruidPool {
         }
     }
 
-    pub(crate) fn ensure_borrow_generation(&self, expected_generation: u64) -> Result<(), DruidError> {
+    pub(crate) fn ensure_borrow_generation(
+        &self,
+        expected_generation: u64,
+    ) -> Result<(), DruidError> {
         if self.inner.lifecycle_generation() != expected_generation {
             // Java 只在进入 getConnectionInternal 时检查 closed。已经进入
             // takeLast/pollLast 的线程被 close 唤醒后走 `!enable` 分支。
@@ -417,5 +420,4 @@ impl DruidPool {
             }
         }
     }
-
 }

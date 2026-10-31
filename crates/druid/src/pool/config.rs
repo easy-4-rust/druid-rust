@@ -270,7 +270,6 @@ pub struct DruidPoolBuilder {
     wall_config_explicit: bool,
 }
 
-
 impl Default for DruidPoolBuilder {
     fn default() -> Self {
         Self::new()

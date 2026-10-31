@@ -381,7 +381,10 @@ impl PoolInner {
         Ok(rows)
     }
 
-    pub(crate) fn collect_variable_rows(target: &mut HashMap<String, JsonValue>, rows: Vec<crate::core::Row>) {
+    pub(crate) fn collect_variable_rows(
+        target: &mut HashMap<String, JsonValue>,
+        rows: Vec<crate::core::Row>,
+    ) {
         for row in rows {
             let Some(name) = row.get(0).and_then(Self::variable_name) else {
                 continue;
@@ -426,5 +429,4 @@ impl PoolInner {
             ),
         }
     }
-
 }

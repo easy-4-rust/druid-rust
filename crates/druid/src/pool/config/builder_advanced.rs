@@ -307,7 +307,10 @@ impl DruidPoolBuilder {
         }
     }
 
-    pub(crate) fn add_filters_in_place(&mut self, filters: &str) -> Result<(), crate::core::DruidError> {
+    pub(crate) fn add_filters_in_place(
+        &mut self,
+        filters: &str,
+    ) -> Result<(), crate::core::DruidError> {
         if filters.is_empty() {
             return Ok(());
         }
@@ -449,6 +452,8 @@ impl DruidPoolBuilder {
     pub async fn build_data_source(
         self,
     ) -> Result<super::super::DruidDataSource, crate::core::DruidError> {
-        self.build().await.map(super::super::DruidDataSource::from_pool)
+        self.build()
+            .await
+            .map(super::super::DruidDataSource::from_pool)
     }
 }

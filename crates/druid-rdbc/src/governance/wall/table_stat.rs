@@ -1,6 +1,8 @@
 //! P3.3a：定义位于 druid-rdbc，druid 侧保留 re-export。
 
-use crate::governance::wall::{sql_table_stat::WallSqlTableStat, table_stat_value::WallTableStatValue};
+use crate::governance::wall::{
+    sql_table_stat::WallSqlTableStat, table_stat_value::WallTableStatValue,
+};
 use std::array;
 use std::sync::atomic::{AtomicU64, Ordering};
 

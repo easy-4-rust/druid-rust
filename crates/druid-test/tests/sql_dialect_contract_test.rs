@@ -17,7 +17,10 @@ fn round_trip(db_type: DbType, sql: &str) {
 
 #[test]
 fn oracle_select_and_merge_parse_and_round_trip() {
-    round_trip(DbType::Oracle, "SELECT * FROM emp WHERE hiredate > DATE '2020-01-01'");
+    round_trip(
+        DbType::Oracle,
+        "SELECT * FROM emp WHERE hiredate > DATE '2020-01-01'",
+    );
     round_trip(
         DbType::Oracle,
         "MERGE INTO t USING s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.v = s.v          WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v)",
@@ -30,7 +33,10 @@ fn odps_partitioned_insert_and_lateral_view_round_trip() {
         DbType::Odps,
         "INSERT OVERWRITE TABLE t PARTITION (ds='2020') SELECT * FROM s",
     );
-    round_trip(DbType::Odps, "SELECT * FROM t LATERAL VIEW explode(arr) v AS x");
+    round_trip(
+        DbType::Odps,
+        "SELECT * FROM t LATERAL VIEW explode(arr) v AS x",
+    );
 }
 
 #[test]
@@ -45,7 +51,10 @@ fn hive_partitioned_insert_and_cluster_by_round_trip() {
 
 #[test]
 fn doris_select_and_alter_round_trip() {
-    round_trip(DbType::Doris, "SELECT bitmap_union_count(b) FROM t GROUP BY k");
+    round_trip(
+        DbType::Doris,
+        "SELECT bitmap_union_count(b) FROM t GROUP BY k",
+    );
     round_trip(DbType::Doris, "ALTER TABLE t ADD COLUMN c INT");
 }
 
@@ -71,4 +80,3 @@ fn doris_unique_key_ddl_round_trips() {
          PROPERTIES (\"replication_num\" = \"1\")",
     );
 }
-

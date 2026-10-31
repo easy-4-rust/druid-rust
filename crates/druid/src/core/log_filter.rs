@@ -156,7 +156,7 @@ impl LogFilter {
     fn enabled(flag: &AtomicBool) -> bool {
         flag.load(Ordering::Acquire)
     }
-}
+}
 
 impl LogFilter {
     fn operation_success_enabled(&self, operation: ExecOperation) -> bool {
