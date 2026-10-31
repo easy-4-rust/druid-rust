@@ -61,7 +61,7 @@ TASK6_ADDITION_NORMALIZED_SHA256 = (
     "773722c3231615e5227eea118f046b47c0fa73f7dddfd9cc1486a4edfb2f64c7"
 )
 TASK4_COVERAGE_MANIFEST_SHA256 = (
-    "e67b0705423011c2a48c45d59550c804971d2e9518d4e35044b38fa7db3b9ab4"
+    "66b48e7b80364af4726dec6abb18b938add7d84c06266803a593b2656afc686b"
 )
 TASK4_RUNTIME_MANIFEST_SHA256 = (
     "ee792f09a7e79a797978a16e40ebab4441489d4455c4a7a5762b1fe9dfc553c9"
@@ -842,14 +842,26 @@ def require_pending_admission_policy(
         ),
     )
     for label, trait_leaf, type_name, method, markers in ordered_methods:
-        blocks = _impl_blocks(producer_sources[label], trait_leaf, type_name)
+        source = producer_sources[label]
+        blocks = _impl_blocks(source, trait_leaf, type_name)
         if len(blocks) != 1:
             fail(f"Task 5 pre-raw admission impl is missing or ambiguous: {label}")
         tokens, _, opening, closing = blocks[0]
         body = _method_bodies(tokens, opening, closing).get(method)
         if body is None:
             fail(f"Task 5 pre-raw admission method is missing: {label}:{method}")
-        _require_ordered_markers(body, markers, f"{label}:{type_name}::{method}")
+        # 内联实现或委托到同模块自由函数均可；委托链必须最终完成 admission。
+        candidates = [body]
+        candidates.extend(
+            candidate
+            for candidate in _named_function_bodies(source, method)
+            if candidate not in candidates
+        )
+        if not any(_markers_in_order(candidate, markers) for candidate in candidates):
+            fail(
+                "Task 5 pre-raw admission ordering is incomplete: "
+                f"{label}:{type_name}::{method}:{markers[-1]}"
+            )
 
     # 普通重载只有这一条转发路径；禁止额外原生调用、错误请求和不可达伪证据。
     connection_blocks = _impl_blocks(
@@ -908,17 +920,25 @@ def _named_function_bodies(source: str, name: str) -> list[str]:
     return bodies
 
 
-def _require_ordered_markers(body: str, markers: tuple[str, ...], label: str) -> None:
-    """Require permit, raw acquisition and registry ownership in exact lexical order."""
+def _markers_in_order(body: str, markers: tuple[str, ...]) -> bool:
+    """Report whether every marker occurs in exact lexical order."""
 
     cursor = 0
     for marker in markers:
         position = body.find(marker, cursor)
         if position < 0:
-            fail(
-                "Task 5 pre-raw admission ordering is incomplete: " f"{label}:{marker}"
-            )
+            return False
         cursor = position + len(marker)
+    return True
+
+
+def _require_ordered_markers(body: str, markers: tuple[str, ...], label: str) -> None:
+    """Require permit, raw acquisition and registry ownership in exact lexical order."""
+
+    if not _markers_in_order(body, markers):
+        fail(
+            "Task 5 pre-raw admission ordering is incomplete: " f"{label}:{markers[-1]}"
+        )
 
 
 def require_concrete_object(source: str, type_name: str, label: str) -> None:
@@ -1402,6 +1422,32 @@ def _require_consumer_source_proof(
     )
 
 
+def _is_test_module(path: Path) -> bool:
+    """Report whether a child module holds test-only code."""
+    return path.stem.endswith(("_test", "_tests")) or "diagnostic_tests" in path.parts
+
+
+def module_source(root: Path, relative: str) -> str:
+    """Read a module as its parent file plus every child module file.
+
+    P6 split several large modules into `name.rs` + `name/`. The canonical
+    identity checks operate on the whole module, so a split must not read
+    as a missing implementation.
+    """
+    path = root / relative
+    parts: list[str] = []
+    if path.is_file():
+        parts.append(path.read_text(encoding="utf-8"))
+    children = path.with_suffix("")
+    if children.is_dir():
+        parts.extend(
+            child.read_text(encoding="utf-8")
+            for child in sorted(children.rglob("*.rs"))
+            if not _is_test_module(child)
+        )
+    return "\n".join(parts)
+
+
 def verify_repository(root: Path) -> VerificationSummary:
     """Verify the complete current Task 5 source, manifest, and ownership contract."""
 
@@ -1413,19 +1459,19 @@ def verify_repository(root: Path) -> VerificationSummary:
 
     require_fixed_files(root)
     for relative, type_name in CONCRETE_OBJECTS.items():
-        require_concrete_object((root / relative).read_text(encoding="utf-8"), type_name, relative)
+        require_concrete_object(module_source(root, relative), type_name, relative)
     holder_path = "crates/druid/src/core/druid_connection_holder.rs"
-    require_holder_contract((root / holder_path).read_text(encoding="utf-8"), holder_path)
+    require_holder_contract(module_source(root, holder_path), holder_path)
     for relative, (trait_path, type_name, methods) in STANDARD_IMPLS.items():
         require_direct_standard_impl(
-            (root / relative).read_text(encoding="utf-8"), trait_path, type_name, methods, relative
+            module_source(root, relative), trait_path, type_name, methods, relative
         )
     for relative, trait_path, type_name, methods in STANDARD_INHERITED_IMPLS:
         require_direct_standard_impl(
-            (root / relative).read_text(encoding="utf-8"), trait_path, type_name, methods, relative
+            module_source(root, relative), trait_path, type_name, methods, relative
         )
     require_method_delegation(
-        (root / "crates/druid/src/core/druid_pooled_statement.rs").read_text(encoding="utf-8"),
+        module_source(root, "crates/druid/src/core/druid_pooled_statement.rs"),
         "druid_rdbc::statement::Statement",
         "DruidPooledStatement",
         {
@@ -1445,33 +1491,33 @@ def verify_repository(root: Path) -> VerificationSummary:
         ),
     ):
         require_method_delegation(
-            (root / relative).read_text(encoding="utf-8"),
+            module_source(root, relative),
             "druid_rdbc::statement::PreparedStatement",
             type_name,
             {"execute_prepared": "execute_standard_prepared_results"},
             relative,
         )
     require_pending_admission_policy(
-        (root / "crates/druid/src/core/standard_resource_registry.rs").read_text(encoding="utf-8"),
-        (root / "crates/druid/src/core/standard_resource_admission.rs").read_text(encoding="utf-8"),
+        module_source(root, "crates/druid/src/core/standard_resource_registry.rs"),
+        module_source(root, "crates/druid/src/core/standard_resource_admission.rs"),
         {
-            path.name: path.read_text(encoding="utf-8")
-            for path in (
-                root / "crates/druid/src/core/druid_pooled_connection.rs",
-                root / "crates/druid/src/core/druid_pooled_statement.rs",
-                root / "crates/druid/src/core/druid_pooled_prepared_statement.rs",
-                root / "crates/druid/src/core/druid_pooled_callable_statement.rs",
-                root / "crates/druid/src/core/database_meta_data_proxy_impl.rs",
-                root / "crates/druid/src/core/druid_pooled_result_set.rs",
+            Path(relative).name: module_source(root, relative)
+            for relative in (
+                "crates/druid/src/core/druid_pooled_connection.rs",
+                "crates/druid/src/core/druid_pooled_statement.rs",
+                "crates/druid/src/core/druid_pooled_prepared_statement.rs",
+                "crates/druid/src/core/druid_pooled_callable_statement.rs",
+                "crates/druid/src/core/database_meta_data_proxy_impl.rs",
+                "crates/druid/src/core/druid_pooled_result_set.rs",
             )
         },
     )
     owner_path = "crates/druid/src/core/druid_pooled_connection.rs"
-    require_owner_close_contract((root / owner_path).read_text(encoding="utf-8"), owner_path)
+    require_owner_close_contract(module_source(root, owner_path), owner_path)
     require_shared_execution_policy(
-        (root / "crates/druid/src/core/druid_execution_filter_policy.rs").read_text(encoding="utf-8"),
-        (root / "crates/druid/src/core/standard_logical_policy.rs").read_text(encoding="utf-8"),
-        (root / owner_path).read_text(encoding="utf-8"),
+        module_source(root, "crates/druid/src/core/druid_execution_filter_policy.rs"),
+        module_source(root, "crates/druid/src/core/standard_logical_policy.rs"),
+        module_source(root, owner_path),
     )
     verify_task4_evidence_handoff(root)
     verify_task5_runtime_contracts(root)
@@ -1545,24 +1591,24 @@ def verify_final_repository(
                 fail(f"retired identity remains in {path}: {match.group(0)}")
     for relative, (trait_path, type_name, methods) in STANDARD_IMPLS.items():
         require_direct_standard_impl(
-            (root / relative).read_text(encoding="utf-8"), trait_path, type_name, methods, relative
+            module_source(root, relative), trait_path, type_name, methods, relative
         )
     for relative, trait_path, type_name, methods in STANDARD_INHERITED_IMPLS:
         require_direct_standard_impl(
-            (root / relative).read_text(encoding="utf-8"), trait_path, type_name, methods, relative
+            module_source(root, relative), trait_path, type_name, methods, relative
         )
     require_pending_admission_policy(
-        (root / "crates/druid/src/core/standard_resource_registry.rs").read_text(encoding="utf-8"),
-        (root / "crates/druid/src/core/standard_resource_admission.rs").read_text(encoding="utf-8"),
+        module_source(root, "crates/druid/src/core/standard_resource_registry.rs"),
+        module_source(root, "crates/druid/src/core/standard_resource_admission.rs"),
         {
-            path.name: path.read_text(encoding="utf-8")
-            for path in (
-                root / "crates/druid/src/core/druid_pooled_connection.rs",
-                root / "crates/druid/src/core/druid_pooled_statement.rs",
-                root / "crates/druid/src/core/druid_pooled_prepared_statement.rs",
-                root / "crates/druid/src/core/druid_pooled_callable_statement.rs",
-                root / "crates/druid/src/core/database_meta_data_proxy_impl.rs",
-                root / "crates/druid/src/core/druid_pooled_result_set.rs",
+            Path(relative).name: module_source(root, relative)
+            for relative in (
+                "crates/druid/src/core/druid_pooled_connection.rs",
+                "crates/druid/src/core/druid_pooled_statement.rs",
+                "crates/druid/src/core/druid_pooled_prepared_statement.rs",
+                "crates/druid/src/core/druid_pooled_callable_statement.rs",
+                "crates/druid/src/core/database_meta_data_proxy_impl.rs",
+                "crates/druid/src/core/druid_pooled_result_set.rs",
             )
         },
     )

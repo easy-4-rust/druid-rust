@@ -391,7 +391,7 @@ FAMILY_EXECUTOR_RULES = {
         "standard_execute_update_core",
     ),
     "JDBC_AGENT": (
-        "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs",
+        "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection/jdbc_agent_support.rs",
         "standard_execute_update_core",
     ),
 }
