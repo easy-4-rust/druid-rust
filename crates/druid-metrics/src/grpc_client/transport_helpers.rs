@@ -130,15 +130,15 @@ pub(super) async fn connect_transport(
 pub(super) struct AbortOnDrop(Option<JoinHandle<Result<Option<ServerFrame>, MetricsError>>>);
 
 impl AbortOnDrop {
-pub(super)     fn new(handle: JoinHandle<Result<Option<ServerFrame>, MetricsError>>) -> Self {
+    pub(super) fn new(handle: JoinHandle<Result<Option<ServerFrame>, MetricsError>>) -> Self {
         Self(Some(handle))
     }
 
-pub(super)     fn take(&mut self) -> Option<JoinHandle<Result<Option<ServerFrame>, MetricsError>>> {
+    pub(super) fn take(&mut self) -> Option<JoinHandle<Result<Option<ServerFrame>, MetricsError>>> {
         self.0.take()
     }
 
-pub(super)     fn is_finished(&self) -> bool {
+    pub(super) fn is_finished(&self) -> bool {
         self.0.as_ref().is_none_or(JoinHandle::is_finished)
     }
 }
@@ -268,7 +268,11 @@ pub(super) fn flatten_join(
     }
 }
 
-pub(super) fn make_header(config: &GrpcClientConfig, stream_epoch: u64, sequence: u64) -> FrameHeader {
+pub(super) fn make_header(
+    config: &GrpcClientConfig,
+    stream_epoch: u64,
+    sequence: u64,
+) -> FrameHeader {
     FrameHeader {
         protocol_version: 1,
         service_name: config.service_name.clone(),
