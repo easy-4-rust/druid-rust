@@ -1,4 +1,4 @@
-"""Verify the current six-crate RDBC-first workspace dependency direction."""
+"""Verify the current seven-crate RDBC-first workspace dependency direction."""
 
 import json
 from pathlib import Path
@@ -14,6 +14,7 @@ EXPECTED = {
     "druid-metrics",
     "druid-admin",
     "druid-bench",
+    "druid-test",
 }
 FORBIDDEN = {
     ("druid-rdbc", "druid"),
