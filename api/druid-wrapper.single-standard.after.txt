@@ -255,7 +255,6 @@ pub const druid_wrapper::driver_admin::DriverInstaller::LOCK_TIMEOUT: core::time
 pub const druid_wrapper::driver_admin::DriverInstaller::MAX_ARTIFACT_BYTES: u64
 pub async fn druid_wrapper::driver_admin::DriverInstaller::activate_version(&self, &str, &str) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
 pub async fn druid_wrapper::driver_admin::DriverInstaller::active_installation(&self, &str) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
-pub async fn druid_wrapper::driver_admin::DriverInstaller::active_java_runtime(&self) -> core::result::Result<druid_wrapper::driver_admin::JavaRuntimeInstallation, druid_wrapper::driver_admin::DriverInstallerError>
 pub fn druid_wrapper::driver_admin::DriverInstaller::default_root() -> core::result::Result<std::path::PathBuf, druid_wrapper::driver_admin::DriverInstallerError>
 pub async fn druid_wrapper::driver_admin::DriverInstaller::install_agent_file(&self, impl core::convert::AsRef<std::path::Path>, core::option::Option<&str>) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
 pub async fn druid_wrapper::driver_admin::DriverInstaller::install_bundle_files(&self, &druid_wrapper::driver_admin::DriverBundleInstallRequest) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
@@ -263,13 +262,15 @@ pub async fn druid_wrapper::driver_admin::DriverInstaller::install_file(&self, &
 pub async fn druid_wrapper::driver_admin::DriverInstaller::install_url(&self, &str, &str, &str, &str) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
 pub async fn druid_wrapper::driver_admin::DriverInstaller::installations(&self, &str) -> core::result::Result<alloc::vec::Vec<druid_wrapper::driver_admin::InstalledDriver>, druid_wrapper::driver_admin::DriverInstallerError>
 pub async fn druid_wrapper::driver_admin::DriverInstaller::jdbc_agent_options(&self, &str, impl core::convert::Into<std::ffi::os_str::OsString>) -> core::result::Result<druid_wrapper::jdbc_agent::JdbcAgentOptions, druid_wrapper::driver_admin::DriverInstallerError>
-pub async fn druid_wrapper::driver_admin::DriverInstaller::jdbc_agent_options_with_managed_java(&self, &str) -> core::result::Result<druid_wrapper::jdbc_agent::JdbcAgentOptions, druid_wrapper::driver_admin::DriverInstallerError>
 pub fn druid_wrapper::driver_admin::DriverInstaller::new(impl core::convert::Into<std::path::PathBuf>) -> Self
 pub const fn druid_wrapper::driver_admin::DriverInstaller::offline(self, bool) -> Self
 pub async fn druid_wrapper::driver_admin::DriverInstaller::register_java_runtime(&self, impl core::convert::AsRef<std::path::Path>, &str) -> core::result::Result<druid_wrapper::driver_admin::JavaRuntimeInstallation, druid_wrapper::driver_admin::DriverInstallerError>
 pub async fn druid_wrapper::driver_admin::DriverInstaller::remove_version(&self, &str, &str) -> core::result::Result<(), druid_wrapper::driver_admin::DriverInstallerError>
 pub async fn druid_wrapper::driver_admin::DriverInstaller::verify_installation(&self, &str, &str) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
 pub fn druid_wrapper::driver_admin::DriverInstaller::with_http_client(impl core::convert::Into<std::path::PathBuf>, reqwest::async_impl::client::Client) -> Self
+impl druid_wrapper::driver_admin::DriverInstaller
+pub async fn druid_wrapper::driver_admin::DriverInstaller::active_java_runtime(&self) -> core::result::Result<druid_wrapper::driver_admin::JavaRuntimeInstallation, druid_wrapper::driver_admin::DriverInstallerError>
+pub async fn druid_wrapper::driver_admin::DriverInstaller::jdbc_agent_options_with_managed_java(&self, &str) -> core::result::Result<druid_wrapper::jdbc_agent::JdbcAgentOptions, druid_wrapper::driver_admin::DriverInstallerError>
 pub struct druid_wrapper::driver_admin::DriverRuntimeDiagnostics
 impl druid_wrapper::driver_admin::DriverRuntimeDiagnostics
 pub async fn druid_wrapper::driver_admin::DriverRuntimeDiagnostics::check(&self, &str) -> core::result::Result<druid_wrapper::driver_admin::DriverRuntimeReport, druid_wrapper::driver_admin::DriverInstallerError>

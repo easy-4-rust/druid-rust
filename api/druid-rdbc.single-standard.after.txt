@@ -1659,6 +1659,177 @@ pub fn druid_rdbc::extensions::RowSetWriter::write_data<'life0, 'life1, 'async_t
 pub trait druid_rdbc::extensions::XmlResult: core::fmt::Debug + core::marker::Send + core::marker::Sync
 pub trait druid_rdbc::extensions::XmlSource: core::fmt::Debug + core::marker::Send + core::marker::Sync
 pub type druid_rdbc::extensions::RowSetParameterResolver = alloc::sync::Arc<(dyn core::ops::function::Fn(core::option::Option<&str>, &str) -> core::result::Result<druid_rdbc::statement::ParameterIndex, druid_rdbc::RdbcError> + core::marker::Send + core::marker::Sync)>
+pub mod druid_rdbc::governance
+pub mod druid_rdbc::governance::hashing
+pub fn druid_rdbc::governance::hashing::fingerprint(&str) -> u64
+pub mod druid_rdbc::governance::shrink_policy
+pub enum druid_rdbc::governance::shrink_policy::ShrinkDecision
+pub druid_rdbc::governance::shrink_policy::ShrinkDecision::Evict
+pub druid_rdbc::governance::shrink_policy::ShrinkDecision::KeepAlive
+pub druid_rdbc::governance::shrink_policy::ShrinkDecision::Retain
+pub druid_rdbc::governance::shrink_policy::ShrinkDecision::StopScan
+pub struct druid_rdbc::governance::shrink_policy::ShrinkPolicy
+pub druid_rdbc::governance::shrink_policy::ShrinkPolicy::keep_alive: bool
+pub druid_rdbc::governance::shrink_policy::ShrinkPolicy::keep_alive_between_millis: u64
+pub druid_rdbc::governance::shrink_policy::ShrinkPolicy::max_evictable_idle_millis: u64
+pub druid_rdbc::governance::shrink_policy::ShrinkPolicy::min_evictable_idle_millis: u64
+pub druid_rdbc::governance::shrink_policy::ShrinkPolicy::min_idle: usize
+pub druid_rdbc::governance::shrink_policy::ShrinkPolicy::phy_timeout_millis: u64
+impl core::default::Default for druid_rdbc::governance::shrink_policy::ShrinkPolicy
+pub fn druid_rdbc::governance::shrink_policy::ShrinkPolicy::default() -> Self
+pub fn druid_rdbc::governance::shrink_policy::classify(usize, usize, u64, u64, u64, &druid_rdbc::governance::shrink_policy::ShrinkPolicy) -> druid_rdbc::governance::shrink_policy::ShrinkDecision
+pub mod druid_rdbc::governance::wall
+pub mod druid_rdbc::governance::wall::check_result
+pub struct druid_rdbc::governance::wall::check_result::WallCheckResult
+impl druid_rdbc::governance::wall::check_result::WallCheckResult
+pub fn druid_rdbc::governance::wall::check_result::WallCheckResult::is_syntax_error(&self) -> bool
+pub fn druid_rdbc::governance::wall::check_result::WallCheckResult::new(alloc::string::String, alloc::vec::Vec<sqlparser::ast::Statement>, alloc::vec::Vec<druid_rdbc::governance::wall::violation::WallViolation>, bool, alloc::sync::Arc<druid_rdbc::governance::wall::sql_stat::WallSqlStat>) -> Self
+pub fn druid_rdbc::governance::wall::check_result::WallCheckResult::privileged(alloc::string::String) -> Self
+pub fn druid_rdbc::governance::wall::check_result::WallCheckResult::set_update_check_items(&mut self, core::option::Option<alloc::vec::Vec<druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem>>)
+pub fn druid_rdbc::governance::wall::check_result::WallCheckResult::sql(&self) -> &str
+pub fn druid_rdbc::governance::wall::check_result::WallCheckResult::sql_stat(&self) -> core::option::Option<&alloc::sync::Arc<druid_rdbc::governance::wall::sql_stat::WallSqlStat>>
+pub fn druid_rdbc::governance::wall::check_result::WallCheckResult::statements(&self) -> &[sqlparser::ast::Statement]
+pub fn druid_rdbc::governance::wall::check_result::WallCheckResult::update_check_items(&self) -> core::option::Option<&[druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem]>
+pub fn druid_rdbc::governance::wall::check_result::WallCheckResult::violations(&self) -> &[druid_rdbc::governance::wall::violation::WallViolation]
+pub mod druid_rdbc::governance::wall::deny_stat
+pub struct druid_rdbc::governance::wall::deny_stat::WallDenyStat
+impl druid_rdbc::governance::wall::deny_stat::WallDenyStat
+pub fn druid_rdbc::governance::wall::deny_stat::WallDenyStat::deny_count(&self) -> u64
+pub fn druid_rdbc::governance::wall::deny_stat::WallDenyStat::increment_and_get_deny_count(&self) -> u64
+pub fn druid_rdbc::governance::wall::deny_stat::WallDenyStat::last_deny_time_millis(&self) -> core::option::Option<i64>
+pub fn druid_rdbc::governance::wall::deny_stat::WallDenyStat::reset(&self)
+pub fn druid_rdbc::governance::wall::deny_stat::WallDenyStat::reset_count(&self) -> u64
+pub mod druid_rdbc::governance::wall::sql_function_stat
+pub struct druid_rdbc::governance::wall::sql_function_stat::WallSqlFunctionStat
+pub druid_rdbc::governance::wall::sql_function_stat::WallSqlFunctionStat::invoke_count: u64
+impl druid_rdbc::governance::wall::sql_function_stat::WallSqlFunctionStat
+pub fn druid_rdbc::governance::wall::sql_function_stat::WallSqlFunctionStat::increment_invoke_count(&mut self)
+pub mod druid_rdbc::governance::wall::sql_stat
+pub struct druid_rdbc::governance::wall::sql_stat::WallSqlStat
+impl druid_rdbc::governance::wall::sql_stat::WallSqlStat
+pub fn druid_rdbc::governance::wall::sql_stat::WallSqlStat::add_fetch_row_count(&self, u64) -> u64
+pub fn druid_rdbc::governance::wall::sql_stat::WallSqlStat::add_update_count(&self, u64) -> u64
+pub fn druid_rdbc::governance::wall::sql_stat::WallSqlStat::function_stats(&self) -> &std::collections::hash::map::HashMap<alloc::string::String, druid_rdbc::governance::wall::sql_function_stat::WallSqlFunctionStat>
+pub fn druid_rdbc::governance::wall::sql_stat::WallSqlStat::increment_execute_count(&self) -> u64
+pub fn druid_rdbc::governance::wall::sql_stat::WallSqlStat::increment_execute_error_count(&self) -> u64
+pub const fn druid_rdbc::governance::wall::sql_stat::WallSqlStat::is_syntax_error(&self) -> bool
+pub fn druid_rdbc::governance::wall::sql_stat::WallSqlStat::new(alloc::string::String, alloc::vec::Vec<druid_rdbc::governance::wall::violation::WallViolation>, bool) -> Self
+pub fn druid_rdbc::governance::wall::sql_stat::WallSqlStat::new_with_stats(alloc::string::String, alloc::vec::Vec<druid_rdbc::governance::wall::violation::WallViolation>, bool, std::collections::hash::map::HashMap<alloc::string::String, druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat>, std::collections::hash::map::HashMap<alloc::string::String, druid_rdbc::governance::wall::sql_function_stat::WallSqlFunctionStat>) -> Self
+pub fn druid_rdbc::governance::wall::sql_stat::WallSqlStat::sql(&self) -> &str
+pub fn druid_rdbc::governance::wall::sql_stat::WallSqlStat::stat_value(&self, bool) -> druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue
+pub fn druid_rdbc::governance::wall::sql_stat::WallSqlStat::table_stats(&self) -> &std::collections::hash::map::HashMap<alloc::string::String, druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat>
+pub fn druid_rdbc::governance::wall::sql_stat::WallSqlStat::violations(&self) -> &[druid_rdbc::governance::wall::violation::WallViolation]
+pub mod druid_rdbc::governance::wall::sql_stat_value
+pub struct druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue
+pub druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue::execute_count: u64
+pub druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue::execute_error_count: u64
+pub druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue::fetch_row_count: u64
+pub druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue::sql: alloc::string::String
+pub druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue::sql_hash: u64
+pub druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue::sql_sample: alloc::string::String
+pub druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue::sql_sample_hash: u64
+pub druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue::syntax_error: bool
+pub druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue::update_count: u64
+pub druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue::violation_message: core::option::Option<alloc::string::String>
+impl druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue
+pub fn druid_rdbc::governance::wall::sql_stat_value::WallSqlStatValue::to_map(&self) -> serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub mod druid_rdbc::governance::wall::sql_table_stat
+pub struct druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat
+pub druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::alter_count: u64
+pub druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::create_count: u64
+pub druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::delete_count: u64
+pub druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::drop_count: u64
+pub druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::insert_count: u64
+pub druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::replace_count: u64
+pub druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::sample: core::option::Option<alloc::string::String>
+pub druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::select_count: u64
+pub druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::select_into_count: u64
+pub druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::show_count: u64
+pub druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::truncate_count: u64
+pub druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::update_count: u64
+impl druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat
+pub fn druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::increment_delete_count(&mut self)
+pub fn druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::increment_insert_count(&mut self)
+pub fn druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::increment_select_count(&mut self)
+pub fn druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat::increment_update_count(&mut self)
+pub mod druid_rdbc::governance::wall::table_stat
+pub struct druid_rdbc::governance::wall::table_stat::WallTableStat
+impl druid_rdbc::governance::wall::table_stat::WallTableStat
+pub fn druid_rdbc::governance::wall::table_stat::WallTableStat::add_delete_data_count(&self, u64)
+pub fn druid_rdbc::governance::wall::table_stat::WallTableStat::add_fetch_row_count(&self, u64)
+pub fn druid_rdbc::governance::wall::table_stat::WallTableStat::add_insert_data_count(&self, u64)
+pub fn druid_rdbc::governance::wall::table_stat::WallTableStat::add_sql_table_stat(&self, &druid_rdbc::governance::wall::sql_table_stat::WallSqlTableStat)
+pub fn druid_rdbc::governance::wall::table_stat::WallTableStat::add_update_data_count(&self, u64)
+pub fn druid_rdbc::governance::wall::table_stat::WallTableStat::stat_value(&self, alloc::string::String, bool) -> druid_rdbc::governance::wall::table_stat_value::WallTableStatValue
+impl core::default::Default for druid_rdbc::governance::wall::table_stat::WallTableStat
+pub fn druid_rdbc::governance::wall::table_stat::WallTableStat::default() -> Self
+pub mod druid_rdbc::governance::wall::table_stat_value
+pub struct druid_rdbc::governance::wall::table_stat_value::WallTableStatValue
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::alter_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::create_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::delete_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::delete_data_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::delete_data_histogram: [u64; 6]
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::drop_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::fetch_row_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::fetch_row_histogram: [u64; 6]
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::insert_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::insert_data_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::name: alloc::string::String
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::replace_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::select_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::select_into_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::truncate_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::update_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::update_data_count: u64
+pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::update_data_histogram: [u64; 6]
+impl druid_rdbc::governance::wall::table_stat_value::WallTableStatValue
+pub fn druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::to_map(&self) -> serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub fn druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::total_execute_count(&self) -> u64
+pub mod druid_rdbc::governance::wall::update_check_item
+pub struct druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem
+pub druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem::column_name: alloc::string::String
+pub druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem::filter_values: alloc::vec::Vec<sqlparser::ast::Expr>
+pub druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem::table_name: alloc::string::String
+pub druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem::value: sqlparser::ast::Expr
+impl druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem
+pub fn druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem::filter_parameter_indices(&self) -> &[core::option::Option<usize>]
+pub fn druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem::literal_values(&self) -> core::option::Option<(druid_rdbc::types::Value, alloc::vec::Vec<druid_rdbc::types::Value>)>
+pub fn druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, sqlparser::ast::Expr, alloc::vec::Vec<sqlparser::ast::Expr>) -> Self
+pub fn druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem::resolve_values(&self, &[druid_rdbc::types::Value]) -> core::option::Option<(druid_rdbc::types::Value, alloc::vec::Vec<druid_rdbc::types::Value>)>
+pub const fn druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem::value_parameter_index(&self) -> core::option::Option<usize>
+pub fn druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem::with_parameter_indices(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, sqlparser::ast::Expr, core::option::Option<usize>, alloc::vec::Vec<sqlparser::ast::Expr>, alloc::vec::Vec<core::option::Option<usize>>) -> Self
+pub mod druid_rdbc::governance::wall::violation
+pub enum druid_rdbc::governance::wall::violation::WallViolation
+pub druid_rdbc::governance::wall::violation::WallViolation::AlwaysFalseCondition(alloc::string::String)
+pub druid_rdbc::governance::wall::violation::WallViolation::AlwaysTrueCondition(alloc::string::String)
+pub druid_rdbc::governance::wall::violation::WallViolation::BitwiseNotAllowed
+pub druid_rdbc::governance::wall::violation::WallViolation::ConstArithmeticNotAllowed
+pub druid_rdbc::governance::wall::violation::WallViolation::ConstCaseCondition
+pub druid_rdbc::governance::wall::violation::WallViolation::DeleteWithoutWhere
+pub druid_rdbc::governance::wall::violation::WallViolation::DeniedFunction(alloc::string::String)
+pub druid_rdbc::governance::wall::violation::WallViolation::DeniedObject(alloc::string::String)
+pub druid_rdbc::governance::wall::violation::WallViolation::DeniedSchema(alloc::string::String)
+pub druid_rdbc::governance::wall::violation::WallViolation::DeniedTable(alloc::string::String)
+pub druid_rdbc::governance::wall::violation::WallViolation::DeniedVariant(alloc::string::String)
+pub druid_rdbc::governance::wall::violation::WallViolation::DoubleConstCondition
+pub druid_rdbc::governance::wall::violation::WallViolation::DropTableNotAllowed(alloc::string::String)
+pub druid_rdbc::governance::wall::violation::WallViolation::LimitZeroNotAllowed
+pub druid_rdbc::governance::wall::violation::WallViolation::MultiStatementNotAllowed
+pub druid_rdbc::governance::wall::violation::WallViolation::MustParameterized
+pub druid_rdbc::governance::wall::violation::WallViolation::OperationNotAllowed(alloc::string::String)
+pub druid_rdbc::governance::wall::violation::WallViolation::ReadOnlyTable(alloc::string::String)
+pub druid_rdbc::governance::wall::violation::WallViolation::SameConstLike
+pub druid_rdbc::governance::wall::violation::WallViolation::SelectAllColumnNotAllowed
+pub druid_rdbc::governance::wall::violation::WallViolation::SelectIntoOutfileNotAllowed
+pub druid_rdbc::governance::wall::violation::WallViolation::SyntaxError(alloc::string::String)
+pub druid_rdbc::governance::wall::violation::WallViolation::TruncateNotAllowed
+pub druid_rdbc::governance::wall::violation::WallViolation::UpdateCheckFailed
+pub druid_rdbc::governance::wall::violation::WallViolation::UpdateWithoutWhere
+pub druid_rdbc::governance::wall::violation::WallViolation::XorNotAllowed
+impl core::error::Error for druid_rdbc::governance::wall::violation::WallViolation
+impl core::fmt::Display for druid_rdbc::governance::wall::violation::WallViolation
+pub fn druid_rdbc::governance::wall::violation::WallViolation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod druid_rdbc::metadata
 #[non_exhaustive] pub enum druid_rdbc::metadata::ColumnNullability
 pub druid_rdbc::metadata::ColumnNullability::NoNulls
