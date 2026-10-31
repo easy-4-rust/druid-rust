@@ -629,8 +629,8 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
     async fn set_client_info(&mut self, name: &str, value: Option<&str>) -> Result<(), RdbcError> {
         self.prepare_client_info_mutation().await.map_err(|error| {
             error.with_client_info_failure(HashMap::from([(
-                Some(name.to_owned()),
-                Some(druid_rdbc::connection::ClientInfoStatus::ReasonUnknown),
+                name.to_owned(),
+                "REASON_UNKNOWN".to_owned(),
             )]))
         })?;
         let result = match self.standard_mut() {
@@ -639,8 +639,8 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         }
         .map_err(|error| {
             error.with_client_info_failure(HashMap::from([(
-                Some(name.to_owned()),
-                Some(druid_rdbc::connection::ClientInfoStatus::ReasonUnknown),
+                name.to_owned(),
+                "REASON_UNKNOWN".to_owned(),
             )]))
         });
         self.classify_result(result)
@@ -664,12 +664,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
                 properties
                     .into_iter()
                     .flat_map(|values| values.keys())
-                    .map(|name| {
-                        (
-                            Some(name.clone()),
-                            Some(druid_rdbc::connection::ClientInfoStatus::ReasonUnknown),
-                        )
-                    })
+                    .map(|name| (name.clone(), "REASON_UNKNOWN".to_owned()))
                     .collect(),
             )
         })?;
@@ -677,12 +672,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             properties
                 .into_iter()
                 .flat_map(|values| values.keys())
-                .map(|name| {
-                    (
-                        Some(name.clone()),
-                        Some(druid_rdbc::connection::ClientInfoStatus::ReasonUnknown),
-                    )
-                })
+                .map(|name| (name.clone(), "REASON_UNKNOWN".to_owned()))
                 .collect()
         };
         let result = match self.standard_mut() {
