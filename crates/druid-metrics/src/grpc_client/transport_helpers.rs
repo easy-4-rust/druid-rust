@@ -94,7 +94,7 @@ async fn open_transport(
     })
 }
 
-async fn connect_transport(
+pub(super) async fn connect_transport(
     config: &GrpcClientConfig,
     stream_epoch: u64,
     cancellation: Option<&CancellationToken>,
@@ -127,18 +127,18 @@ async fn connect_transport(
     }
 }
 
-struct AbortOnDrop(Option<JoinHandle<Result<Option<ServerFrame>, MetricsError>>>);
+pub(super) struct AbortOnDrop(Option<JoinHandle<Result<Option<ServerFrame>, MetricsError>>>);
 
 impl AbortOnDrop {
-    fn new(handle: JoinHandle<Result<Option<ServerFrame>, MetricsError>>) -> Self {
+pub(super)     fn new(handle: JoinHandle<Result<Option<ServerFrame>, MetricsError>>) -> Self {
         Self(Some(handle))
     }
 
-    fn take(&mut self) -> Option<JoinHandle<Result<Option<ServerFrame>, MetricsError>>> {
+pub(super)     fn take(&mut self) -> Option<JoinHandle<Result<Option<ServerFrame>, MetricsError>>> {
         self.0.take()
     }
 
-    fn is_finished(&self) -> bool {
+pub(super)     fn is_finished(&self) -> bool {
         self.0.as_ref().is_none_or(JoinHandle::is_finished)
     }
 }
@@ -151,7 +151,7 @@ impl Drop for AbortOnDrop {
     }
 }
 
-async fn join_reader_and_collect_successor_commands(
+pub(super) async fn join_reader_and_collect_successor_commands(
     reader_task: &mut AbortOnDrop,
     reader_cancellation: &CancellationToken,
     exit: &mut PushWorkerExit,
@@ -211,7 +211,7 @@ fn flatten_reader_join(
     }
 }
 
-async fn wait_for_reconnect(
+pub(super) async fn wait_for_reconnect(
     backoff: Duration,
     cancellation: &CancellationToken,
 ) -> Result<(), MetricsError> {
@@ -221,7 +221,7 @@ async fn wait_for_reconnect(
     }
 }
 
-fn validate_config(config: &GrpcClientConfig) -> Result<(), MetricsError> {
+pub(super) fn validate_config(config: &GrpcClientConfig) -> Result<(), MetricsError> {
     if config.ack_window_capacity == 0 {
         return Err(MetricsError::ChannelSend(
             "gRPC ACK window capacity must be greater than zero".to_owned(),
@@ -259,7 +259,7 @@ fn validate_config(config: &GrpcClientConfig) -> Result<(), MetricsError> {
     Ok(())
 }
 
-fn flatten_join(
+pub(super) fn flatten_join(
     result: Result<Result<(), MetricsError>, tokio::task::JoinError>,
 ) -> Result<(), MetricsError> {
     match result {
@@ -268,7 +268,7 @@ fn flatten_join(
     }
 }
 
-fn make_header(config: &GrpcClientConfig, stream_epoch: u64, sequence: u64) -> FrameHeader {
+pub(super) fn make_header(config: &GrpcClientConfig, stream_epoch: u64, sequence: u64) -> FrameHeader {
     FrameHeader {
         protocol_version: 1,
         service_name: config.service_name.clone(),
@@ -287,7 +287,7 @@ fn same_stream_identity(expected: &FrameHeader, actual: &FrameHeader) -> bool {
         && expected.stream_epoch == actual.stream_epoch
 }
 
-fn validate_server_frame(
+pub(super) fn validate_server_frame(
     frame: &ServerFrame,
     config: &GrpcClientConfig,
     stream_epoch: u64,
@@ -322,7 +322,7 @@ fn validate_server_frame(
     Ok(())
 }
 
-fn next_stream_epoch() -> u64 {
+pub(super) fn next_stream_epoch() -> u64 {
     static NEXT_EPOCH: AtomicU64 = AtomicU64::new(1);
     now_unix_ms()
         .saturating_mul(1_000)
@@ -336,7 +336,7 @@ fn now_unix_ms() -> u64 {
         .as_millis() as u64
 }
 
-fn next_backoff(current: Duration) -> Duration {
+pub(super) fn next_backoff(current: Duration) -> Duration {
     current.saturating_mul(2).min(MAX_BACKOFF)
 }
 
@@ -351,6 +351,6 @@ fn jittered(base: Duration) -> Duration {
     Duration::from_nanos(nanos.min(MAX_BACKOFF.as_nanos()) as u64)
 }
 
-fn other_error(error: impl std::error::Error + Send + Sync + 'static) -> MetricsError {
+pub(super) fn other_error(error: impl std::error::Error + Send + Sync + 'static) -> MetricsError {
     MetricsError::Other(Box::new(error))
 }

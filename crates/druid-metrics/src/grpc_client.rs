@@ -28,6 +28,11 @@ use crate::registry::RegistryCommandExecutor;
 use crate::sequence_window::PendingFrame;
 
 mod transport_helpers;
+use transport_helpers::{
+    connect_transport, flatten_join, join_reader_and_collect_successor_commands, make_header,
+    next_backoff, next_stream_epoch, other_error, validate_config, validate_server_frame,
+    wait_for_reconnect, AbortOnDrop,
+};
 
 pub use crate::grpc_authorization::GrpcAuthorization;
 
