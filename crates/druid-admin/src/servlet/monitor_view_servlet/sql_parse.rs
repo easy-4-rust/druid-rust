@@ -138,7 +138,7 @@ fn break_lines(text: &str) -> String {
                 .filter_map(|kw| tail.find(kw).map(|pos| (pos, *kw)))
                 .min_by_key(|(pos, _)| *pos);
             match hit {
-                Some((pos, kw)) if pos > 0 => {
+                Some((pos, _)) if pos > 0 => {
                     line.push_str(tail[..pos].trim_end());
                     line.push('\n');
                     tail = tail[pos + 1..].to_owned();

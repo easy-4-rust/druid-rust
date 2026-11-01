@@ -1,8 +1,9 @@
 //! Real TCP boundary tests for the shared `druid_metrics.v1` bidi protocol.
 
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, LazyLock, Mutex};
 use std::time::Duration;
 
 use base64::Engine as _;
@@ -3381,11 +3382,24 @@ async fn start_production_server_at(
     (shutdown, handle)
 }
 
+static RESERVED_LOOPBACK_ADDRS: LazyLock<Mutex<HashSet<SocketAddr>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
 async fn reserve_loopback_addr() -> SocketAddr {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("reserve loopback address");
-    listener.local_addr().expect("reserved address")
+    loop {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("reserve loopback address");
+        let addr = listener.local_addr().expect("reserved address");
+        // Tests run concurrently; a dropped listener must not hand out the same port twice.
+        if RESERVED_LOOPBACK_ADDRS
+            .lock()
+            .expect("reserved loopback addresses lock")
+            .insert(addr)
+        {
+            return addr;
+        }
+    }
 }
 
 async fn start_http_with_repo(

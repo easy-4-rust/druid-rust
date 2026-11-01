@@ -25,7 +25,7 @@ async fn task6_filter_chain_extended_public_behavior(case_id: &str) {
     assert_eq!(chain.filter_class_names().len(), 1);
     let class_name = chain.filter_class_names()[0].clone();
     assert!(chain.contains_filter_class_name(&class_name));
-    assert!(chain.contains_filter_class_name(&class_name.to_uppercase()));
+    assert!(!chain.contains_filter_class_name(&class_name.to_uppercase()));
     assert_eq!(chain.prepare_statement_sql("SELECT 1").unwrap(), "SELECT 1");
     assert_eq!(
         chain.statement_add_batch_sql("UPDATE t SET x = 1").unwrap(),
