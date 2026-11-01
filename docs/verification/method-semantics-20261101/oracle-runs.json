@@ -1,0 +1,55 @@
+[
+  {
+    "run": "exception-sorters-28116-1793535856240556100",
+    "rows": 118,
+    "statuses": {
+      "MATCH": 34,
+      "MISMATCH": 84
+    }
+  },
+  {
+    "run": "exception-sorters-28116-1793535856240565000",
+    "rows": 576,
+    "statuses": {
+      "MATCH": 573,
+      "APPROVED_STANDARD_DIFFERENCE": 3
+    }
+  },
+  {
+    "run": "exception-sorters-45776-1793536138326902700",
+    "rows": 118,
+    "statuses": {
+      "MATCH": 118
+    }
+  },
+  {
+    "run": "exception-sorters-45776-1793536138327047100",
+    "rows": 576,
+    "statuses": {
+      "MATCH": 573,
+      "APPROVED_STANDARD_DIFFERENCE": 3
+    }
+  },
+  {
+    "run": "exception-sorters-60532-1793535967734741400",
+    "rows": 118,
+    "statuses": {
+      "MATCH": 118
+    }
+  },
+  {
+    "run": "exception-sorters-60532-1793535967734757200",
+    "rows": 576,
+    "statuses": {
+      "MATCH": 573,
+      "APPROVED_STANDARD_DIFFERENCE": 3
+    }
+  },
+  {
+    "run": "mock-sorter-live-7980-1793536149301544500",
+    "rows": 1,
+    "statuses": {
+      "MATCH": 1
+    }
+  }
+]

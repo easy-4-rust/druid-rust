@@ -1,0 +1,65 @@
+   Compiling zerocopy v0.8.56
+   Compiling zerocopy-derive v0.8.56
+   Compiling either v1.17.0
+   Compiling chrono v0.4.45
+   Compiling windows-sys v0.52.0
+   Compiling windows-sys v0.48.0
+   Compiling atoi v2.0.0
+   Compiling crossbeam-deque v0.8.7
+   Compiling toasty-core v0.9.0
+   Compiling rayon-core v1.13.0
+   Compiling ciborium-io v0.2.2
+   Compiling plotters-backend v0.3.7
+   Compiling clap_lex v1.1.0
+   Compiling anstyle v1.0.14
+   Compiling cast v0.3.0
+   Compiling tinytemplate v1.2.1
+   Compiling anes v0.1.6
+   Compiling oorandom v11.1.5
+   Compiling itertools v0.10.5
+   Compiling plotters-svg v0.3.7
+   Compiling clap_builder v4.6.6
+   Compiling plotters v0.3.7
+   Compiling errno v0.3.14
+   Compiling is-terminal v0.4.17
+   Compiling sqlx-core v0.8.6
+   Compiling druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc)
+   Compiling rustix v1.1.4
+   Compiling etcetera v0.8.0
+   Compiling winapi-util v0.1.11
+   Compiling same-file v1.0.6
+   Compiling criterion-plot v0.5.0
+   Compiling walkdir v2.5.0
+   Compiling rayon v1.12.0
+   Compiling async-io v2.6.0
+   Compiling clap v4.6.6
+   Compiling async-net v2.0.0
+   Compiling toasty-sql v0.9.0
+   Compiling sqlx-sqlite v0.8.6
+   Compiling ahash v0.8.12
+   Compiling ppv-lite86 v0.2.21
+   Compiling half v2.7.1
+   Compiling hashbrown v0.14.5
+   Compiling ciborium-ll v0.2.2
+   Compiling rand_chacha v0.3.1
+   Compiling ciborium v0.2.2
+   Compiling rand v0.8.7
+   Compiling hashlink v0.9.1
+   Compiling hashlink v0.8.4
+   Compiling dashmap v6.2.1
+   Compiling criterion v0.5.1
+   Compiling rusqlite v0.32.1
+   Compiling zookeeper-client v0.11.2
+   Compiling num-bigint-dig v0.8.6
+   Compiling sqlx-postgres v0.8.6
+   Compiling toasty-driver-sqlite v0.9.0 (E:\workspaces\workspace-github-easy-4-rust\druid-rust\vendor\toasty-driver-sqlite)
+   Compiling rsa v0.9.10
+   Compiling toasty v0.9.0
+   Compiling sqlx-mysql v0.8.6
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+   Compiling sqlx v0.8.6
+   Compiling druid-wrapper v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper)
+   Compiling druid-bench v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-bench)
+error: failed to build archive at `E:\workspaces\workspace-github-easy-4-rust\druid-rust\target\debug\deps\libdruid-ab330590066fcd7e.rlib`: 磁盘空间不足。 (os error 112)
+
+error: could not compile `druid` (lib) due to 1 previous error

@@ -1,0 +1,26 @@
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+   Compiling druid-bench v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-bench)
+   Compiling druid-wrapper v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper)
+    Finished `test` profile [unoptimized] target(s) in 19.50s
+     Running tests\java_rust_exception_sorters_differential.rs (D:\codex-build\druid-audit-20261101\debug\deps\java_rust_exception_sorters_differential-28cd7689f6764abe.exe)
+
+running 4 tests
+test shared_corpus_has_complete_unique_rust_results_without_panics ... ok
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+Java Druid 33824c3dec1612711f9bb4e409319bcab2e4cd0e; 118 cases; artifacts: D:\codex-build\druid-sorter-methods-20261101\oracle\exception-sorters-28116-1793535856240556100
+
+thread 'pinned_java_and_rust_match_every_property_boundary_case' (2916) panicked at crates\druid-bench\tests\java_rust_exception_sorters_differential.rs:297:5:
+different classifications: ["property_oceanbase_oracle_digits_0660", "property_oceanbase_oracle_digits_06f0", "property_oceanbase_oracle_digits_07c0", "property_oceanbase_oracle_digits_0966", "property_oceanbase_oracle_digits_09e6", "property_oceanbase_oracle_digits_0a66", "property_oceanbase_oracle_digits_0ae6", "property_oceanbase_oracle_digits_0b66", "property_oceanbase_oracle_digits_0be6", "property_oceanbase_oracle_digits_0c66", "property_oceanbase_oracle_digits_0ce6", "property_oceanbase_oracle_digits_0d66", "property_oceanbase_oracle_digits_0de6", "property_oceanbase_oracle_digits_0e50", "property_oceanbase_oracle_digits_0ed0", "property_oceanbase_oracle_digits_0f20", "property_oceanbase_oracle_digits_1040", "property_oceanbase_oracle_digits_1090", "property_oceanbase_oracle_digits_17e0", "property_oceanbase_oracle_digits_1810", "property_oceanbase_oracle_digits_1946", "property_oceanbase_oracle_digits_19d0", "property_oceanbase_oracle_digits_1a80", "property_oceanbase_oracle_digits_1a90", "property_oceanbase_oracle_digits_1b50", "property_oceanbase_oracle_digits_1bb0", "property_oceanbase_oracle_digits_1c40", "property_oceanbase_oracle_digits_1c50", "property_oceanbase_oracle_digits_a620", "property_oceanbase_oracle_digits_a8d0", "property_oceanbase_oracle_digits_a900", "property_oceanbase_oracle_digits_a9d0", "property_oceanbase_oracle_digits_a9f0", "property_oceanbase_oracle_digits_aa50", "property_oceanbase_oracle_digits_abf0", "property_oceanbase_oracle_digits_ff10", "property_oceanbase_oracle_invalid_then_valid", "property_oceanbase_oracle_max", "property_oceanbase_oracle_min", "property_oceanbase_oracle_mixed", "property_oceanbase_oracle_negative_zero", "property_oceanbase_oracle_zero_prefix", "property_oracle_digits_0660", "property_oracle_digits_06f0", "property_oracle_digits_07c0", "property_oracle_digits_0966", "property_oracle_digits_09e6", "property_oracle_digits_0a66", "property_oracle_digits_0ae6", "property_oracle_digits_0b66", "property_oracle_digits_0be6", "property_oracle_digits_0c66", "property_oracle_digits_0ce6", "property_oracle_digits_0d66", "property_oracle_digits_0de6", "property_oracle_digits_0e50", "property_oracle_digits_0ed0", "property_oracle_digits_0f20", "property_oracle_digits_1040", "property_oracle_digits_1090", "property_oracle_digits_17e0", "property_oracle_digits_1810", "property_oracle_digits_1946", "property_oracle_digits_19d0", "property_oracle_digits_1a80", "property_oracle_digits_1a90", "property_oracle_digits_1b50", "property_oracle_digits_1bb0", "property_oracle_digits_1c40", "property_oracle_digits_1c50", "property_oracle_digits_a620", "property_oracle_digits_a8d0", "property_oracle_digits_a900", "property_oracle_digits_a9d0", "property_oracle_digits_a9f0", "property_oracle_digits_aa50", "property_oracle_digits_abf0", "property_oracle_digits_ff10", "property_oracle_invalid_then_valid", "property_oracle_max", "property_oracle_min", "property_oracle_mixed", "property_oracle_negative_zero", "property_oracle_zero_prefix"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test pinned_java_and_rust_match_every_property_boundary_case ... FAILED
+Java Druid 33824c3dec1612711f9bb4e409319bcab2e4cd0e; 576 cases; artifacts: D:\codex-build\druid-sorter-methods-20261101\oracle\exception-sorters-28116-1793535856240565000
+test pinned_java_and_rust_match_every_shared_exception_case ... ok
+
+failures:
+
+failures:
+    pinned_java_and_rust_match_every_property_boundary_case
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.05s
+
+error: test failed, to rerun pass `-p druid-bench --test java_rust_exception_sorters_differential`

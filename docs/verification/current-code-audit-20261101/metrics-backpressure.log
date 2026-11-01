@@ -1,0 +1,21 @@
+   Compiling druid-metrics v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-metrics)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.87s
+     Running tests\queue_semantics_test.rs (target\debug\deps\queue_semantics_test-652e331452ba4986.exe)
+
+running 5 tests
+test busy_datasource_increments_snapshot_busy_total ... ok
+test saturated_metrics_queue_never_blocks_datasource_operations ... ok
+test saturated_runtime_shutdown_drains_and_joins_every_owned_task ... ok
+test runtime_end_to_end_with_many_datasources ... ok
+test queue_saturation_coalesces_live_sources_without_panicking ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+
+     Running tests\task_supervision_test.rs (target\debug\deps\task_supervision_test-b1052cb75340d54a.exe)
+
+running 2 tests
+test shutdown_joins_every_task_while_registration_guard_remains_live ... ok
+test sampler_panic_returns_join_error_and_supervisor_reaps_all_tasks ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,46 @@
+{
+  "java_sha": "fa8dc9912637a2f729eef9f55356621fec18d40e",
+  "rust_sha": "7b39d0c04d6829493cacb5de125d7e6de50ef5fe",
+  "status": "M Cargo.lock\n M crates/druid-admin/Cargo.toml\n M crates/druid-admin/src/servlet/monitor_view_servlet.rs\n M crates/druid-admin/src/servlet/monitor_view_servlet/monitor_view_a.rs\n M crates/druid-admin/src/servlet/monitor_view_servlet/v1_api.rs\n M crates/druid-admin/web/src/api/client.js\n M crates/druid-admin/web/src/components/SqlCode.vue\n M crates/druid-admin/web/src/views/SqlDetail.vue\n M crates/druid-bench/tests/java_rust_exception_sorters_differential.rs\n M crates/druid/src/core/filter_chain_impl/chain_a.rs\n M crates/druid/tests/task6_filter_manager_semantics_test_parity.rs\n M docs/migration/README.md\n M docs/migration/dialect-fidelity/README.md\n M \"docs/migration/\\345\\257\\271\\350\\261\\241\\345\\220\\215\\347\\247\\260\\344\\270\\200\\350\\207\\264\\346\\200\\247\\346\\243\\200\\346\\237\\245.md\"\n M \"docs/migration/\\345\\257\\271\\350\\261\\241\\347\\272\\247\\345\\257\\271\\347\\205\\247\\350\\241\\250.md\"\n M \"docs/migration/\\350\\257\\255\\344\\271\\211\\350\\277\\201\\347\\247\\273\\345\\257\\271\\347\\205\\247\\350\\241\\250.md\"\n M \"docs/migration/\\350\\277\\201\\347\\247\\273\\350\\267\\257\\347\\272\\277\\345\\233\\276.md\"\n M \"docs/migration/\\350\\277\\201\\347\\247\\273\\351\\252\\214\\346\\224\\266\\350\\247\\204\\350\\214\\203.md\"\n M docs/superpowers/README.md\n M docs/verification/rdbc-first/p3-3a-wall-values-20261023.md\n M scripts/render_migration_docs.py\n?? api/observed/\n?? crates/druid-admin/src/servlet/monitor_view_servlet/sql_parse.rs\n?? crates/druid-bench/tests/fixtures/exception_sorter_property_cases.tsv\n?? crates/druid/tests/exception_sorter_property_contract_test.rs\n?? docs/verification/current-code-audit-20261101/\n?? docs/verification/migration-audit-20261101/\n?? docs/verification/rdbc-first/client-info-typed-payload-migration-20261021.md\n?? gui-test-screenshots/r6_sql_detail_parsed.png\n?? gui-test-screenshots/r7_sql_detail_meta.png\n?? openspec/changes/exception-sorter-property-parity/\n?? openspec/changes/filter-class-identity-parity/\n?? scripts/reconcile_migration_evidence.py\n?? scripts/test_reconcile_migration_evidence.py\n?? scripts/test_render_migration_docs.py\n?? wip/",
+  "input_sha256": {
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid\\src\\core\\abstract_oracle_exception_sorter.rs": "69595722d741cfcab1784f3976af7bb888b9492fea3950636f00a2e672453bf0",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid\\src\\core\\db2_exception_sorter.rs": "f1d825ecd002d3513d708f3a47380a4b5ade9e222157c891d7107e3bbde49429",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid\\src\\core\\exception_sorter.rs": "f5f5f42509351d67974d309c79d4e21d3c5a3b0b12bb516f1b8f5bcace674dab",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid\\src\\core\\informix_exception_sorter.rs": "bf3f6453c076c27389cb1d27a4df49c32c84b451750f14510c4f2d9021c86f61",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid\\src\\core\\mock_exception_sorter.rs": "0395874f2b25bb5fa4dce4befbd46967df11a1b83eb5b3ad19209f3d332711f2",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid\\src\\core\\my_sql_exception_sorter.rs": "dfc9fb0b0e13809458a41f8f8c934b973df9f7e34ea5abf069b9354c49c3266c",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid\\src\\core\\null_exception_sorter.rs": "e2c62ca10a6710b1edc7346066f124c5d568fae726fbf91f05706b89a90baa96",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid\\src\\core\\ocean_base_oracle_exception_sorter.rs": "cee58ebd90fe38c301d9ec61b5dcef3d9825040963dd40caecd759aeeb5c9374",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid\\src\\core\\oracle_exception_sorter.rs": "65f37d2559d443cd6ebf1e4e80c6d964732578a86a86eb8ad3f91baf08ff0c85",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid\\src\\core\\pg_exception_sorter.rs": "744e3359f534f4c510d4f5a5aab00909a0d738722293b9ed53d6af1bc85ac945",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid\\src\\core\\phoenix_exception_sorter.rs": "3c6b0afcdd6ba52fa7afe48a9d615414eaccd8434daaf088d58ad2da00aca404",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid\\src\\core\\sybase_exception_sorter.rs": "e082f7705b8b37b54a9500518bd99ad405527f3383c137c5fbff27f836cdaba1",
+    "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\ExceptionSorter.java": "27286fcec67731b152268567b8b60a8de8d2aa1973966b762c8500a500307e2a",
+    "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\AbstractOracleExceptionSorter.java": "a75af49bb8602d7dadc83b36b9b469170818f8c12e7b478d23fcb067602ff2e2",
+    "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\DB2ExceptionSorter.java": "3cf8df42bec0af20f0e74b77cca7efb653df07a3770983430b764fc26a467952",
+    "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\InformixExceptionSorter.java": "b1c7e8894c7c67710349cc3052319ac5e0dac30aeb1c4cddf6381eb40cc7fab4",
+    "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\MySqlExceptionSorter.java": "7485c8ccac8aa3e8d2192cfd9b0f78f17566d5dee3b0c4e3b32a810b6394fd8c",
+    "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\NullExceptionSorter.java": "50934c4a7fa6938dc926e7a9e38f6e1635294c2d5975b738f9320085df3a2b74",
+    "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\OceanBaseOracleExceptionSorter.java": "63d8dd463289e3c9cf165817f94823b651b64b84ea454353629645d68eab41d7",
+    "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\OracleExceptionSorter.java": "894376bc437d1411dcf558f53b702f8fd92a61e0eafc1f5de1cfdc63d8f90b1e",
+    "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\PGExceptionSorter.java": "be062a1e78b3795ad593ff8ef38fd2a53432f45297ad5f889aecc2b6a31f56df",
+    "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\PhoenixExceptionSorter.java": "fe1c4d2cafc6cfe406a697d234ebd62d2e39794ac3df0152f874980f6a5f99ef",
+    "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\SybaseExceptionSorter.java": "608f1480ea6494c2b3dee99e6a40a4ae221e47b6daaf5422e6f4cc813b603abd",
+    "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\MockExceptionSorter.java": "97200e5cf402305bfd741221f20dd9b9cb89bd2468d136b4fced1b0fcb9e300b",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\Cargo.lock": "6949ce6f97cb1b95d0432eb01a251c0043fabb0485fc88bc4ab45ea8427115fc",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\Cargo.toml": "3eef28ad421f45639da42e25b81dc573382494c8fd53ad3f4a1f97d441f3955e",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid-bench\\tests\\java_rust_exception_sorters_differential.rs": "25ce13ca3b5b4d26ee9456d679ebfabb6c48efdd1687cd3024244af74388a680",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid-bench\\tests\\fixtures\\exception_sorters.tsv": "d1d493ff62e29fd2da298a7373a4bbe6083e2a7550b971dd701f9d83b8c70cb5",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid-bench\\tests\\fixtures\\exception_sorter_property_cases.tsv": "0d6deb4b36b9b2f234e7b0c09981969cd17c83f3cdec79c9de5abab9631b1ce4"
+  },
+  "parallel_sha256": {
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid-admin\\Cargo.toml": "337149d3b2f952c00895c072846f101a1bbd5380e4e2102254114e65f59e8d66",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid-admin\\web\\src\\api\\client.js": "13d56ba2d7558b315b2dfb655abfaaa79852ea5e42c3d9f03d9c26880c9ac29b",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid-admin\\web\\src\\components\\SqlCode.vue": "3b1aa2a20aad83834e4167953e8881a5d0c431c92e7ea5bce94d48bdf03fb5c8",
+    "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid-admin\\web\\src\\views\\SqlDetail.vue": "5a76f78f0217ba7970041fdac0f31fac3fe4ad4a612c7c74374bda3314cb2954"
+  },
+  "oracle_classpath_sha256": {
+    "C:\\Users\\hnxyh\\.m2\\repository\\com\\alibaba\\druid\\1.2.28\\druid-1.2.28.jar": "c4cec3792390a2bbe6020d59be52160fd38d15de0f00dc52702eb91128c695a5",
+    "C:\\Users\\hnxyh\\.m2\\repository\\junit\\junit\\4.13.2\\junit-4.13.2.jar": "8e495b634469d64fb8acfa3495a065cbacc8a0fff55ce1e31007be4c16dc57d3"
+  }
+}

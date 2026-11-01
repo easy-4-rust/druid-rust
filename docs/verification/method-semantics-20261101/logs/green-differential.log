@@ -1,0 +1,37 @@
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+   Compiling druid-bench v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-bench)
+   Compiling druid-wrapper v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper)
+    Finished `test` profile [unoptimized] target(s) in 24.59s
+     Running tests\java_rust_exception_sorters_differential.rs (D:\codex-build\druid-audit-20261101\debug\deps\java_rust_exception_sorters_differential-28cd7689f6764abe.exe)
+
+running 4 tests
+test shared_corpus_has_complete_unique_rust_results_without_panics ... ok
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+Java Druid 33824c3dec1612711f9bb4e409319bcab2e4cd0e; 118 cases; artifacts: D:\codex-build\druid-sorter-methods-20261101\oracle\exception-sorters-60532-1793535967734741400
+test pinned_java_and_rust_match_every_property_boundary_case ... ok
+Java Druid 33824c3dec1612711f9bb4e409319bcab2e4cd0e; 576 cases; artifacts: D:\codex-build\druid-sorter-methods-20261101\oracle\exception-sorters-60532-1793535967734757200
+test pinned_java_and_rust_match_every_shared_exception_case ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+
+     Running tests\java_rust_mock_sorter_differential.rs (D:\codex-build\druid-audit-20261101\debug\deps\java_rust_mock_sorter_differential-8966488d95dea510.exe)
+
+running 2 tests
+Mock sorter differential artifacts: D:\codex-build\druid-sorter-methods-20261101\oracle\mock-sorter-live-60076-1793535969565109400
+
+thread 'pinned_java_and_rust_compare_original_mock_sorter_case' (2444) panicked at crates\druid-bench\tests\java_rust_mock_sorter_differential.rs:131:5:
+assertion `left == right` failed
+  left: "4153545ed46fc0fe6e6f2dfc6f7e002c06fa669903545f72dd98230554b06dbe"
+ right: "cf1665f28399e9bb17d9e791651d4f5a3941bfe54c29cc5d93e1a7385cabedfd"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test pinned_java_and_rust_compare_original_mock_sorter_case ... FAILED
+test mock_sorter_physical_close_observation_is_complete ... ok
+
+failures:
+
+failures:
+    pinned_java_and_rust_compare_original_mock_sorter_case
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass `-p druid-bench --test java_rust_mock_sorter_differential`

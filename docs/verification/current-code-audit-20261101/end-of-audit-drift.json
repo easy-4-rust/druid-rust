@@ -1,0 +1,9 @@
+{
+  "note": "End-of-audit drift after snapshot-validation; concurrent edits are preserved and not covered by earlier test runs",
+  "rust_head": "7b39d0c04d6829493cacb5de125d7e6de50ef5fe",
+  "changed_production_files": [],
+  "new_production_files": [
+    "crates/druid-admin/src/servlet/monitor_view_servlet/sql_parse.rs"
+  ],
+  "git_status": "M Cargo.lock\n M crates/druid-admin/Cargo.toml\n M crates/druid/src/core/filter_chain_impl/chain_a.rs\n M crates/druid/tests/task6_filter_manager_semantics_test_parity.rs\n M docs/migration/README.md\n M docs/migration/dialect-fidelity/README.md\n M \"docs/migration/\\345\\257\\271\\350\\261\\241\\345\\220\\215\\347\\247\\260\\344\\270\\200\\350\\207\\264\\346\\200\\247\\346\\243\\200\\346\\237\\245.md\"\n M \"docs/migration/\\345\\257\\271\\350\\261\\241\\347\\272\\247\\345\\257\\271\\347\\205\\247\\350\\241\\250.md\"\n M \"docs/migration/\\350\\257\\255\\344\\271\\211\\350\\277\\201\\347\\247\\273\\345\\257\\271\\347\\205\\247\\350\\241\\250.md\"\n M \"docs/migration/\\350\\277\\201\\347\\247\\273\\350\\267\\257\\347\\272\\277\\345\\233\\276.md\"\n M \"docs/migration/\\350\\277\\201\\347\\247\\273\\351\\252\\214\\346\\224\\266\\350\\247\\204\\350\\214\\203.md\"\n M docs/superpowers/README.md\n M docs/verification/rdbc-first/p3-3a-wall-values-20261023.md\n M scripts/render_migration_docs.py\n?? api/observed/\n?? crates/druid-admin/src/servlet/monitor_view_servlet/sql_parse.rs\n?? docs/verification/current-code-audit-20261101/\n?? docs/verification/migration-audit-20261101/\n?? docs/verification/rdbc-first/client-info-typed-payload-migration-20261021.md\n?? openspec/changes/filter-class-identity-parity/\n?? scripts/reconcile_migration_evidence.py\n?? scripts/test_reconcile_migration_evidence.py\n?? scripts/test_render_migration_docs.py\n?? wip/"
+}

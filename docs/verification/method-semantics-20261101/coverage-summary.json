@@ -1,0 +1,44 @@
+{
+  "totals": {
+    "branches": {
+      "count": 0,
+      "covered": 0,
+      "notcovered": 0,
+      "percent": 0
+    },
+    "functions": {
+      "count": 4737,
+      "covered": 568,
+      "percent": 11.99071142073042
+    },
+    "instantiations": {
+      "count": 6013,
+      "covered": 612,
+      "percent": 10.17794777981041
+    },
+    "lines": {
+      "count": 29643,
+      "covered": 4782,
+      "percent": 16.13197044833519
+    },
+    "mcdc": {
+      "count": 0,
+      "covered": 0,
+      "notcovered": 0,
+      "percent": 0
+    },
+    "regions": {
+      "count": 39383,
+      "covered": 5814,
+      "notcovered": 33569,
+      "percent": 14.762714876977377
+    }
+  },
+  "file_count": 242,
+  "raw_selected_json": "D:\\codex-build\\druid-sorter-methods-20261101\\coverage-selected.json",
+  "raw_selected_sha256": "ead5d2abc289edf76bc8a796c620b843c4ba54e60a711801444aea825fc31bbd",
+  "raw_unselected_json": "D:\\codex-build\\druid-sorter-methods-20261101\\coverage.json",
+  "raw_unselected_sha256": "d22315f21550049e7a430e59187f44c674ab3f0a1b92269cd74c2f70c2a7bacb",
+  "branch_coverage": "NOT_COLLECTED",
+  "production_exclusions": []
+}

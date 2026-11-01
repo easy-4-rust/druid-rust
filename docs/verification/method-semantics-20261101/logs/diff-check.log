@@ -1,0 +1,4 @@
+warning: in the working copy of 'crates/druid-admin/web/src/components/MiniHistogram.vue', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'crates/druid-admin/web/src/views/SqlList.vue', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'crates/druid-bench/tests/java_rust_exception_sorters_differential.rs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'crates/druid/src/core/abstract_oracle_exception_sorter.rs', LF will be replaced by CRLF the next time Git touches it

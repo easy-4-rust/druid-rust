@@ -1,0 +1,474 @@
+[
+  {
+    "path": "baseline.json",
+    "sha256": "5d3765960fa824b863162eff22b1c113d99673edd0af1b05fcb20ef71e5de70a"
+  },
+  {
+    "path": "coverage-summary.json",
+    "sha256": "8cc03dd7ea043bcd711f601b66c233bde134981a75f5e267a89379ebe035dbce"
+  },
+  {
+    "path": "current-java-commands.json",
+    "sha256": "35e2c7ea632f9a324de03186a7aa3f1fdc337b36e0a71588f101248078faba8a"
+  },
+  {
+    "path": "current-java-inputs.json",
+    "sha256": "ca83eff84c4317d641ebc0e2cb9f34dc3bf32c604e867aecdc88c1a3f17383cd"
+  },
+  {
+    "path": "current-mock-results.tsv",
+    "sha256": "702efb2e24cc34031da15ecdae1ec16c3811339c8f27568dc42a2078c680ea42"
+  },
+  {
+    "path": "end-state.json",
+    "sha256": "aa89dd7cb0b8022525c5c29c430bca7a7e5038166bb546dbeebf155ef28e5dc0"
+  },
+  {
+    "path": "final-inputs.json",
+    "sha256": "ae772049c837e4418165ce0f088b23d7f81adfd438d1e3075afb536f448cecc8"
+  },
+  {
+    "path": "logs/clippy.log",
+    "sha256": "ab7ddac75c35c525827f6d07b7c8d0bb60492fb2b7b82795e9a34a200d56cbe1"
+  },
+  {
+    "path": "logs/coverage-json.log",
+    "sha256": "dcde55c5678099da826b81a3465f820e41c4e6bfb161efcf50702c8ed55000a6"
+  },
+  {
+    "path": "logs/coverage-selected-json.log",
+    "sha256": "7f49aacfb84c533561b3d4f49670e3588a16a3efe0db47d31c6396fc0b70eb07"
+  },
+  {
+    "path": "logs/coverage.log",
+    "sha256": "9b7fd3471f3b8159f285e461ba230b8b056c5d220d3ddc5e8b98bada5344282d"
+  },
+  {
+    "path": "logs/current-mock-java.exit",
+    "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+  },
+  {
+    "path": "logs/current-mock-java.stderr",
+    "sha256": "64a0c47f312503afccfc78ca8de613b93657d44852a2297b7b058705823d1c25"
+  },
+  {
+    "path": "logs/current-mock-java.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "logs/current-source-javac.exit",
+    "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+  },
+  {
+    "path": "logs/current-source-javac.log",
+    "sha256": "3e85aa7f1e3ee4ed26cc837d112794ee80f9feaaeabc7ca969135f9aba9cc5fe"
+  },
+  {
+    "path": "logs/current-source-javac.stderr",
+    "sha256": "d2acf38c8f18dbee13d579d43184dea446a791ebbcf99387832c89b90e01b6cf"
+  },
+  {
+    "path": "logs/current-source-javac.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "logs/current-source-tests.exit",
+    "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+  },
+  {
+    "path": "logs/current-source-tests.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "logs/current-source-tests.stdout",
+    "sha256": "d0afde2d972e1b760a26a5ad323aba5becb12fcdfa0e49626fb84d361ecdff89"
+  },
+  {
+    "path": "logs/diff-check.log",
+    "sha256": "b86317c6a6de7f4987df88544e06e0a6755e7691d70f762de11f4282c7519600"
+  },
+  {
+    "path": "logs/fmt.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "logs/green-differential.log",
+    "sha256": "ae785e79ca824878e14b231553851e542a1f2ab2ac3ae3b960bb3709cf5cb987"
+  },
+  {
+    "path": "logs/green-frozen-mock.log",
+    "sha256": "2a6ec3b0cd6bd72defcec917e66130ecfbebe09afb3632558bfb0bee9f6aeadf"
+  },
+  {
+    "path": "logs/green-local.log",
+    "sha256": "b008ed407e62181a43e065ca99c8b2903b66953a9f5bc8cd80b3fe6c6ffddcd0"
+  },
+  {
+    "path": "logs/openspec-final.log",
+    "sha256": "ee456d9402f03f3c64d70cd912277c0c174b5a14507c2514a203cb35f5a80da0"
+  },
+  {
+    "path": "logs/openspec.log",
+    "sha256": "ee456d9402f03f3c64d70cd912277c0c174b5a14507c2514a203cb35f5a80da0"
+  },
+  {
+    "path": "logs/probe-java-stderr.log",
+    "sha256": "c1cb44d5c061eb8e2d6fc34330cb8a89fe4a760fbcafa680b8fe86dbd25795de"
+  },
+  {
+    "path": "logs/probe-java.log",
+    "sha256": "5fee5f5588840f547af1b355efc2ea3dd94c6ea32959031e811d412926183b3f"
+  },
+  {
+    "path": "logs/probe-javac.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "logs/red-differential.log",
+    "sha256": "bc07c8dec5a20eb1f5bcb1960c91201233a69844af3e38e498a8d6115922dbb9"
+  },
+  {
+    "path": "logs/red-local.log",
+    "sha256": "59aaa8861eb2f68bf9c87d68ce0bea82e349e229a3f3f9fd0288fb4cf6f569a3"
+  },
+  {
+    "path": "methods.tsv",
+    "sha256": "4326a583b9c25f2977ce80515297f5ece01a9d65365cac48cf3626f658dc38d4"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240556100/comparison.tsv",
+    "sha256": "255dceed44ac66e62929d87ab29b9499d86a98e09fb3e2b738797f2e782356ca"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240556100/java-results.tsv",
+    "sha256": "4b3176027dff2f43e6f653791165b16a21caac4ad6ca7b0f0b4456afda78b5c0"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240556100/java-version.stderr",
+    "sha256": "883b711aef665165cf31c5df6e7ca5dbbb38eb1eba71fbb0f58fd8ec5c06e291"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240556100/java-version.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240556100/java.stderr",
+    "sha256": "9d2e3c61d733e8ffe9b0e16f9caa26116fc3d57779218479a195f78bed7994f8"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240556100/java.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240556100/javac.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240556100/run-metadata.tsv",
+    "sha256": "cd1a1f9b086c97e101b17bba2599656c781f9a0530f1a87254c16076bfa3a21b"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240565000/comparison.tsv",
+    "sha256": "443a2cf1f04729623eefce819d7c07007c1278ea568c5099556ebc65ab925b35"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240565000/java-results.tsv",
+    "sha256": "009d71613436a7f5ab30668193bdca75277412c52b22d300b85093941cf634f8"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240565000/java-version.stderr",
+    "sha256": "883b711aef665165cf31c5df6e7ca5dbbb38eb1eba71fbb0f58fd8ec5c06e291"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240565000/java-version.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240565000/java.stderr",
+    "sha256": "0ce337680d0e25904be00866d4696f599654d5941a913d8d155e1c2f902da4e3"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240565000/java.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240565000/javac.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-28116-1793535856240565000/run-metadata.tsv",
+    "sha256": "3fd65da8cdf734ae8daa246a23cc4048923ff4cc44e52bcbe7b7339d4bcfd7f4"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138326902700/comparison.tsv",
+    "sha256": "fe04fed806bbef7d82a8b0a50b72453b149d63c0c5e37dcfc088aebb9aeb27c7"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138326902700/java-results.tsv",
+    "sha256": "4b3176027dff2f43e6f653791165b16a21caac4ad6ca7b0f0b4456afda78b5c0"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138326902700/java-version.stderr",
+    "sha256": "883b711aef665165cf31c5df6e7ca5dbbb38eb1eba71fbb0f58fd8ec5c06e291"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138326902700/java-version.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138326902700/java.stderr",
+    "sha256": "f761fd19a7e5e3c078ce605ab2d1f31b77c470ead302ded0a824ebb1838af9d1"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138326902700/java.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138326902700/javac.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138326902700/run-metadata.tsv",
+    "sha256": "cd1a1f9b086c97e101b17bba2599656c781f9a0530f1a87254c16076bfa3a21b"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138327047100/comparison.tsv",
+    "sha256": "443a2cf1f04729623eefce819d7c07007c1278ea568c5099556ebc65ab925b35"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138327047100/java-results.tsv",
+    "sha256": "009d71613436a7f5ab30668193bdca75277412c52b22d300b85093941cf634f8"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138327047100/java-version.stderr",
+    "sha256": "883b711aef665165cf31c5df6e7ca5dbbb38eb1eba71fbb0f58fd8ec5c06e291"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138327047100/java-version.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138327047100/java.stderr",
+    "sha256": "250beb2324f586502c5595429384ffe3ae6f24084f7cfd2b2415657985711e13"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138327047100/java.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138327047100/javac.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-45776-1793536138327047100/run-metadata.tsv",
+    "sha256": "3fd65da8cdf734ae8daa246a23cc4048923ff4cc44e52bcbe7b7339d4bcfd7f4"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734741400/comparison.tsv",
+    "sha256": "fe04fed806bbef7d82a8b0a50b72453b149d63c0c5e37dcfc088aebb9aeb27c7"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734741400/java-results.tsv",
+    "sha256": "4b3176027dff2f43e6f653791165b16a21caac4ad6ca7b0f0b4456afda78b5c0"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734741400/java-version.stderr",
+    "sha256": "883b711aef665165cf31c5df6e7ca5dbbb38eb1eba71fbb0f58fd8ec5c06e291"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734741400/java-version.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734741400/java.stderr",
+    "sha256": "ab0f73fb9736c60e8ccd320050be1bf2cc8d411ae31f7f51c9650f898daed75e"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734741400/java.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734741400/javac.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734741400/run-metadata.tsv",
+    "sha256": "cd1a1f9b086c97e101b17bba2599656c781f9a0530f1a87254c16076bfa3a21b"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734757200/comparison.tsv",
+    "sha256": "443a2cf1f04729623eefce819d7c07007c1278ea568c5099556ebc65ab925b35"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734757200/java-results.tsv",
+    "sha256": "009d71613436a7f5ab30668193bdca75277412c52b22d300b85093941cf634f8"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734757200/java-version.stderr",
+    "sha256": "883b711aef665165cf31c5df6e7ca5dbbb38eb1eba71fbb0f58fd8ec5c06e291"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734757200/java-version.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734757200/java.stderr",
+    "sha256": "c200c0a4764c614a2ada7752ad9ff2bdd9c20a1717d7d0accf3069587e1eaa02"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734757200/java.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734757200/javac.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/exception-sorters-60532-1793535967734757200/run-metadata.tsv",
+    "sha256": "3fd65da8cdf734ae8daa246a23cc4048923ff4cc44e52bcbe7b7339d4bcfd7f4"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/comparison.tsv",
+    "sha256": "eae005a3cbe441dc7fc3d935c043e00271cece09c68ac08a98e903e8ed0d4fa6"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/inputs.tsv",
+    "sha256": "69faf3454701669a2dc6a2095285a73684c8298364ed1615b05aedf09eefb952"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/java-results.tsv",
+    "sha256": "702efb2e24cc34031da15ecdae1ec16c3811339c8f27568dc42a2078c680ea42"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/java-version.exit",
+    "sha256": "2fad43cd569e4c57e0f8882179e153954ab571983b9fee2b6f2924582c0f76a9"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/java-version.stderr",
+    "sha256": "883b711aef665165cf31c5df6e7ca5dbbb38eb1eba71fbb0f58fd8ec5c06e291"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/java-version.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/java.exit",
+    "sha256": "2fad43cd569e4c57e0f8882179e153954ab571983b9fee2b6f2924582c0f76a9"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/java.stderr",
+    "sha256": "56d57c7ff72f5e2181bfde5198f6b2184e5197b9b45b755da86a99d1a87b78d9"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/java.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/javac.exit",
+    "sha256": "2fad43cd569e4c57e0f8882179e153954ab571983b9fee2b6f2924582c0f76a9"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/javac.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/javac.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/metadata.tsv",
+    "sha256": "7d7666ea239d97181ccd47d3cee6e80584f85c3a8c61e5793cb4c24fe705d04c"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/rust-head.exit",
+    "sha256": "2fad43cd569e4c57e0f8882179e153954ab571983b9fee2b6f2924582c0f76a9"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/rust-head.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/rust-head.stdout",
+    "sha256": "0f11224a2a9cbe557682f03ad0aa09455b69524725188c895aacb434eeff40ad"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/rust-results.tsv",
+    "sha256": "702efb2e24cc34031da15ecdae1ec16c3811339c8f27568dc42a2078c680ea42"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/rust-toolchain.exit",
+    "sha256": "2fad43cd569e4c57e0f8882179e153954ab571983b9fee2b6f2924582c0f76a9"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/rust-toolchain.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/rust-toolchain.stdout",
+    "sha256": "7fad09dd8c16d49de37932475436003b5b1763c1015c5ce081ad7692db368ca3"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/rust-worktree.exit",
+    "sha256": "2fad43cd569e4c57e0f8882179e153954ab571983b9fee2b6f2924582c0f76a9"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/rust-worktree.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/rust-worktree.stdout",
+    "sha256": "dfa69edfe52626aaf0f27db27d127702f29b628cb3fad872078c026ed352cd52"
+  },
+  {
+    "path": "oracle/mock-sorter-live-7980-1793536149301544500/tested-source-sha256.tsv",
+    "sha256": "e51ade26eb99635275f6e9e9d9f6a4df726e88de0154130869af22f956e23018"
+  },
+  {
+    "path": "oracle-runs.json",
+    "sha256": "3ccc24d85c4d336e104d1e3a8d624f0540d9a1c4d513ad2151fb320190248861"
+  },
+  {
+    "path": "README.md",
+    "sha256": "50c1912367f9bd435ce37d47e57ec8628aacec17613a1af2b2812859c0a35a1c"
+  },
+  {
+    "path": "reproduce/collect-evidence.py",
+    "sha256": "b2e445dd8a92549f83177997a8470530cd348b193471d98e366ee18ed3a73c93"
+  },
+  {
+    "path": "reproduce/environment.ps1",
+    "sha256": "dd71d5377fa802d06a74d9d4b9b06e187aae65501bd46ef961330ad2ac56d435"
+  },
+  {
+    "path": "reproduce/generate-property-cases.py",
+    "sha256": "c080ba71d5b7a997ce8eced226985a8a09670f2c9cf6331552d222073fc8ef2c"
+  },
+  {
+    "path": "reproduce/prepare-source-validation.py",
+    "sha256": "e216ad62697741486dd97a365f7b9cc943ada2a69b8a2d2a10e79a4479fb9fb6"
+  },
+  {
+    "path": "reproduce/run-current-java.py",
+    "sha256": "c2e2a02701a3011c8be6bddb5a86ec94acc251ba70d09189c045bc0566dea914"
+  },
+  {
+    "path": "reproduce/SorterPropertyProbe.java",
+    "sha256": "0e2a62a8610f5aa39690fa3059358338717fa76b66d9b558b6bb2a814007749f"
+  },
+  {
+    "path": "reproduce/SourceSorterTests.java",
+    "sha256": "ffc35fcc96af6599f0d250d115b24be9b53ebd0fe917fbe91a49ea08027db811"
+  },
+  {
+    "path": "sorter-coverage.tsv",
+    "sha256": "26c1bead9a5cecff1a6469556dd3bcb465501c41dc4a6da9e3898719df19fa1a"
+  },
+  {
+    "path": "source-test-methods.tsv",
+    "sha256": "a512faf2d1988e471d6aeb8e63e9c694ed4dfbe55d6036a6acaa188da9520cb5"
+  },
+  {
+    "path": "source-tests-manifest.json",
+    "sha256": "72c9164c874fe5d30c276ca8419021eb45710001877c1a9f543d8102ac3e8166"
+  }
+]

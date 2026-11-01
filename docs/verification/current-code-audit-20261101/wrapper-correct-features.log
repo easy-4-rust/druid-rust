@@ -1,0 +1,62 @@
+   Compiling windows-sys v0.52.0
+   Compiling tokio v1.54.1
+   Compiling getrandom v0.3.4
+   Compiling errno v0.3.14
+   Compiling tempfile v3.27.0
+   Compiling rustix v1.1.4
+   Compiling async-io v2.6.0
+   Compiling async-net v2.0.0
+   Compiling tokio-stream v0.1.19
+   Compiling spawns-compat v0.2.2
+   Compiling deadpool-runtime v0.3.1
+   Compiling druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc)
+   Compiling deadpool v0.13.0
+   Compiling spawns v0.2.6
+   Compiling asyncs v0.4.0
+   Compiling zookeeper-client v0.11.2
+   Compiling sqlx-core v0.8.6
+   Compiling toasty-core v0.9.0
+   Compiling sqlx-sqlite v0.8.6
+   Compiling sqlx-mysql v0.8.6
+   Compiling sqlx-postgres v0.8.6
+   Compiling toasty-sql v0.9.0
+   Compiling toasty-driver-sqlite v0.9.0 (E:\workspaces\workspace-github-easy-4-rust\druid-rust\vendor\toasty-driver-sqlite)
+   Compiling toasty v0.9.0
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+   Compiling sqlx v0.8.6
+   Compiling druid-wrapper v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 40.89s
+     Running tests\jdbc_agent_xa_external_consumer.rs (target\debug\deps\jdbc_agent_xa_external_consumer-2dd9a1ad52c66d6c.exe)
+
+running 5 tests
+test external_pool_discards_xa_owner_after_agent_transport_failure ... ignored, requires DRUID_JDBC_AGENT_JAR, DRUID_JDBC_DRIVER_JAR, and Java
+test external_pool_returns_logical_lease_and_reuses_live_xa_owner ... ignored, requires DRUID_JDBC_AGENT_JAR, DRUID_JDBC_DRIVER_JAR, and Java
+test rust_client_recovers_prepared_branches_across_sessions ... ignored, requires PostgreSQL Testcontainers harness and JDBC Agent classpath
+test public_xa_data_source_implements_only_the_rdbc_standard_contract ... ok
+test blank_xa_class_fails_before_agent_startup ... ok
+
+test result: ok. 2 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\task6_driver_registry_test_parity.rs (target\debug\deps\task6_driver_registry_test_parity-9e70e8f7c45c1b21.exe)
+
+running 17 tests
+test task6_driver_registry_test_manifest_rejects_unknown_druid_dialect ... ok
+test task6_driver_registry_test_profile_id_is_stable_and_rejects_path_syntax ... ok
+test task6_driver_registry_test_manifest_keeps_omitted_capabilities_disabled ... ok
+test task6_driver_registry_test_unified_rdbc_url_rejects_non_rdbc_scheme_and_user_info ... ok
+test task6_driver_registry_test_manifest_rejects_verified_profiles_without_cross_platform_evidence ... ok
+test task6_driver_registry_test_manifest_rejects_incompatible_provider_runtime_and_protocol ... ok
+test task6_driver_registry_test_manifest_rejects_platform_labels_without_auditable_contract_runs ... ok
+test task6_driver_registry_test_builtin_catalog_has_exact_phased_sql_scope ... ok
+test task6_driver_registry_test_catalog_count_only_includes_profiles_with_support_evidence ... ok
+test task6_driver_registry_test_manifest_accepts_only_complete_five_target_contract_evidence ... ok
+test task6_driver_registry_test_registry_resolves_protocol_compatible_sqlx_profiles ... ok
+test connection_config_diagnostics_redact_native_urls_and_invalid_input ... ok
+test task6_driver_registry_test_jdbc_agent_runtime_requires_explicit_installation ... ok
+test task6_driver_registry_test_java_style_mysql_rdbc_url_maps_to_sqlx_with_all_properties_and_separate_credentials ... ok
+test task6_driver_registry_test_profile_builder_installs_protocol_family_checker_and_sorter ... ok
+test task6_driver_registry_test_unified_rdbc_url_routes_through_catalog_into_real_sqlite_driver ... ok
+test task6_driver_registry_test_profile_builder_keeps_canonical_druid_pool ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

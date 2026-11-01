@@ -1,0 +1,31 @@
+{
+  "java_sha": "fa8dc9912637a2f729eef9f55356621fec18d40e",
+  "rust_sha": "7b39d0c04d6829493cacb5de125d7e6de50ef5fe",
+  "dirty_before": "M crates/druid/src/core/filter_chain_impl/chain_a.rs\n M crates/druid/tests/task6_filter_manager_semantics_test_parity.rs\n M \"docs/migration/\\350\\277\\201\\347\\247\\273\\350\\267\\257\\347\\272\\277\\345\\233\\276.md\"\n M docs/superpowers/README.md\n?? api/observed/\n?? docs/verification/migration-audit-20261101/\n?? docs/verification/rdbc-first/client-info-typed-payload-migration-20261021.md\n?? openspec/changes/filter-class-identity-parity/\n?? scripts/reconcile_migration_evidence.py\n?? scripts/test_reconcile_migration_evidence.py\n?? wip/",
+  "claim": "V0_STATIC; candidate links are not semantic verification",
+  "source_files": {
+    "core": 1684,
+    "druid-admin": 13,
+    "druid-wrapper": 13
+  },
+  "mapping_signals": {
+    "REFERENCE_CANDIDATE": 104,
+    "DECLARATION_CANDIDATE": 163,
+    "UNRESOLVED_MAPPING": 1443
+  },
+  "rust_production_files": 922,
+  "rust_test_files": 440,
+  "java_test_inputs": {
+    "JAVA_TEST_SOURCE": 3558,
+    "TEST_ASSET": 823
+  },
+  "limitations": [
+    "File census, not complete nested-object inventory",
+    "Regex declarations/references are candidates, never proof of implementation",
+    "No parameterized/dynamic test expansion; no asset copy parity claim",
+    "Only conventional src/test roots inventoried; other roots need runner review",
+    "No derived percentage of functional completion"
+  ],
+  "dirty_after": "M crates/druid/src/core/filter_chain_impl/chain_a.rs\n M crates/druid/tests/task6_filter_manager_semantics_test_parity.rs\n M \"docs/migration/\\350\\277\\201\\347\\247\\273\\350\\267\\257\\347\\272\\277\\345\\233\\276.md\"\n M docs/superpowers/README.md\n?? api/observed/\n?? docs/verification/current-code-audit-20261101/\n?? docs/verification/migration-audit-20261101/\n?? docs/verification/rdbc-first/client-info-typed-payload-migration-20261021.md\n?? openspec/changes/filter-class-identity-parity/\n?? scripts/reconcile_migration_evidence.py\n?? scripts/test_reconcile_migration_evidence.py\n?? wip/",
+  "rust_sha_after": "7b39d0c04d6829493cacb5de125d7e6de50ef5fe"
+}

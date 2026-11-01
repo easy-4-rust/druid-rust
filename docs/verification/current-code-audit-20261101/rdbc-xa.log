@@ -1,0 +1,13 @@
+   Compiling tokio v1.54.1
+   Compiling druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.41s
+     Running tests\xa_standard_external_consumer.rs (target\debug\deps\xa_standard_external_consumer-aeef22fa2183c02b.exe)
+
+running 4 tests
+test external_consumer_can_share_a_real_resource_manager_identity ... ok
+test xa_identifiers_reject_oversized_components_with_structured_code ... ok
+test external_transaction_manager_uses_only_the_rdbc_xa_contract ... ok
+test unsupported_xa_connection_fails_with_feature_not_supported ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

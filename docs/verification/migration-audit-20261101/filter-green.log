@@ -1,0 +1,25 @@
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+   Compiling druid-wrapper v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.40s
+     Running tests\task6_data_source_filter_config_test_parity.rs (target\debug\deps\task6_data_source_filter_config_test_parity-9642a135bbbc9254.exe)
+
+running 4 tests
+test task6_data_source_filter_config_test_set_filters_reports_factory_error_immediately_and_keeps_prior_side_effects ... ok
+test task6_data_source_filter_config_test_add_and_clear_filters_use_java_trim_and_clear_enable_boundaries ... ok
+test task6_data_source_filter_config_test_set_filters_preserves_clear_disable_order_and_exactly_once_lifecycle ... ok
+test task6_data_source_filter_config_test_builtin_stat_alias_is_the_default_sqlite_datasource_filter ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests\task6_filter_manager_semantics_test_parity.rs (target\debug\deps\task6_filter_manager_semantics_test_parity-6b40171b7de63f9b.exe)
+
+running 6 tests
+test task6_filter_manager_semantics_test_ordered_property_sources_preserve_override_escape_and_continuation_semantics ... ok
+test task6_filter_manager_semantics_test_java_properties_separators_comments_and_escape_families_remain_observable ... ok
+test task6_filter_manager_semantics_test_bundled_aliases_and_java_utf16_fallback_match_filter_manager_contract ... ok
+test case_distinct_registered_filters_preserve_identity_and_exact_duplicates ... ok
+test task6_filter_manager_semantics_test_explicit_factories_preserve_alias_expansion_exact_dedup_and_failure ... ok
+test task6_filter_manager_semantics_test_real_toasty_sqlite_uses_filter_loaded_from_builtin_stat_alias ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+

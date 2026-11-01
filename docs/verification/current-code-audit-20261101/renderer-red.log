@@ -1,0 +1,16 @@
+rendered a.md (11 bytes)
+rendered z.md (11 bytes)
+F
+======================================================================
+FAIL: test_refuses_before_any_output_when_a_reviewed_document_exists (test_render_migration_docs.ReviewedDocumentProtectionTests.test_refuses_before_any_output_when_a_reviewed_document_exists)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "E:\workspaces\workspace-github-easy-4-rust\druid-rust\scripts\test_render_migration_docs.py", line 23, in test_refuses_before_any_output_when_a_reviewed_document_exists
+    with self.assertRaisesRegex(SystemExit, "reviewed"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: SystemExit not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.032s
+
+FAILED (failures=1)

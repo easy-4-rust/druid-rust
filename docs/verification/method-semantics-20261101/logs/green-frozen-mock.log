@@ -1,0 +1,11 @@
+    Finished `test` profile [unoptimized] target(s) in 0.74s
+     Running tests\java_rust_mock_sorter_differential.rs (D:\codex-build\druid-audit-20261101\debug\deps\java_rust_mock_sorter_differential-8966488d95dea510.exe)
+
+running 2 tests
+Mock sorter differential artifacts: D:\codex-build\druid-sorter-methods-20261101\oracle\mock-sorter-live-7980-1793536149301544500
+test mock_sorter_physical_close_observation_is_complete ... ok
+1 original Mock sorter case: 1 exact match, 0 allowed differences
+test pinned_java_and_rust_compare_original_mock_sorter_case ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.37s
+
