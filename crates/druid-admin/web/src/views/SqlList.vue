@@ -109,16 +109,16 @@ onMounted(load)
         </template>
       </el-table-column>
 
-      <el-table-column label="执行耗时" width="130" align="center">
+      <el-table-column label="执行耗时" width="96" align="center">
         <template #default="{ row }"><MiniHistogram :buckets="histogram(row)" /></template>
       </el-table-column>
-      <el-table-column label="取回行" width="110" align="center">
+      <el-table-column label="取回行" width="76" align="center">
         <template #default="{ row }"><MiniHistogram :buckets="fetchHistogram(row)" color="#67c23a" /></template>
       </el-table-column>
-      <el-table-column label="影响行" width="110" align="center">
+      <el-table-column label="影响行" width="76" align="center">
         <template #default="{ row }"><MiniHistogram :buckets="updateHistogram(row)" color="#e6a23c" /></template>
       </el-table-column>
-      <el-table-column label="执行+持有" width="130" align="center">
+      <el-table-column label="执行+持有" width="96" align="center">
         <template #default="{ row }"><MiniHistogram :buckets="holdHistogram(row)" color="#909399" /></template>
       </el-table-column>
 
@@ -151,14 +151,16 @@ onMounted(load)
       <el-table-column prop="serviceName" label="服务" min-width="120" show-overflow-tooltip />
     </el-table>
 
+    <!-- 分页常显：数据少时是状态提示，数据多时是导航。 -->
     <el-pagination
-      v-if="total > perPageCount"
       class="pager"
-      layout="total, sizes, prev, pager, next"
+      layout="total, sizes, prev, pager, next, jumper"
       :total="total"
       :current-page="page"
       :page-size="perPageCount"
-      :page-sizes="[20, 50, 100, 200]"
+      :page-sizes="[10, 20, 50, 100, 200]"
+      :hide-on-single-page="false"
+      background
       @current-change="(value) => { page = value; load() }"
       @size-change="(value) => { perPageCount = value; page = 1; load() }"
     />

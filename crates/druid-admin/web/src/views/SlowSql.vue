@@ -40,6 +40,17 @@ const slowRows = computed(() =>
   rows.value.filter((row) => Number(row.maxTimespan) >= threshold.value),
 )
 
+// 阈值变化后回到第一页。
+watch(threshold, () => { page.value = 1 })
+
+// 前端分页：阈值过滤后的结果再分页，数据多时不撑爆表格。
+const page = ref(1)
+const perPageCount = ref(20)
+const pagedRows = computed(() => {
+  const from = (page.value - 1) * perPageCount.value
+  return slowRows.value.slice(from, from + perPageCount.value)
+})
+
 const stats = computed(() => {
   const totalExec = rows.value.reduce((sum, row) => sum + (Number(row.executeCount) || 0), 0)
   const slowExec = slowRows.value.reduce((sum, row) => sum + (Number(row.executeCount) || 0), 0)
@@ -101,7 +112,7 @@ onMounted(load)
 
       <el-table
         v-loading="loading"
-        :data="slowRows"
+        :data="pagedRows"
         border
         stripe
         size="small"
@@ -115,7 +126,7 @@ onMounted(load)
             </el-link>
           </template>
         </el-table-column>
-        <el-table-column label="耗时分布" width="140" align="center">
+        <el-table-column label="耗时分布" width="96" align="center">
           <template #default="{ row }"><MiniHistogram :buckets="histogram(row)" /></template>
         </el-table-column>
         <el-table-column label="最大耗时" width="110" align="right" sortable prop="maxTimespan">
@@ -146,6 +157,20 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页常显：阈值过滤后的条数驱动。 -->
+      <el-pagination
+        class="pager"
+        layout="total, sizes, prev, pager, next, jumper"
+        :total="slowRows.length"
+        :current-page="page"
+        :page-size="perPageCount"
+        :page-sizes="[10, 20, 50, 100]"
+        :hide-on-single-page="false"
+        background
+        @current-change="(value) => { page = value }"
+        @size-change="(value) => { perPageCount = value; page = 1 }"
+      />
     </template>
   </el-card>
 </template>
@@ -180,6 +205,11 @@ onMounted(load)
   text-overflow: ellipsis;
   display: block;
   max-width: 460px;
+}
+
+.pager {
+  margin-top: 14px;
+  justify-content: flex-end;
 }
 
 :deep(.el-table__row) {
