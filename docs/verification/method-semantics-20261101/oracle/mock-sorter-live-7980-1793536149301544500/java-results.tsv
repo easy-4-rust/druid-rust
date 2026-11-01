@@ -1,0 +1,2 @@
+case_id	sorter	error_class	error_code	sql_state	message	discard_count	active_count	idle_count
+test_exceptionSorter	MockExceptionSorter	com.alibaba.druid.mock.MockConnectionClosedException	0	-	-	1	0	0

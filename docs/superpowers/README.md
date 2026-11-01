@@ -1,5 +1,9 @@
 # druid-rust Superpowers 规格驱动开发（SDD）体系
 
+> **2026-11-01 代码与文档核对入口**：[三类结论、当前源码候选与实跑证据](../verification/current-code-audit-20261101/README.md)。旧 TODO、文件数和名称启发式结果不代表当前功能缺失；同一行为优先沿已有 OpenSpec 规格核验，不重复创建实现。
+
+> **2026-11-01 当前架构更正**：核心归属以已批准的 [ADR-CRATE-003](../migration/adr/ADR-CRATE-003.md) 为准：`druid-rdbc` 逐步承载核心，`druid` 最终收敛为门面。下方 ADR-CRATE-002 的核心归属描述是历史阶段，不应作为拒绝下沉的依据。代码已包含 `governance/shrink_policy`、`hashing` 和 Wall 值对象；Filter 上下文与池运行时仍未全部下沉。保留 ADR-002 中未被取代的协议、隔离和安全约束。DBX 调研与本次语义修复证据见 [续审报告](../verification/migration-audit-20261101/continuation.md)。
+
 > **建立日期**：2026-08-12
 > **基线**：Alibaba Druid Java 1.2.28（commit `33824c3dec1612711f9bb4e409319bcab2e4cd0e`）+ druid-rust workspace 当前 HEAD
 > **方法论**：Superpowers SDD（Spec-Driven Development）

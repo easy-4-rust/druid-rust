@@ -1,0 +1,26 @@
+ M crates/druid-bench/tests/java_rust_exception_sorters_differential.rs
+ M crates/druid/src/core/abstract_oracle_exception_sorter.rs
+ M crates/druid/src/core/filter_chain_impl/chain_a.rs
+ M crates/druid/tests/task6_filter_manager_semantics_test_parity.rs
+ M docs/migration/README.md
+ M docs/migration/dialect-fidelity/README.md
+ M "docs/migration/\345\257\271\350\261\241\345\220\215\347\247\260\344\270\200\350\207\264\346\200\247\346\243\200\346\237\245.md"
+ M "docs/migration/\345\257\271\350\261\241\347\272\247\345\257\271\347\205\247\350\241\250.md"
+ M "docs/migration/\350\257\255\344\271\211\350\277\201\347\247\273\345\257\271\347\205\247\350\241\250.md"
+ M "docs/migration/\350\277\201\347\247\273\350\267\257\347\272\277\345\233\276.md"
+ M "docs/migration/\350\277\201\347\247\273\351\252\214\346\224\266\350\247\204\350\214\203.md"
+ M docs/superpowers/README.md
+ M docs/verification/rdbc-first/p3-3a-wall-values-20261023.md
+ M scripts/render_migration_docs.py
+?? api/observed/
+?? crates/druid-bench/tests/fixtures/exception_sorter_property_cases.tsv
+?? crates/druid/tests/exception_sorter_property_contract_test.rs
+?? docs/verification/current-code-audit-20261101/
+?? docs/verification/migration-audit-20261101/
+?? docs/verification/rdbc-first/client-info-typed-payload-migration-20261021.md
+?? openspec/changes/exception-sorter-property-parity/
+?? openspec/changes/filter-class-identity-parity/
+?? scripts/reconcile_migration_evidence.py
+?? scripts/test_reconcile_migration_evidence.py
+?? scripts/test_render_migration_docs.py
+?? wip/

@@ -52,11 +52,14 @@ impl FilterChainImpl {
         self.result_set.push(result_set);
     }
 
+    /// 判断链中是否已有精确类名，区分大小写。
+    /// 对应 Java: FilterManager#existsFilter。
+    /// 参数 `class_name` 为注册类名；返回是否已存在同一类身份。
     #[must_use]
     pub fn contains_filter_class_name(&self, class_name: &str) -> bool {
         self.filter_class_names
             .iter()
-            .any(|existing| existing.eq_ignore_ascii_case(class_name))
+            .any(|existing| existing == class_name)
     }
 
     #[must_use]

@@ -1,0 +1,10 @@
+11月 01, 2026 8:26:08 下午 com.alibaba.druid.pool.vendor.OracleExceptionSorter error
+严重: 剔除phoenix不可用的连接
+java.sql.SQLException: Phoenix: Connection is null or closed
+	at ExceptionSortersOracle.main(ExceptionSortersOracle.java:49)
+
+11月 01, 2026 8:26:08 下午 com.alibaba.druid.pool.vendor.OracleExceptionSorter error
+严重: 剔除phoenix不可用的连接
+java.sql.SQLException: Phoenix: Connection is null or closed: details
+	at ExceptionSortersOracle.main(ExceptionSortersOracle.java:49)
+

@@ -1,6 +1,10 @@
 # druid-rust 迁移文档
 
-本目录是 druid-rust 的**迁移事实与验收**入口。四份主文档由脚本从源码生成事实区，禁止手改统计与对象行。
+后续推进：[ExceptionSorter 逐方法语义核验](../verification/method-semantics-20261101/README.md)（12 对象、30 个显式签名）。已修复 Unicode 错误码解析真实偏差；复用源测试和 live differential，保留日志、宿主配置与全量验收未完成项。
+
+本目录是 druid-rust 的**迁移事实与验收**入口。先读 [2026-11-01 当前代码核对](../verification/current-code-audit-20261101/README.md)：已区分文档滞后、已有实现缺验证、真实偏差，并保留待核实队列。
+
+四份主文档顶部的当前核对摘要优先；下方旧自动生成内容是历史快照。旧 `objects.tsv` 是名称启发式台账，不能作为功能完成/缺失的唯一状态源。尤其 `MISSING` 不表示相应行为不存在，`semantic_test=yes` 也不表示测试已执行。
 
 | 文档 | 作用 |
 |---|---|
@@ -11,21 +15,19 @@
 | [对象名称一致性检查](对象名称一致性检查.md) | 名称/文件/目录/主类型对齐与缺口 |
 | `inventory/` | 机器台账：`objects.tsv`、`methods.tsv`、`rust_extra.tsv`、`redlines.tsv`、`summary.json` |
 
-## 重新生成
+## 更新候选证据清单
 
 ```bash
-python scripts/migration_inventory.py \
-  --java-root E:/workspaces/workspace-github/druid/core/src/main/java \
-  --java-repo E:/workspaces/workspace-github/druid \
-  --java-test-root E:/workspaces/workspace-github/druid/core/src/test/java \
-  --rust-root . --out-dir docs/migration
-python scripts/render_migration_docs.py
+python scripts/reconcile_migration_evidence.py \
+  --java-root E:/workspaces/workspace-github/druid \
+  --rust-root . --output docs/verification/<本次审计标识>/inventory
 ```
 
 ## 阅读顺序
 
-1. 先读验收规范，确认状态词表与证据等级；
-2. 看对象级对照表的“汇总 + 结构红线”，判断分母与债务；
-3. 看语义表确认能力缺口；
-4. 看名称检查确认命名/路径问题；
-5. 最后按路线图 P0–P6 执行。
+1. 先读当前代码核对报告，确认基线、运行范围及未核实边界；
+2. 读验收规范，区分名称候选、语义状态与证据等级；
+3. 结合对象表、语义表和名称检查定位实现，不用旧数量推导完成率；
+4. 仅对确认的缺口沿既有 OpenSpec / ADR / 计划继续实施。
+
+新清单是全模块文件普查，不是嵌套对象/方法全量验收账本。手工结论必须引用源码或运行证据。旧 `migration_inventory.py` 与模板保留作历史复现；`render_migration_docs.py` 遇到已核对文档会在写入前拒绝覆盖，不应移除保护标记来强行生成。

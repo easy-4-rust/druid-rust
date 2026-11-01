@@ -1,0 +1,2 @@
+case_id	status	java_sorter	java_error_class	java_error_code	java_sql_state	java_message	java_discard_count	java_active_count	java_idle_count	rust_sorter	rust_error_class	rust_error_code	rust_sql_state	rust_message	rust_discard_count	rust_active_count	rust_idle_count
+test_exceptionSorter	MATCH	MockExceptionSorter	com.alibaba.druid.mock.MockConnectionClosedException	0	-	-	1	0	0	MockExceptionSorter	com.alibaba.druid.mock.MockConnectionClosedException	0	-	-	1	0	0

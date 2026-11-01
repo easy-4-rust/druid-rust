@@ -151,6 +151,7 @@ fn task6_filter_manager_semantics_test_java_properties_separators_comments_and_e
 }
 
 #[test]
+// 保留历史测试 ID 以维持既有迁移账本关联；名称中的 insensitive 不再描述当前合同。
 fn task6_filter_manager_semantics_test_explicit_factories_preserve_alias_expansion_case_insensitive_dedup_and_failure(
 ) {
     let manager = FilterManager::new();
@@ -166,7 +167,7 @@ fn task6_filter_manager_semantics_test_explicit_factories_preserve_alias_expansi
     manager.load_filter(&mut chain, "pair").unwrap();
 
     // SOURCE_PARITY / V2_MIRRORED：
-    // Java existsFilter 使用 equalsIgnoreCase；第二个大小写变体不得再次构造。
+    // 当前 Java 按精确类名去重；未注册的大写变体被跳过，不产生占位实例。
     assert_eq!(created.load(Ordering::SeqCst), 1);
     assert_eq!(chain.filter_class_names(), [PROBE_CLASS]);
     assert_eq!(chain.before_count(), 1);
@@ -218,6 +219,40 @@ fn task6_filter_manager_semantics_test_explicit_factories_preserve_alias_expansi
         FilterManager::default().get_filter(Some("stat")).as_deref(),
         Some(STAT_CLASS)
     );
+}
+
+#[test]
+fn case_distinct_registered_filters_preserve_identity_and_exact_duplicates() {
+    // SOURCE_PARITY / V2_MIRRORED：Java FilterManager#existsFilter 的 String.equals。
+    // 覆盖别名展开和 >=128 UTF-16 单元的直接加载分支；不能靠未注册工厂掩盖错误。
+    for prefix_length in [0, 128] {
+        let first = format!("{}example.filter.ProbeFilter", "a".repeat(prefix_length));
+        let second = first.to_ascii_uppercase();
+        let manager = FilterManager::new();
+        let created = Arc::new(AtomicUsize::new(0));
+        for class_name in [&first, &second] {
+            let calls = Arc::clone(&created);
+            manager.register_filter(class_name, move || {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(ProbeFilter)
+            });
+        }
+        manager.register_alias("case-pair", format!("{first},{second},{first}"));
+        let mut chain = FilterChain::new();
+        if prefix_length == 0 {
+            manager.load_filter(&mut chain, "case-pair").unwrap();
+        } else {
+            manager.load_filter(&mut chain, &first).unwrap();
+            manager.load_filter(&mut chain, &second).unwrap();
+        }
+        manager.load_filter(&mut chain, &first).unwrap();
+        manager.load_filter(&mut chain, &second).unwrap();
+        assert_eq!(created.load(Ordering::SeqCst), 2);
+        assert_eq!(chain.filter_class_names(), [first, second]);
+        assert_eq!(chain.before_count(), 2);
+        assert_eq!(chain.after_count(), 2);
+        assert_eq!(chain.result_set_count(), 2);
+    }
 }
 
 #[tokio::test]

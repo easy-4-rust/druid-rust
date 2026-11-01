@@ -1,0 +1,4 @@
+E:\workspaces\workspace-github\druid\core\src\test\java\com\alibaba\druid\bvt\pool\vendor\PGExceptionSorterTest.java:15: 警告: [removal] Integer 中的 Integer(int) 已过时, 且标记为待删除
+        PSQLException ex = new PSQLException(GT.tr("Expected an EOF from server, got: {0}", new Integer(0)),
+                                                                                            ^
+1 个警告
