@@ -209,7 +209,28 @@ jobs:
       # by SQLx MySQL. Keep the exception narrow and visible in both audit tools.
       - run: python3 -m unittest discover -s scripts -p test_verify_rsa_waiver_scope.py
       - run: python3 scripts/verify_rsa_waiver_scope.py
-      - run: cargo audit --ignore RUSTSEC-2023-0071
+      # The remaining waivers are the zstd / zstd-safe / lru family that only
+      # the optional turso feature chain reaches, plus the unmaintained
+      # rustls-pemfile. deny.toml carries the same list with the rationale.
+      - run: |
+          cargo audit \
+            --ignore RUSTSEC-2023-0071 \
+            --ignore RUSTSEC-2026-0391 \
+            --ignore RUSTSEC-2026-0395 \
+            --ignore RUSTSEC-2026-0396 \
+            --ignore RUSTSEC-2026-0397 \
+            --ignore RUSTSEC-2026-0398 \
+            --ignore RUSTSEC-2026-0399 \
+            --ignore RUSTSEC-2026-0400 \
+            --ignore RUSTSEC-2026-0401 \
+            --ignore RUSTSEC-2026-0402 \
+            --ignore RUSTSEC-2026-0403 \
+            --ignore RUSTSEC-2026-0404 \
+            --ignore RUSTSEC-2026-0405 \
+            --ignore RUSTSEC-2026-0406 \
+            --ignore RUSTSEC-2026-0002 \
+            --ignore RUSTSEC-2026-0253 \
+            --ignore RUSTSEC-2025-0134
       - run: cargo deny check
 
   rust-platforms:
