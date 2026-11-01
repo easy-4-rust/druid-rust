@@ -11,6 +11,7 @@ const error = ref('')
 const tabs = [
   { path: '/datasources', label: '数据源' },
   { path: '/sql', label: 'SQL 统计' },
+  { path: '/slow-sql', label: '慢 SQL' },
   { path: '/wall', label: 'SQL 防火墙' },
   { path: '/api', label: 'API 索引' },
 ]

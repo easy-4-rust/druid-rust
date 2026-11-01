@@ -8,6 +8,7 @@ const routes = [
   { path: '/datasources/:identity', name: 'datasource-detail', component: () => import('./views/DatasourceDetail.vue'), meta: { title: '数据源详情' } },
   { path: '/sql', name: 'sql', component: () => import('./views/SqlList.vue'), meta: { title: 'SQL 统计' } },
   { path: '/sql/:id', name: 'sql-detail', component: () => import('./views/SqlDetail.vue'), meta: { title: 'SQL 详情' } },
+  { path: '/slow-sql', name: 'slow-sql', component: () => import('./views/SlowSql.vue'), meta: { title: '慢 SQL' } },
   { path: '/wall', name: 'wall', component: () => import('./views/WallView.vue'), meta: { title: 'SQL 防火墙' } },
   { path: '/api', name: 'api', component: () => import('./views/ApiIndex.vue'), meta: { title: 'API 索引' } },
 ]

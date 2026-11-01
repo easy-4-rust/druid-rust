@@ -195,6 +195,19 @@ fn sample_sql_stats(identity: i64) -> HashMap<i64, SqlListContent> {
             5,
             612,
         ),
+        // 慢 SQL：报表大查询，多数执行落在秒级以上桶。
+        (
+            "select * from orders o join order_items i on o.id = i.order_id where o.created_at > ? order by o.created_at desc",
+            320,
+            12_500,
+            4_800,
+        ),
+        (
+            "select count(*) from audit_log where action = ? and created_at between ? and ?",
+            88,
+            3_800,
+            1,
+        ),
     ];
     let offset = identity * 100;
     rows.iter()
@@ -209,7 +222,12 @@ fn sample_sql_stats(identity: i64) -> HashMap<i64, SqlListContent> {
                     sql: Some((*sql).to_owned()),
                     execute_count: *executes,
                     error_count: if index == 2 { 3 } else { 0 },
-                    total_time: *millis,
+                    // 慢 SQL 行的总耗时按「次数 × 平均耗时」放大数据量。
+                    total_time: if index >= 4 {
+                        *millis * *executes / 5
+                    } else {
+                        *millis
+                    },
                     max_timespan: millis * 3,
                     fetch_row_count: *rows,
                     fetch_row_count_max: rows * 2,
@@ -219,16 +237,30 @@ fn sample_sql_stats(identity: i64) -> HashMap<i64, SqlListContent> {
                     running_count: index as i64 + 1,
                     in_transaction_count: executes / 3,
                     db_type: Some("postgresql".to_owned()),
-                    histogram: Some(vec![
-                        executes / 2,
-                        executes / 3,
-                        executes / 8,
-                        executes / 40,
-                        20,
-                        6,
-                        2,
-                        1,
-                    ]),
+                    // 慢 SQL 行的执行耗时直方图把质量压到秒级以上桶。
+                    histogram: if index >= 4 {
+                        Some(vec![
+                            executes / 10,
+                            executes / 8,
+                            executes / 5,
+                            executes / 4,
+                            executes / 4,
+                            executes / 10,
+                            executes / 40,
+                            executes / 100,
+                        ])
+                    } else {
+                        Some(vec![
+                            executes / 2,
+                            executes / 3,
+                            executes / 8,
+                            executes / 40,
+                            20,
+                            6,
+                            2,
+                            1,
+                        ])
+                    },
                     fetch_row_count_histogram: Some(vec![
                         executes / 3,
                         executes / 3,
@@ -255,7 +287,9 @@ fn sample_sql_stats(identity: i64) -> HashMap<i64, SqlListContent> {
                         2,
                         1,
                     ]),
-                    last_slow_parameters: if index == 1 {
+                    last_slow_parameters: if index >= 4 {
+                        json!("created_at=2026-10-01..2026-11-01")
+                    } else if index == 1 {
                         json!("id=88213")
                     } else {
                         Value::Null
