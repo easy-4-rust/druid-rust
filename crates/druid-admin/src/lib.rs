@@ -53,7 +53,23 @@ pub fn production_router_with_command_broker(
     config: &AdminServerConfig,
     command_broker: CommandBroker,
 ) -> Router {
-    let management = MonitorViewServlet::from_repository(repository)
+    production_router_with_source(
+        crate::service::ManagementSource::repository(repository),
+        config,
+        command_broker,
+    )
+}
+
+/// 使用统一的来源构建与真实 IngestService 共享命令 broker 的生产 HTTP 应用。
+///
+/// 来源可以是推送仓库、远端轮询或两者并存；管理端点不再关心数据从哪来。
+#[must_use]
+pub fn production_router_with_source(
+    source: crate::service::ManagementSource,
+    config: &AdminServerConfig,
+    command_broker: CommandBroker,
+) -> Router {
+    let management = MonitorViewServlet::from_management_source(source)
         .with_auth_mode(config.auth().clone())
         .with_secure_cookies(config.tls().is_some())
         .with_command_broker(command_broker)

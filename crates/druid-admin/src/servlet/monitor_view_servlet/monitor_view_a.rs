@@ -5,7 +5,28 @@ impl MonitorViewServlet {
     #[must_use]
     pub fn new(monitor_stat_service: Arc<MonitorStatService>) -> Self {
         Self {
-            backend: MonitorBackend::Remote(monitor_stat_service),
+            backend: MonitorBackend {
+                source: Arc::new(ManagementSource::remote(monitor_stat_service)),
+            },
+            task_monitor: TaskMonitor::new(),
+            auth: AdminAuthMode::Disabled,
+            redaction_policy: AdminRedactionPolicy::compatibility(),
+            sessions: Arc::new(RwLock::new(HashMap::new())),
+            context_path: Arc::new("/druid".to_owned()),
+            secure_cookies: false,
+            command_broker: None,
+            metrics_appendix: None,
+            remote_metrics_output_rejected_total: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    /// 使用统一的来源创建管理路由；管理端点不感知数据来源。
+    #[must_use]
+    pub fn from_management_source(source: ManagementSource) -> Self {
+        Self {
+            backend: MonitorBackend {
+                source: Arc::new(source),
+            },
             task_monitor: TaskMonitor::new(),
             auth: AdminAuthMode::Disabled,
             redaction_policy: AdminRedactionPolicy::compatibility(),
@@ -21,18 +42,7 @@ impl MonitorViewServlet {
     /// 使用 Metrics gRPC ingest 的本地 repository 创建 standalone 管理路由。
     #[must_use]
     pub fn from_repository(repository: MetricsRepository) -> Self {
-        Self {
-            backend: MonitorBackend::Repository(repository),
-            task_monitor: TaskMonitor::new(),
-            auth: AdminAuthMode::Disabled,
-            redaction_policy: AdminRedactionPolicy::compatibility(),
-            sessions: Arc::new(RwLock::new(HashMap::new())),
-            context_path: Arc::new("/druid".to_owned()),
-            secure_cookies: false,
-            command_broker: None,
-            metrics_appendix: None,
-            remote_metrics_output_rejected_total: Arc::new(AtomicU64::new(0)),
-        }
+        Self::from_management_source(ManagementSource::repository(repository))
     }
 
     /// 配置 Java `loginUsername`/`loginPassword` 登录语义。

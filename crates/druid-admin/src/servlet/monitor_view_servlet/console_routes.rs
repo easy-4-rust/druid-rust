@@ -14,9 +14,8 @@ use serde_json::{Value, json};
 
 use crate::command::CommandBroker;
 use crate::model::dto::DataSourceResult;
-use crate::service::MonitorStatService;
+use crate::service::{ManagementSource, MonitorStatService};
 
-use super::MonitorBackend;
 
 /// 控制台路由无法提供该能力时返回的原因。
 const CONNECTION_INFO_UNSUPPORTED: &str =
@@ -28,7 +27,7 @@ const STACK_TRACE_UNSUPPORTED: &str =
 ///
 /// 返回 [`None`] 表示该地址不是控制台路由，调用方应继续走普通分发。
 pub(crate) async fn dispatch_console_route(
-    backend: &MonitorBackend,
+    backend: &ManagementSource,
     command_broker: Option<&CommandBroker>,
     service_url: &str,
 ) -> Option<Response> {
@@ -102,15 +101,16 @@ fn failure(reason: &str) -> Response {
 }
 
 /// `basic.json`：Admin 自身的运行信息。
-async fn basic(backend: &MonitorBackend) -> Response {
-    let mut drivers: Vec<String> = match backend {
-        MonitorBackend::Remote(_) => Vec::new(),
-        MonitorBackend::Repository(repository) => repository
-            .all_datasources()
-            .into_iter()
-            .filter_map(|entry| entry.datasource.db_type)
-            .collect(),
-    };
+async fn basic(backend: &ManagementSource) -> Response {
+    let mut drivers: Vec<String> = backend
+        .data_sources()
+        .await
+        .ok()
+        .and_then(|result| result.content)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|content| content.db_type)
+        .collect();
     drivers.sort();
     drivers.dedup();
     success(json!({
@@ -131,89 +131,55 @@ fn start_time_millis() -> i64 {
 }
 
 /// `datasource-{id}.json`：按标识符返回单个数据源。
-async fn datasource_identity(backend: &MonitorBackend, id: i64) -> Response {
-    match backend {
-        MonitorBackend::Remote(service) => match service.get_data_source_stat_data().await {
-            Ok(result) => axum::Json(result).into_response(),
-            Err(error) => failure(&error.to_string()),
-        },
-        MonitorBackend::Repository(repository) => {
-            let matched = repository
-                .all_datasources()
-                .into_iter()
-                .find(|entry| entry.datasource.identity == id);
-            match matched {
-                Some(entry) => axum::Json(DataSourceResult {
-                    result_code: MonitorStatService::RESULT_CODE_SUCCESS,
-                    content: Some(vec![entry.datasource]),
-                })
-                .into_response(),
-                None => failure("no datasource matches the requested identity"),
-            }
-        }
+async fn datasource_identity(backend: &ManagementSource, id: i64) -> Response {
+    match backend.data_source(id, None).await {
+        Ok(Some(content)) => axum::Json(DataSourceResult {
+            result_code: MonitorStatService::RESULT_CODE_SUCCESS,
+            content: Some(vec![content]),
+        })
+        .into_response(),
+        Ok(None) => failure("no datasource matches the requested identity"),
+        Err(error) => failure(&error.to_string()),
     }
 }
 
 /// `sql-{id}.json`：按标识符返回单条 SQL 统计。
 async fn sql_identity(
-    backend: &MonitorBackend,
+    backend: &ManagementSource,
     id: i64,
     query: Option<&str>,
 ) -> Response {
     let parameters = query_parameters(query);
-    match backend {
-        MonitorBackend::Remote(service) => {
-            let Some(service_id) = parameters.get("serviceId") else {
-                return failure("serviceId is required to address a remote SQL identity");
-            };
-            match service.get_sql_stat(id, service_id).await {
-                Ok(result) => axum::Json(result).into_response(),
-                Err(error) => failure(&error.to_string()),
-            }
-        }
-        MonitorBackend::Repository(repository) => {
-            let matched = repository
-                .all_sql_stats()
-                .into_iter()
-                .find(|stat| stat.id == id || stat.hash == id);
-            match matched {
-                Some(stat) => success(json!(stat)),
-                None => failure("no SQL statement matches the requested identity"),
-            }
-        }
+    let service_id = parameters.get("serviceId").map(String::as_str);
+    match backend.sql_stat(id, service_id, None).await {
+        Ok(Some(stat)) => success(json!(stat)),
+        Ok(None) => failure("no SQL statement matches the requested identity"),
+        Err(error) => failure(&error.to_string()),
     }
 }
 
 /// `connectionInfo-{id}.json`：池化连接明细。
 async fn connection_info_identity(
-    backend: &MonitorBackend,
+    backend: &ManagementSource,
     id: i64,
     query: Option<&str>,
 ) -> Response {
     let parameters = query_parameters(query);
-    match backend {
-        MonitorBackend::Remote(service) => {
-            let Some(service_id) = parameters.get("serviceId") else {
-                return failure("serviceId is required to address remote pooled connections");
-            };
-            match service
-                .get_pooling_connection_info_by_data_source_id(id, service_id)
-                .await
-            {
-                Ok(result) => axum::Json(result).into_response(),
-                Err(error) => failure(&error.to_string()),
-            }
-        }
-        MonitorBackend::Repository(_) => failure(CONNECTION_INFO_UNSUPPORTED),
+    let service_id = parameters.get("serviceId").map(String::as_str);
+    if service_id.is_none() {
+        return failure("serviceId is required to address remote pooled connections");
+    }
+    match backend.connection_info(id, service_id).await {
+        Ok(Some(result)) => axum::Json(result).into_response(),
+        Ok(None) => failure(CONNECTION_INFO_UNSUPPORTED),
+        Err(error) => failure(&error.to_string()),
     }
 }
 
 /// `activeConnectionStackTrace-{id}.json`：活跃连接堆栈。
-async fn active_stack_trace_identity(backend: &MonitorBackend, _id: i64) -> Response {
-    match backend {
-        MonitorBackend::Remote(_) => failure(STACK_TRACE_UNSUPPORTED),
-        MonitorBackend::Repository(_) => failure(STACK_TRACE_UNSUPPORTED),
-    }
+async fn active_stack_trace_identity(backend: &ManagementSource, _id: i64) -> Response {
+    let _ = backend;
+    failure(STACK_TRACE_UNSUPPORTED)
 }
 
 /// `reset-all.json` 与 `log-and-reset.json`：向所有接入服务下发重置命令。

@@ -55,9 +55,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shutdown_token = CancellationToken::new();
     let command_broker = druid_admin::CommandBroker::new(64, shutdown_timeout);
 
+    // 数据来源：默认只用 gRPC 推送；配置了发现时用远端轮询或两者并存。
+    let discovery = druid_admin::config::AdminDiscoveryConfig::from_env()?;
+    let source = discovery.build_management_source(repo.clone())?;
+
     // Build HTTP router
-    let http_app = druid_admin::production_router_with_command_broker(
-        repo.clone(),
+    let http_app = druid_admin::production_router_with_source(
+        source,
         &config,
         command_broker.clone(),
     );

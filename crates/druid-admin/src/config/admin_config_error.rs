@@ -28,6 +28,12 @@ pub enum AdminConfigError {
     /// Shutdown deadline 必须是非零毫秒数。
     #[error("admin shutdown timeout must be a non-zero millisecond value")]
     InvalidShutdownTimeout,
+    /// 轮询发现模式至少需要配置一个被监控节点。
+    #[error("poll discovery mode requires at least one monitored endpoint")]
+    InvalidDiscovery,
+    /// 无法构造远端 HTTP 客户端。
+    #[error("the remote HTTP client could not be constructed")]
+    HttpClientUnavailable,
     /// 非 loopback 暴露缺少 TLS 或应用层认证。
     #[error("non-loopback admin listeners require both TLS and authentication")]
     InsecureRemoteBind,

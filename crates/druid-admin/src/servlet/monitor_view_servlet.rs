@@ -24,7 +24,7 @@ use crate::config::AdminAuthMode;
 use crate::model::dto::DataSourceResult;
 use crate::repository::{DataSourceId, MetricsRepository, MetricsRepositoryConfig};
 use crate::security::AdminRedactionPolicy;
-use crate::service::{MonitorStatService, MonitorStatServiceError, StatQuery};
+use crate::service::{ManagementSource, MonitorStatService, MonitorStatServiceError, StatQuery};
 use crate::CommandBroker;
 
 use super::LoginRequest;
@@ -61,10 +61,17 @@ pub struct MonitorViewServlet {
     remote_metrics_output_rejected_total: Arc<AtomicU64>,
 }
 
+/// 管理数据来源；远端优先，仓库兜底。
 #[derive(Clone)]
-enum MonitorBackend {
-    Remote(Arc<MonitorStatService>),
-    Repository(MetricsRepository),
+struct MonitorBackend {
+    source: Arc<ManagementSource>,
+}
+
+impl MonitorBackend {
+    /// 返回管理数据来源。
+    fn source(&self) -> &Arc<ManagementSource> {
+        &self.source
+    }
 }
 
 /// 返回稳定端点清单；保留早期 `druid-admin` 门面 API。
@@ -117,8 +124,8 @@ async fn connection_response(
     id: i64,
     service_identity: ServiceIdentity,
 ) -> Response {
-    match &state.backend {
-        MonitorBackend::Remote(service) => {
+    match state.backend.source().remote_service() {
+        Some(service) => {
             let service = Arc::clone(service);
             state
                 .task_monitor
@@ -136,7 +143,10 @@ async fn connection_response(
                 })
                 .await
         }
-        MonitorBackend::Repository(repository) => repository
+        None => state
+            .backend
+            .source()
+            .repository_view()
             .get_datasource(&DataSourceId {
                 service_identity,
                 identity: id,

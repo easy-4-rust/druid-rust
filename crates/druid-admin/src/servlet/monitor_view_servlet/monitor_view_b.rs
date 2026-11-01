@@ -39,38 +39,20 @@ impl MonitorViewServlet {
     }
 
     pub(crate) async fn service_list(State(state): State<Self>) -> Json<Vec<String>> {
-        match &state.backend {
-            MonitorBackend::Remote(service) => Json(service.applications().to_vec()),
-            MonitorBackend::Repository(_) => Json(Vec::new()),
-        }
+        Json(state.backend.source().services())
     }
 
     pub(crate) async fn data_sources(State(state): State<Self>) -> Response {
-        match &state.backend {
-            MonitorBackend::Remote(service) => {
-                let service = Arc::clone(service);
-                state
-                    .task_monitor
-                    .instrument(async move {
-                        match service.get_data_source_stat_data().await {
-                            Ok(result) => Json(result).into_response(),
-                            Err(error) => error_response(error),
-                        }
-                    })
-                    .await
-            }
-            MonitorBackend::Repository(repository) => Json(DataSourceResult {
-                result_code: MonitorStatService::RESULT_CODE_SUCCESS,
-                content: Some(
-                    repository
-                        .all_datasources()
-                        .into_iter()
-                        .map(|entry| entry.datasource)
-                        .collect(),
-                ),
+        let source = Arc::clone(state.backend.source());
+        state
+            .task_monitor
+            .instrument(async move {
+                match source.data_sources().await {
+                    Ok(result) => Json(result).into_response(),
+                    Err(error) => error_response(error),
+                }
             })
-            .into_response(),
-        }
+            .await
     }
 
     pub(crate) async fn data_source(
@@ -81,27 +63,22 @@ impl MonitorViewServlet {
         let Some(service_id) = parameters.get("serviceId") else {
             return missing_parameter("serviceId");
         };
-        let Ok(service_identity) = ServiceIdentity::parse(service_id) else {
+        if ServiceIdentity::parse(service_id).is_err() {
             return invalid_service_id();
-        };
-        match &state.backend {
-            MonitorBackend::Remote(_) => Self::data_sources(State(state)).await,
-            MonitorBackend::Repository(repository) => {
-                let content = repository
-                    .get_datasource(&DataSourceId {
-                        service_identity,
-                        identity: id,
-                    })
-                    .map(|entry| entry.datasource);
-                match content {
-                    Some(content) => Json(DataSourceResult {
-                        result_code: MonitorStatService::RESULT_CODE_SUCCESS,
-                        content: Some(vec![content]),
-                    })
-                    .into_response(),
-                    None => StatusCode::NOT_FOUND.into_response(),
-                }
-            }
+        }
+        match state
+            .backend
+            .source()
+            .data_source(id, Some(service_id.as_str()))
+            .await
+        {
+            Ok(Some(content)) => Json(DataSourceResult {
+                result_code: MonitorStatService::RESULT_CODE_SUCCESS,
+                content: Some(vec![content]),
+            })
+            .into_response(),
+            Ok(None) => StatusCode::NOT_FOUND.into_response(),
+            Err(error) => error_response(error),
         }
     }
 
@@ -109,50 +86,32 @@ impl MonitorViewServlet {
         State(state): State<Self>,
         Valid(Query(query)): Valid<Query<StatQuery>>,
     ) -> Response {
-        match &state.backend {
-            MonitorBackend::Remote(service) => {
-                let service = Arc::clone(service);
-                state
-                    .task_monitor
-                    .instrument(async move {
-                        match service.get_sql_stat_data_list(&query).await {
-                            Ok(result) => Json(result).into_response(),
-                            Err(error) => error_response(error),
-                        }
-                    })
-                    .await
-            }
-            MonitorBackend::Repository(repository) => Json(json!({
-                "ResultCode": MonitorStatService::RESULT_CODE_SUCCESS,
-                "Content": repository.all_sql_stats(),
-            }))
-            .into_response(),
-        }
+        let source = Arc::clone(state.backend.source());
+        state
+            .task_monitor
+            .instrument(async move {
+                match source.sql_list(&query).await {
+                    Ok(result) => Json(result).into_response(),
+                    Err(error) => error_response(error),
+                }
+            })
+            .await
     }
 
     pub(crate) async fn wall(
         State(state): State<Self>,
-        Valid(Query(query)): Valid<Query<StatQuery>>,
+        Valid(Query(_query)): Valid<Query<StatQuery>>,
     ) -> Response {
-        match &state.backend {
-            MonitorBackend::Remote(service) => {
-                let service = Arc::clone(service);
-                state
-                    .task_monitor
-                    .instrument(async move {
-                        match service.get_wall_stat_map(&query).await {
-                            Ok(result) => Json(result).into_response(),
-                            Err(error) => error_response(error),
-                        }
-                    })
-                    .await
-            }
-            MonitorBackend::Repository(repository) => {
-                let mut wall = repository.aggregated_wall();
-                wall.result_code = MonitorStatService::RESULT_CODE_SUCCESS;
-                Json(wall).into_response()
-            }
-        }
+        let source = Arc::clone(state.backend.source());
+        state
+            .task_monitor
+            .instrument(async move {
+                match source.wall().await {
+                    Ok(result) => Json(result).into_response(),
+                    Err(error) => error_response(error),
+                }
+            })
+            .await
     }
 
     pub(crate) async fn api_description() -> Json<Value> {
@@ -170,7 +129,7 @@ impl MonitorViewServlet {
         State(state): State<Self>,
         Valid(Query(query)): Valid<Query<StatQuery>>,
     ) -> Response {
-        let MonitorBackend::Remote(service) = &state.backend else {
+        let Some(service) = state.backend.source().remote_service() else {
             return Json(empty_success()).into_response();
         };
         let service = Arc::clone(service);
@@ -189,9 +148,9 @@ impl MonitorViewServlet {
         State(state): State<Self>,
         Path(uri): Path<String>,
     ) -> Json<Value> {
-        let content = match &state.backend {
-            MonitorBackend::Remote(service) => service.get_web_uri_stat_data(&uri),
-            MonitorBackend::Repository(_) => None,
+        let content = match state.backend.source().remote_service() {
+            Some(service) => service.get_web_uri_stat_data(&uri),
+            None => None,
         };
         Json(MonitorStatService::return_json_result(
             MonitorStatService::RESULT_CODE_SUCCESS,
@@ -203,9 +162,9 @@ impl MonitorViewServlet {
         State(state): State<Self>,
         Valid(Query(query)): Valid<Query<StatQuery>>,
     ) -> Json<Value> {
-        let content = match &state.backend {
-            MonitorBackend::Remote(service) => service.get_web_app_stat_data_list(&query),
-            MonitorBackend::Repository(_) => Vec::new(),
+        let content = match state.backend.source().remote_service() {
+            Some(service) => service.get_web_app_stat_data_list(&query),
+            None => Vec::new(),
         };
         Json(MonitorStatService::return_json_result(
             MonitorStatService::RESULT_CODE_SUCCESS,
@@ -217,9 +176,9 @@ impl MonitorViewServlet {
         State(state): State<Self>,
         Valid(Query(query)): Valid<Query<StatQuery>>,
     ) -> Json<Value> {
-        let content = match &state.backend {
-            MonitorBackend::Remote(service) => service.get_web_session_stat_data_list(&query),
-            MonitorBackend::Repository(_) => Vec::new(),
+        let content = match state.backend.source().remote_service() {
+            Some(service) => service.get_web_session_stat_data_list(&query),
+            None => Vec::new(),
         };
         Json(MonitorStatService::return_json_result(
             MonitorStatService::RESULT_CODE_SUCCESS,
@@ -231,9 +190,9 @@ impl MonitorViewServlet {
         State(state): State<Self>,
         Path(id): Path<String>,
     ) -> Json<Value> {
-        let content = match &state.backend {
-            MonitorBackend::Remote(service) => service.get_web_session_stat_data(&id),
-            MonitorBackend::Repository(_) => None,
+        let content = match state.backend.source().remote_service() {
+            Some(service) => service.get_web_session_stat_data(&id),
+            None => None,
         };
         Json(MonitorStatService::return_json_result(
             MonitorStatService::RESULT_CODE_SUCCESS,
@@ -245,9 +204,9 @@ impl MonitorViewServlet {
         State(state): State<Self>,
         Valid(Query(query)): Valid<Query<StatQuery>>,
     ) -> Json<Value> {
-        let content = match &state.backend {
-            MonitorBackend::Remote(service) => service.get_spring_stat_data_list(&query),
-            MonitorBackend::Repository(_) => Vec::new(),
+        let content = match state.backend.source().remote_service() {
+            Some(service) => service.get_spring_stat_data_list(&query),
+            None => Vec::new(),
         };
         Json(MonitorStatService::return_json_result(
             MonitorStatService::RESULT_CODE_SUCCESS,
@@ -265,9 +224,9 @@ impl MonitorViewServlet {
         let Some(method) = parameters.get("method") else {
             return missing_parameter("method");
         };
-        let content = match &state.backend {
-            MonitorBackend::Remote(service) => service.get_spring_method_stat_data(class, method),
-            MonitorBackend::Repository(_) => None,
+        let content = match state.backend.source().remote_service() {
+            Some(service) => service.get_spring_method_stat_data(class, method),
+            None => None,
         };
         Json(MonitorStatService::return_json_result(
             MonitorStatService::RESULT_CODE_SUCCESS,
@@ -284,7 +243,7 @@ impl MonitorViewServlet {
         let Some(service_id) = parameters.get("serviceId") else {
             return missing_parameter("serviceId");
         };
-        let Ok(service_identity) = ServiceIdentity::parse(service_id) else {
+        if ServiceIdentity::parse(service_id).is_err() {
             return invalid_service_id();
         };
         let Some(datasource_id) = parameters
@@ -293,8 +252,8 @@ impl MonitorViewServlet {
         else {
             return missing_parameter("dataSourceId");
         };
-        match &state.backend {
-            MonitorBackend::Remote(service) => {
+        match state.backend.source().remote_service() {
+            Some(service) => {
                 let service = Arc::clone(service);
                 state
                     .task_monitor
@@ -306,12 +265,16 @@ impl MonitorViewServlet {
                     })
                     .await
             }
-            MonitorBackend::Repository(repository) => repository
-                .get_sql_stat(&service_identity, datasource_id, id)
-                .map_or_else(
-                    || StatusCode::NOT_FOUND.into_response(),
-                    |stat| Json(stat).into_response(),
-                ),
+            None => match state
+                .backend
+                .source()
+                .sql_stat(id, Some(service_id.as_str()), Some(datasource_id))
+                .await
+            {
+                Ok(Some(stat)) => Json(stat).into_response(),
+                Ok(None) => StatusCode::NOT_FOUND.into_response(),
+                Err(error) => error_response(error),
+            },
         }
     }
 
@@ -366,7 +329,7 @@ impl MonitorViewServlet {
         // Java 的控制台地址把标识符嵌在路径段中间（/datasource-{id}.json），
         // Axum 的路由匹配无法表达，先在控制台路由里解析。
         if let Some(response) = super::console_routes::dispatch_console_route(
-            &state.backend,
+            state.backend.source(),
             state.command_broker.as_ref(),
             service_url,
         )
@@ -374,8 +337,8 @@ impl MonitorViewServlet {
         {
             return response;
         }
-        match &state.backend {
-            MonitorBackend::Remote(service) => match service.service(service_url).await {
+        match state.backend.source().remote_service() {
+            Some(service) => match service.service(service_url).await {
                 Ok(body) => (
                     StatusCode::OK,
                     [(header::CONTENT_TYPE, "application/json;charset=utf-8")],
@@ -384,7 +347,7 @@ impl MonitorViewServlet {
                     .into_response(),
                 Err(error) => error_response(error),
             },
-            MonitorBackend::Repository(_) => Json(json!({
+            None => Json(json!({
                 "ResultCode": MonitorStatService::RESULT_CODE_ERROR,
                 "Content": "Do not support this request, please contact with administrator.",
             }))
@@ -414,33 +377,30 @@ impl MonitorViewServlet {
             metrics.total_poll_count,
             metrics.total_slow_poll_count
         );
-        if let MonitorBackend::Repository(repository) = &state.backend {
-            write_repository_metrics(&mut body, repository);
-        }
+        write_repository_metrics(&mut body, state.backend.source().repository_view());
         if let Some(provider) = &state.metrics_appendix {
             body.push_str(&provider());
         }
-        let (accepted, output_rejected_total, output_limit) = match &state.backend {
-            MonitorBackend::Repository(repository) => {
-                let accepted = repository.accept_metrics_output_size(body.len());
-                let (_, _, rejected) = repository.limit_counters();
-                (accepted, rejected, repository.max_metrics_output_bytes())
-            }
-            MonitorBackend::Remote(_) => {
-                let limit = MetricsRepositoryConfig::default().max_metrics_output_bytes();
-                let accepted = body.len() <= limit;
-                let rejected = if accepted {
-                    state
-                        .remote_metrics_output_rejected_total
-                        .load(Ordering::Relaxed)
-                } else {
-                    state
-                        .remote_metrics_output_rejected_total
-                        .fetch_add(1, Ordering::Relaxed)
-                        + 1
-                };
-                (accepted, rejected, limit)
-            }
+        let (accepted, output_rejected_total, output_limit) = if state.backend.source().has_remote()
+        {
+            let limit = MetricsRepositoryConfig::default().max_metrics_output_bytes();
+            let accepted = body.len() <= limit;
+            let rejected = if accepted {
+                state
+                    .remote_metrics_output_rejected_total
+                    .load(Ordering::Relaxed)
+            } else {
+                state
+                    .remote_metrics_output_rejected_total
+                    .fetch_add(1, Ordering::Relaxed)
+                    + 1
+            };
+            (accepted, rejected, limit)
+        } else {
+            let repository = state.backend.source().repository_view();
+            let accepted = repository.accept_metrics_output_size(body.len());
+            let (_, _, rejected) = repository.limit_counters();
+            (accepted, rejected, repository.max_metrics_output_bytes())
         };
         if !accepted {
             let rejected = format!(
