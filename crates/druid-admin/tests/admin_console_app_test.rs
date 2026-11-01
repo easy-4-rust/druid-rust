@@ -1,8 +1,10 @@
 //! Tests for the separated console application's delivery.
 //!
 //! The console is an independently built application whose resources are
-//! embedded in the binary by the build script. Adding an asset must not
-//! require editing any Rust source file.
+//! embedded by the build script. These tests are adaptive: when the console
+//! has been built they assert it is served; when it has not (for example in
+//! a Rust-only CI job) they assert the Admin still compiles, still serves its
+//! API, and reports the absence instead of failing to start.
 
 mod common;
 
@@ -36,9 +38,41 @@ async fn get(addr: SocketAddr, path: &str) -> (u16, String, String) {
     (status, content_type, body)
 }
 
+/// 报告控制台是否已内嵌；未内嵌时这些断言改为验证降级行为。
+async fn console_built(addr: SocketAddr) -> bool {
+    let (status, _, _) = get(addr, "/druid/console").await;
+    status == 200
+}
+
+/// 前端未构建时的降级契约：Admin 仍编译并正常提供 API。
+async fn assert_degraded_console(addr: SocketAddr) {
+    let (status, _, body) = get(addr, "/druid/console").await;
+    assert_eq!(
+        status, 404,
+        "without a built console the entry must report its absence, got {body}"
+    );
+    assert!(
+        body.contains("not been built"),
+        "the absence must be explained, got {body}"
+    );
+    // API 不受前端缺失影响。
+    let (api_status, _, api_body) = get(addr, "/druid/api/v1/basic").await;
+    assert_eq!(
+        api_status, 200,
+        "the API must stay available without the console, got {api_body}"
+    );
+    let api_json: serde_json::Value =
+        serde_json::from_str(&api_body).expect("the API must answer JSON");
+    assert_eq!(api_json["apiVersion"], "v1");
+}
+
 #[tokio::test]
 async fn console_entry_serves_the_built_application() {
     let (addr, _handle) = start_admin().await;
+    if !console_built(addr).await {
+        assert_degraded_console(addr).await;
+        return;
+    }
 
     let (status, content_type, body) = get(addr, "/druid/console").await;
 
@@ -60,6 +94,10 @@ async fn console_entry_serves_the_built_application() {
 #[tokio::test]
 async fn console_unknown_path_falls_back_to_the_application_entry() {
     let (addr, _handle) = start_admin().await;
+    if !console_built(addr).await {
+        assert_degraded_console(addr).await;
+        return;
+    }
 
     let (status, _content_type, body) = get(addr, "/druid/console/datasources/7").await;
 
@@ -76,6 +114,10 @@ async fn console_unknown_path_falls_back_to_the_application_entry() {
 #[tokio::test]
 async fn console_asset_is_served_with_its_own_content_type() {
     let (addr, _handle) = start_admin().await;
+    if !console_built(addr).await {
+        assert_degraded_console(addr).await;
+        return;
+    }
 
     let (status, entry_content_type, entry_body) = get(addr, "/druid/console").await;
     assert_eq!(status, 200);
@@ -98,4 +140,15 @@ async fn console_asset_is_served_with_its_own_content_type() {
     );
     assert!(!asset_body.is_empty(), "the asset must not be empty");
     assert_ne!(asset_content_type, entry_content_type);
+}
+
+#[tokio::test]
+async fn the_api_stays_available_regardless_of_the_console() {
+    // 无论前端是否构建，版本化 API 都可用；这是「前后端解耦」的硬约束。
+    let (addr, _handle) = start_admin().await;
+    let (status, content_type, body) = get(addr, "/druid/api/v1/basic").await;
+    assert_eq!(status, 200);
+    assert!(content_type.starts_with("application/json"));
+    let json: serde_json::Value = serde_json::from_str(&body).expect("the API must answer JSON");
+    assert_eq!(json["apiVersion"], "v1");
 }
