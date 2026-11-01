@@ -444,7 +444,12 @@ impl MonitorViewServlet {
     }
 
     pub(crate) async fn root(State(state): State<Self>) -> Response {
-        redirect_found(format!("{}/index.html", state.context_path))
+        // 分离控制台是默认入口；未构建前端时回退到 legacy 页面。
+        if super::console::entry_document().is_some() {
+            redirect_found(format!("{}/console/", state.context_path))
+        } else {
+            redirect_found(format!("{}/index.html", state.context_path))
+        }
     }
 
     pub(crate) async fn legacy_page() -> Response {

@@ -125,7 +125,8 @@ fn admin_error_display_omits_untrusted_urls_and_parameter_values() {
 
 // ---- Route tests (no auth) ----
 
-/// /druid/ root must redirect to /druid/index.html.
+/// /druid/ root must redirect to an entry point: the separated console when it
+/// is built, the legacy page otherwise.
 #[tokio::test]
 async fn root_redirects_to_index() {
     let (addr, handle) = start_servlet_server().await;
@@ -140,9 +141,19 @@ async fn root_redirects_to_index() {
         .unwrap();
     assert_eq!(resp.status(), 302, "root must redirect");
     let location = resp.headers().get("location").unwrap().to_str().unwrap();
+    let console_built = reqwest::get(format!("http://{addr}/druid/console"))
+        .await
+        .unwrap()
+        .status()
+        == 200;
+    let expected = if console_built {
+        "/druid/console/"
+    } else {
+        "/druid/index.html"
+    };
     assert!(
-        location.contains("/druid/index.html"),
-        "must redirect to index.html, got: {location}"
+        location.contains(expected),
+        "must redirect to {expected}, got: {location}"
     );
     handle.abort();
 }
