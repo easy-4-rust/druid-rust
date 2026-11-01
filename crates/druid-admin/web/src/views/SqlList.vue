@@ -26,6 +26,22 @@ const sortable = [
   { prop: 'concurrentMax', label: '并发峰值' },
 ]
 
+// 数值列定宽：数字右对齐不需要 min-width 撑出的留白。
+function columnWidth(prop) {
+  switch (prop) {
+    case 'errorCount':
+      return 76
+    case 'totalTime':
+    case 'maxTimespan':
+      return 92
+    case 'fetchRowCount':
+    case 'effectedRowCount':
+      return 86
+    default:
+      return 90
+  }
+}
+
 function histogram(row) {
   return zipBuckets(row.histogram, TIME_BUCKETS_8)
 }
@@ -125,7 +141,7 @@ onMounted(load)
       <el-table-column
         v-for="column in sortable.slice(1)"
         :key="column.prop"
-        :min-width="110"
+        :width="columnWidth(column.prop)"
         align="right"
       >
         <template #header>
@@ -147,8 +163,8 @@ onMounted(load)
         </template>
       </el-table-column>
 
-      <el-table-column prop="dbType" label="数据库" width="100" />
-      <el-table-column prop="serviceName" label="服务" min-width="120" show-overflow-tooltip />
+      <el-table-column prop="dbType" label="数据库" width="90" />
+      <el-table-column prop="serviceName" label="服务" width="110" show-overflow-tooltip />
     </el-table>
 
     <!-- 分页常显：数据少时是状态提示，数据多时是导航。 -->
