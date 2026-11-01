@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { api } from '../api/client.js'
 import MiniHistogram from '../components/MiniHistogram.vue'
 import { ROW_BUCKETS_6, TIME_BUCKETS_8, formatDuration, formatNumber, zipBuckets } from '../utils/format.js'
@@ -93,6 +94,29 @@ function openDetail(row) {
   router.push(`/sql/${row.id}`)
 }
 
+// 点击 SQL 文本即复制（不进详情），toast 反馈。
+async function copySql(row) {
+  const text = row.sql || ''
+  if (!text) return
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+    ElMessage.success('已复制 SQL')
+  } catch {
+    ElMessage.error('复制失败，请手动选择复制')
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -119,7 +143,14 @@ onMounted(load)
     >
       <el-table-column label="SQL" min-width="300">
         <template #default="{ row }">
-          <el-link type="primary" :underline="false" class="sql-link" @click.stop="openDetail(row)">
+          <!-- 点击 SQL 文本复制；点行内其他区域进详情。 -->
+          <el-link
+            type="primary"
+            :underline="false"
+            class="sql-link"
+            :title="'点击复制：' + (row.sql || '')"
+            @click.stop="copySql(row)"
+          >
             <code>{{ row.sql || '—' }}</code>
           </el-link>
         </template>
@@ -223,5 +254,14 @@ onMounted(load)
 
 :deep(.el-table__row) {
   cursor: pointer;
+}
+
+/* 压缩行高：small 尺寸默认单元格上下 padding 偏大，数据密表再收紧。 */
+:deep(.el-table .el-table__cell) {
+  padding: 2px 0;
+}
+
+:deep(.el-table .cell) {
+  line-height: 1.5;
 }
 </style>
