@@ -363,6 +363,17 @@ impl MonitorViewServlet {
         if !service_url.contains(".json") {
             return StatusCode::NOT_FOUND.into_response();
         }
+        // Java 的控制台地址把标识符嵌在路径段中间（/datasource-{id}.json），
+        // Axum 的路由匹配无法表达，先在控制台路由里解析。
+        if let Some(response) = super::console_routes::dispatch_console_route(
+            &state.backend,
+            state.command_broker.as_ref(),
+            service_url,
+        )
+        .await
+        {
+            return response;
+        }
         match &state.backend {
             MonitorBackend::Remote(service) => match service.service(service_url).await {
                 Ok(body) => (

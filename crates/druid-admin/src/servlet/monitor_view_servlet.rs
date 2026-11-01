@@ -29,6 +29,7 @@ use crate::CommandBroker;
 
 use super::LoginRequest;
 
+mod console_routes;
 mod monitor_view_a;
 mod monitor_view_b;
 

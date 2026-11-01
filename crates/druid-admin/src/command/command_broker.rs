@@ -61,6 +61,20 @@ impl CommandBroker {
         self.capacity
     }
 
+    /// 返回当前所有已连接服务的身份。
+    ///
+    /// 用于「重置全部统计」这类需要扇出到每个接入服务的命令。
+    #[must_use]
+    pub fn attached_identities(&self) -> Vec<ServiceIdentity> {
+        let inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut identities: Vec<ServiceIdentity> = inner.streams.keys().cloned().collect();
+        identities.sort_by(|left, right| left.service_id().cmp(right.service_id()));
+        identities
+    }
+
     /// 把 ResetStats 投递给当前 live stream 并等待 durable result。
     pub async fn issue_reset(
         &self,
