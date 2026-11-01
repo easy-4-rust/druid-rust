@@ -57,11 +57,8 @@ pub(crate) fn serve(path: &str) -> Response {
     let body = asset(normalized)
         .or_else(|| asset(ENTRY))
         .unwrap_or_default();
-    let is_entry = asset(normalized).is_none();
     let status = if body.is_empty() {
         StatusCode::NOT_FOUND
-    } else if is_entry && normalized.is_empty() {
-        StatusCode::OK
     } else {
         StatusCode::OK
     };
@@ -74,10 +71,4 @@ pub(crate) fn serve(path: &str) -> Response {
         body,
     )
         .into_response()
-}
-
-/// 前端资源是否已经内嵌。
-#[must_use]
-pub fn is_embedded() -> bool {
-    !CONSOLE_ASSETS.is_empty()
 }
