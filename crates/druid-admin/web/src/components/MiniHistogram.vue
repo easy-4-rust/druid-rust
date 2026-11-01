@@ -7,8 +7,8 @@ const props = defineProps({
   color: { type: String, default: '#409eff' },
 })
 
-// 正方形单元格：宽度固定，高度与宽度一致，hover 热区扩大到整行高。
-const CELL = 8
+// 正方形单元格：宽高一致（12x12），hover 热区扩大到整行高。
+const CELL = 12
 
 const max = computed(() => Math.max(...props.buckets.map((b) => Number(b.count) || 0), 1))
 
@@ -21,7 +21,7 @@ const cells = computed(() =>
 </script>
 
 <template>
-  <div v-if="buckets.length" class="mini" :style="{ height: `${CELL * 2 + 4}px` }">
+  <div v-if="buckets.length" class="mini" :style="{ height: `${CELL + 6}px` }">
     <el-tooltip
       v-for="cell in cells"
       :key="cell.label"
