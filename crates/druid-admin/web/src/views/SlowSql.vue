@@ -126,7 +126,7 @@ onMounted(load)
             </el-link>
           </template>
         </el-table-column>
-        <el-table-column label="耗时分布" width="122" align="center">
+        <el-table-column label="耗时分布" width="130" align="center">
           <template #default="{ row }"><MiniHistogram :buckets="histogram(row)" /></template>
         </el-table-column>
         <el-table-column label="最大耗时" width="110" align="right" sortable prop="maxTimespan">

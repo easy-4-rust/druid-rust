@@ -109,16 +109,16 @@ onMounted(load)
         </template>
       </el-table-column>
 
-      <el-table-column label="执行耗时" width="122" align="center">
+      <el-table-column label="执行耗时" width="130" align="center">
         <template #default="{ row }"><MiniHistogram :buckets="histogram(row)" /></template>
       </el-table-column>
-      <el-table-column label="取回行" width="94" align="center">
+      <el-table-column label="取回行" width="130" align="center">
         <template #default="{ row }"><MiniHistogram :buckets="fetchHistogram(row)" color="#67c23a" /></template>
       </el-table-column>
-      <el-table-column label="影响行" width="94" align="center">
+      <el-table-column label="影响行" width="130" align="center">
         <template #default="{ row }"><MiniHistogram :buckets="updateHistogram(row)" color="#e6a23c" /></template>
       </el-table-column>
-      <el-table-column label="执行+持有" width="122" align="center">
+      <el-table-column label="执行+持有" width="130" align="center">
         <template #default="{ row }"><MiniHistogram :buckets="holdHistogram(row)" color="#909399" /></template>
       </el-table-column>
 

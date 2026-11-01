@@ -40,8 +40,9 @@ const cells = computed(() =>
 </template>
 
 <style scoped>
+/* inline-flex：容器宽度跟随内容，配合单元格 align=center 实现左右等距。 */
 .mini {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 2px;
 }
