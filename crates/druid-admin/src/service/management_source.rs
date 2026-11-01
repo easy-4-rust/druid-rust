@@ -17,7 +17,8 @@ use serde_json::{json, Value};
 use druid_metrics::ServiceIdentity;
 
 use crate::model::dto::{
-    ConnectionResult, DataSourceContent, DataSourceResult, SqlListContent, WallResult,
+    ConnectionResult, DataSourceContent, DataSourceResult, SqlListContent, StackTraceResult,
+    WallResult,
 };
 use crate::repository::MetricsRepository;
 use crate::service::{MonitorStatService, MonitorStatServiceError, StatQuery};
@@ -242,6 +243,27 @@ impl ManagementSource {
         };
         remote
             .get_pooling_connection_info_by_data_source_id(identity, service_id)
+            .await
+            .map(Some)
+    }
+
+    /// 返回活跃连接在借出点捕获的调用栈。
+    ///
+    /// 与 `connection_info` 同为远程节点专属能力：推送 ingest 协议
+    /// 不带连接级堆栈，只有轮询后端能回答。
+    pub async fn active_connection_stack_trace(
+        &self,
+        identity: i64,
+        service_id: Option<&str>,
+    ) -> Result<Option<StackTraceResult>, MonitorStatServiceError> {
+        let Some(remote) = &self.remote else {
+            return Ok(None);
+        };
+        let Some(service_id) = service_id else {
+            return Ok(None);
+        };
+        remote
+            .get_active_connection_stack_trace(identity, service_id)
             .await
             .map(Some)
     }

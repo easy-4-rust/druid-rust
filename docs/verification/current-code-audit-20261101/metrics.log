@@ -1,0 +1,83 @@
+   Compiling hashbrown v0.17.1
+   Compiling futures-sink v0.3.33
+   Compiling pulldown-cmark v0.13.6
+   Compiling linkme-impl v0.3.37
+   Compiling getrandom v0.3.4
+   Compiling tokio v1.54.1
+   Compiling windows-sys v0.52.0
+   Compiling zerotrie v0.2.4
+   Compiling tinystr v0.8.3
+   Compiling icu_collections v2.2.0
+   Compiling chrono v0.4.45
+   Compiling subtle v2.6.1
+   Compiling quick-xml v0.41.0
+   Compiling prost v0.14.4
+   Compiling futures-channel v0.3.33
+   Compiling rsa v0.9.10
+   Compiling icu_locale_core v2.2.0
+   Compiling futures-util v0.3.33
+   Compiling indexmap v2.14.0
+   Compiling linkme v0.3.37
+   Compiling spawns-core v1.1.2
+   Compiling tempfile v3.27.0
+   Compiling icu_provider v2.2.0
+   Compiling toml_edit v0.19.15
+   Compiling petgraph v0.8.3
+   Compiling icu_normalizer v2.2.0
+   Compiling icu_properties v2.2.0
+   Compiling pulldown-cmark-to-cmark v22.0.1
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling prost-build v0.14.4
+   Compiling proc-macro-crate v1.3.1
+   Compiling futures-executor v0.3.33
+   Compiling moka v0.12.15
+   Compiling url v2.5.8
+   Compiling futures v0.3.33
+   Compiling num_enum_derive v0.5.11
+   Compiling tonic-prost-build v0.14.6
+   Compiling druid-metrics v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-metrics)
+   Compiling num_enum v0.5.11
+   Compiling spawns-compat v0.2.2
+   Compiling druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc)
+   Compiling tokio-util v0.7.19
+   Compiling spawns v0.2.6
+   Compiling asyncs v0.4.0
+   Compiling zookeeper-client v0.11.2
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 35.16s
+     Running tests\protocol_roundtrip_test.rs (target\debug\deps\protocol_roundtrip_test-e22acdec22c1416b.exe)
+
+running 14 tests
+test client_command_ack_with_error_roundtrip ... ok
+test client_heartbeat_roundtrip ... ok
+test client_command_ack_roundtrip ... ok
+test client_goodbye_roundtrip ... ok
+test client_hello_roundtrip ... ok
+test empty_client_frame_roundtrip ... ok
+test client_snapshot_batch_roundtrip ... ok
+test empty_server_frame_roundtrip ... ok
+test server_batch_ack_roundtrip ... ok
+test server_command_request_full_snapshot_roundtrip ... ok
+test server_error_roundtrip ... ok
+test server_command_reset_stats_roundtrip ... ok
+test server_hello_ack_roundtrip ... ok
+test server_resync_required_roundtrip ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\registration_lifecycle_test.rs (target\debug\deps\registration_lifecycle_test-5841777cb0837703.exe)
+
+running 9 tests
+test dropping_runtime_with_live_guard_stops_owned_unregister_listener ... ok
+test runtime_holds_weak_references_only ... ok
+test saturated_unregister_queue_coalesces_and_eventually_cleans_live_sources ... ok
+test dropping_one_registration_preserves_another_with_the_same_datasource_id ... ok
+test sampler_removes_only_the_closed_registration_when_ids_match ... ok
+test guard_drop_unregisters_datasource ... ok
+test multiple_registrations_and_selective_drop ... ok
+test shutdown_within_deadline_succeeds ... ok
+test source_drop_auto_cleans_on_next_sample ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+

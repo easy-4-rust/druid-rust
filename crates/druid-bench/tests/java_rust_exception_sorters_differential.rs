@@ -19,6 +19,8 @@ use sha2::{Digest, Sha256};
 const CASES: &str = include_str!("fixtures/exception_sorters.tsv");
 const SOURCES: &str = include_str!("fixtures/exception_sorter_java_sources.tsv");
 const EXPECTED_CASES: usize = 576;
+const PROPERTY_CASES: &str = include_str!("fixtures/exception_sorter_property_cases.tsv");
+const EXPECTED_PROPERTY_CASES: usize = 118;
 
 fn required_path(name: &str) -> PathBuf {
     PathBuf::from(std::env::var_os(name).unwrap_or_else(|| panic!("{name} is required")))
@@ -56,8 +58,12 @@ fn sorter(name: &str) -> Box<dyn ExceptionSorter> {
 }
 
 fn rust_results() -> BTreeMap<String, String> {
+    rust_results_from(CASES)
+}
+
+fn rust_results_from(cases: &str) -> BTreeMap<String, String> {
     let mut results = BTreeMap::new();
-    for line in CASES
+    for line in cases
         .lines()
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
     {
@@ -131,6 +137,20 @@ fn shared_corpus_has_complete_unique_rust_results_without_panics() {
 #[test]
 #[ignore = "requires pinned Java Druid source, compiled dependency classpath and JDK"]
 fn pinned_java_and_rust_match_every_shared_exception_case() {
+    compare_corpus(CASES, EXPECTED_CASES, "exception_sorters.tsv");
+}
+
+#[test]
+#[ignore = "requires pinned Java Druid source, compiled dependency classpath and JDK"]
+fn pinned_java_and_rust_match_every_property_boundary_case() {
+    compare_corpus(
+        PROPERTY_CASES,
+        EXPECTED_PROPERTY_CASES,
+        "exception_sorter_property_cases.tsv",
+    );
+}
+
+fn compare_corpus(cases: &str, expected_cases: usize, corpus_file: &str) {
     let root = required_path("DRUID_JAVA_ORACLE_ROOT");
     let java_home = required_path("DRUID_JAVA_ORACLE_JAVA_HOME");
     let classpath =
@@ -158,7 +178,7 @@ fn pinned_java_and_rust_match_every_shared_exception_case() {
     std::fs::write(output.join("java-version.stderr"), &version.stderr).unwrap();
     let metadata = format!(
         "java_commit\t33824c3dec1612711f9bb4e409319bcab2e4cd0e\ncorpus_sha256\t{:x}\nmanifest_sha256\t{:x}\njava_oracle_sha256\t{:x}\n",
-        Sha256::digest(CASES.as_bytes()), Sha256::digest(SOURCES.as_bytes()),
+        Sha256::digest(cases.as_bytes()), Sha256::digest(SOURCES.as_bytes()),
         Sha256::digest(std::fs::read(fixture_dir.join("ExceptionSortersOracle.java")).unwrap())
     );
     std::fs::write(output.join("run-metadata.tsv"), metadata).unwrap();
@@ -202,7 +222,7 @@ fn pinned_java_and_rust_match_every_shared_exception_case() {
         .arg("-cp")
         .arg(std::env::join_paths(paths).expect("oracle classpath"))
         .arg("ExceptionSortersOracle")
-        .arg(fixture_dir.join("exception_sorters.tsv"))
+        .arg(fixture_dir.join(corpus_file))
         .arg(output.join("java-results.tsv"))
         .output()
         .expect("run pinned Java oracle");
@@ -229,8 +249,8 @@ fn pinned_java_and_rust_match_every_shared_exception_case() {
             "duplicate Java case: {id}"
         );
     }
-    let rust_results = rust_results();
-    let denominator: usize = CASES
+    let rust_results = rust_results_from(cases);
+    let denominator: usize = cases
         .lines()
         .next()
         .unwrap()
@@ -239,7 +259,7 @@ fn pinned_java_and_rust_match_every_shared_exception_case() {
         .parse()
         .unwrap();
     assert_eq!(
-        denominator, EXPECTED_CASES,
+        denominator, expected_cases,
         "review required for corpus changes"
     );
     assert_eq!(

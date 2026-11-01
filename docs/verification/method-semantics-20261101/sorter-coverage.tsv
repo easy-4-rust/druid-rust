@@ -1,0 +1,13 @@
+path	regions_covered	regions_count	regions_percent	functions_covered	functions_count	functions_percent	lines_covered	lines_count	lines_percent
+crates/druid/src/core/abstract_oracle_exception_sorter.rs	78	79	98.7342	10	10	100.0	44	44	100.0
+crates/druid/src/core/db2_exception_sorter.rs	13	13	100.0	3	3	100.0	10	10	100.0
+crates/druid/src/core/exception_sorter.rs	3	3	100.0	1	1	100.0	3	3	100.0
+crates/druid/src/core/informix_exception_sorter.rs	8	8	100.0	2	2	100.0	6	6	100.0
+crates/druid/src/core/mock_exception_sorter.rs	10	10	100.0	3	3	100.0	7	7	100.0
+crates/druid/src/core/my_sql_exception_sorter.rs	52	52	100.0	4	4	100.0	35	35	100.0
+crates/druid/src/core/null_exception_sorter.rs	8	8	100.0	3	3	100.0	7	7	100.0
+crates/druid/src/core/ocean_base_oracle_exception_sorter.rs	68	75	90.6667	9	9	100.0	62	67	92.5373
+crates/druid/src/core/oracle_exception_sorter.rs	58	65	89.2308	7	7	100.0	48	53	90.566
+crates/druid/src/core/pg_exception_sorter.rs	11	11	100.0	3	3	100.0	8	8	100.0
+crates/druid/src/core/phoenix_exception_sorter.rs	9	9	100.0	3	3	100.0	7	7	100.0
+crates/druid/src/core/sybase_exception_sorter.rs	18	18	100.0	3	3	100.0	11	11	100.0

@@ -1,0 +1,11 @@
+$env:TEMP = 'D:\codex-build\druid-sorter-methods-20261101\tmp'
+$env:TMP = $env:TEMP
+$env:PYTHONDONTWRITEBYTECODE = '1'
+$env:CARGO_TARGET_DIR = 'D:\codex-build\druid-audit-20261101'
+$env:CARGO_PROFILE_DEV_DEBUG = '0'
+$env:CARGO_PROFILE_TEST_DEBUG = '0'
+$env:CARGO_INCREMENTAL = '0'
+$env:DRUID_JAVA_ORACLE_ROOT = 'E:\workspaces\workspace-github\druid'
+$env:DRUID_JAVA_ORACLE_JAVA_HOME = 'D:\Java\jdk-17.0.12'
+$env:DRUID_JAVA_ORACLE_CLASSPATH = 'C:\Users\hnxyh\.m2\repository\com\alibaba\druid\1.2.28\druid-1.2.28.jar;C:\Users\hnxyh\.m2\repository\junit\junit\4.13.2\junit-4.13.2.jar'
+$env:DRUID_JAVA_ORACLE_WORK_DIR = 'D:\codex-build\druid-sorter-methods-20261101\oracle'

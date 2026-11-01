@@ -1,0 +1,36 @@
+11月 01, 2026 8:23:34 下午 com.alibaba.druid.pool.vendor.AbstractOracleExceptionSorter error
+严重: parse druid.oracle.fatalErrorCodes error
+java.lang.NumberFormatException: For input string: "𝟙𝟚"
+	at java.base/java.lang.NumberFormatException.forInputString(NumberFormatException.java:67)
+	at java.base/java.lang.Integer.parseInt(Integer.java:668)
+	at java.base/java.lang.Integer.parseInt(Integer.java:786)
+	at com.alibaba.druid.pool.vendor.AbstractOracleExceptionSorter.configFromProperties(AbstractOracleExceptionSorter.java:29)
+	at SorterPropertyProbe.main(SorterPropertyProbe.java:9)
+
+11月 01, 2026 8:23:34 下午 com.alibaba.druid.pool.vendor.AbstractOracleExceptionSorter error
+严重: parse druid.oracle.fatalErrorCodes error
+java.lang.NumberFormatException: For input string: "²"
+	at java.base/java.lang.NumberFormatException.forInputString(NumberFormatException.java:67)
+	at java.base/java.lang.Integer.parseInt(Integer.java:668)
+	at java.base/java.lang.Integer.parseInt(Integer.java:786)
+	at com.alibaba.druid.pool.vendor.AbstractOracleExceptionSorter.configFromProperties(AbstractOracleExceptionSorter.java:29)
+	at SorterPropertyProbe.main(SorterPropertyProbe.java:9)
+
+11月 01, 2026 8:23:34 下午 com.alibaba.druid.pool.vendor.AbstractOracleExceptionSorter error
+严重: parse druid.oracle.fatalErrorCodes error
+java.lang.NumberFormatException: For input string: "2147483648"
+	at java.base/java.lang.NumberFormatException.forInputString(NumberFormatException.java:67)
+	at java.base/java.lang.Integer.parseInt(Integer.java:672)
+	at java.base/java.lang.Integer.parseInt(Integer.java:786)
+	at com.alibaba.druid.pool.vendor.AbstractOracleExceptionSorter.configFromProperties(AbstractOracleExceptionSorter.java:29)
+	at SorterPropertyProbe.main(SorterPropertyProbe.java:9)
+
+11月 01, 2026 8:23:34 下午 com.alibaba.druid.pool.vendor.AbstractOracleExceptionSorter error
+严重: parse druid.oracle.fatalErrorCodes error
+java.lang.NumberFormatException: For input string: " 1"
+	at java.base/java.lang.NumberFormatException.forInputString(NumberFormatException.java:67)
+	at java.base/java.lang.Integer.parseInt(Integer.java:654)
+	at java.base/java.lang.Integer.parseInt(Integer.java:786)
+	at com.alibaba.druid.pool.vendor.AbstractOracleExceptionSorter.configFromProperties(AbstractOracleExceptionSorter.java:29)
+	at SorterPropertyProbe.main(SorterPropertyProbe.java:9)
+

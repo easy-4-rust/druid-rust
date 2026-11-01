@@ -1,0 +1,45 @@
+11月 01, 2026 8:29:10 下午 com.alibaba.druid.pool.DruidDataSource error
+严重: testOnBorrow is true, testWhileIdle is true, validationQuery not set
+11月 01, 2026 8:29:10 下午 com.alibaba.druid.pool.DruidDataSource info
+信息: {dataSource-1} inited
+11月 01, 2026 8:29:10 下午 com.alibaba.druid.pool.DruidDataSource error
+严重: {conn-10001} discard
+com.alibaba.druid.mock.MockConnectionClosedException
+	at com.alibaba.druid.mock.MockConnection.checkState(MockConnection.java:268)
+	at com.alibaba.druid.util.jdbc.StatementBase.checkOpen(StatementBase.java:63)
+	at com.alibaba.druid.util.jdbc.PreparedStatementBase.clearParameters(PreparedStatementBase.java:135)
+	at com.alibaba.druid.filter.FilterChainImpl.preparedStatement_clearParameters(FilterChainImpl.java:3434)
+	at com.alibaba.druid.filter.FilterAdapter.preparedStatement_clearParameters(FilterAdapter.java:1058)
+	at com.alibaba.druid.filter.FilterChainImpl.preparedStatement_clearParameters(FilterChainImpl.java:3431)
+	at com.alibaba.druid.proxy.jdbc.PreparedStatementProxyImpl.clearParameters(PreparedStatementProxyImpl.java:140)
+	at com.alibaba.druid.pool.DruidPooledConnection.closePoolableStatement(DruidPooledConnection.java:148)
+	at com.alibaba.druid.pool.DruidPooledPreparedStatement.close(DruidPooledPreparedStatement.java:187)
+	at com.alibaba.druid.bvt.pool.ExceptionSorterTest.test_exceptionSorter(ExceptionSorterTest.java:45)
+	at MockSorterCaseOracle.main(MockSorterCaseOracle.java:44)
+
+11月 01, 2026 8:29:10 下午 com.alibaba.druid.pool.DruidDataSource info
+信息: {dataSource-1} closing ...
+11月 01, 2026 8:29:10 下午 com.alibaba.druid.pool.DruidDataSource info
+信息: {dataSource-1} closed
+11月 01, 2026 8:29:10 下午 com.alibaba.druid.pool.DruidDataSource error
+严重: testOnBorrow is true, testWhileIdle is true, validationQuery not set
+11月 01, 2026 8:29:10 下午 com.alibaba.druid.pool.DruidDataSource info
+信息: {dataSource-2} inited
+11月 01, 2026 8:29:10 下午 com.alibaba.druid.pool.DruidDataSource error
+严重: {conn-110001} discard
+com.alibaba.druid.mock.MockConnectionClosedException
+	at com.alibaba.druid.mock.MockConnection.checkState(MockConnection.java:268)
+	at com.alibaba.druid.util.jdbc.StatementBase.checkOpen(StatementBase.java:63)
+	at com.alibaba.druid.util.jdbc.PreparedStatementBase.clearParameters(PreparedStatementBase.java:135)
+	at com.alibaba.druid.filter.FilterChainImpl.preparedStatement_clearParameters(FilterChainImpl.java:3434)
+	at com.alibaba.druid.filter.FilterAdapter.preparedStatement_clearParameters(FilterAdapter.java:1058)
+	at com.alibaba.druid.filter.FilterChainImpl.preparedStatement_clearParameters(FilterChainImpl.java:3431)
+	at com.alibaba.druid.proxy.jdbc.PreparedStatementProxyImpl.clearParameters(PreparedStatementProxyImpl.java:140)
+	at com.alibaba.druid.pool.DruidPooledConnection.closePoolableStatement(DruidPooledConnection.java:148)
+	at com.alibaba.druid.pool.DruidPooledPreparedStatement.close(DruidPooledPreparedStatement.java:187)
+	at MockSorterCaseOracle.main(MockSorterCaseOracle.java:58)
+
+11月 01, 2026 8:29:10 下午 com.alibaba.druid.pool.DruidDataSource info
+信息: {dataSource-2} closing ...
+11月 01, 2026 8:29:10 下午 com.alibaba.druid.pool.DruidDataSource info
+信息: {dataSource-2} closed

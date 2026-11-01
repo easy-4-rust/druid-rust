@@ -1,0 +1,83 @@
+{
+  "scope": "V1 current Rust observation; no new Java execution or golden certification",
+  "current_cases": 32,
+  "parse_ok": 31,
+  "reparse_ok": 31,
+  "changed_since_historical_rust": [
+    {
+      "case": "oracle-returning-into",
+      "changes": {
+        "parse": {
+          "historical": "err",
+          "current": "ok"
+        },
+        "format": {
+          "historical": "ERR:SQL parse error: sql parser error: Expected: end of statement, found: INTO at Line: 1, Column: 44",
+          "current": "INSERT INTO t (id) VALUES (1) RETURNING id INTO :out_id"
+        },
+        "reparse": {
+          "historical": "n/a",
+          "current": "ok"
+        },
+        "wall_violations": {
+          "historical": "1",
+          "current": "0"
+        }
+      }
+    },
+    {
+      "case": "hive-tablesample",
+      "changes": {
+        "parse": {
+          "historical": "err",
+          "current": "ok"
+        },
+        "format": {
+          "historical": "ERR:SQL parse error: sql parser error: Expected: identifier, found: 10 at Line: 1, Column: 30",
+          "current": "SELECT * FROM t TABLESAMPLE (10 PERCENT)"
+        },
+        "reparse": {
+          "historical": "n/a",
+          "current": "ok"
+        },
+        "wall_violations": {
+          "historical": "1",
+          "current": "0"
+        }
+      }
+    },
+    {
+      "case": "doris-create-unique-key",
+      "changes": {
+        "parse": {
+          "historical": "err",
+          "current": "ok"
+        },
+        "format": {
+          "historical": "ERR:SQL parse error: sql parser error: Expected: end of statement, found: UNIQUE at Line: 1, Column: 32",
+          "current": "CREATE TABLE t (k1 INT, v INT) UNIQUE KEY (k1) DISTRIBUTED BY HASH (k1) BUCKETS 3 PROPERTIES (\"replication_num\" = \"1\")"
+        },
+        "reparse": {
+          "historical": "n/a",
+          "current": "ok"
+        },
+        "wall_violations": {
+          "historical": "1",
+          "current": "0"
+        }
+      }
+    }
+  ],
+  "failures": [
+    {
+      "dialect": "Doris",
+      "case": "doris-distribute-buckets",
+      "parse": "err",
+      "format": "ERR:SQL parse error: sql parser error: Expected: end of statement, found: BUCKETS at Line: 1, Column: 40",
+      "reparse": "n/a",
+      "parameterized": "SELECT * FROM t DISTRIBUTE BY HASH(k1) BUCKETS ?",
+      "wall_violations": "1",
+      "sql": "SELECT * FROM t DISTRIBUTE BY HASH(k1) BUCKETS 10"
+    }
+  ]
+}

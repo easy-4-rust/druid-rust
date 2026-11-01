@@ -1,0 +1,38 @@
+[
+  {
+    "path": "core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\InformixExceptionSorterTest.java",
+    "sha256": "487a54076d99e5fba39a167e9f5ef3e409a0fb932a3ece99fa48075a1a43da6b"
+  },
+  {
+    "path": "core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\MySqlExceptionSorterTest.java",
+    "sha256": "0f6869dca1bd5a9181bfdff7c8dc3cec4257d65a758a0bc80acc1a7a4cd252b2"
+  },
+  {
+    "path": "core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\MySqlExceptionSorterTest_1.java",
+    "sha256": "3691eb05701467d7cffbb5e86bf3525540decb7f05daba87a1a30362f14f2d77"
+  },
+  {
+    "path": "core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\MySqlExceptionSorterTest_2.java",
+    "sha256": "08e57648e62df281020b9447e962f9745a4a453e5bb365a9730ba59f854b1631"
+  },
+  {
+    "path": "core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\MySqlExceptionSorterTest_oceanbase.java",
+    "sha256": "66f023fb8d9e31a388c67c33b9ca789d0c58ece329b54a2bcc07de0081e9c55c"
+  },
+  {
+    "path": "core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\PGExceptionSorterTest.java",
+    "sha256": "669f3a69fab6cdde407adfd27c0a22bae9df06476c8654567e1b28659558ae55"
+  },
+  {
+    "path": "core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\SybaseExceptionSorterTest.java",
+    "sha256": "4b7f64e9165c00505b880f0b34016e8c350e845e5a1300e7e76e8035e96ab19c"
+  },
+  {
+    "path": "core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\ExceptionSorterTest.java",
+    "sha256": "4153545ed46fc0fe6e6f2dfc6f7e002c06fa669903545f72dd98230554b06dbe"
+  },
+  {
+    "path": "core\\src\\test\\java\\com\\alibaba\\druid\\PoolTestCase.java",
+    "sha256": "74deb4318164fb2abfd6d1fbad85a7c052ef96ea1c1b9d1c01df7fb7cf965c62"
+  }
+]

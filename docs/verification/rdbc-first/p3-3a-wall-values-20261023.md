@@ -37,5 +37,5 @@ cargo clippy -p druid-rdbc -p druid --lib -- -D warnings -A clippy::pedantic
 
 ## 3. 未做
 
-- 其余 Wall 值对象（`WallCheckResult`、`WallSqlStat`、`WallTableStat` 等）仍依赖 `sqlparser::ast::Statement` 与更多统计类型，按同一模式分批迁移；
+- 2026-11-01 更正：上文列出的 `WallCheckResult`、`WallSqlStat`、`WallTableStat` 等十个模块现已位于 `druid-rdbc/src/governance/wall`；原先“这些对象未迁移”的表述已过时。它们使用 AST/统计类型不等于迁移缺失。当前局部回归与剩余边界见 [核对报告](../current-code-audit-20261101/README.md)；原第 2 节命令仍为历史记录。
 - Filter 接口（P3.3b）因引用 `DruidPooledConnection` 仍 HOLD，需要泛型上下文设计。

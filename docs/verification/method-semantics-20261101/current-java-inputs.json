@@ -1,0 +1,110 @@
+[
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\ExceptionSorter.java",
+    "sha256": "27286fcec67731b152268567b8b60a8de8d2aa1973966b762c8500a500307e2a"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\AbstractOracleExceptionSorter.java",
+    "sha256": "a75af49bb8602d7dadc83b36b9b469170818f8c12e7b478d23fcb067602ff2e2"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\DB2ExceptionSorter.java",
+    "sha256": "3cf8df42bec0af20f0e74b77cca7efb653df07a3770983430b764fc26a467952"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\InformixExceptionSorter.java",
+    "sha256": "b1c7e8894c7c67710349cc3052319ac5e0dac30aeb1c4cddf6381eb40cc7fab4"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\MySqlExceptionSorter.java",
+    "sha256": "7485c8ccac8aa3e8d2192cfd9b0f78f17566d5dee3b0c4e3b32a810b6394fd8c"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\NullExceptionSorter.java",
+    "sha256": "50934c4a7fa6938dc926e7a9e38f6e1635294c2d5975b738f9320085df3a2b74"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\OceanBaseOracleExceptionSorter.java",
+    "sha256": "63d8dd463289e3c9cf165817f94823b651b64b84ea454353629645d68eab41d7"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\OracleExceptionSorter.java",
+    "sha256": "894376bc437d1411dcf558f53b702f8fd92a61e0eafc1f5de1cfdc63d8f90b1e"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\PGExceptionSorter.java",
+    "sha256": "be062a1e78b3795ad593ff8ef38fd2a53432f45297ad5f889aecc2b6a31f56df"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\PhoenixExceptionSorter.java",
+    "sha256": "fe1c4d2cafc6cfe406a697d234ebd62d2e39794ac3df0152f874980f6a5f99ef"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\SybaseExceptionSorter.java",
+    "sha256": "608f1480ea6494c2b3dee99e6a40a4ae221e47b6daaf5422e6f4cc813b603abd"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\MockExceptionSorter.java",
+    "sha256": "97200e5cf402305bfd741221f20dd9b9cb89bd2468d136b4fced1b0fcb9e300b"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\PoolTestCase.java",
+    "sha256": "74deb4318164fb2abfd6d1fbad85a7c052ef96ea1c1b9d1c01df7fb7cf965c62"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\InformixExceptionSorterTest.java",
+    "sha256": "487a54076d99e5fba39a167e9f5ef3e409a0fb932a3ece99fa48075a1a43da6b"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\MySqlExceptionSorterTest.java",
+    "sha256": "0f6869dca1bd5a9181bfdff7c8dc3cec4257d65a758a0bc80acc1a7a4cd252b2"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\MySqlExceptionSorterTest_1.java",
+    "sha256": "3691eb05701467d7cffbb5e86bf3525540decb7f05daba87a1a30362f14f2d77"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\MySqlExceptionSorterTest_2.java",
+    "sha256": "08e57648e62df281020b9447e962f9745a4a453e5bb365a9730ba59f854b1631"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\MySqlExceptionSorterTest_oceanbase.java",
+    "sha256": "66f023fb8d9e31a388c67c33b9ca789d0c58ece329b54a2bcc07de0081e9c55c"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\PGExceptionSorterTest.java",
+    "sha256": "669f3a69fab6cdde407adfd27c0a22bae9df06476c8654567e1b28659558ae55"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\SybaseExceptionSorterTest.java",
+    "sha256": "4b7f64e9165c00505b880f0b34016e8c350e845e5a1300e7e76e8035e96ab19c"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\ExceptionSorterTest.java",
+    "sha256": "4153545ed46fc0fe6e6f2dfc6f7e002c06fa669903545f72dd98230554b06dbe"
+  },
+  {
+    "path": "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid-bench\\tests\\fixtures\\MockSorterCaseOracle.java",
+    "sha256": "8a32f75f6aa270fe49a74e0f471faf4872bb2463eecd316bfe0c984fa5174c42"
+  },
+  {
+    "path": "D:\\codex-build\\druid-sorter-methods-20261101\\SourceSorterTests.java",
+    "sha256": "ffc35fcc96af6599f0d250d115b24be9b53ebd0fe917fbe91a49ea08027db811"
+  },
+  {
+    "path": "C:\\Users\\hnxyh\\.m2\\repository\\com\\alibaba\\druid\\1.2.28\\druid-1.2.28.jar",
+    "sha256": "c4cec3792390a2bbe6020d59be52160fd38d15de0f00dc52702eb91128c695a5"
+  },
+  {
+    "path": "C:\\Users\\hnxyh\\.m2\\repository\\org\\junit\\platform\\junit-platform-console-standalone\\1.11.4\\junit-platform-console-standalone-1.11.4.jar",
+    "sha256": "b016ef6b1c3454d6d7c2c88ce081dabf289699686af6622d6e4e2e1b54b4a2fc"
+  },
+  {
+    "path": "C:\\Users\\hnxyh\\.m2\\repository\\org\\postgresql\\postgresql\\42.7.8\\postgresql-42.7.8.jar",
+    "sha256": "2a32a9dcbc42d67a50ad3a0de5efd102c8d2be46720045f2cbd6689f160ab7c7"
+  },
+  {
+    "path": "C:\\Users\\hnxyh\\.m2\\repository\\mysql\\mysql-connector-java\\8.0.28\\mysql-connector-java-8.0.28.jar",
+    "sha256": "a00ccdf537ff50e50067b989108c2235197ffb65e197149bbb669db843cd1c3e"
+  }
+]

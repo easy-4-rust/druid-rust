@@ -171,7 +171,11 @@ async fn connection_info_identity_json_reports_the_capability_the_backend_lacks(
 async fn active_connection_stack_trace_identity_json_reports_the_capability_the_backend_lacks() {
     let (addr, _handle) = start_admin_with_repository(MetricsRepository::new()).await;
 
-    let (status, body) = get_json(addr, "/druid/activeConnectionStackTrace-1.json").await;
+    let (status, body) = get_json(
+        addr,
+        "/druid/activeConnectionStackTrace-1.json?serviceId=orders",
+    )
+    .await;
 
     assert_eq!(status, 200);
     assert_eq!(

@@ -1,0 +1,597 @@
+info: cargo-llvm-cov currently setting cfg(coverage); you can opt-out it by passing --no-cfg-coverage
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling cfg-if v1.0.4
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling pin-project-lite v0.2.17
+   Compiling version_check v0.9.5
+   Compiling windows-link v0.2.1
+   Compiling autocfg v1.5.1
+   Compiling scopeguard v1.2.0
+   Compiling once_cell v1.21.4
+   Compiling futures-core v0.3.33
+   Compiling allocator-api2 v0.2.21
+   Compiling parking_lot_core v0.9.12
+   Compiling crossbeam-utils v0.8.22
+   Compiling zerocopy v0.8.56
+   Compiling libm v0.2.16
+   Compiling memchr v2.8.3
+   Compiling equivalent v1.0.2
+   Compiling stable_deref_trait v1.2.1
+   Compiling bytes v1.12.1
+   Compiling foldhash v0.2.0
+   Compiling const-oid v0.9.6
+   Compiling futures-io v0.3.33
+   Compiling typenum v1.20.1
+   Compiling itoa v1.0.18
+   Compiling windows-sys v0.61.2
+   Compiling lock_api v0.4.14
+   Compiling writeable v0.6.3
+   Compiling parking v2.2.1
+   Compiling litemap v0.8.2
+   Compiling tracing-core v0.1.36
+   Compiling generic-array v0.14.7
+   Compiling rand_core v0.10.1
+   Compiling icu_normalizer_data v2.2.0
+   Compiling num-traits v0.2.19
+   Compiling hashbrown v0.17.1
+   Compiling zmij v1.0.23
+   Compiling utf8_iter v1.0.4
+   Compiling getrandom v0.4.3
+   Compiling icu_properties_data v2.2.0
+   Compiling cpufeatures v0.3.0
+   Compiling slab v0.4.12
+   Compiling log v0.4.33
+   Compiling futures-sink v0.3.33
+   Compiling serde_json v1.0.151
+   Compiling subtle v2.6.1
+   Compiling event-listener v5.4.2
+   Compiling bigdecimal v0.4.10
+   Compiling getrandom v0.2.17
+   Compiling windows_x86_64_msvc v0.52.6
+   Compiling futures-task v0.3.33
+   Compiling indexmap v2.14.0
+   Compiling percent-encoding v2.3.2
+   Compiling chacha20 v0.10.2
+   Compiling ahash v0.8.12
+   Compiling futures-channel v0.3.33
+   Compiling windows_x86_64_msvc v0.48.5
+   Compiling regex-syntax v0.8.11
+   Compiling zeroize v1.9.0
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.2
+   Compiling base64ct v1.8.3
+   Compiling rand_core v0.6.4
+   Compiling spin v0.9.9
+   Compiling form_urlencoded v1.2.2
+   Compiling flagset v0.4.7
+   Compiling rustversion v1.0.23
+   Compiling linkme-impl v0.3.37
+   Compiling shlex v2.0.1
+   Compiling syn v1.0.109
+   Compiling crossbeam-epoch v0.9.20
+   Compiling block-buffer v0.10.4
+   Compiling syn v2.0.119
+   Compiling syn v3.0.3
+   Compiling crypto-common v0.1.7
+   Compiling rand v0.10.2
+   Compiling bitflags v2.13.1
+   Compiling pem-rfc7468 v0.7.0
+   Compiling jiff-tzdb v0.1.8
+   Compiling linkme v0.3.37
+   Compiling find-msvc-tools v0.1.9
+   Compiling concurrent-queue v2.5.0
+   Compiling event-listener-strategy v0.5.4
+   Compiling vcpkg v0.2.15
+   Compiling fastrand v2.5.0
+   Compiling jiff-core v0.1.0
+   Compiling digest v0.10.7
+   Compiling windows-targets v0.52.6
+   Compiling pkg-config v0.3.33
+   Compiling jiff-tzdb-platform v0.1.3
+   Compiling windows-targets v0.48.5
+   Compiling lazy_static v1.5.0
+   Compiling thiserror v2.0.19
+   Compiling toml_datetime v0.6.11
+   Compiling base64 v0.22.1
+   Compiling num-bigint-dig v0.8.6
+   Compiling bit-vec v0.10.1
+   Compiling cc v1.4.0
+   Compiling num-integer v0.1.46
+   Compiling uuid v1.24.0
+   Compiling ryu v1.0.23
+   Compiling windows-sys v0.52.0
+   Compiling winnow v0.5.40
+   Compiling windows-sys v0.48.0
+   Compiling jiff v0.2.35
+   Compiling rustix v1.1.4
+   Compiling foldhash v0.1.5
+   Compiling cpufeatures v0.2.17
+   Compiling futures-lite v2.6.1
+   Compiling aho-corasick v1.1.5
+   Compiling async-io v2.6.0
+   Compiling bit-set v0.11.1
+   Compiling ahash v0.7.8
+   Compiling heck v0.5.0
+   Compiling crc-catalog v2.5.0
+   Compiling num-bigint v0.4.8
+   Compiling hashbrown v0.15.5
+   Compiling num-iter v0.1.46
+   Compiling tinyvec_macros v0.1.1
+   Compiling atomic-waker v1.1.2
+   Compiling unicode-segmentation v1.13.3
+   Compiling crc v3.4.0
+   Compiling sha2 v0.10.9
+   Compiling tinyvec v1.12.0
+   Compiling piper v0.2.5
+   Compiling signature v2.2.0
+   Compiling polling v3.11.0
+   Compiling async-channel v2.5.0
+   Compiling errno v0.3.14
+   Compiling heck v0.3.3
+   Compiling crossbeam-queue v0.3.13
+   Compiling unicode-xid v0.2.6
+   Compiling regex-automata v0.4.18
+   Compiling hashlink v0.10.0
+   Compiling konst_macro_rules v0.2.19
+   Compiling portable-atomic v1.14.0
+   Compiling async-task v4.7.1
+   Compiling thiserror v1.0.69
+   Compiling unicode-normalization v0.1.25
+   Compiling const_format_proc_macros v0.2.34
+   Compiling castaway v0.2.4
+   Compiling hmac v0.12.1
+   Compiling atoi v2.0.0
+   Compiling tokio v1.54.1
+   Compiling libsqlite3-sys v0.30.1
+   Compiling konst v0.2.20
+   Compiling blocking v1.6.2
+   Compiling unicode-bidi v0.3.18
+   Compiling unicode-properties v0.1.4
+   Compiling asyncs-sync v0.4.0
+   Compiling toml_edit v0.19.15
+   Compiling compact_str v0.4.1
+   Compiling hkdf v0.12.4
+   Compiling hashbrown v0.12.3
+   Compiling md-5 v0.10.6
+   Compiling async-lock v3.4.2
+   Compiling synstructure v0.13.2
+   Compiling stringprep v0.1.5
+   Compiling crossbeam-channel v0.5.16
+   Compiling home v0.5.12
+   Compiling encoding_rs v0.8.35
+   Compiling static_assertions v1.1.0
+   Compiling fallible-iterator v0.3.0
+   Compiling tagptr v0.2.0
+   Compiling const_format v0.2.36
+   Compiling async-net v2.0.0
+   Compiling tokio-stream v0.1.19
+   Compiling whoami v1.6.1
+   Compiling byteorder v1.5.0
+   Compiling toasty-macros v0.9.0
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling xxhash-rust v0.8.18
+   Compiling dotenvy v0.15.7
+   Compiling inventory v0.3.24
+   Compiling hex v0.4.3
+   Compiling strum_macros v0.23.1
+   Compiling ignore-result v0.2.0
+   Compiling etcetera v0.8.0
+   Compiling arc-swap v1.9.2
+   Compiling sha1 v0.10.7
+   Compiling flume v0.11.1
+   Compiling num_cpus v1.17.0
+   Compiling toasty v0.9.0
+   Compiling by_address v1.2.1
+   Compiling index_vec v0.1.4
+   Compiling crossbeam-deque v0.8.7
+   Compiling proc-macro-crate v1.3.1
+   Compiling rayon-core v1.13.0
+   Compiling winapi-util v0.1.11
+   Compiling plotters-backend v0.3.7
+   Compiling clap_lex v1.1.0
+   Compiling ciborium-io v0.2.2
+   Compiling anstyle v1.0.14
+   Compiling regex v1.13.1
+   Compiling cast v0.3.0
+   Compiling is-terminal v0.4.17
+   Compiling oorandom v11.1.5
+   Compiling anes v0.1.6
+   Compiling same-file v1.0.6
+   Compiling plotters-svg v0.3.7
+   Compiling clap_builder v4.6.6
+   Compiling java-properties v2.0.0
+   Compiling serde_derive v1.0.229
+   Compiling tokio-macros v2.7.2
+   Compiling displaydoc v0.2.7
+   Compiling async-trait v0.1.91
+   Compiling thiserror-impl v2.0.19
+   Compiling num_enum_derive v0.5.11
+   Compiling strum v0.23.0
+   Compiling zerocopy-derive v0.8.56
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling zerovec-derive v0.11.3
+   Compiling tracing-attributes v0.1.31
+   Compiling futures-macro v0.3.33
+   Compiling der_derive v0.7.3
+   Compiling async-select-proc-macros v0.3.0
+   Compiling thiserror-impl v1.0.69
+   Compiling sqlparser_derive v0.2.2
+   Compiling derive-where v1.6.1
+   Compiling plotters v0.3.7
+   Compiling walkdir v2.5.0
+   Compiling pluralizer v0.5.0
+   Compiling sqlparser v0.52.0 (E:\workspaces\workspace-github-easy-4-rust\druid-rust\vendor\sqlparser)
+   Compiling async-select v0.3.0
+   Compiling num_enum v0.5.11
+   Compiling futures-util v0.3.33
+   Compiling der v0.7.10
+   Compiling spawns-core v1.1.2
+   Compiling tracing v0.1.44
+   Compiling zerofrom v0.1.8
+   Compiling clap v4.6.6
+   Compiling toasty-core v0.9.0
+   Compiling yoke v0.8.3
+   Compiling spki v0.7.3
+   Compiling zerovec v0.11.6
+   Compiling zerotrie v0.2.4
+   Compiling pkcs8 v0.10.2
+   Compiling x509-cert v0.2.5
+   Compiling pkcs1 v0.7.5
+   Compiling smallvec v1.15.2
+   Compiling either v1.17.0
+   Compiling chrono v0.4.45
+   Compiling quick-xml v0.41.0
+   Compiling serde_urlencoded v0.7.1
+   Compiling tinytemplate v1.2.1
+   Compiling tinystr v0.8.3
+   Compiling potential_utf v0.1.5
+   Compiling icu_collections v2.2.0
+   Compiling itertools v0.10.5
+   Compiling rayon v1.12.0
+   Compiling icu_locale_core v2.2.0
+   Compiling futures-executor v0.3.33
+   Compiling parking_lot v0.12.5
+   Compiling futures v0.3.33
+   Compiling futures-intrusive v0.5.0
+   Compiling moka v0.12.15
+   Compiling icu_provider v2.2.0
+   Compiling icu_properties v2.2.0
+   Compiling icu_normalizer v2.2.0
+   Compiling criterion-plot v0.5.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling half v2.7.1
+   Compiling hashbrown v0.14.5
+   Compiling ciborium-ll v0.2.2
+   Compiling rand_chacha v0.3.1
+   Compiling idna_adapter v1.2.2
+   Compiling ciborium v0.2.2
+   Compiling idna v1.1.0
+   Compiling rand v0.8.7
+   Compiling hashlink v0.9.1
+   Compiling hashlink v0.8.4
+   Compiling dashmap v6.2.1
+   Compiling url v2.5.8
+   Compiling criterion v0.5.1
+   Compiling rusqlite v0.32.1
+   Compiling rsa v0.9.10
+   Compiling spawns-compat v0.2.2
+   Compiling deadpool-runtime v0.3.1
+   Compiling deadpool v0.13.0
+   Compiling spawns v0.2.6
+   Compiling asyncs v0.4.0
+   Compiling sqlx-core v0.8.6
+   Compiling zookeeper-client v0.11.2
+   Compiling druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc)
+   Compiling sqlx-mysql v0.8.6
+   Compiling sqlx-postgres v0.8.6
+   Compiling sqlx-sqlite v0.8.6
+   Compiling toasty-sql v0.9.0
+   Compiling toasty-driver-sqlite v0.9.0 (E:\workspaces\workspace-github-easy-4-rust\druid-rust\vendor\toasty-driver-sqlite)
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+   Compiling sqlx v0.8.6
+   Compiling druid-wrapper v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper)
+   Compiling druid-bench v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-bench)
+    Finished `test` profile [unoptimized] target(s) in 1m 00s
+     Running tests\exception_sorter_property_contract_test.rs (D:\codex-build\druid-sorter-coverage-20261101\debug\deps\exception_sorter_property_contract_test-696e161841aaa7d4.exe)
+
+running 2 tests
+test both_oracle_classifiers_use_unicode_property_codes_without_widening_defaults ... ok
+test java_integer_boundaries_preserve_exact_sets_append_and_replace ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\exception_sorter_semantics_test.rs (D:\codex-build\druid-sorter-coverage-20261101\debug\deps\exception_sorter_semantics_test-ae8e80117c1f5a49.exe)
+
+running 12 tests
+test informix_sorter_matches_recoverable_and_all_java_error_codes ... ok
+test null_and_pg_sorters_match_java_recoverable_and_sqlstate_rules ... ok
+test abstract_oracle_sorter_matches_java_property_parsing_and_set_semantics ... ok
+test oceanbase_oracle_sorter_preserves_java_extensions_to_oracle_rules ... ok
+test oracle_sorter_matches_all_java_code_message_and_custom_code_branches ... ok
+test phoenix_and_mock_sorters_match_java_message_singleton_and_instanceof_rules ... ok
+test mysql_sorter_matches_every_java_fatal_branch_and_cause_depth_limit ... ok
+test sql_exception_preserves_nullable_rdbc_fields_and_runtime_identity ... ok
+test sybase_sorter_matches_recoverable_nullable_message_and_jz_codes ... ok
+test db2_sorter_matches_recoverable_sqlstate_and_all_java_error_codes ... ok
+test mock_physical_close_makes_prepared_close_fail_and_discards_holder ... ok
+test mock_driver_uses_mock_sorter_even_with_mysql_db_type ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\task6_owner_disposition_control_test.rs (D:\codex-build\druid-sorter-coverage-20261101\debug\deps\task6_owner_disposition_control_test-f02dc1a2c922fc37.exe)
+
+running 2 tests
+test native_pool_fatal_signal_is_synchronous_and_holder_transfer_is_one_shot ... ok
+test native_pool_shutdown_before_fatal_holder_return_closes_driver_once ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\task6_pooled_connection_exception_paths_test_parity.rs (D:\codex-build\druid-sorter-coverage-20261101\debug\deps\task6_pooled_connection_exception_paths_test_parity-1bbf51f1ab8090ef.exe)
+
+running 1 test
+test task6_pooled_connection_exception_paths_test_every_standard_connection_error_path_invokes_exception_sorter ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\java_rust_exception_sorters_differential.rs (D:\codex-build\druid-sorter-coverage-20261101\debug\deps\java_rust_exception_sorters_differential-4fd41425b0ec951f.exe)
+
+running 4 tests
+test shared_corpus_has_complete_unique_rust_results_without_panics ... ok
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+Java Druid 33824c3dec1612711f9bb4e409319bcab2e4cd0e; 118 cases; artifacts: D:\codex-build\druid-sorter-methods-20261101\oracle\exception-sorters-45776-1793536138326902700
+test pinned_java_and_rust_match_every_property_boundary_case ... ok
+Java Druid 33824c3dec1612711f9bb4e409319bcab2e4cd0e; 576 cases; artifacts: D:\codex-build\druid-sorter-methods-20261101\oracle\exception-sorters-45776-1793536138327047100
+test pinned_java_and_rust_match_every_shared_exception_case ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.03s
+
+Filename                                                            Regions    Missed Regions     Cover   Functions  Missed Functions  Executed       Lines      Missed Lines     Cover    Branches   Missed Branches     Cover
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+core\abstract_oracle_exception_sorter.rs                                 79                 1    98.73%          10                 0   100.00%          44                 0   100.00%           0                 0         -
+core\auto_load.rs                                                        47                35    25.53%           8                 7    12.50%          55                43    21.82%           0                 0         -
+core\cached_prepared_statement.rs                                        16                16     0.00%           4                 4     0.00%          12                12     0.00%           0                 0         -
+core\clob_proxy_impl.rs                                                 101               101     0.00%          30                30     0.00%         110               110     0.00%           0                 0         -
+core\config.rs                                                          150               150     0.00%          32                32     0.00%         169               169     0.00%           0                 0         -
+core\conn_state.rs                                                        3                 3     0.00%           1                 1     0.00%           9                 9     0.00%           0                 0         -
+core\connection_defaults.rs                                             225               128    43.11%          16                 8    50.00%         128                63    50.78%           0                 0         -
+core\connection_info.rs                                                  47                 0   100.00%          10                 0   100.00%          51                 0   100.00%           0                 0         -
+core\connection_recycle_disposition.rs                                   14                 3    78.57%           4                 1    75.00%          17                 5    70.59%           0                 0         -
+core\database_meta_data_proxy_impl.rs                                    43                43     0.00%          11                11     0.00%          50                50     0.00%           0                 0         -
+core\db2_exception_sorter.rs                                             13                 0   100.00%           3                 0   100.00%          10                 0   100.00%           0                 0         -
+core\druid_array.rs                                                     151               151     0.00%          26                26     0.00%         117               117     0.00%           0                 0         -
+core\druid_array_state.rs                                                49                49     0.00%          11                11     0.00%          46                46     0.00%           0                 0         -
+core\druid_blob.rs                                                      137               137     0.00%          18                18     0.00%         127               127     0.00%           0                 0         -
+core\druid_blob_state.rs                                                 46                46     0.00%          10                10     0.00%          36                36     0.00%           0                 0         -
+core\druid_clob.rs                                                      142               142     0.00%          20                20     0.00%         133               133     0.00%           0                 0         -
+core\druid_clob_state.rs                                                 46                46     0.00%          10                10     0.00%          36                36     0.00%           0                 0         -
+core\druid_connection_holder.rs                                         583               260    55.40%          84                40    52.38%         497               214    56.94%           0                 0         -
+core\druid_execution_filter_policy.rs                                   112                78    30.36%          14                 8    42.86%         103                59    42.72%           0                 0         -
+core\druid_n_clob.rs                                                     42                42     0.00%          16                16     0.00%          39                39     0.00%           0                 0         -
+core\druid_pooled_callable_statement.rs                                 512               512     0.00%          55                55     0.00%         430               430     0.00%           0                 0         -
+core\druid_pooled_callable_statement\cache_lifecycle.rs                 209               209     0.00%           2                 2     0.00%         146               146     0.00%           0                 0         -
+core\druid_pooled_callable_statement\callable_trait_impls.rs            668               668     0.00%         114               114     0.00%         523               523     0.00%           0                 0         -
+core\druid_pooled_callable_statement\identity.rs                         12                12     0.00%           1                 1     0.00%           8                 8     0.00%           0                 0         -
+core\druid_pooled_callable_statement\prepared_batch.rs                  189               189     0.00%          17                17     0.00%         159               159     0.00%           0                 0         -
+core\druid_pooled_callable_statement\shared_owner.rs                      5                 5     0.00%           1                 1     0.00%           6                 6     0.00%           0                 0         -
+core\druid_pooled_connection.rs                                          68                48    29.41%           3                 1    66.67%          60                44    26.67%           0                 0         -
+core\druid_pooled_connection\inherent_a.rs                              491               248    49.49%          52                30    42.31%         423               190    55.08%           0                 0         -
+core\druid_pooled_connection\inherent_b.rs                              690               387    43.91%          56                24    57.14%         470               246    47.66%           0                 0         -
+core\druid_pooled_connection\standard_connection.rs                     217               154    29.03%          67                40    40.30%         162               107    33.95%           0                 0         -
+core\druid_pooled_connection\standard_connection_helpers.rs             250                95    62.00%           8                 2    75.00%         153                49    67.97%           0                 0         -
+core\druid_pooled_connection_owner.rs                                   497               497     0.00%          97                97     0.00%         381               381     0.00%           0                 0         -
+core\druid_pooled_prepared_statement.rs                                 669               457    31.69%          56                43    23.21%         535               347    35.14%           0                 0         -
+core\druid_pooled_prepared_statement\identity.rs                         16                16     0.00%           1                 1     0.00%          17                17     0.00%           0                 0         -
+core\druid_pooled_prepared_statement\prepared_batch.rs                  193               193     0.00%          17                17     0.00%         160               160     0.00%           0                 0         -
+core\druid_pooled_prepared_statement\prepared_trait_impls.rs            358               343     4.19%          48                44     8.33%         266               251     5.64%           0                 0         -
+core\druid_pooled_prepared_statement\shared_owner.rs                      5                 0   100.00%           1                 0   100.00%           6                 0   100.00%           0                 0         -
+core\druid_pooled_result_set.rs                                         626               626     0.00%          63                63     0.00%         477               477     0.00%           0                 0         -
+core\druid_pooled_result_set\access.rs                                   61                61     0.00%           5                 5     0.00%          40                40     0.00%           0                 0         -
+core\druid_pooled_result_set\resource.rs                                280               280     0.00%          21                21     0.00%         189               189     0.00%           0                 0         -
+core\druid_pooled_result_set\result_set_trait.rs                        674               674     0.00%          81                81     0.00%         506               506     0.00%           0                 0         -
+core\druid_pooled_result_set\staging.rs                                 116               116     0.00%           6                 6     0.00%          94                94     0.00%           0                 0         -
+core\druid_pooled_statement.rs                                          614               468    23.78%          66                50    24.24%         520               352    32.31%           0                 0         -
+core\druid_pooled_statement\standard_statement.rs                       374               374     0.00%          58                58     0.00%         264               264     0.00%           0                 0         -
+core\druid_resource_owner.rs                                             36                36     0.00%           6                 6     0.00%          35                35     0.00%           0                 0         -
+core\druid_sql_xml.rs                                                   120               120     0.00%          17                17     0.00%         106               106     0.00%           0                 0         -
+core\druid_sql_xml_payload.rs                                            20                20     0.00%           2                 2     0.00%          20                20     0.00%           0                 0         -
+core\druid_sql_xml_state.rs                                              47                47     0.00%          10                10     0.00%          36                36     0.00%           0                 0         -
+core\error.rs                                                           344               333     3.20%          17                14    17.65%         242               232     4.13%           0                 0         -
+core\exception_sorter.rs                                                  3                 0   100.00%           1                 0   100.00%           3                 0   100.00%           0                 0         -
+core\external_connection_lease.rs                                       183               183     0.00%          66                66     0.00%         159               159     0.00%           0                 0         -
+core\filter.rs                                                          136               136     0.00%          58                58     0.00%         153               153     0.00%           0                 0         -
+core\filter\config\config_filter.rs                                     378               378     0.00%          54                54     0.00%         282               282     0.00%           0                 0         -
+core\filter\config\config_tools.rs                                      320               320     0.00%          35                35     0.00%         217               217     0.00%           0                 0         -
+core\filter\encoding\charset_convert.rs                                  87                87     0.00%          12                12     0.00%          65                65     0.00%           0                 0         -
+core\filter\encoding\charset_parameter.rs                                16                16     0.00%           4                 4     0.00%          12                12     0.00%           0                 0         -
+core\filter\encoding\encoding_convert_filter.rs                         107               107     0.00%          21                21     0.00%          76                76     0.00%           0                 0         -
+core\filter\mysql8datetime\my_sql8_date_time_sql_type_filter.rs          16                16     0.00%           6                 6     0.00%          16                16     0.00%           0                 0         -
+core\filter_adapter.rs                                                   16                16     0.00%           6                 6     0.00%          16                16     0.00%           0                 0         -
+core\filter_chain_impl.rs                                               295               289     2.03%          48                46     4.17%         312               303     2.88%           0                 0         -
+core\filter_chain_impl\chain_a.rs                                       353               340     3.68%          72                70     2.78%         393               382     2.80%           0                 0         -
+core\filter_chain_impl\chain_b.rs                                       361               361     0.00%          50                50     0.00%         385               385     0.00%           0                 0         -
+core\filter_event_adapter.rs                                             82                82     0.00%          32                32     0.00%          83                83     0.00%           0                 0         -
+core\filter_manager.rs                                                  338               177    47.63%          23                11    52.17%         224               123    45.09%           0                 0         -
+core\informix_exception_sorter.rs                                         8                 0   100.00%           2                 0   100.00%           6                 0   100.00%           0                 0         -
+core\log_filter.rs                                                      270               270     0.00%          30                30     0.00%         210               210     0.00%           0                 0         -
+core\log_filter\options.rs                                              349               349     0.00%          65                65     0.00%         229               229     0.00%           0                 0         -
+core\mock_exception_sorter.rs                                            10                 0   100.00%           3                 0   100.00%           7                 0   100.00%           0                 0         -
+core\ms_sql_valid_connection_checker.rs                                   4                 4     0.00%           2                 2     0.00%           3                 3     0.00%           0                 0         -
+core\my_sql_exception_sorter.rs                                          52                 0   100.00%           4                 0   100.00%          35                 0   100.00%           0                 0         -
+core\my_sql_valid_connection_checker.rs                                  28                23    17.86%           7                 5    28.57%          25                18    28.00%           0                 0         -
+core\mysql_metadata_compatibility.rs                                      9                 9     0.00%           2                 2     0.00%          10                10     0.00%           0                 0         -
+core\n_clob_proxy_impl.rs                                                22                22     0.00%           5                 5     0.00%          19                19     0.00%           0                 0         -
+core\null_exception_sorter.rs                                             8                 0   100.00%           3                 0   100.00%           7                 0   100.00%           0                 0         -
+core\ocean_base_oracle_exception_sorter.rs                               75                 7    90.67%           9                 0   100.00%          67                 5    92.54%           0                 0         -
+core\ocean_base_valid_connection_checker.rs                              10                10     0.00%           4                 4     0.00%           9                 9     0.00%           0                 0         -
+core\optional_statement_state_delegates.rs                              308               308     0.00%          40                40     0.00%         120               120     0.00%           0                 0         -
+core\oracle_exception_sorter.rs                                          65                 7    89.23%           7                 0   100.00%          53                 5    90.57%           0                 0         -
+core\oracle_valid_connection_checker.rs                                  28                28     0.00%           8                 8     0.00%          25                25     0.00%           0                 0         -
+core\owner_disposition_control.rs                                        23                 6    73.91%           3                 1    66.67%          26                 3    88.46%           0                 0         -
+core\pg_exception_sorter.rs                                              11                 0   100.00%           3                 0   100.00%           8                 0   100.00%           0                 0         -
+core\pg_valid_connection_checker.rs                                       4                 4     0.00%           2                 2     0.00%           3                 3     0.00%           0                 0         -
+core\phoenix_exception_sorter.rs                                          9                 0   100.00%           3                 0   100.00%           7                 0   100.00%           0                 0         -
+core\pool.rs                                                              3                 3     0.00%           2                 2     0.00%           3                 3     0.00%           0                 0         -
+core\pool_state.rs                                                       43                43     0.00%           1                 1     0.00%          27                27     0.00%           0                 0         -
+core\prepared_statement_cache_stats.rs                                  111                42    62.16%          18                 5    72.22%          80                30    62.50%           0                 0         -
+core\prepared_statement_key.rs                                          176               145    17.61%          24                23     4.17%         188               162    13.83%           0                 0         -
+core\prepared_statement_property_snapshot.rs                             82                43    47.56%           3                 0   100.00%          41                15    63.41%           0                 0         -
+core\proxy_attributes.rs                                                 63                63     0.00%          12                12     0.00%          59                59     0.00%           0                 0         -
+core\rdbc4_valid_connection_checker.rs                                    2                 2     0.00%           1                 1     0.00%           2                 2     0.00%           0                 0         -
+core\registered_lob.rs                                                   17                17     0.00%           5                 5     0.00%          17                17     0.00%           0                 0         -
+core\resource_context.rs                                                136               136     0.00%          12                12     0.00%         119               119     0.00%           0                 0         -
+core\resource_factory.rs                                                 17                17     0.00%           2                 2     0.00%          24                24     0.00%           0                 0         -
+core\resource_id.rs                                                       9                 9     0.00%           3                 3     0.00%           9                 9     0.00%           0                 0         -
+core\resource_kind.rs                                                     9                 9     0.00%           1                 1     0.00%           9                 9     0.00%           0                 0         -
+core\resource_owner.rs                                                    9                 9     0.00%           4                 4     0.00%           7                 7     0.00%           0                 0         -
+core\resource_runtime_capabilities.rs                                     8                 8     0.00%           1                 1     0.00%           8                 8     0.00%           0                 0         -
+core\resource_state.rs                                                    7                 7     0.00%           1                 1     0.00%           7                 7     0.00%           0                 0         -
+core\result_set_filter.rs                                               143               143     0.00%          32                32     0.00%         225               225     0.00%           0                 0         -
+core\result_set_filter_context.rs                                       144               144     0.00%          25                25     0.00%         113               113     0.00%           0                 0         -
+core\result_set_meta_data_proxy.rs                                      228               228     0.00%          43                43     0.00%         178               178     0.00%           0                 0         -
+core\result_set_property_value.rs                                        53                53     0.00%           9                 9     0.00%          63                63     0.00%           0                 0         -
+core\standard_callable_was_null_filter_chain.rs                          13                13     0.00%           2                 2     0.00%          16                16     0.00%           0                 0         -
+core\standard_connection_lob_filter_chain.rs                            175               175     0.00%          18                18     0.00%         130               130     0.00%           0                 0         -
+core\standard_connection_meta_data_filter_chain.rs                       20                20     0.00%           4                 4     0.00%          27                27     0.00%           0                 0         -
+core\standard_connection_warning_filter_chain.rs                         29                29     0.00%           5                 5     0.00%          27                27     0.00%           0                 0         -
+core\standard_logical_policy.rs                                         547               297    45.70%          45                19    57.78%         478               230    51.88%           0                 0         -
+core\standard_prepared_statement_cache.rs                               124                85    31.45%          11                 6    45.45%          99                62    37.37%           0                 0         -
+core\standard_resource_admission.rs                                      33                 2    93.94%           6                 0   100.00%          29                 1    96.55%           0                 0         -
+core\standard_resource_handle.rs                                         11                 1    90.91%           2                 0   100.00%           8                 0   100.00%           0                 0         -
+core\standard_resource_registration.rs                                   39                28    28.21%           8                 6    25.00%          36                20    44.44%           0                 0         -
+core\standard_resource_registry.rs                                       34                 6    82.35%           5                 0   100.00%          33                 4    87.88%           0                 0         -
+core\standard_resource_registry\registry_a.rs                           446               229    48.65%          21                13    38.10%         358               196    45.25%           0                 0         -
+core\standard_resource_registry\registry_b.rs                           338               152    55.03%          15                 7    53.33%         244               115    52.87%           0                 0         -
+core\standard_resource_registry_state.rs                                  7                 0   100.00%           2                 0   100.00%          18                 0   100.00%           0                 0         -
+core\standard_result_set_filter_chain.rs                                475               475     0.00%          38                38     0.00%         344               344     0.00%           0                 0         -
+core\standard_result_set_open_context.rs                                 33                33     0.00%           8                 8     0.00%          43                43     0.00%           0                 0         -
+core\standard_statement_clear_batch_filter_chain.rs                      15                15     0.00%           2                 2     0.00%          16                16     0.00%           0                 0         -
+core\standard_statement_mutation_filter_chain.rs                        115               115     0.00%           4                 4     0.00%         109               109     0.00%           0                 0         -
+core\standard_statement_warning_filter_chain.rs                          27                27     0.00%           3                 3     0.00%          22                22     0.00%           0                 0         -
+core\statement_state_delegates.rs                                       106               106     0.00%          21                21     0.00%          92                92     0.00%           0                 0         -
+core\sybase_exception_sorter.rs                                          18                 0   100.00%           3                 0   100.00%          11                 0   100.00%           0                 0         -
+core\transaction_info.rs                                                 49                49     0.00%           9                 9     0.00%          46                46     0.00%           0                 0         -
+core\valid_connection_checker.rs                                          7                 4    42.86%           3                 2    33.33%           6                 3    50.00%           0                 0         -
+core\valid_connection_checker_adapter.rs                                 55                27    50.91%           5                 2    60.00%          31                 9    70.97%           0                 0         -
+core\wrapper_proxy_hooks.rs                                               9                 9     0.00%           3                 3     0.00%          11                11     0.00%           0                 0         -
+core\xa.rs                                                               57                57     0.00%           6                 6     0.00%          38                38     0.00%           0                 0         -
+core\xa\state_a.rs                                                       73                73     0.00%          14                14     0.00%          57                57     0.00%           0                 0         -
+core\xa\state_b.rs                                                       74                74     0.00%           6                 6     0.00%          79                79     0.00%           0                 0         -
+dynamic\data_source_creator.rs                                          192               192     0.00%          14                14     0.00%         122               122     0.00%           0                 0         -
+dynamic\datasource_group.rs                                               6                 6     0.00%           1                 1     0.00%          13                13     0.00%           0                 0         -
+dynamic\dynamic_datasource.rs                                            41                41     0.00%           9                 9     0.00%          36                36     0.00%           0                 0         -
+dynamic\high_available_data_source.rs                                   463               463     0.00%          80                80     0.00%         363               363     0.00%           0                 0         -
+dynamic\load_balancer.rs                                                 38                38     0.00%           6                 6     0.00%          31                31     0.00%           0                 0         -
+dynamic\mod.rs                                                           11                11     0.00%           2                 2     0.00%           8                 8     0.00%           0                 0         -
+dynamic\node\file_node_listener.rs                                      145               145     0.00%          17                17     0.00%          89                89     0.00%           0                 0         -
+dynamic\node\node_event.rs                                              113               113     0.00%          12                12     0.00%          85                85     0.00%           0                 0         -
+dynamic\node\node_listener.rs                                            50                50     0.00%          11                11     0.00%          41                41     0.00%           0                 0         -
+dynamic\node\pool_updater.rs                                            262               262     0.00%          20                20     0.00%         163               163     0.00%           0                 0         -
+dynamic\node\zookeeper_node_info.rs                                      58                58     0.00%          14                14     0.00%          44                44     0.00%           0                 0         -
+dynamic\node\zookeeper_node_listener.rs                                 390               390     0.00%          34                34     0.00%         252               252     0.00%           0                 0         -
+dynamic\node\zookeeper_node_register.rs                                 193               193     0.00%          22                22     0.00%         129               129     0.00%           0                 0         -
+dynamic\properties_utils.rs                                              69                69     0.00%          10                10     0.00%          46                46     0.00%           0                 0         -
+dynamic\selector\data_source_selector_enum.rs                            14                14     0.00%           3                 3     0.00%          12                12     0.00%           0                 0         -
+dynamic\selector\data_source_selector_factory.rs                         11                11     0.00%           1                 1     0.00%           9                 9     0.00%           0                 0         -
+dynamic\selector\named_data_source_selector.rs                           84                84     0.00%          12                12     0.00%          59                59     0.00%           0                 0         -
+dynamic\selector\random_data_source_recover_task.rs                      63                63     0.00%           4                 4     0.00%          45                45     0.00%           0                 0         -
+dynamic\selector\random_data_source_selector.rs                         251               251     0.00%          39                39     0.00%         184               184     0.00%           0                 0         -
+dynamic\selector\random_data_source_validate_filter.rs                   10                10     0.00%           4                 4     0.00%          10                10     0.00%           0                 0         -
+dynamic\selector\random_data_source_validate_task.rs                    274               274     0.00%          28                28     0.00%         165               165     0.00%           0                 0         -
+dynamic\selector\sticky_data_source_holder.rs                            28                28     0.00%           8                 8     0.00%          30                30     0.00%           0                 0         -
+dynamic\selector\sticky_random_data_source_selector.rs                   94                94     0.00%          11                11     0.00%          62                62     0.00%           0                 0         -
+pool\active_connection_lease.rs                                           8                 8     0.00%           1                 1     0.00%          11                11     0.00%           0                 0         -
+pool\config.rs                                                           98                60    38.78%          15                12    20.00%         113                88    22.12%           0                 0         -
+pool\config\builder.rs                                                  298               187    37.25%          47                40    14.89%         296               173    41.55%           0                 0         -
+pool\config\builder_advanced.rs                                         296               184    37.84%          37                32    13.51%         292               190    34.93%           0                 0         -
+pool\connection_close_worker.rs                                          35                 7    80.00%           3                 0   100.00%          34                 5    85.29%           0                 0         -
+pool\connection_create_worker.rs                                         78                49    37.18%           3                 0   100.00%          49                31    36.73%           0                 0         -
+pool\druid_data_source.rs                                               507               507     0.00%         107               107     0.00%         433               433     0.00%           0                 0         -
+pool\druid_data_source_factory.rs                                       842               842     0.00%          49                49     0.00%         471               471     0.00%           0                 0         -
+pool\druid_pool.rs                                                      250               142    43.20%          27                20    25.93%         213               105    50.70%           0                 0         -
+pool\druid_pool\acquire.rs                                              510               256    49.80%          27                 5    81.48%         335               162    51.64%           0                 0         -
+pool\druid_pool\construct.rs                                            239                70    70.71%          18                 5    72.22%         209                78    62.68%           0                 0         -
+pool\druid_pool\state.rs                                                731               368    49.66%          87                67    22.99%         560               286    48.93%           0                 0         -
+pool\pool_inner.rs                                                      105                27    74.29%          16                 3    81.25%          89                17    80.90%           0                 0         -
+pool\pool_inner\create.rs                                               517               324    37.33%          30                15    50.00%         364               210    42.31%           0                 0         -
+pool\pool_inner\recycle.rs                                              655               346    47.18%          35                12    65.71%         393               198    49.62%           0                 0         -
+pool\pool_inner\state.rs                                                658               294    55.32%          56                23    58.93%         453               192    57.62%           0                 0         -
+pool\tracing_data_source_stat_sink.rs                                    21                18    14.29%           3                 2    33.33%          12                 9    25.00%           0                 0         -
+sql\char_types.rs                                                       101               101     0.00%           8                 8     0.00%          68                68     0.00%           0                 0         -
+sql\clickhouse\ck_wall_provider.rs                                       22                22     0.00%           5                 5     0.00%          17                17     0.00%           0                 0         -
+sql\clickhouse\clickhouse_wall_visitor.rs                                49                49     0.00%          12                12     0.00%          38                38     0.00%           0                 0         -
+sql\data_source.rs                                                       43                43     0.00%           9                 9     0.00%          42                42     0.00%           0                 0         -
+sql\db2\db2_wall_provider.rs                                             22                22     0.00%           5                 5     0.00%          17                17     0.00%           0                 0         -
+sql\db2\db2_wall_visitor.rs                                              52                52     0.00%          12                12     0.00%          39                39     0.00%           0                 0         -
+sql\db_type.rs                                                          354               331     6.50%          10                 9    10.00%         260               243     6.54%           0                 0         -
+sql\dialect_feature.rs                                                  121               121     0.00%          19                19     0.00%         109               109     0.00%           0                 0         -
+sql\eof_parser_exception.rs                                              18                18     0.00%           5                 5     0.00%          17                17     0.00%           0                 0         -
+sql\keywords.rs                                                         640               640     0.00%          15                15     0.00%         175               175     0.00%           0                 0         -
+sql\lexer.rs                                                             64                64     0.00%           8                 8     0.00%          41                41     0.00%           0                 0         -
+sql\lexer\scan_a.rs                                                     386               386     0.00%          39                39     0.00%         317               317     0.00%           0                 0         -
+sql\lexer\scan_b.rs                                                     527               527     0.00%          19                19     0.00%         344               344     0.00%           0                 0         -
+sql\mysql\my_sql_wall_provider.rs                                        22                 6    72.73%           5                 2    60.00%          17                 6    64.71%           0                 0         -
+sql\mysql\my_sql_wall_visitor.rs                                         74                74     0.00%          16                16     0.00%          56                56     0.00%           0                 0         -
+sql\not_allow_comment_exception.rs                                       25                25     0.00%           7                 7     0.00%          28                28     0.00%           0                 0         -
+sql\oracle\oracle_wall_provider.rs                                       22                22     0.00%           5                 5     0.00%          17                17     0.00%           0                 0         -
+sql\oracle\oracle_wall_visitor.rs                                        55                55     0.00%          12                12     0.00%          40                40     0.00%           0                 0         -
+sql\parameter_meta_data.rs                                              142               142     0.00%          27                27     0.00%         102               102     0.00%           0                 0         -
+sql\parser_exception.rs                                                  62                62     0.00%          13                13     0.00%          73                73     0.00%           0                 0         -
+sql\postgresql\pg_wall_provider.rs                                       22                22     0.00%           5                 5     0.00%          17                17     0.00%           0                 0         -
+sql\postgresql\pg_wall_visitor.rs                                        52                52     0.00%          12                12     0.00%          39                39     0.00%           0                 0         -
+sql\rdbc_url.rs                                                          62                62     0.00%          13                13     0.00%          47                47     0.00%           0                 0         -
+sql\rdbc_utils.rs                                                       163               160     1.84%          18                17     5.56%         132               129     2.27%           0                 0         -
+sql\sql_input.rs                                                        192               192     0.00%          26                26     0.00%         118               118     0.00%           0                 0         -
+sql\sql_output.rs                                                       109               109     0.00%          20                20     0.00%          58                58     0.00%           0                 0         -
+sql\sql_parse_exception.rs                                                3                 3     0.00%           1                 1     0.00%           3                 3     0.00%           0                 0         -
+sql\sql_parser_feature.rs                                                68                68     0.00%          10                10     0.00%          62                62     0.00%           0                 0         -
+sql\sql_permission.rs                                                    11                11     0.00%           3                 3     0.00%          12                12     0.00%           0                 0         -
+sql\sql_type.rs                                                          11                11     0.00%           3                 3     0.00%          11                11     0.00%           0                 0         -
+sql\sql_utils.rs                                                         81                81     0.00%          18                18     0.00%          77                77     0.00%           0                 0         -
+sql\sqlite\sqlite_wall_provider.rs                                       22                22     0.00%           5                 5     0.00%          17                17     0.00%           0                 0         -
+sql\sqlite\sqlite_wall_visitor.rs                                        49                49     0.00%          12                12     0.00%          38                38     0.00%           0                 0         -
+sql\sqlserver\sql_server_wall_provider.rs                                22                22     0.00%           5                 5     0.00%          17                17     0.00%           0                 0         -
+sql\sqlserver\sql_server_wall_visitor.rs                                 52                52     0.00%          12                12     0.00%          39                39     0.00%           0                 0         -
+sql\struct_value.rs                                                      10                10     0.00%           3                 3     0.00%          12                12     0.00%           0                 0         -
+sql\symbol_table.rs                                                     145               145     0.00%          11                11     0.00%          91                91     0.00%           0                 0         -
+sql\token.rs                                                             16                16     0.00%           5                 5     0.00%          16                16     0.00%           0                 0         -
+sql\wall.rs                                                             802               794     1.00%          38                36     5.26%         560               551     1.61%           0                 0         -
+sql\wall\rules.rs                                                       318               318     0.00%          29                29     0.00%         208               208     0.00%           0                 0         -
+sql\wall_config.rs                                                      399               271    32.08%          56                50    10.71%         416               251    39.66%           0                 0         -
+sql\wall_context.rs                                                     181               181     0.00%          33                33     0.00%         146               146     0.00%           0                 0         -
+sql\wall_filter.rs                                                      475               461     2.95%          59                57     3.39%         344               330     4.07%           0                 0         -
+sql\wall_function_stat.rs                                                22                22     0.00%           3                 3     0.00%          13                13     0.00%           0                 0         -
+sql\wall_function_stat_value.rs                                          10                10     0.00%           1                 1     0.00%           6                 6     0.00%           0                 0         -
+sql\wall_provider.rs                                                    818               788     3.67%          81                77     4.94%         552               525     4.89%           0                 0         -
+sql\wall_provider_creator.rs                                             27                27     0.00%           5                 5     0.00%          19                19     0.00%           0                 0         -
+sql\wall_provider_stat_value.rs                                         105               105     0.00%           5                 5     0.00%          61                61     0.00%           0                 0         -
+sql\wall_utils.rs                                                        40                40     0.00%          10                10     0.00%          42                42     0.00%           0                 0         -
+sql\wall_visitor.rs                                                       3                 3     0.00%           1                 1     0.00%           3                 3     0.00%           0                 0         -
+sql\wall_visitor_base.rs                                                195               195     0.00%          28                28     0.00%         153               153     0.00%           0                 0         -
+sql\wall_visitor_utils.rs                                               315               315     0.00%          26                26     0.00%         194               194     0.00%           0                 0         -
+stats\data_source_monitorable.rs                                         23                23     0.00%           8                 8     0.00%          22                22     0.00%           0                 0         -
+stats\druid_data_source_stat_manager.rs                                  68                68     0.00%          11                11     0.00%          47                47     0.00%           0                 0         -
+stats\druid_data_source_stat_value.rs                                     3                 3     0.00%           1                 1     0.00%           3                 3     0.00%           0                 0         -
+stats\druid_stat_manager_facade.rs                                      418               418     0.00%          48                48     0.00%         253               253     0.00%           0                 0         -
+stats\druid_stat_service.rs                                             438               438     0.00%          26                26     0.00%         198               198     0.00%           0                 0         -
+stats\merge.rs                                                          425               398     6.35%          32                28    12.50%         285               266     6.67%           0                 0         -
+stats\merge_stat_filter.rs                                               38                38     0.00%          12                12     0.00%          32                32     0.00%           0                 0         -
+stats\rdbc_connection_stat.rs                                           477               444     6.92%          57                54     5.26%         284               254    10.56%           0                 0         -
+stats\rdbc_data_source_stat.rs                                          304               223    26.64%          38                29    23.68%         219               163    25.57%           0                 0         -
+stats\rdbc_result_set_stat.rs                                           217               203     6.45%          25                24     4.00%         144               128    11.11%           0                 0         -
+stats\rdbc_sql_stat.rs                                                  626               626     0.00%          57                57     0.00%         378               378     0.00%           0                 0         -
+stats\rdbc_stat_context.rs                                               41                41     0.00%          11                11     0.00%          33                33     0.00%           0                 0         -
+stats\rdbc_stat_manager.rs                                               78                78     0.00%          13                13     0.00%          61                61     0.00%           0                 0         -
+stats\rdbc_statement_stat.rs                                            247               153    38.06%          33                23    30.30%         149                89    40.27%           0                 0         -
+stats\rdbc_trace_manager.rs                                               4                 4     0.00%           1                 1     0.00%           3                 3     0.00%           0                 0         -
+stats\snapshot_unavailable.rs                                             7                 7     0.00%           1                 1     0.00%           5                 5     0.00%           0                 0         -
+stats\stat_filter.rs                                                    477               477     0.00%          66                66     0.00%         300               300     0.00%           0                 0         -
+stats\stat_filter_context.rs                                            160               160     0.00%          37                37     0.00%         121               121     0.00%           0                 0         -
+stats\stat_filter_context_listener.rs                                     6                 6     0.00%           2                 2     0.00%           6                 6     0.00%           0                 0         -
+stats\stat_filter_context_listener_adapter.rs                            45                45     0.00%          15                15     0.00%          50                50     0.00%           0                 0         -
+stats\table_stat.rs                                                     392               392     0.00%          68                68     0.00%         310               310     0.00%           0                 0         -
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+TOTAL                                                                 39383             33569    14.76%        4737              4169    11.99%       29643             24861    16.13%           0                 0         -

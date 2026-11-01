@@ -9,7 +9,8 @@ use serde_json::{json, Map, Value};
 
 use crate::config::MonitorProperties;
 use crate::model::dto::{
-    ConnectionResult, DataSourceResult, SqlDetailResult, SqlListResult, WallResult, WebResult,
+    ConnectionResult, DataSourceResult, SqlDetailResult, SqlListResult, StackTraceResult,
+    WallResult, WebResult,
 };
 use crate::model::ServiceNode;
 use crate::util::{HttpClient, HttpUtil};
@@ -471,6 +472,27 @@ impl MonitorStatService {
         let _ = self.get_all_service_node_map().await?;
         let node = self.node(service_id).await?;
         let url = node_url(&node, &format!("/druid/connectionInfo-{id}.json"));
+        HttpUtil::get(self.http_client.as_ref(), &url)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// 查询指定服务节点的数据源活跃连接堆栈。
+    ///
+    /// 对应 Java: `MonitorStatService#getActiveConnectionStackTrace`。
+    /// 节点只有在 `removeAbandoned=true` 时才捕获借出堆栈，否则返回
+    /// `ResultCode=-1`、`Content` 为原因字符串的信封。
+    pub async fn get_active_connection_stack_trace(
+        &self,
+        id: i64,
+        service_id: &str,
+    ) -> Result<StackTraceResult, MonitorStatServiceError> {
+        let _ = self.get_all_service_node_map().await?;
+        let node = self.node(service_id).await?;
+        let url = node_url(
+            &node,
+            &format!("/druid/activeConnectionStackTrace-{id}.json"),
+        );
         HttpUtil::get(self.http_client.as_ref(), &url)
             .await
             .map_err(Into::into)

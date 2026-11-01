@@ -1,0 +1,69 @@
+[
+  {
+    "name": "current-source-javac",
+    "argv": [
+      "D:\\Java\\jdk-17.0.12\\bin\\javac.exe",
+      "-J-Dfile.encoding=UTF-8",
+      "-encoding",
+      "UTF-8",
+      "-cp",
+      "C:\\Users\\hnxyh\\.m2\\repository\\com\\alibaba\\druid\\1.2.28\\druid-1.2.28.jar;C:\\Users\\hnxyh\\.m2\\repository\\org\\junit\\platform\\junit-platform-console-standalone\\1.11.4\\junit-platform-console-standalone-1.11.4.jar;C:\\Users\\hnxyh\\.m2\\repository\\org\\postgresql\\postgresql\\42.7.8\\postgresql-42.7.8.jar;C:\\Users\\hnxyh\\.m2\\repository\\mysql\\mysql-connector-java\\8.0.28\\mysql-connector-java-8.0.28.jar",
+      "-d",
+      "D:\\codex-build\\druid-sorter-methods-20261101\\current-source-classes",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\ExceptionSorter.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\AbstractOracleExceptionSorter.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\DB2ExceptionSorter.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\InformixExceptionSorter.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\MySqlExceptionSorter.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\NullExceptionSorter.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\OceanBaseOracleExceptionSorter.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\OracleExceptionSorter.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\PGExceptionSorter.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\PhoenixExceptionSorter.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\SybaseExceptionSorter.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\java\\com\\alibaba\\druid\\pool\\vendor\\MockExceptionSorter.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\PoolTestCase.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\InformixExceptionSorterTest.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\MySqlExceptionSorterTest.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\MySqlExceptionSorterTest_1.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\MySqlExceptionSorterTest_2.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\MySqlExceptionSorterTest_oceanbase.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\PGExceptionSorterTest.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\vendor\\SybaseExceptionSorterTest.java",
+      "E:\\workspaces\\workspace-github\\druid\\core\\src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\ExceptionSorterTest.java",
+      "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid-bench\\tests\\fixtures\\MockSorterCaseOracle.java",
+      "D:\\codex-build\\druid-sorter-methods-20261101\\SourceSorterTests.java"
+    ]
+  },
+  {
+    "name": "current-source-tests",
+    "argv": [
+      "D:\\Java\\jdk-17.0.12\\bin\\java.exe",
+      "-Dfile.encoding=UTF-8",
+      "-Djava.io.tmpdir=D:\\codex-build\\druid-sorter-methods-20261101\\tmp",
+      "-cp",
+      "D:\\codex-build\\druid-sorter-methods-20261101\\current-source-classes;C:\\Users\\hnxyh\\.m2\\repository\\com\\alibaba\\druid\\1.2.28\\druid-1.2.28.jar;C:\\Users\\hnxyh\\.m2\\repository\\org\\junit\\platform\\junit-platform-console-standalone\\1.11.4\\junit-platform-console-standalone-1.11.4.jar;C:\\Users\\hnxyh\\.m2\\repository\\org\\postgresql\\postgresql\\42.7.8\\postgresql-42.7.8.jar;C:\\Users\\hnxyh\\.m2\\repository\\mysql\\mysql-connector-java\\8.0.28\\mysql-connector-java-8.0.28.jar",
+      "SourceSorterTests",
+      "InformixExceptionSorterTest",
+      "MySqlExceptionSorterTest",
+      "MySqlExceptionSorterTest_1",
+      "MySqlExceptionSorterTest_2",
+      "MySqlExceptionSorterTest_oceanbase",
+      "PGExceptionSorterTest",
+      "SybaseExceptionSorterTest"
+    ]
+  },
+  {
+    "name": "current-mock-java",
+    "argv": [
+      "D:\\Java\\jdk-17.0.12\\bin\\java.exe",
+      "-Dfile.encoding=UTF-8",
+      "-Djava.io.tmpdir=D:\\codex-build\\druid-sorter-methods-20261101\\tmp",
+      "-cp",
+      "D:\\codex-build\\druid-sorter-methods-20261101\\current-source-classes;C:\\Users\\hnxyh\\.m2\\repository\\com\\alibaba\\druid\\1.2.28\\druid-1.2.28.jar;C:\\Users\\hnxyh\\.m2\\repository\\org\\junit\\platform\\junit-platform-console-standalone\\1.11.4\\junit-platform-console-standalone-1.11.4.jar;C:\\Users\\hnxyh\\.m2\\repository\\org\\postgresql\\postgresql\\42.7.8\\postgresql-42.7.8.jar;C:\\Users\\hnxyh\\.m2\\repository\\mysql\\mysql-connector-java\\8.0.28\\mysql-connector-java-8.0.28.jar",
+      "MockSorterCaseOracle",
+      "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust\\crates\\druid-bench\\tests\\fixtures\\mock_sorter_cases.tsv",
+      "D:\\codex-build\\druid-sorter-methods-20261101\\current-mock-results.tsv"
+    ]
+  }
+]

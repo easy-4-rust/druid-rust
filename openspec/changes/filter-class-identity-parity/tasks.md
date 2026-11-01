@@ -1,0 +1,5 @@
+- [x] 冻结 Java/Rust 基线、调用链和本批次边界。
+- [x] 完成大小写敏感身份与回归矩阵。
+- [x] 运行统一批次测试、覆盖率与格式检查，记录实际结果（10 passed；FilterManager 行覆盖率 98.21%）。
+- [ ] 严格 Clippy：被既存 druid-rdbc/shared_row_set/trait_impls.rs 通配导入阻断，exit 101。
+- [ ] 验证后同步规格；未通过不得归档或宣称完整迁移。

@@ -46,6 +46,16 @@ def table(header, rows, align_right=()):
 
 
 def main():
+    # 旧台账只有名称候选，不得覆盖已经人工核对的语义证据；先检查全部输出。
+    protected = [
+        path.name for path in (DOCS / tpl.name for tpl in TPL.glob("*.md"))
+        if path.exists() and "<!-- current-code-audit-start -->" in path.read_text(encoding="utf-8")
+    ]
+    if protected:
+        raise SystemExit(
+            "refusing to overwrite reviewed migration documents: " + ", ".join(sorted(protected))
+            + "; use scripts/reconcile_migration_evidence.py for candidate inventory"
+        )
     summary = json.loads((INV / "summary.json").read_text(encoding="utf-8"))
     objects = tsv("objects.tsv")
     methods = tsv("methods.tsv")

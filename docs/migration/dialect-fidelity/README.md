@@ -1,5 +1,7 @@
 # P2 方言保真矩阵（Oracle / ODPS / Hive / Doris）
 
+> **2026-11-01 时效说明**：下方表格保留原始观测，不是当前代码结果。原有观测器重跑的 32 例已有 **31 例 parse/reparse 成功**；RETURNING INTO、TABLESAMPLE、CREATE UNIQUE KEY 三例由失败转成功。唯一仍被拒绝的 SELECT ... BUCKETS 在旧 Java golden 中也被拒绝；不能据此重复补语法。见 [新观测与证据限制](../../verification/current-code-audit-20261101/README.md) 及 [原始 TSV](../../verification/current-code-audit-20261101/dialect-current.tsv)。本轮没有重跑 Java，因此不手改下方历史匹配统计。
+
 > 状态：**GOLDEN_DIFFED**。Rust 观测 + Java Druid 1.2.28 jar golden 已生成；parse 匹配 30/32，parameterized 匹配 24/32（空白与大小写不计差异）。
 > 本文件由 scripts/dialect_fidelity_report.py 从 rust-observations.tsv 生成，禁止手改统计。
 

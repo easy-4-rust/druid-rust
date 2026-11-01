@@ -1,0 +1,173 @@
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.74s
+     Running tests\dialect_wall_matrix_test.rs (target\debug\deps\dialect_wall_matrix_test-e94a2e408e9b3b91.exe)
+
+running 21 tests
+test matrix_read_only_table_insert_all_dialects ... ok
+test matrix_ddl_truncate_strict_deny_all_dialects ... ok
+test matrix_cross_dialect_consistency_drop_strict ... ok
+test matrix_ddl_alter_strict_deny_all_dialects ... ok
+test matrix_ddl_drop_strict_deny_all_dialects ... ok
+test matrix_deny_table_select_all_dialects ... ok
+test matrix_cross_dialect_consistency_deny_table ... ok
+test matrix_cross_dialect_consistency_read_only ... ok
+test matrix_syntax_error_all_dialects ... ok
+test matrix_grant_deny_all_dialects ... ok
+test matrix_crud_insert_allowed_all_dialects ... ok
+test matrix_ddl_truncate_default_allow_all_dialects ... ok
+test matrix_ddl_alter_default_allow_all_dialects ... ok
+test matrix_revoke_deny_all_dialects ... ok
+test matrix_ddl_drop_default_allow_all_dialects ... ok
+test matrix_crud_update_allowed_all_dialects ... ok
+test matrix_crud_delete_allowed_all_dialects ... ok
+test matrix_crud_select_allowed_all_dialects ... ok
+test matrix_strict_ddl_3x7 ... ok
+test matrix_cross_dialect_consistency_crud ... ok
+test matrix_full_9x7_default_config ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests\dynamic_batch2_ha_pool_test.rs (target\debug\deps\dynamic_batch2_ha_pool_test-a9067c1de0a2ae06.exe)
+
+running 43 tests
+test ha_set_connect_properties_none ... ok
+test ha_add_blacklist_nonexistent ... ok
+test ha_pool_driver_name ... ok
+test ha_set_connect_properties_extends ... ok
+test ha_pool_name ... ok
+test ha_pool_state_no_selector ... ok
+test ha_set_connection_properties_empty_clears ... ok
+test ha_available_excludes_blacklist ... ok
+test ha_destroy_with_pools ... ok
+test ha_pool_close_pool ... ok
+test ha_remove_blacklist_nonexistent ... ok
+test ha_set_connection_properties_no_equals ... ok
+test ha_set_connection_properties_none_clears ... ok
+test ha_init_with_preexisting_skips_listener ... ok
+test ha_set_data_source_selector_replaces ... ok
+test ha_get_connection_no_selector ... ok
+test ha_set_selector_unknown_no_change ... ok
+test ha_set_target_no_selector ... ok
+test ha_set_target_with_random ... ok
+test ha_set_target_with_byname ... ok
+test pool_updater_default_interval ... ok
+test ha_set_target_with_sticky ... ok
+test validate_task_log_and_query_success_time ... ok
+test validate_task_constants ... ok
+test validate_task_log_empty_name ... ok
+test ha_pool_get_no_pools ... ok
+test validate_task_success_time_unknown ... ok
+test pool_updater_update_empty_noop ... ok
+test ha_init_with_credentials ... ok
+test pool_updater_delete_last_node_allowed ... ok
+test ha_init_unsupported_url_scheme ... ok
+test ha_init_idempotent ... ok
+test pool_updater_zero_interval_fallback ... ok
+test pool_updater_small_interval_warning ... ok
+test ha_init_update_cycle_add_empty_name ... ok
+test pool_updater_negative_interval_fallback ... ok
+test ha_init_with_prefix ... ok
+test ha_init_multiple_nodes ... ok
+test ha_init_invalid_url ... ok
+test pool_updater_delete_last_node_protected ... ok
+test ha_init_creates_pool_updater_and_listener ... ok
+test ha_init_empty_url_warning ... ok
+test ha_pool_get_timeout_no_pools ... ok
+
+test result: ok. 43 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests\task6_wrapper_semantics_test_parity.rs (target\debug\deps\task6_wrapper_semantics_test_parity-76b64096659f478b.exe)
+
+running 3 tests
+test task6_wrapper_semantics_test_wrapper_adapter_matches_java_null_self_and_foreign_type_semantics ... ok
+test task6_wrapper_semantics_test_poolable_wrapper_matches_java_direct_and_null_wrapper_semantics ... ok
+test task6_wrapper_semantics_test_poolable_wrapper_preserves_statement_connection_and_proxy_delegation_order ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_sql_stat_value_test.rs (target\debug\deps\wall_sql_stat_value_test-e2f56c6cc7eadd26.exe)
+
+running 7 tests
+test wall_sql_stat_value_default ... ok
+test wall_sql_stat_value_clone_eq ... ok
+test wall_sql_stat_value_serialize ... ok
+test wall_sql_stat_value_to_map_sample_differ ... ok
+test wall_sql_stat_value_to_map_full ... ok
+test wall_sql_stat_value_to_map_sample_same ... ok
+test wall_sql_stat_value_to_map_sparse ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_table_stat_value_test.rs (target\debug\deps\wall_table_stat_value_test-2d7612e4128a2592.exe)
+
+running 6 tests
+test wall_table_stat_value_debug ... ok
+test wall_table_stat_value_saturating_add ... ok
+test wall_table_stat_value_clone_eq ... ok
+test wall_table_stat_value_to_map_keys ... ok
+test wall_table_stat_value_total_execute_count ... ok
+test wall_table_stat_value_total_execute_count_zero ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\xa_state_machine_test.rs (target\debug\deps\xa_state_machine_test-7821669e4824b868.exe)
+
+running 55 tests
+test xa_commit_from_active_rejected ... ok
+test xa_clone_preserves_state ... ok
+test xa_enum_discriminants_preserve_existing_values ... ok
+test xa_flags_tests::tm_fail_flag ... ok
+test xa_flags_tests::tm_one_phase_flag ... ok
+test xa_commit_from_idle_rejected ... ok
+test xa_flags_tests::tm_success_flag ... ok
+test xa_commit_one_phase_from_idle_rejected ... ok
+test xa_end_from_idle_rejected ... ok
+test xa_flags_tests::tm_no_flags_is_zero ... ok
+test xa_full_failure_and_forget_lifecycle ... ok
+test xa_committed_rejects_all_operations ... ok
+test xa_failed_allows_only_forget ... ok
+test xa_flags_tests::tm_recovery_scan_flags ... ok
+test xa_flags_tests::tm_join_flag ... ok
+test xa_flags_tests::tm_suspend_flag ... ok
+test xa_forget_from_active_rejected ... ok
+test xa_full_rollback_from_preparing_lifecycle ... ok
+test xa_forget_resets_to_idle ... ok
+test xa_elapsed_is_positive_after_some_time ... ok
+test xa_full_rollback_from_active_lifecycle ... ok
+test xa_flags_tests::tm_resume_flag ... ok
+test xa_full_rollback_from_idle_lifecycle ... ok
+test xa_forget_from_committed_rejected ... ok
+test xa_full_rollback_from_prepared_lifecycle ... ok
+test xa_full_two_phase_commit_lifecycle ... ok
+test xa_full_one_phase_commit_lifecycle ... ok
+test xa_history_empty_at_start ... ok
+test xa_flags_tests::xa_rdonly_value ... ok
+test xa_history_records_all_transitions_in_two_phase_commit ... ok
+test xa_history_records_rollback_transitions ... ok
+test xa_mark_failed_from_every_non_terminal_state ... ok
+test xa_rolled_back_rejects_all_operations ... ok
+test xa_start_from_non_idle_rejected ... ok
+test xa_no_timeout_never_expires ... ok
+test xa_prepare_from_active_rejected ... ok
+test xa_prepare_from_idle_rejected ... ok
+test xa_mark_failed_from_terminal_states_rejected ... ok
+test xa_state_transition_error_to_druid_error ... ok
+test xa_operation_display_values ... ok
+test xa_state_display_values ... ok
+test xa_state_transition_error_accessors ... ok
+test xa_with_timeout_does_not_expire_immediately ... ok
+test xa_with_zero_timeout_expires_immediately ... ok
+test xa_xid_bqual_exceeds_max_rejected ... ok
+test xa_xid_equality ... ok
+test xa_xid_display_format ... ok
+test xa_xid_gtrid_exceeds_max_rejected ... ok
+test xa_xid_hash_consistency ... ok
+test xa_xid_inequality_bqual ... ok
+test xa_xid_inequality_format_id ... ok
+test xa_xid_inequality_gtrid ... ok
+test xa_xid_negative_format_id ... ok
+test xa_xid_valid_max_lengths ... ok
+test xa_xid_zero_format_id ... ok
+
+test result: ok. 55 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

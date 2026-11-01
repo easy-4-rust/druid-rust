@@ -1,0 +1,2 @@
+error: target `task6_driver_registry_test_parity` in package `druid-wrapper` requires the features: `driver-catalog`, `sqlx`
+Consider enabling them by passing, e.g., `--features="driver-catalog sqlx"`
