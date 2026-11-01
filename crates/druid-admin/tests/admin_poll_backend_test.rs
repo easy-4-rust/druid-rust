@@ -53,6 +53,28 @@ async fn start_fake_node() -> (SocketAddr, tokio::task::JoinHandle<()>) {
                     }],
                 }))
             }),
+        )
+        // 活跃连接堆栈：id=1 返回两条借出堆栈，其余 id 报 removeAbandoned 未开启。
+        .route(
+            "/druid/activeConnectionStackTrace-1.json",
+            get(|| async {
+                Json(json!({
+                    "ResultCode": 1,
+                    "Content": [
+                        "   0: druid::pool::borrow\n   1: app::checkout",
+                        "   0: druid::pool::borrow\n   1: app::report_job",
+                    ],
+                }))
+            }),
+        )
+        .route(
+            "/druid/activeConnectionStackTrace-99.json",
+            get(|| async {
+                Json(json!({
+                    "ResultCode": -1,
+                    "Content": "require set removeAbandoned=true",
+                }))
+            }),
         );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -169,5 +191,72 @@ async fn service_list_reports_the_configured_application() {
         body.as_array()
             .is_some_and(|names| names.iter().any(|n| n == "orders")),
         "serviceList.json must report the configured application, got {body}"
+    );
+}
+
+#[tokio::test]
+async fn poll_mode_serves_active_connection_stack_traces() {
+    let (node_addr, _node) = start_fake_node().await;
+    let discovery = AdminDiscoveryConfig {
+        mode: AdminDiscoveryMode::Poll,
+        applications: vec!["orders".to_owned()],
+        endpoints: vec![format!("http://{node_addr}")],
+    };
+    let source = discovery
+        .build_management_source(MetricsRepository::new())
+        .expect("source must build");
+    let (addr, _handle) = start_admin_with_source(source).await;
+
+    let (status, body) = get_json(
+        addr,
+        "/druid/activeConnectionStackTrace-1.json?serviceId=orders-0",
+    )
+    .await;
+
+    assert_eq!(status, 200);
+    assert_eq!(
+        body["ResultCode"], 1,
+        "the monitored node stack traces must be served, got {body}"
+    );
+    let traces = body["Content"]
+        .as_array()
+        .expect("Content must be the stack trace list, got {body}");
+    assert_eq!(traces.len(), 2, "the fake node holds two active borrows");
+    assert!(
+        traces[0]
+            .as_str()
+            .is_some_and(|trace| trace.contains("borrow")),
+        "each entry is one connect-time stack trace, got {traces:?}"
+    );
+}
+
+#[tokio::test]
+async fn poll_mode_forwards_the_node_remove_abandoned_error() {
+    let (node_addr, _node) = start_fake_node().await;
+    let discovery = AdminDiscoveryConfig {
+        mode: AdminDiscoveryMode::Poll,
+        applications: vec!["orders".to_owned()],
+        endpoints: vec![format!("http://{node_addr}")],
+    };
+    let source = discovery
+        .build_management_source(MetricsRepository::new())
+        .expect("source must build");
+    let (addr, _handle) = start_admin_with_source(source).await;
+
+    let (status, body) = get_json(
+        addr,
+        "/druid/activeConnectionStackTrace-99.json?serviceId=orders-0",
+    )
+    .await;
+
+    assert_eq!(status, 200);
+    assert_eq!(
+        body["ResultCode"], -1,
+        "the node's own failure must be forwarded, got {body}"
+    );
+    let reason = body["Content"].as_str().unwrap_or_default();
+    assert!(
+        reason.contains("removeAbandoned"),
+        "the reason must be the node's, not a generic admin error, got {reason}"
     );
 }

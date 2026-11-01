@@ -13,7 +13,7 @@ sql.json	sql-list	SqlListContent×46（SQL,ExecuteCount,Histogram..）	/druid/sq
 sql-{id}.json	sql-detail	SqlDetailContent×51（含 formattedSql/parsedTable/parsedFields..）	/druid/sql-{id}.json	LIVE	REST 别名 /api/sql/{id} 用复合键 (serviceId,dataSourceId,id)
 wall.json	wall-stats	checkCount,violationCount,tables[],functions[],whiteList[],blackList[]	/druid/wall.json、/druid/api/v1/wall	LIVE	轮询拿 tables/functions/黑白名单；推送只有计数
 connectionInfo-{id}.json	pool-connections	ConnectionContent（id,connectionId,useCount,pscache..）	/druid/connectionInfo-{id}.json	POLL_ONLY	推送协议不带连接级明细
-activeConnectionStackTrace-{id}.json	active-stack-traces	List<List<String>>	/druid/activeConnectionStackTrace-{id}.json	POLL_ONLY	需要 removeAbandoned=true；当前轮询亦报不支持，留作后续
+activeConnectionStackTrace-{id}.json	active-stack-traces	List<List<String>>	/druid/activeConnectionStackTrace-{id}.json	POLL_ONLY	需要节点 removeAbandoned=true（池化层借出点捕获，Rust stat servlet 已暴露端点）；Admin 轮询转发，节点错误信封（未开启原因）原样转述
 reset-all.json	reset-all	null	/druid/reset-all.json	LIVE	经 CommandBroker 扇出到每个接入服务
 log-and-reset.json	log-and-reset	null	/druid/log-and-reset.json	LIVE	同上
 serviceList.json	service-list	[String]	/druid/serviceList.json	LIVE	轮询报配置的应用；推送报已见服务名

@@ -54,7 +54,7 @@ pub(crate) async fn dispatch_console_route(
         return Some(connection_info_identity(backend, id, query).await);
     }
     if let Some(id) = embedded_identity(path, "activeConnectionStackTrace-") {
-        return Some(active_stack_trace_identity(backend, id).await);
+        return Some(active_stack_trace_identity(backend, id, query).await);
     }
     None
 }
@@ -172,9 +172,28 @@ async fn connection_info_identity(
 }
 
 /// `activeConnectionStackTrace-{id}.json`：活跃连接堆栈。
-async fn active_stack_trace_identity(backend: &ManagementSource, _id: i64) -> Response {
-    let _ = backend;
-    failure(STACK_TRACE_UNSUPPORTED)
+///
+/// 数据来自被监控节点的借出点堆栈捕获（需节点 `removeAbandoned=true`），
+/// 由轮询后端转发；推送后端不带连接级堆栈，明确报告能力缺失。
+async fn active_stack_trace_identity(
+    backend: &ManagementSource,
+    id: i64,
+    query: Option<&str>,
+) -> Response {
+    let parameters = query_parameters(query);
+    let service_id = parameters.get("serviceId").map(String::as_str);
+    if service_id.is_none() {
+        return failure("serviceId is required to address remote active-connection stack traces");
+    }
+    match backend.active_connection_stack_trace(id, service_id).await {
+        Ok(Some(result)) if result.result_code == MonitorStatService::RESULT_CODE_SUCCESS => {
+            success(result.content)
+        }
+        // 节点回答了但报告自身失败（典型：未开启 removeAbandoned），原样转述原因。
+        Ok(Some(result)) => failure(&result.content.to_string()),
+        Ok(None) => failure(STACK_TRACE_UNSUPPORTED),
+        Err(error) => failure(&error.to_string()),
+    }
 }
 
 /// `reset-all.json` 与 `log-and-reset.json`：向所有接入服务下发重置命令。
