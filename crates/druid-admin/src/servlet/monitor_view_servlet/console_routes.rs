@@ -9,13 +9,11 @@
 
 use std::collections::HashMap;
 
-use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
 
 use crate::command::CommandBroker;
 use crate::model::dto::DataSourceResult;
-use crate::repository::MetricsRepository;
 use crate::service::MonitorStatService;
 
 use super::MonitorBackend;
@@ -249,10 +247,4 @@ async fn reset_all(command_broker: Option<&CommandBroker>, log_before_reset: boo
     } else {
         failure(&failed.join("; "))
     }
-}
-
-/// 便于测试构造仓库后端。
-#[cfg(test)]
-pub(crate) fn repository_backend(repository: MetricsRepository) -> MonitorBackend {
-    MonitorBackend::Repository(repository)
 }

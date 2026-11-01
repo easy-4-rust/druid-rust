@@ -29,9 +29,11 @@ use crate::CommandBroker;
 
 use super::LoginRequest;
 
+mod console;
 mod console_routes;
 mod monitor_view_a;
 mod monitor_view_b;
+mod v1_api;
 
 /// Session expiry duration (2 hours, matching typical Java Servlet session).
 const SESSION_TTL: Duration = Duration::from_secs(7200);

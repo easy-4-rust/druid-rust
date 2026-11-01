@@ -122,3 +122,8 @@ crates/druid-wrapper/src/bin/*
 !/docs/verification/rdbc-first/workspace405/**/*.log
 !/docs/verification/rdbc-first/format407/**/*.json
 !/docs/verification/rdbc-first/format407/**/*.log
+
+# 分离前端的构建产物与依赖：源码在 crates/druid-admin/web，
+# 产物由 crates/druid-admin/build.rs 在编译时内嵌。
+crates/druid-admin/web/node_modules/
+crates/druid-admin/web/dist/

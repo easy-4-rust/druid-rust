@@ -1,0 +1,9 @@
+# Admin web console with a separated front end
+
+The standalone `druid-admin` ships the Java Druid console's doT/jQuery pages verbatim, but they are not usable. The pages call `basic.json`, `datasource-{id}.json`, `sql-{id}.json`, `connectionInfo-{id}.json`, `activeConnectionStackTrace-{id}.json`, `reset-all.json` and `log-and-reset.json`, and none of those routes exist in the shipped repository backend, so the landing page renders empty and every detail page and header button fails with `ResultCode:-1`. The push ingest protocol carries only about ten numeric fields, so roughly 75 of the 87 `DataSourceContent` fields are structurally zero, `serviceList.json` is always empty, and the Web/WebURI/WebSession/Spring families have no data source at all.
+
+Rebuild the console as a separated front end: the admin server exposes one documented JSON API, and a dedicated single-page application consumes it. The console must present the same information Java Druid's admin presents — datasource configuration, SQL statistics with parsed detail, Wall statistics, pooled-connection information and active-connection stack traces — rather than a reduced push-only view.
+
+The Java-compatible `.json` routes stay as a compatibility layer for embedders, and the existing repository backend, push ingest, Prometheus output, redaction policy, session authentication and command broker stay intact. This change adds the poll backend that makes the Java-equivalent data reachable, completes the missing routes, adds a versioned API for the separated client, and replaces the embedded doT pages with the separated application.
+
+Pages whose data source does not exist in the Rust platform — the WebApp, WebURI, WebSession and Spring families, which depend on servlet filters and framework interception — are reported as unsupported by the API instead of being rendered as permanently empty tables.

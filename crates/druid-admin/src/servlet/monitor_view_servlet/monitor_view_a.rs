@@ -150,6 +150,18 @@ impl MonitorViewServlet {
             .route("/api/connections/{id}", get(Self::connection_info))
             .route("/api/active", get(Self::active))
             .route("/api/commands", post(Self::issue_command))
+            // 版本化管理 API：分离前端只读这一套。
+            .route("/api/v1/basic", get(super::v1_api::basic))
+            .route("/api/v1/datasources", get(super::v1_api::datasources))
+            .route("/api/v1/datasources/{identity}", get(super::v1_api::datasource))
+            .route("/api/v1/sql", get(super::v1_api::sql_list))
+            .route("/api/v1/wall", get(super::v1_api::wall))
+            .route("/api/v1/services", get(super::v1_api::services))
+            .route("/api/v1/openapi.json", get(super::v1_api::openapi))
+            // 分离前端：独立构建的应用，资源内嵌在二进制中。
+            .route("/console", get(Self::console_entry))
+            .route("/console/", get(Self::console_entry))
+            .route("/console/{*path}", get(Self::console_asset))
             .fallback(Self::legacy_dispatch);
         // Merge admin routes into a single router that also handles the
         // bare context-path (e.g. /druid and /druid/) by redirecting to
@@ -430,6 +442,29 @@ impl MonitorViewServlet {
 
     pub(crate) async fn no_permit_page() -> Response {
         static_resource_response("nopermit.html")
+    }
+
+    /// 分离前端入口。
+    pub(crate) async fn console_entry() -> Response {
+        let Some(body) = super::console::entry_document() else {
+            return (
+                StatusCode::NOT_FOUND,
+                [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+                "the console application has not been built; see crates/druid-admin/web",
+            )
+                .into_response();
+        };
+        (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+            body,
+        )
+            .into_response()
+    }
+
+    /// 分离前端静态资源。
+    pub(crate) async fn console_asset(Path(path): Path<String>) -> Response {
+        super::console::serve(&path)
     }
 
     pub(crate) async fn legacy_style(Path(asset): Path<String>) -> Response {
