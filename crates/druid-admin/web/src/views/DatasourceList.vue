@@ -1,30 +1,13 @@
 <script setup>
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../api/client.js'
+import { formatNumber } from '../utils/format.js'
 
+const router = useRouter()
 const rows = ref([])
 const loading = ref(false)
 const error = ref('')
-
-const columns = [
-  { prop: 'identity', label: 'ID', width: 90 },
-  { prop: 'name', label: '名称', minWidth: 160 },
-  { prop: 'dbType', label: '数据库类型', width: 120 },
-  { prop: 'driverClassName', label: '驱动', minWidth: 160 },
-  { prop: 'url', label: '连接地址', minWidth: 220, showOverflowTooltip: true },
-  { prop: 'activeCount', label: '活跃', width: 80, align: 'right' },
-  { prop: 'poolingCount', label: '空闲', width: 80, align: 'right' },
-  { prop: 'maxActive', label: '上限', width: 80, align: 'right' },
-  { prop: 'waitThreadCount', label: '等待', width: 80, align: 'right' },
-  { prop: 'executeCount', label: '执行', width: 100, align: 'right' },
-  { prop: 'errorCount', label: '错误', width: 90, align: 'right' },
-  { prop: 'commitCount', label: '提交', width: 90, align: 'right' },
-  { prop: 'rollbackCount', label: '回滚', width: 90, align: 'right' },
-  { prop: 'sqlCount', label: 'SQL', width: 80, align: 'right' },
-  { prop: 'wallCheckCount', label: 'Wall 检查', width: 110, align: 'right' },
-  { prop: 'wallViolationCount', label: 'Wall 拒绝', width: 110, align: 'right' },
-  { prop: 'serviceName', label: '服务', minWidth: 140 },
-]
 
 async function load() {
   loading.value = true
@@ -40,6 +23,14 @@ async function load() {
   }
 }
 
+function openDetail(row) {
+  router.push(`/datasources/${row.identity}`)
+}
+
+function errorType({ row }) {
+  return Number(row.errorCount) > 0 ? 'danger' : 'primary'
+}
+
 onMounted(load)
 </script>
 
@@ -47,7 +38,7 @@ onMounted(load)
   <el-card shadow="never" class="card">
     <template #header>
       <div class="card-header">
-        <span>数据源</span>
+        <span>数据源（{{ rows.length }}）</span>
         <el-button size="small" @click="load">刷新</el-button>
       </div>
     </template>
@@ -58,22 +49,47 @@ onMounted(load)
       v-else
       v-loading="loading"
       :data="rows"
-      :columns="columns"
       border
       stripe
       size="small"
       empty-text="没有数据源"
+      @row-click="openDetail"
     >
-      <el-table-column
-        v-for="column in columns"
-        :key="column.prop"
-        :prop="column.prop"
-        :label="column.label"
-        :min-width="column.minWidth"
-        :width="column.width"
-        :align="column.align || 'left'"
-        show-overflow-tooltip
-      />
+      <el-table-column prop="identity" label="ID" width="70" align="right" />
+      <el-table-column prop="name" label="名称" min-width="150">
+        <template #default="{ row }">
+          <el-link type="primary" :underline="false" @click.stop="openDetail(row)">{{ row.name }}</el-link>
+        </template>
+      </el-table-column>
+      <el-table-column prop="dbType" label="数据库" width="100" />
+      <el-table-column prop="driverClassName" label="驱动" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="url" label="连接地址" min-width="220" show-overflow-tooltip />
+      <el-table-column label="活跃/空闲/上限" width="140" align="right">
+        <template #default="{ row }">
+          {{ formatNumber(row.activeCount) }} / {{ formatNumber(row.poolingCount) }} / {{ formatNumber(row.maxActive) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="等待" width="80" align="right">
+        <template #default="{ row }">
+          <el-tag v-if="Number(row.waitThreadCount) > 0" type="warning" size="small">{{ row.waitThreadCount }}</el-tag>
+          <span v-else>0</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="executeCount" label="执行" width="100" align="right">
+        <template #default="{ row }">{{ formatNumber(row.executeCount) }}</template>
+      </el-table-column>
+      <el-table-column prop="errorCount" label="错误" width="80" align="right">
+        <template #default="{ row }">
+          <el-tag v-if="Number(row.errorCount) > 0" type="danger" size="small">{{ formatNumber(row.errorCount) }}</el-tag>
+          <span v-else>0</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="提交/回滚" width="130" align="right">
+        <template #default="{ row }">
+          {{ formatNumber(row.commitCount) }} / {{ formatNumber(row.rollbackCount) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="serviceName" label="服务" min-width="130" show-overflow-tooltip />
     </el-table>
   </el-card>
 </template>
@@ -83,5 +99,9 @@ onMounted(load)
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+:deep(.el-table__row) {
+  cursor: pointer;
 }
 </style>

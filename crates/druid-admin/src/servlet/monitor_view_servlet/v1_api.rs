@@ -116,6 +116,131 @@ fn datasource_summary(source: &DataSourceContent) -> Value {
     })
 }
 
+/// 把 Java 形状的数据源完整配置映射为 camelCase 详情。
+///
+/// Java 的 datasource 页展示全部 ~74 个字段；版本化 API 的详情路由
+/// 原样保留这些配置，控制台据此渲染完整面板。
+fn datasource_detail(source: &DataSourceContent) -> Value {
+    let mut row = serde_json::Map::new();
+    let pairs: Vec<(&str, Value)> = vec![
+        ("serviceId", v(&source.service_id)),
+        ("serviceName", v(&source.service_name)),
+        ("instanceId", v(&source.instance_id)),
+        ("bootId", v(&source.boot_id)),
+        ("identity", v(&source.identity)),
+        ("name", v(&source.name)),
+        ("dbType", v(&source.db_type)),
+        ("driverClassName", v(&source.driver_class_name)),
+        ("url", v(&source.url)),
+        ("userName", v(&source.user_name)),
+        ("waitThreadCount", v(&source.wait_thread_count)),
+        ("notEmptyWaitCount", v(&source.not_empty_wait_count)),
+        ("notEmptyWaitMillis", v(&source.not_empty_wait_millis)),
+        ("poolingCount", v(&source.pooling_count)),
+        ("poolingPeak", v(&source.pooling_peak)),
+        ("poolingPeakTime", v(&source.pooling_peak_time)),
+        ("activeCount", v(&source.active_count)),
+        ("activePeak", v(&source.active_peak)),
+        ("activePeakTime", v(&source.active_peak_time)),
+        ("initialSize", v(&source.initial_size)),
+        ("minIdle", v(&source.min_idle)),
+        ("maxActive", v(&source.max_active)),
+        ("queryTimeout", v(&source.query_timeout)),
+        (
+            "transactionQueryTimeout",
+            v(&source.transaction_query_timeout),
+        ),
+        ("loginTimeout", v(&source.login_timeout)),
+        (
+            "validConnectionCheckerClassName",
+            v(&source.valid_connection_checker_class_name),
+        ),
+        (
+            "exceptionSorterClassName",
+            v(&source.exception_sorter_class_name),
+        ),
+        ("testOnBorrow", v(&source.test_on_borrow)),
+        ("testOnReturn", v(&source.test_on_return)),
+        ("testWhileIdle", v(&source.test_while_idle)),
+        ("defaultAutoCommit", v(&source.default_auto_commit)),
+        ("defaultReadOnly", v(&source.default_read_only)),
+        (
+            "defaultTransactionIsolation",
+            v(&source.default_transaction_isolation),
+        ),
+        ("logicConnectCount", v(&source.logic_connect_count)),
+        ("logicCloseCount", v(&source.logic_close_count)),
+        (
+            "logicConnectErrorCount",
+            v(&source.logic_connect_error_count),
+        ),
+        ("driverConnectCount", v(&source.driver_connect_count)),
+        ("driverCloseCount", v(&source.driver_close_count)),
+        (
+            "driverConnectErrorCount",
+            v(&source.driver_connect_error_count),
+        ),
+        ("executeCount", v(&source.execute_count)),
+        ("executeUpdateCount", v(&source.execute_update_count)),
+        ("executeQueryCount", v(&source.execute_query_count)),
+        ("executeBatchCount", v(&source.execute_batch_count)),
+        ("errorCount", v(&source.error_count)),
+        ("commitCount", v(&source.commit_count)),
+        ("rollbackCount", v(&source.rollback_count)),
+        ("psCacheAccessCount", v(&source.ps_cache_access_count)),
+        ("psCacheHitCount", v(&source.ps_cache_hit_count)),
+        ("psCacheMissCount", v(&source.ps_cache_miss_count)),
+        ("startTransactionCount", v(&source.start_transaction_count)),
+        ("removeAbandoned", v(&source.remove_abandoned)),
+        ("clobOpenCount", v(&source.clob_open_count)),
+        ("blobOpenCount", v(&source.blob_open_count)),
+        ("keepAliveCheckCount", v(&source.keep_alive_check_count)),
+        ("keepAlive", v(&source.keep_alive)),
+        ("failFast", v(&source.fail_fast)),
+        ("maxWait", v(&source.max_wait)),
+        ("maxWaitThreadCount", v(&source.max_wait_thread_count)),
+        (
+            "poolPreparedStatements",
+            v(&source.pool_prepared_statements),
+        ),
+        (
+            "maxPoolPreparedStatementPerConnectionSize",
+            v(&source.max_pool_prepared_statement_per_connection_size),
+        ),
+        (
+            "minEvictableIdleTimeMillis",
+            v(&source.min_evictable_idle_time_millis),
+        ),
+        (
+            "maxEvictableIdleTimeMillis",
+            v(&source.max_evictable_idle_time_millis),
+        ),
+        ("logDifferentThread", v(&source.log_different_thread)),
+        ("recycleErrorCount", v(&source.recycle_error_count)),
+        (
+            "preparedStatementOpenCount",
+            v(&source.prepared_statement_open_count),
+        ),
+        (
+            "preparedStatementClosedCount",
+            v(&source.prepared_statement_closed_count),
+        ),
+        ("useUnfairLock", v(&source.use_unfair_lock)),
+        ("initGlobalVariants", v(&source.init_global_variants)),
+        ("initVariants", v(&source.init_variants)),
+        ("filterClassNames", v(&source.filter_class_names)),
+        ("transactionHistogram", v(&source.transaction_histogram)),
+        (
+            "connectionHoldTimeHistogram",
+            v(&source.connection_hold_time_histogram),
+        ),
+    ];
+    for (name, value) in pairs {
+        row.insert(name.to_owned(), value);
+    }
+    Value::Object(row)
+}
+
 /// `GET /druid/api/v1/basic` —— Admin 自身的运行信息。
 pub(crate) async fn basic(State(state): State<super::MonitorViewServlet>) -> Response {
     let rows = state
@@ -174,7 +299,7 @@ pub(crate) async fn datasource(
     match rows.iter().find(|content| content.identity == identity) {
         Some(content) => Json(json!({
             "apiVersion": API_VERSION,
-            "datasource": datasource_summary(content),
+            "datasource": datasource_detail(content),
         }))
         .into_response(),
         None => (StatusCode::NOT_FOUND, "no datasource matches the identity").into_response(),

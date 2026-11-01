@@ -1,7 +1,11 @@
 <script setup>
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../api/client.js'
+import MiniHistogram from '../components/MiniHistogram.vue'
+import { ROW_BUCKETS_6, TIME_BUCKETS_8, formatDuration, formatNumber, zipBuckets } from '../utils/format.js'
 
+const router = useRouter()
 const rows = ref([])
 const total = ref(0)
 const loading = ref(false)
@@ -21,6 +25,22 @@ const sortable = [
   { prop: 'effectedRowCount', label: '影响行数' },
   { prop: 'concurrentMax', label: '并发峰值' },
 ]
+
+function histogram(row) {
+  return zipBuckets(row.histogram, TIME_BUCKETS_8)
+}
+
+function fetchHistogram(row) {
+  return zipBuckets(row.fetchRowCountHistogram, ROW_BUCKETS_6)
+}
+
+function updateHistogram(row) {
+  return zipBuckets(row.effectedRowCountHistogram, ROW_BUCKETS_6)
+}
+
+function holdHistogram(row) {
+  return zipBuckets(row.executeAndResultHoldTimeHistogram, TIME_BUCKETS_8)
+}
 
 async function load() {
   loading.value = true
@@ -53,6 +73,10 @@ function sortBy(prop) {
   load()
 }
 
+function openDetail(row) {
+  router.push(`/sql/${row.id}`)
+}
+
 onMounted(load)
 </script>
 
@@ -75,13 +99,34 @@ onMounted(load)
       stripe
       size="small"
       empty-text="没有 SQL 统计"
+      @row-click="openDetail"
     >
+      <el-table-column label="SQL" min-width="300">
+        <template #default="{ row }">
+          <el-link type="primary" :underline="false" class="sql-link" @click.stop="openDetail(row)">
+            <code>{{ row.sql || '—' }}</code>
+          </el-link>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="执行耗时" width="130" align="center">
+        <template #default="{ row }"><MiniHistogram :buckets="histogram(row)" /></template>
+      </el-table-column>
+      <el-table-column label="取回行" width="110" align="center">
+        <template #default="{ row }"><MiniHistogram :buckets="fetchHistogram(row)" color="#67c23a" /></template>
+      </el-table-column>
+      <el-table-column label="影响行" width="110" align="center">
+        <template #default="{ row }"><MiniHistogram :buckets="updateHistogram(row)" color="#e6a23c" /></template>
+      </el-table-column>
+      <el-table-column label="执行+持有" width="130" align="center">
+        <template #default="{ row }"><MiniHistogram :buckets="holdHistogram(row)" color="#909399" /></template>
+      </el-table-column>
+
       <el-table-column
-        v-for="column in sortable"
+        v-for="column in sortable.slice(1)"
         :key="column.prop"
-        :label="column.label"
-        :min-width="column.prop === 'sql' ? 320 : 110"
-        show-overflow-tooltip
+        :min-width="110"
+        align="right"
       >
         <template #header>
           <button class="sort" type="button" @click="sortBy(column.prop)">
@@ -91,13 +136,19 @@ onMounted(load)
             </span>
           </button>
         </template>
-        <template #default="scope">
-          <code v-if="column.prop === 'sql'">{{ scope.row.sql || scope.row.formattedSql || '—' }}</code>
-          <span v-else>{{ scope.row[column.prop] ?? '—' }}</span>
+        <template #default="{ row }">
+          <template v-if="column.prop === 'totalTime' || column.prop === 'maxTimespan'">
+            {{ formatDuration(row[column.prop]) }}
+          </template>
+          <el-tag v-else-if="column.prop === 'errorCount' && Number(row.errorCount) > 0" type="danger" size="small">
+            {{ formatNumber(row.errorCount) }}
+          </el-tag>
+          <span v-else>{{ formatNumber(row[column.prop]) }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="dbType" label="数据库类型" width="120" />
-      <el-table-column prop="serviceName" label="服务" width="140" />
+
+      <el-table-column prop="dbType" label="数据库" width="100" />
+      <el-table-column prop="serviceName" label="服务" min-width="120" show-overflow-tooltip />
     </el-table>
 
     <el-pagination
@@ -138,5 +189,21 @@ onMounted(load)
 .pager {
   margin-top: 14px;
   justify-content: flex-end;
+}
+
+.sql-link {
+  display: inline-block;
+  max-width: 100%;
+}
+
+.sql-link code {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+:deep(.el-table__row) {
+  cursor: pointer;
 }
 </style>

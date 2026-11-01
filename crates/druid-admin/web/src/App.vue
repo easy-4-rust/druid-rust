@@ -1,21 +1,25 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { api } from './api/client.js'
-import DatasourceList from './views/DatasourceList.vue'
-import SqlList from './views/SqlList.vue'
-import WallView from './views/WallView.vue'
-import ApiIndex from './views/ApiIndex.vue'
+import { refreshOptions, store } from './store.js'
 
+const route = useRoute()
 const basic = ref(null)
 const error = ref('')
-const view = ref('datasources')
 
 const tabs = [
-  { key: 'datasources', label: '数据源' },
-  { key: 'sql', label: 'SQL 统计' },
-  { key: 'wall', label: 'SQL 防火墙' },
-  { key: 'api', label: 'API 索引' },
+  { path: '/datasources', label: '数据源' },
+  { path: '/sql', label: 'SQL 统计' },
+  { path: '/wall', label: 'SQL 防火墙' },
+  { path: '/api', label: 'API 索引' },
 ]
+
+const activePath = computed(() => {
+  if (route.path.startsWith('/sql')) return '/sql'
+  if (route.path.startsWith('/datasources')) return '/datasources'
+  return route.path
+})
 
 const summary = computed(() => {
   if (!basic.value) return []
@@ -28,13 +32,18 @@ const summary = computed(() => {
   ]
 })
 
-onMounted(async () => {
+async function loadBasic() {
   try {
     basic.value = await api.basic()
+    error.value = ''
   } catch (cause) {
     error.value = cause.message
   }
-})
+}
+
+onMounted(loadBasic)
+// 自动刷新节拍驱动顶栏摘要同步。
+watch(() => store.tick, loadBasic)
 </script>
 
 <template>
@@ -45,43 +54,29 @@ onMounted(async () => {
         <el-tag size="small" type="info" effect="plain">{{ basic?.apiVersion || 'v1' }}</el-tag>
       </div>
       <nav class="nav">
-        <button
-          v-for="tab in tabs"
-          :key="tab.key"
-          class="nav-item"
-          :class="{ active: view === tab.key }"
-          type="button"
-          @click="view = tab.key"
-        >
+        <router-link v-for="tab in tabs" :key="tab.path" :to="tab.path" class="nav-item" :class="{ active: activePath === tab.path }">
           {{ tab.label }}
-        </button>
+        </router-link>
       </nav>
+      <div class="refresh">
+        <el-select v-model="store.autoRefreshSeconds" size="small" style="width: 130px">
+          <el-option v-for="opt in refreshOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+        </el-select>
+      </div>
     </el-header>
 
     <el-main class="main">
-      <el-alert
-        v-if="error"
-        type="error"
-        show-icon
-        :closable="false"
-        :title="error"
-        class="alert"
-      />
+      <el-alert v-if="error" type="error" show-icon :closable="false" :title="error" class="alert" />
 
       <el-descriptions v-if="basic" :column="5" border size="small" class="summary">
-        <el-descriptions-item
-          v-for="item in summary"
-          :key="item.label"
-          :label="item.label"
-        >
+        <el-descriptions-item v-for="item in summary" :key="item.label" :label="item.label">
           {{ item.value }}
         </el-descriptions-item>
       </el-descriptions>
 
-      <DatasourceList v-if="view === 'datasources'" />
-      <SqlList v-else-if="view === 'sql'" />
-      <WallView v-else-if="view === 'wall'" />
-      <ApiIndex v-else-if="view === 'api'" />
+      <router-view v-slot="{ Component }">
+        <component :is="Component" :key="route.fullPath + ':' + store.tick" />
+      </router-view>
     </el-main>
   </el-container>
 </template>
@@ -94,7 +89,7 @@ onMounted(async () => {
 .header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 24px;
   background: #1f2d3d;
   color: #fff;
   padding: 0 24px;
@@ -115,16 +110,15 @@ onMounted(async () => {
 .nav {
   display: flex;
   gap: 4px;
+  flex: 1;
 }
 
 .nav-item {
-  background: transparent;
-  border: none;
   color: #c0c4cc;
   padding: 8px 16px;
   font-size: 14px;
-  cursor: pointer;
-  border-radius: 4px 4px 0 0;
+  text-decoration: none;
+  border-radius: 4px;
 }
 
 .nav-item:hover {
