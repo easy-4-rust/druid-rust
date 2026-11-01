@@ -127,3 +127,6 @@ crates/druid-wrapper/src/bin/*
 # 产物由 crates/druid-admin/build.rs 在编译时内嵌。
 crates/druid-admin/web/node_modules/
 crates/druid-admin/web/dist/
+
+# 前端锁文件必须入库：CI 的 npm ci 依赖它（根 *.json 规则会忽略它）。
+!crates/druid-admin/web/package-lock.json
