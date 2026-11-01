@@ -4,11 +4,13 @@ import { formatSql } from '../utils/format.js'
 
 const props = defineProps({
   sql: { type: String, default: '' },
+  // 服务端已格式化好的 SQL（详情路由的 formattedSql）；传入则跳过客端格式化。
+  formattedSql: { type: String, default: '' },
 })
 
 // 简易关键字高亮：仅着色，不做完整词法分析。
 const highlighted = computed(() => {
-  const formatted = formatSql(props.sql)
+  const formatted = props.formattedSql || formatSql(props.sql)
   const escaped = formatted
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

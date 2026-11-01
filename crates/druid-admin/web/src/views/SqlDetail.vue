@@ -14,7 +14,27 @@ const error = ref('')
 
 const sqlId = computed(() => Number(route.params.id))
 
-const meta = computed(() => parseSqlMeta(row.value?.sql || ''))
+// 解析元数据：优先用服务端 sqlparser 结果（/sql/{id} 路由附带），
+// 服务端解析失败（字段为 null）时回退客户端简易解析。
+const meta = computed(() => {
+  const r = row.value
+  if (!r) return { tables: [], fields: [], conditions: [], relationships: [], orderBy: [] }
+  const server = {
+    tables: Array.isArray(r.parsedTable) ? r.parsedTable : null,
+    fields: Array.isArray(r.parsedFields) ? r.parsedFields : null,
+    conditions: Array.isArray(r.parsedConditions) ? r.parsedConditions : null,
+    relationships: Array.isArray(r.parsedRelationships) ? r.parsedRelationships : null,
+    orderBy: Array.isArray(r.parsedOrderbycolumns) ? r.parsedOrderbycolumns : null,
+  }
+  const fallback = parseSqlMeta(r.sql || '')
+  return {
+    tables: server.tables ?? fallback.tables,
+    fields: server.fields ?? fallback.fields,
+    conditions: server.conditions ?? fallback.conditions,
+    relationships: server.relationships ?? [],
+    orderBy: server.orderBy ?? [],
+  }
+})
 
 const histograms = computed(() => {
   const r = row.value
@@ -66,11 +86,10 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    // 版本化 API 暂无单条 SQL 路由；列表按 id 过滤（数据量即 SQL 条目数）。
-    const body = await api.sql({ page: 1, perPageCount: 100000, orderBy: 'id', orderType: 'asc' })
-    const found = (body.rows || []).find((item) => Number(item.id) === sqlId.value)
-    if (found) {
-      row.value = found
+    // 详情路由附带服务端 SQL 解析（formattedSql + parsed* 六字段）。
+    const body = await api.sqlDetail(sqlId.value)
+    if (body.sql) {
+      row.value = body.sql
     } else {
       error.value = `未找到 ID 为 ${sqlId.value} 的 SQL 统计`
     }
@@ -101,7 +120,7 @@ onMounted(load)
     <template v-if="row">
       <el-card shadow="never" class="section">
         <template #header>SQL</template>
-        <SqlCode :sql="row.sql || ''" />
+        <SqlCode :sql="row.sql || ''" :formatted-sql="typeof row.formattedSql === 'string' ? row.formattedSql : ''" />
       </el-card>
 
       <el-alert v-if="hasError" type="error" show-icon :closable="false" class="alert">
@@ -143,7 +162,7 @@ onMounted(load)
         </el-col>
         <el-col :xs="24" :lg="10">
           <el-card shadow="never" class="section">
-            <template #header>解析元数据（客户端解析）</template>
+            <template #header>解析元数据（服务端 sqlparser）</template>
             <el-descriptions :column="1" border size="small">
               <el-descriptions-item label="涉及表 ParsedTable">
                 {{ meta.tables.length ? meta.tables.join(', ') : '—' }}
@@ -156,6 +175,15 @@ onMounted(load)
                   <div v-for="cond in meta.conditions" :key="cond">{{ cond }}</div>
                 </div>
                 <span v-else>—</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="表关联 ParsedRelationships">
+                <div v-if="meta.relationships.length">
+                  <div v-for="rel in meta.relationships" :key="rel"><code>{{ rel }}</code></div>
+                </div>
+                <span v-else>—</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="排序列 ParsedOrderbycolumns">
+                {{ meta.orderBy.length ? meta.orderBy.join(', ') : '—' }}
               </el-descriptions-item>
             </el-descriptions>
           </el-card>

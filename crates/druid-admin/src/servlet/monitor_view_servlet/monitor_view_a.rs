@@ -187,6 +187,7 @@ impl MonitorViewServlet {
                 get(super::v1_api::datasource),
             )
             .route("/api/v1/sql", get(super::v1_api::sql_list))
+            .route("/api/v1/sql/{id}", get(super::v1_api::sql_detail))
             .route("/api/v1/wall", get(super::v1_api::wall))
             .route("/api/v1/services", get(super::v1_api::services))
             .route("/api/v1/openapi.json", get(super::v1_api::openapi))

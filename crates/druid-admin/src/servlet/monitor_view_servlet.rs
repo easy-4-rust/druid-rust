@@ -33,6 +33,7 @@ mod console;
 mod console_routes;
 mod monitor_view_a;
 mod monitor_view_b;
+mod sql_parse;
 mod v1_api;
 
 /// Session expiry duration (2 hours, matching typical Java Servlet session).

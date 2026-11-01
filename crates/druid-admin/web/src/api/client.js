@@ -34,6 +34,7 @@ export const api = {
     const query = new URLSearchParams(params).toString()
     return request(`/sql${query ? `?${query}` : ''}`)
   },
+  sqlDetail: (id) => request(`/sql/${id}`),
   wall: () => request('/wall'),
   services: () => request('/services'),
   openapi: () => request('/openapi.json'),

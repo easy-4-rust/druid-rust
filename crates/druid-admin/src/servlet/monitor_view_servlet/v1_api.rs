@@ -371,7 +371,61 @@ pub(crate) async fn sql_list(
     .into_response()
 }
 
+/// `GET /druid/api/v1/sql/{id}` —— 单条 SQL 统计 + 服务端解析的 parsed* 字段。
+///
+/// 语义对齐 Java 的 `sql-{id}.json`：不带 serviceId 时按 id/hash 全局查；
+/// 返回时在 camelCase 行上追加 `formattedSql` 与 `parsedTable` / `parsedFields` /
+/// `parsedConditions` / `parsedRelationships` / `parsedOrderbycolumns`。
+/// 解析失败的字段为 null，前端回退客户端简易解析。
+pub(crate) async fn sql_detail(
+    State(state): State<super::MonitorViewServlet>,
+    Path(id): Path<i64>,
+    Query(parameters): Query<HashMap<String, String>>,
+) -> Response {
+    let service_filter = parameters.get("serviceId").cloned();
+    let rows = state
+        .backend
+        .source()
+        .sql_rows(&StatQuery {
+            service_name: None,
+            order_by: "id".to_owned(),
+            order_type: "asc".to_owned(),
+            page: 1,
+            per_page_count: usize::MAX,
+        })
+        .await
+        .unwrap_or_default();
+    let found = rows.iter().find(|row| {
+        let service_matches = match (&service_filter, &row.service_id) {
+            (Some(want), Some(have)) => want.as_str() == &have[..],
+            (Some(_), None) => false,
+            (None, _) => true,
+        };
+        service_matches && (row.id == id || row.hash == id)
+    });
+    match found {
+        Some(row) => {
+            let mut value = sql_row(row);
+            if let Value::Object(ref mut map) = value {
+                let stat = super::sql_parse::parse_sql_stat(row.sql.as_deref().unwrap_or_default());
+                if let Some(fields) = stat.to_json().as_object() {
+                    for (key, parsed) in fields {
+                        map.insert(key.clone(), parsed.clone());
+                    }
+                }
+            }
+            Json(json!({
+                "apiVersion": API_VERSION,
+                "sql": value,
+            }))
+            .into_response()
+        }
+        None => (StatusCode::NOT_FOUND, "no sql stat matches the id").into_response(),
+    }
+}
+
 /// 比较两个 JSON 对象的某个字段。
+
 fn compare_values(left: &Value, right: &Value, key: &str) -> std::cmp::Ordering {
     let left_value = left.get(key);
     let right_value = right.get(key);
@@ -418,6 +472,7 @@ pub(crate) async fn openapi() -> Response {
             "/druid/api/v1/datasources": {"get": {"summary": "Datasource list"}},
             "/druid/api/v1/datasources/{identity}": {"get": {"summary": "One datasource"}},
             "/druid/api/v1/sql": {"get": {"summary": "SQL statistics"}},
+            "/druid/api/v1/sql/{id}": {"get": {"summary": "One SQL stat with parsed metadata"}},
             "/druid/api/v1/wall": {"get": {"summary": "Wall statistics"}},
             "/druid/api/v1/services": {"get": {"summary": "Attached services"}},
             "/druid/api/v1/openapi.json": {"get": {"summary": "This document"}},
