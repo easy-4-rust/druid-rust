@@ -73,13 +73,8 @@ impl AdminServerConfig {
             Some(_) => return Err(AdminConfigError::UnsupportedAuthMode),
         };
         let shutdown_timeout = parse_shutdown_timeout()?;
-        let mut config = Self::try_new_with_shutdown_timeout(
-            http_addr,
-            grpc_addr,
-            tls,
-            auth,
-            shutdown_timeout,
-        )?;
+        let mut config =
+            Self::try_new_with_shutdown_timeout(http_addr, grpc_addr, tls, auth, shutdown_timeout)?;
         config.bearer_token = std::env::var("DRUID_ADMIN_BEARER_TOKEN")
             .ok()
             .filter(|value| !value.is_empty());

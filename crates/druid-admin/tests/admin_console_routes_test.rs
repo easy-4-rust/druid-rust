@@ -22,8 +22,8 @@ async fn start_admin_with_repository(
     repository: MetricsRepository,
 ) -> (SocketAddr, tokio::task::JoinHandle<()>) {
     let broker = CommandBroker::new(16, Duration::from_secs(5));
-    let servlet = druid_admin::MonitorViewServlet::from_repository(repository)
-        .with_command_broker(broker);
+    let servlet =
+        druid_admin::MonitorViewServlet::from_repository(repository).with_command_broker(broker);
     let app = servlet.router();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -97,13 +97,18 @@ async fn datasource_identity_json_unknown_identity_reports_not_found() {
 
     let (status, body) = get_json(addr, "/druid/datasource-999.json").await;
 
-    assert_eq!(status, 200, "the compatibility route keeps the Java envelope");
+    assert_eq!(
+        status, 200,
+        "the compatibility route keeps the Java envelope"
+    );
     assert_eq!(
         body["ResultCode"], -1,
         "an unknown identity must report failure, got {body}"
     );
     assert!(
-        body["Content"].as_str().is_some_and(|value| !value.is_empty()),
+        body["Content"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty()),
         "an unknown identity must carry a reason, got {body}"
     );
 }
@@ -147,7 +152,10 @@ async fn connection_info_identity_json_reports_the_capability_the_backend_lacks(
 
     let (status, body) = get_json(addr, "/druid/connectionInfo-1.json").await;
 
-    assert_eq!(status, 200, "the compatibility route keeps the Java envelope");
+    assert_eq!(
+        status, 200,
+        "the compatibility route keeps the Java envelope"
+    );
     assert_eq!(
         body["ResultCode"], -1,
         "the push backend cannot answer connection info, got {body}"
@@ -160,8 +168,7 @@ async fn connection_info_identity_json_reports_the_capability_the_backend_lacks(
 }
 
 #[tokio::test]
-async fn active_connection_stack_trace_identity_json_reports_the_capability_the_backend_lacks()
-{
+async fn active_connection_stack_trace_identity_json_reports_the_capability_the_backend_lacks() {
     let (addr, _handle) = start_admin_with_repository(MetricsRepository::new()).await;
 
     let (status, body) = get_json(addr, "/druid/activeConnectionStackTrace-1.json").await;

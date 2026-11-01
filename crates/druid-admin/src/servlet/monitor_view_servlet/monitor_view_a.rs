@@ -182,7 +182,10 @@ impl MonitorViewServlet {
             // 版本化管理 API：分离前端只读这一套。
             .route("/api/v1/basic", get(super::v1_api::basic))
             .route("/api/v1/datasources", get(super::v1_api::datasources))
-            .route("/api/v1/datasources/{identity}", get(super::v1_api::datasource))
+            .route(
+                "/api/v1/datasources/{identity}",
+                get(super::v1_api::datasource),
+            )
             .route("/api/v1/sql", get(super::v1_api::sql_list))
             .route("/api/v1/wall", get(super::v1_api::wall))
             .route("/api/v1/services", get(super::v1_api::services))

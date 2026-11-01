@@ -3,11 +3,12 @@
 //! 前端是独立构建的应用，资源由构建脚本内嵌进二进制。
 //! Admin 只负责把资源发出去，不参与前端的渲染。
 
-use axum::http::{StatusCode, header};
+use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 
 /// 构建脚本生成的内嵌资源表。
-pub static CONSOLE_ASSETS: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/console_assets.rs"));
+pub static CONSOLE_ASSETS: &[(&str, &str)] =
+    include!(concat!(env!("OUT_DIR"), "/console_assets.rs"));
 
 /// 前端入口文件名。
 const ENTRY: &str = "index.html";

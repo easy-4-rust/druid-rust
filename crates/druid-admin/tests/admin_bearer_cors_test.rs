@@ -18,9 +18,7 @@ use druid_admin::config::AdminAuthMode;
 use druid_admin::repository::MetricsRepository;
 
 async fn start_admin(
-    build: impl FnOnce(
-        druid_admin::MonitorViewServlet,
-    ) -> druid_admin::MonitorViewServlet,
+    build: impl FnOnce(druid_admin::MonitorViewServlet) -> druid_admin::MonitorViewServlet,
 ) -> (SocketAddr, tokio::task::JoinHandle<()>) {
     let servlet = build(druid_admin::MonitorViewServlet::from_repository(
         MetricsRepository::new(),
@@ -113,8 +111,7 @@ async fn v1_api_serves_the_operator_view_while_java_routes_stay_redacted() {
         .await
         .unwrap();
     assert_eq!(
-        v1["datasources"][0]["url"],
-        "jdbc:postgresql://10.0.0.7:5432/orders",
+        v1["datasources"][0]["url"], "jdbc:postgresql://10.0.0.7:5432/orders",
         "the versioned API must keep the operator view, got {v1}"
     );
 
@@ -129,22 +126,22 @@ async fn v1_api_serves_the_operator_view_while_java_routes_stay_redacted() {
         .await
         .unwrap();
     assert_eq!(
-        java["Content"][0]["URL"],
-        "[REDACTED]",
+        java["Content"][0]["URL"], "[REDACTED]",
         "the Java-compatible route must stay redacted, got {java}"
     );
 }
 
 #[tokio::test]
 async fn cors_preflight_answers_the_configured_origin() {
-    let (addr, _handle) = start_admin(|s| {
-        s.with_cors_origins(vec!["https://console.example.com".to_owned()])
-    })
-    .await;
+    let (addr, _handle) =
+        start_admin(|s| s.with_cors_origins(vec!["https://console.example.com".to_owned()])).await;
 
     let client = reqwest::Client::new();
     let allowed = client
-        .request(reqwest::Method::OPTIONS, format!("http://{addr}/druid/api/v1/basic"))
+        .request(
+            reqwest::Method::OPTIONS,
+            format!("http://{addr}/druid/api/v1/basic"),
+        )
         .header("Origin", "https://console.example.com")
         .header("Access-Control-Request-Method", "GET")
         .send()
@@ -161,7 +158,10 @@ async fn cors_preflight_answers_the_configured_origin() {
     );
 
     let refused = client
-        .request(reqwest::Method::OPTIONS, format!("http://{addr}/druid/api/v1/basic"))
+        .request(
+            reqwest::Method::OPTIONS,
+            format!("http://{addr}/druid/api/v1/basic"),
+        )
         .header("Origin", "https://evil.example.com")
         .header("Access-Control-Request-Method", "GET")
         .send()

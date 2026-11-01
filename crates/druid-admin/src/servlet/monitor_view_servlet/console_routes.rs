@@ -10,12 +10,11 @@
 use std::collections::HashMap;
 
 use axum::response::{IntoResponse, Response};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::command::CommandBroker;
 use crate::model::dto::DataSourceResult;
 use crate::service::{ManagementSource, MonitorStatService};
-
 
 /// 控制台路由无法提供该能力时返回的原因。
 const CONNECTION_INFO_UNSUPPORTED: &str =
@@ -144,11 +143,7 @@ async fn datasource_identity(backend: &ManagementSource, id: i64) -> Response {
 }
 
 /// `sql-{id}.json`：按标识符返回单条 SQL 统计。
-async fn sql_identity(
-    backend: &ManagementSource,
-    id: i64,
-    query: Option<&str>,
-) -> Response {
+async fn sql_identity(backend: &ManagementSource, id: i64, query: Option<&str>) -> Response {
     let parameters = query_parameters(query);
     let service_id = parameters.get("serviceId").map(String::as_str);
     match backend.sql_stat(id, service_id, None).await {

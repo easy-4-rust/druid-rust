@@ -60,11 +60,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let source = discovery.build_management_source(repo.clone())?;
 
     // Build HTTP router
-    let http_app = druid_admin::production_router_with_source(
-        source,
-        &config,
-        command_broker.clone(),
-    );
+    let http_app =
+        druid_admin::production_router_with_source(source, &config, command_broker.clone());
     let http_listener = tokio::net::TcpListener::bind(http_addr).await?;
     let http_shutdown = shutdown_token.clone();
     let http_tls = tls_material.clone();

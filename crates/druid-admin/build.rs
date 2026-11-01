@@ -30,11 +30,7 @@ fn main() {
     generated.push_str("// 由 build.rs 生成，请勿手工修改。\n");
     generated.push_str("&[\n");
     for (path, body) in &assets {
-        generated.push_str(&format!(
-            "    ({:?}, {:?}),\n",
-            path,
-            body
-        ));
+        generated.push_str(&format!("    ({:?}, {:?}),\n", path, body));
     }
     generated.push_str("]\n");
 

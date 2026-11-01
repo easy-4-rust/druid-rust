@@ -13,9 +13,7 @@ use serde_json::Value;
 
 use druid_admin::repository::MetricsRepository;
 
-async fn start_admin(
-    repository: MetricsRepository,
-) -> (SocketAddr, tokio::task::JoinHandle<()>) {
+async fn start_admin(repository: MetricsRepository) -> (SocketAddr, tokio::task::JoinHandle<()>) {
     let servlet = druid_admin::MonitorViewServlet::from_repository(repository);
     let app = servlet.router();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -72,7 +70,9 @@ async fn v1_datasources_use_camel_case_and_no_java_envelope() {
         body.get("ResultCode").is_none(),
         "the versioned API must not use the Java envelope, got {body}"
     );
-    let rows = body["datasources"].as_array().expect("datasources must be a list");
+    let rows = body["datasources"]
+        .as_array()
+        .expect("datasources must be a list");
     assert_eq!(rows.len(), 1);
     let row = &rows[0];
     assert_eq!(row["identity"], 7);
@@ -124,8 +124,11 @@ async fn v1_sql_sorts_and_pages() {
     repository.upsert_datasource(datasource_id, entry);
     let (addr, _handle) = start_admin(repository).await;
 
-    let (status, _content_type, body) =
-        get_json(addr, "/druid/api/v1/sql?orderBy=executeCount&orderType=desc").await;
+    let (status, _content_type, body) = get_json(
+        addr,
+        "/druid/api/v1/sql?orderBy=executeCount&orderType=desc",
+    )
+    .await;
 
     assert_eq!(status, 200);
     assert_eq!(body["total"], 2);
@@ -142,7 +145,11 @@ async fn v1_sql_pages_with_the_requested_window() {
     let repository = MetricsRepository::new();
     let (datasource_id, mut entry) =
         common::make_datasource_entry_with_sql(3, "sqlite", 1, 11, "select 1", 5);
-    let mut second = entry.sql_stats.get(&11).expect("SQL stat must exist").clone();
+    let mut second = entry
+        .sql_stats
+        .get(&11)
+        .expect("SQL stat must exist")
+        .clone();
     second.id = 12;
     second.sql = Some("select 2".to_owned());
     entry.sql_stats.insert(12, second);

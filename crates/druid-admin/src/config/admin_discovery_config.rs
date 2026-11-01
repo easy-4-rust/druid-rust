@@ -10,7 +10,9 @@ use std::time::Duration;
 
 use crate::config::{AdminConfigError, MonitorProperties};
 use crate::repository::MetricsRepository;
-use crate::service::{ManagementSource, MonitorStatService, ServiceInstance, StaticDiscoveryClient};
+use crate::service::{
+    ManagementSource, MonitorStatService, ServiceInstance, StaticDiscoveryClient,
+};
 use crate::util::ReqwestHttpClient;
 
 /// Admin 数据来源模式。
@@ -97,9 +99,7 @@ impl AdminDiscoveryConfig {
     }
 
     /// 构造 Java 模型下的远端聚合服务。
-    fn build_remote_service(
-        &self,
-    ) -> Result<Arc<MonitorStatService>, AdminConfigError> {
+    fn build_remote_service(&self) -> Result<Arc<MonitorStatService>, AdminConfigError> {
         let http_client = Arc::new(
             ReqwestHttpClient::new(Duration::from_secs(5), Duration::from_secs(10))
                 .map_err(|_| AdminConfigError::HttpClientUnavailable)?,
@@ -154,11 +154,7 @@ fn split_env(name: &str) -> Vec<String> {
 }
 
 /// 解析一个 `http://host:port` 形式的节点地址。
-fn parse_endpoint(
-    endpoint: &str,
-    index: usize,
-    service_name: &str,
-) -> Option<ServiceInstance> {
+fn parse_endpoint(endpoint: &str, index: usize, service_name: &str) -> Option<ServiceInstance> {
     let without_scheme = endpoint
         .strip_prefix("http://")
         .or_else(|| endpoint.strip_prefix("https://"))?;

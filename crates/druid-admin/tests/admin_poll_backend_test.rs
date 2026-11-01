@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use axum::routing::get;
 use axum::{Json, Router};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use druid_admin::config::{AdminDiscoveryConfig, AdminDiscoveryMode};
 use druid_admin::repository::MetricsRepository;
@@ -103,7 +103,9 @@ async fn poll_mode_serves_the_monitored_node_rich_data() {
     let (status, body) = get_json(addr, "/druid/datasource.json").await;
     assert_eq!(status, 200);
     // Java Admin 的 datasource.json 返回 ResultCode 0（DTO 默认值），与实现平价。
-    let rows = body["Content"].as_array().expect("Content must be a list, got {body}");
+    let rows = body["Content"]
+        .as_array()
+        .expect("Content must be a list, got {body}");
     assert_eq!(rows.len(), 1, "the monitored node must be polled");
     assert_eq!(rows[0]["URL"], "jdbc:postgresql://10.0.0.7:5432/orders");
     assert_eq!(rows[0]["UserName"], "orders_app");
@@ -111,7 +113,9 @@ async fn poll_mode_serves_the_monitored_node_rich_data() {
     // 版本化 API 同样拿到这些深层字段。
     let (status, body) = get_json(addr, "/druid/api/v1/datasources").await;
     assert_eq!(status, 200);
-    let rows = body["datasources"].as_array().expect("datasources must be a list");
+    let rows = body["datasources"]
+        .as_array()
+        .expect("datasources must be a list");
     assert_eq!(rows[0]["url"], "jdbc:postgresql://10.0.0.7:5432/orders");
     assert_eq!(rows[0]["userName"], "orders_app");
 }
@@ -134,7 +138,9 @@ async fn both_mode_falls_back_to_the_repository_when_the_node_is_unreachable() {
 
     let (status, body) = get_json(addr, "/druid/api/v1/datasources").await;
     assert_eq!(status, 200);
-    let rows = body["datasources"].as_array().expect("datasources must be a list");
+    let rows = body["datasources"]
+        .as_array()
+        .expect("datasources must be a list");
     assert_eq!(
         rows.len(),
         1,
@@ -160,7 +166,8 @@ async fn service_list_reports_the_configured_application() {
     let (status, body) = get_json(addr, "/druid/serviceList.json").await;
     assert_eq!(status, 200);
     assert!(
-        body.as_array().is_some_and(|names| names.iter().any(|n| n == "orders")),
+        body.as_array()
+            .is_some_and(|names| names.iter().any(|n| n == "orders")),
         "serviceList.json must report the configured application, got {body}"
     );
 }

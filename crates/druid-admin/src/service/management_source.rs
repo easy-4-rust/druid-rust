@@ -12,7 +12,7 @@
 
 use std::sync::Arc;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use druid_metrics::ServiceIdentity;
 
@@ -142,7 +142,10 @@ impl ManagementSource {
     }
 
     /// 返回类型化的 SQL 统计行，供版本化 API 做字段映射。
-    pub async fn sql_rows(&self, query: &StatQuery) -> Result<Vec<SqlListContent>, MonitorStatServiceError> {
+    pub async fn sql_rows(
+        &self,
+        query: &StatQuery,
+    ) -> Result<Vec<SqlListContent>, MonitorStatServiceError> {
         let value = self.sql_list(query).await?;
         Ok(value
             .get("Content")

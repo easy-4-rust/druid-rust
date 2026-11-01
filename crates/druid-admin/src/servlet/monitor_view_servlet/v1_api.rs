@@ -13,7 +13,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::model::dto::{DataSourceContent, SqlListContent};
 use crate::service::StatQuery;
@@ -52,7 +52,10 @@ fn sql_row(stat: &SqlListContent) -> Value {
         ("runningCount", v(&stat.running_count)),
         ("inTransactionCount", v(&stat.in_transaction_count)),
         ("resultSetHoldTime", v(&stat.result_set_hold_time)),
-        ("executeAndResultSetHoldTime", v(&stat.execute_and_result_set_hold_time)),
+        (
+            "executeAndResultSetHoldTime",
+            v(&stat.execute_and_result_set_hold_time),
+        ),
         ("dbType", v(&stat.db_type)),
         ("dataSource", v(&stat.data_source)),
         ("url", v(&stat.url)),
@@ -72,7 +75,10 @@ fn sql_row(stat: &SqlListContent) -> Value {
         ("readerOpenCount", v(&stat.reader_open_count)),
         ("histogram", v(&stat.histogram)),
         ("fetchRowCountHistogram", v(&stat.fetch_row_count_histogram)),
-        ("effectedRowCountHistogram", v(&stat.effected_row_count_histogram)),
+        (
+            "effectedRowCountHistogram",
+            v(&stat.effected_row_count_histogram),
+        ),
         (
             "executeAndResultHoldTimeHistogram",
             v(&stat.execute_and_result_hold_time_histogram),
@@ -184,7 +190,9 @@ pub(crate) async fn sql_list(
         .get("orderBy")
         .cloned()
         .unwrap_or_else(|| "executeCount".to_owned());
-    let descending = parameters.get("orderType").is_some_and(|value| value == "desc");
+    let descending = parameters
+        .get("orderType")
+        .is_some_and(|value| value == "desc");
     let page = parameters
         .get("page")
         .and_then(|value| value.parse::<usize>().ok())
@@ -202,7 +210,11 @@ pub(crate) async fn sql_list(
         .sql_rows(&StatQuery {
             service_name: parameters.get("serviceName").cloned(),
             order_by: order_by.clone(),
-            order_type: if descending { "desc".to_owned() } else { "asc".to_owned() },
+            order_type: if descending {
+                "desc".to_owned()
+            } else {
+                "asc".to_owned()
+            },
             page,
             per_page_count: per_page,
         })
@@ -211,7 +223,11 @@ pub(crate) async fn sql_list(
 
     rows.sort_by(|left, right| {
         let ordering = compare_values(&sql_row(left), &sql_row(right), &order_by);
-        if descending { ordering.reverse() } else { ordering }
+        if descending {
+            ordering.reverse()
+        } else {
+            ordering
+        }
     });
     let total = rows.len();
     let from = (page - 1) * per_page;
@@ -250,8 +266,7 @@ fn compare_values(left: &Value, right: &Value, key: &str) -> std::cmp::Ordering 
 /// `GET /druid/api/v1/wall` —— SQL 防火墙统计。
 pub(crate) async fn wall(State(state): State<super::MonitorViewServlet>) -> Response {
     match state.backend.source().wall().await {
-        Ok(wall) => Json(json!({"apiVersion": API_VERSION, "wall": wall.content}))
-            .into_response(),
+        Ok(wall) => Json(json!({"apiVersion": API_VERSION, "wall": wall.content})).into_response(),
         Err(error) => (StatusCode::BAD_GATEWAY, error.to_string()).into_response(),
     }
 }
