@@ -425,7 +425,6 @@ pub(crate) async fn sql_detail(
 }
 
 /// 比较两个 JSON 对象的某个字段。
-
 fn compare_values(left: &Value, right: &Value, key: &str) -> std::cmp::Ordering {
     let left_value = left.get(key);
     let right_value = right.get(key);
