@@ -13,6 +13,10 @@ pub struct AdminServerConfig {
     tls: Option<AdminTlsFiles>,
     auth: AdminAuthMode,
     shutdown_timeout: Duration,
+    /// 可选的 Bearer 令牌。
+    bearer_token: Option<String>,
+    /// 允许的跨源来源。
+    cors_origins: Vec<String>,
 }
 
 impl AdminServerConfig {
@@ -69,7 +73,27 @@ impl AdminServerConfig {
             Some(_) => return Err(AdminConfigError::UnsupportedAuthMode),
         };
         let shutdown_timeout = parse_shutdown_timeout()?;
-        Self::try_new_with_shutdown_timeout(http_addr, grpc_addr, tls, auth, shutdown_timeout)
+        let mut config = Self::try_new_with_shutdown_timeout(
+            http_addr,
+            grpc_addr,
+            tls,
+            auth,
+            shutdown_timeout,
+        )?;
+        config.bearer_token = std::env::var("DRUID_ADMIN_BEARER_TOKEN")
+            .ok()
+            .filter(|value| !value.is_empty());
+        config.cors_origins = std::env::var("DRUID_ADMIN_CORS_ORIGINS")
+            .ok()
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(|item| item.trim().to_owned())
+                    .filter(|item| !item.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(config)
     }
 
     /// 校验监听暴露面与安全配置是否匹配。
@@ -118,6 +142,18 @@ impl AdminServerConfig {
         &self.auth
     }
 
+    /// 返回可选的 Bearer 令牌。
+    #[must_use]
+    pub fn bearer_token(&self) -> Option<&str> {
+        self.bearer_token.as_deref()
+    }
+
+    /// 返回允许的跨源来源。
+    #[must_use]
+    pub fn cors_origins(&self) -> &[String] {
+        &self.cors_origins
+    }
+
     /// 返回进程收到终止信号后等待 owned server handles 的总期限。
     #[must_use]
     pub const fn shutdown_timeout(&self) -> Duration {
@@ -137,6 +173,8 @@ impl Default for AdminServerConfig {
             tls: None,
             auth: AdminAuthMode::Disabled,
             shutdown_timeout: default_shutdown_timeout(),
+            bearer_token: None,
+            cors_origins: Vec::new(),
         }
     }
 }
@@ -155,6 +193,8 @@ impl AdminServerConfig {
             tls,
             auth,
             shutdown_timeout,
+            bearer_token: None,
+            cors_origins: Vec::new(),
         };
         config.validate()?;
         Ok(config)

@@ -18,7 +18,7 @@ axum          = { workspace = true }
 axum-valid    = { workspace = true }
 chrono        = { workspace = true }
 tower         = { workspace = true }
-tower-http    = { version = "0.7", features = ["trace"] }
+tower-http    = { version = "0.7", features = ["trace", "cors"] }
 hyper         = { workspace = true }
 reqwest       = { workspace = true }
 tokio-metrics = { workspace = true }

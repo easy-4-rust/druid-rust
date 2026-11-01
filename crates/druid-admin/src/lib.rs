@@ -69,11 +69,17 @@ pub fn production_router_with_source(
     config: &AdminServerConfig,
     command_broker: CommandBroker,
 ) -> Router {
-    let management = MonitorViewServlet::from_management_source(source)
+    let mut servlet = MonitorViewServlet::from_management_source(source)
         .with_auth_mode(config.auth().clone())
         .with_secure_cookies(config.tls().is_some())
-        .with_command_broker(command_broker)
-        .router();
+        .with_command_broker(command_broker);
+    if let Some(token) = config.bearer_token() {
+        servlet = servlet.with_bearer_token(token);
+    }
+    if !config.cors_origins().is_empty() {
+        servlet = servlet.with_cors_origins(config.cors_origins().to_vec());
+    }
+    let management = servlet.router();
     Router::new()
         .route("/health", get(health_handler))
         .merge(management)

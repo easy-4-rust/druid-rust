@@ -17,6 +17,8 @@ impl MonitorViewServlet {
             command_broker: None,
             metrics_appendix: None,
             remote_metrics_output_rejected_total: Arc::new(AtomicU64::new(0)),
+            bearer_token: None,
+            cors_origins: Arc::new(Vec::new()),
         }
     }
 
@@ -36,6 +38,8 @@ impl MonitorViewServlet {
             command_broker: None,
             metrics_appendix: None,
             remote_metrics_output_rejected_total: Arc::new(AtomicU64::new(0)),
+            bearer_token: None,
+            cors_origins: Arc::new(Vec::new()),
         }
     }
 
@@ -92,6 +96,20 @@ impl MonitorViewServlet {
         self
     }
 
+    /// 配置 Bearer 令牌；跨源部署的控制台用它代替会话 cookie。
+    #[must_use]
+    pub fn with_bearer_token(mut self, token: impl Into<String>) -> Self {
+        self.bearer_token = Some(Arc::from(token.into()));
+        self
+    }
+
+    /// 配置允许的跨源来源；非空时给响应加 CORS 头。
+    #[must_use]
+    pub fn with_cors_origins(mut self, origins: Vec<String>) -> Self {
+        self.cors_origins = Arc::new(origins);
+        self
+    }
+
     /// 注入与生产 gRPC IngestService 共用的有界命令 broker。
     #[must_use]
     pub fn with_command_broker(mut self, command_broker: CommandBroker) -> Self {
@@ -115,6 +133,7 @@ impl MonitorViewServlet {
         let auth_state = self.clone();
         let redaction_policy = self.redaction_policy;
         let context_path = self.context_path.to_string();
+        let cors_origins = self.cors_origins.clone();
         let admin_routes = Router::new()
             .route("/index.html", get(Self::legacy_page))
             .route("/login.html", get(Self::login_page))
@@ -177,7 +196,7 @@ impl MonitorViewServlet {
         // bare context-path (e.g. /druid and /druid/) by redirecting to
         // the index page.
         let context_slash = format!("{context_path}/");
-        Router::new()
+        let mut router = Router::new()
             .route(&context_path, get(Self::root))
             .route(&context_slash, get(Self::root))
             .merge(
@@ -190,7 +209,22 @@ impl MonitorViewServlet {
             .layer(middleware::from_fn_with_state(
                 redaction_policy,
                 Self::redact_management_response,
-            ))
+            ));
+        if !cors_origins.is_empty() {
+            let origins: Vec<axum::http::HeaderValue> = cors_origins
+                .iter()
+                .filter_map(|origin| origin.parse::<axum::http::HeaderValue>().ok())
+                .collect();
+            let cors = tower_http::cors::CorsLayer::new()
+                .allow_origin(tower_http::cors::AllowOrigin::list(origins))
+                .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+                .allow_headers([
+                    axum::http::header::AUTHORIZATION,
+                    axum::http::header::CONTENT_TYPE,
+                ]);
+            router = router.layer(cors);
+        }
+        router
     }
 
     pub(crate) async fn redact_management_response(
@@ -198,7 +232,13 @@ impl MonitorViewServlet {
         request: Request,
         next: Next,
     ) -> Response {
+        // 版本化 API 面向已认证的 operator，保留其需要的字段；
+        // 只有 Java 兼容路由做保守脱敏。
+        let path = request.uri().path().to_owned();
         let response = next.run(request).await;
+        if path.contains("/api/v1/") {
+            return response;
+        }
         if !policy.is_enabled()
             || !response
                 .headers()
@@ -273,6 +313,7 @@ impl MonitorViewServlet {
         }
         if request_has_session(&request, &state.sessions)
             || state.auth.authorizes_header(authorization)
+            || state.authorizes_bearer(authorization)
         {
             request
                 .extensions_mut()
@@ -280,6 +321,23 @@ impl MonitorViewServlet {
             return next.run(request).await;
         }
         redirect_found(format!("{}/login.html", state.context_path))
+    }
+
+    /// 校验 Bearer 令牌；令牌按字节做常量时间比较。
+    fn authorizes_bearer(&self, authorization: Option<&str>) -> bool {
+        let Some(token) = &self.bearer_token else {
+            return false;
+        };
+        let Some(value) = authorization else {
+            return false;
+        };
+        let Some(provided) = value.strip_prefix("Bearer ") else {
+            return false;
+        };
+        use subtle::ConstantTimeEq;
+        let expected = token.as_bytes();
+        let provided = provided.as_bytes();
+        expected.len() == provided.len() && expected.ct_eq(provided).into()
     }
 
     pub(crate) async fn issue_command(

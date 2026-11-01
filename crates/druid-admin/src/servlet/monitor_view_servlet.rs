@@ -59,6 +59,10 @@ pub struct MonitorViewServlet {
     command_broker: Option<CommandBroker>,
     metrics_appendix: Option<Arc<dyn Fn() -> String + Send + Sync>>,
     remote_metrics_output_rejected_total: Arc<AtomicU64>,
+    /// 可选的 Bearer 令牌；供跨源部署的控制台使用。
+    bearer_token: Option<Arc<str>>,
+    /// 允许的跨源来源；为空时不加 CORS 头。
+    cors_origins: Arc<Vec<String>>,
 }
 
 /// 管理数据来源；远端优先，仓库兜底。
