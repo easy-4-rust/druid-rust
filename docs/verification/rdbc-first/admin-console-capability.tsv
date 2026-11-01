@@ -1,0 +1,24 @@
+# Java Druid admin 控制台能力基线：Java 路由 → Rust 路由的覆盖对照。
+# java_route          Java 侧地址（相对 /druid）
+# capability          能力名
+# java_fields         Java 响应 Content 的关键字段
+# rust_route          Rust 侧对应地址
+# rust_state          LIVE（两类后端都有）/ POLL_ONLY（只有轮询后端有）/ PUSH_ONLY（只有推送后端有）/ UNSUPPORTED（平台无数据源）
+# notes               差异说明
+java_route	capability	java_fields	rust_route	rust_state	notes
+basic.json	runtime-basic	Version,Drivers[],ResetEnable,ResetCount,JavaVersion,JavaVMName,JavaClassPath,StartTime	/druid/basic.json	LIVE	Java 运行时报 null（Rust 平台不冒充 Java）；Rust 报自身版本与驱动
+datasource.json	datasource-list	DataSourceContent×87（Identity..ConnectionHoldTimeHistogram）	/druid/datasource.json、/druid/api/v1/datasources	LIVE	推送只带 ~10 字段；轮询拿全量 87 字段
+datasource-{id}.json	datasource-detail	同上（单条）	/druid/datasource-{id}.json	LIVE	REST 别名 /api/datasources/{id} 用复合键 (serviceId,identity)
+sql.json	sql-list	SqlListContent×46（SQL,ExecuteCount,Histogram..）	/druid/sql.json、/druid/api/v1/sql	LIVE	版本化 API 支持 orderBy/orderType/page/perPageCount
+sql-{id}.json	sql-detail	SqlDetailContent×51（含 formattedSql/parsedTable/parsedFields..）	/druid/sql-{id}.json	LIVE	REST 别名 /api/sql/{id} 用复合键 (serviceId,dataSourceId,id)
+wall.json	wall-stats	checkCount,violationCount,tables[],functions[],whiteList[],blackList[]	/druid/wall.json、/druid/api/v1/wall	LIVE	轮询拿 tables/functions/黑白名单；推送只有计数
+connectionInfo-{id}.json	pool-connections	ConnectionContent（id,connectionId,useCount,pscache..）	/druid/connectionInfo-{id}.json	POLL_ONLY	推送协议不带连接级明细
+activeConnectionStackTrace-{id}.json	active-stack-traces	List<List<String>>	/druid/activeConnectionStackTrace-{id}.json	POLL_ONLY	需要 removeAbandoned=true；当前轮询亦报不支持，留作后续
+reset-all.json	reset-all	null	/druid/reset-all.json	LIVE	经 CommandBroker 扇出到每个接入服务
+log-and-reset.json	log-and-reset	null	/druid/log-and-reset.json	LIVE	同上
+serviceList.json	service-list	[String]	/druid/serviceList.json	LIVE	轮询报配置的应用；推送报已见服务名
+webapp.json	webapp-stats	WebAppStatValue（ContextPath,OS/Browser/Device/Bot 计数）	/druid/webapp.json	UNSUPPORTED	依赖 servlet filter，Rust 平台无数据源
+weburi.json	weburi-stats	WebURIStatValue（URI,RequestCount,Jdbc*..）	/druid/weburi.json	UNSUPPORTED	同上
+websession.json	websession-stats	WebSessionStatValue（SESSIONID,Principal..）	/druid/websession.json	UNSUPPORTED	同上
+spring.json	spring-method-stats	SpringMethodStatValue（Class,Method,Histogram..）	/druid/spring.json	UNSUPPORTED	依赖 Spring 方法拦截，Rust 平台无数据源
+index/api.html	api-index	静态 API 目录	/druid/api.json、/druid/api/v1/openapi.json	LIVE	版本化 API 发布 OpenAPI 3.1 文档

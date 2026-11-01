@@ -1,0 +1,24 @@
+# Tasks
+
+- [x] 1. Record the Java-console capability baseline: enumerate the routes and the response fields Java Druid's admin serves, and the Rust routes that currently answer them. Keep the list in `docs/verification/rdbc-first/admin-console-capability.tsv` so later steps can prove coverage instead of asserting it.
+- [x] 2. Write the failing test for the missing management routes: `basic.json`, `datasource-{id}.json`, `sql-{id}.json`, `connectionInfo-{id}.json`, `activeConnectionStackTrace-{id}.json` and `reset-all.json` must be answered by the Admin with the Java-compatible envelope, and the identity-bearing routes must distinguish a missing identity from an unknown one.
+- [x] 3. Run the test RED and record the failure output before implementing.
+- [x] 4. Implement the missing Java-compatible routes. `basic.json` reports the runtime version, the known drivers, the reset flag and the reset count; the detail routes resolve the identity and answer not-found when it is unknown; `reset-all.json` and `log-and-reset.json` issue the corresponding command through the command broker and report the broker's outcome.
+- [x] 5. Run the test GREEN.
+- [x] 6. Write the failing test for the remote backend being reachable from the Admin binary: a configured discovery must produce a service list, and the datasource and SQL routes must answer from the discovered nodes.
+- [x] 7. Run the test RED and record the failure output.
+- [x] 8. Implement the remote backend wiring. Load the monitor properties from the environment, construct the discovery client and the HTTP client, build `MonitorStatService`, and select the remote backend when discovery is configured while the repository backend remains the default.
+- [x] 9. Run the test GREEN.
+- [x] 10. Write the failing test for the versioned API namespace: every versioned route must use the one naming convention, must answer unauthorized, not-found and unprocessable-entity with their own statuses, and must carry a JSON content type.
+- [x] 11. Run the test RED and record the failure output.
+- [x] 12. Implement the versioned namespace over the backend-neutral accessor. Report a capability the platform cannot provide as unsupported with a reason instead of as zero-valued rows.
+- [x] 13. Publish the OpenAPI document for the versioned namespace from the same definitions that implement the routes, and add a test that every served route appears in the document.
+- [x] 14. Run the tests GREEN.
+- [x] 15. Write the failing test for the console delivery: the Admin root must serve the built console application, a console asset must be served without a Rust source change, and the Admin must still compile and serve its API when the console has not been built.
+- [x] 16. Run the test RED and record the failure output.
+- [x] 17. Implement the console delivery. Build the separated application under `crates/druid-admin/web/`, embed the built output in the binary, and replace the hand-written static-resource match with the embedded directory.
+- [x] 18. Build the separated application: a datasource list, a datasource detail, a SQL list with sorting and pagination, a SQL detail, the Wall view, the pooled-connection view, the active-connection view and the API index. Each view reads the versioned API only.
+- [x] 19. Implement the bearer credential alongside the session cookie, and the configurable cross-origin access, without weakening the non-loopback rule that requires both TLS and authentication.
+- [x] 20. Adjust the redaction so the operator-scoped versioned view serves the fields an operator needs while the ingest role and the compatibility routes stay redacted.
+- [x] 21. Verify the whole change: the Admin module tests, the versioned API contract tests, the console build, and a real run of the Admin against a live pool showing the datasource, SQL and Wall views populated. Record the evidence in `implementation-evidence.md`.
+- [x] 22. Sync the new capability spec and archive this change after the evidence is accepted.
