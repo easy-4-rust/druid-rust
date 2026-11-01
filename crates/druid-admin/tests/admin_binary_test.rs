@@ -3,7 +3,8 @@
 //! Task 1 Step 1: Tests for dual-port binding (HTTP 8080, gRPC 9090),
 //! /health route, and graceful shutdown.
 
-use std::sync::{Arc, Mutex};
+use std::collections::HashSet;
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 #[cfg(unix)]
@@ -363,6 +364,33 @@ async fn invalid_tls_material_fails_before_listening() {
     assert!(!status.success());
 }
 
+static RESERVED_TLS_TEST_PORTS: LazyLock<Mutex<HashSet<u16>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+async fn reserve_tls_port_pair() -> (u16, u16) {
+    loop {
+        // Keep both listeners bound until both ports are selected, then never reuse them
+        // within this test process. Windows can recycle a just-closed ephemeral port.
+        let http = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("reserve HTTP port");
+        let grpc = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("reserve gRPC port");
+        let http_port = http.local_addr().expect("HTTP port").port();
+        let grpc_port = grpc.local_addr().expect("gRPC port").port();
+        let mut reserved = RESERVED_TLS_TEST_PORTS
+            .lock()
+            .expect("TLS test port reservations lock");
+        if reserved.contains(&http_port) || reserved.contains(&grpc_port) {
+            continue;
+        }
+        reserved.insert(http_port);
+        reserved.insert(grpc_port);
+        return (http_port, grpc_port);
+    }
+}
+
 fn secure_grpc_config(port: u16, authorization: Option<GrpcAuthorization>) -> GrpcClientConfig {
     let tls = ClientTlsConfig::new()
         .ca_certificate(Certificate::from_pem(include_bytes!(
@@ -386,18 +414,7 @@ fn secure_grpc_config(port: u16, authorization: Option<GrpcAuthorization>) -> Gr
 
 #[tokio::test]
 async fn remote_http_and_grpc_use_tls_and_require_authentication() {
-    let http_port = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("reserve HTTP port")
-        .local_addr()
-        .expect("HTTP port")
-        .port();
-    let grpc_port = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("reserve gRPC port")
-        .local_addr()
-        .expect("gRPC port")
-        .port();
+    let (http_port, grpc_port) = reserve_tls_port_pair().await;
     let fixture_dir = format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR"));
     let mut child = admin_command()
         .env("DRUID_ADMIN_HTTP_ADDR", format!("0.0.0.0:{http_port}"))
@@ -602,18 +619,7 @@ async fn remote_http_and_grpc_use_tls_and_require_authentication() {
 
 #[tokio::test]
 async fn stalled_tls_handshake_does_not_block_another_http_client() {
-    let http_port = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("reserve HTTP port")
-        .local_addr()
-        .expect("HTTP port")
-        .port();
-    let grpc_port = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("reserve gRPC port")
-        .local_addr()
-        .expect("gRPC port")
-        .port();
+    let (http_port, grpc_port) = reserve_tls_port_pair().await;
     let fixture_dir = format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR"));
     let mut child = admin_command()
         .env("DRUID_ADMIN_HTTP_ADDR", format!("127.0.0.1:{http_port}"))
