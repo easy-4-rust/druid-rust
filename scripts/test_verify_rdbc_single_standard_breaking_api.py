@@ -285,6 +285,12 @@ class BreakingApiAllowlistTest(unittest.TestCase):
             allowlist.write_text(rows, encoding="utf-8")
             self.assertEqual(subprocess.run(arguments, capture_output=True).returncode, 0)
 
+            allowlist.write_text(rows + "druid\tmodule_missing\t1\t" + "0" * 64 + "\tapproved\treviewed\n", encoding="utf-8")
+            missing_result = subprocess.run(arguments, capture_output=True)
+            self.assertEqual(missing_result.returncode, 1)
+            self.assertIn(b"no longer present: druid/module_missing", missing_result.stderr)
+            allowlist.write_text(rows, encoding="utf-8")
+
             paths[1].write_text(report("Unexpected"), encoding="utf-8")
             self.assertEqual(subprocess.run(arguments, capture_output=True).returncode, 1)
 

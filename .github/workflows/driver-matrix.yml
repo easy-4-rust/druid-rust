@@ -532,7 +532,7 @@ jobs:
   semver:
     runs-on: ubuntu-latest
     env:
-      SEMVER_BASELINE_REV: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '2c421efa6caf8bfc983633529fc3775c251f9492' }}
+      SEMVER_BASELINE_REV: 2c421efa6caf8bfc983633529fc3775c251f9492
     steps:
       - uses: actions/checkout@v7
         with:
@@ -544,7 +544,9 @@ jobs:
         with:
           tool: cargo-semver-checks
       - name: Test SemVer breaking API verifier
-        run: python3 scripts/test_verify_rdbc_single_standard_breaking_api.py
+        run: |
+          python3 scripts/test_verify_rdbc_single_standard_breaking_api.py
+          python3 scripts/test_verify_pr_semver.py
       - name: Capture SemVer reports against the decision baseline
         run: |
           mkdir -p api/observed
@@ -570,6 +572,11 @@ jobs:
             --rdbc-report api/observed/druid-rdbc.semver-checks.txt --rdbc-exit-code "$rdbc_status" \
             --druid-report api/observed/druid.semver-checks.txt --druid-exit-code "$druid_status" \
             --wrapper-report api/observed/druid-wrapper.semver-checks.txt --wrapper-exit-code "$wrapper_status"
+      - name: Reject new SemVer breaks against PR base
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASELINE_REV: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/verify_pr_semver.py --baseline "$PR_BASELINE_REV"
       - name: Upload SemVer reports
         if: always()
         uses: actions/upload-artifact@v4
