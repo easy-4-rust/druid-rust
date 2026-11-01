@@ -29,8 +29,9 @@ const cells = computed(() =>
       placement="top"
     >
       <div class="hit">
+        <!-- 类名不能叫 cell：会撞上 Element Plus 的 .el-table .cell（padding: 0 8px）把方块撑扁。 -->
         <div
-          class="cell"
+          class="sq"
           :style="{ width: `${CELL}px`, height: `${CELL}px`, background: color, opacity: cell.opacity }"
         />
       </div>
@@ -54,8 +55,9 @@ const cells = computed(() =>
   height: 100%;
 }
 
-.cell {
+.sq {
   border-radius: 1px;
+  flex: none;
 }
 
 .empty {
