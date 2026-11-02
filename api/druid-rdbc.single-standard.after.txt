@@ -1678,6 +1678,54 @@ pub druid_rdbc::governance::shrink_policy::ShrinkPolicy::phy_timeout_millis: u64
 impl core::default::Default for druid_rdbc::governance::shrink_policy::ShrinkPolicy
 pub fn druid_rdbc::governance::shrink_policy::ShrinkPolicy::default() -> Self
 pub fn druid_rdbc::governance::shrink_policy::classify(usize, usize, u64, u64, u64, &druid_rdbc::governance::shrink_policy::ShrinkPolicy) -> druid_rdbc::governance::shrink_policy::ShrinkDecision
+pub mod druid_rdbc::governance::two_phase
+pub enum druid_rdbc::governance::two_phase::GlobalDecision
+pub druid_rdbc::governance::two_phase::GlobalDecision::Commit
+pub druid_rdbc::governance::two_phase::GlobalDecision::Rollback
+pub druid_rdbc::governance::two_phase::GlobalDecision::Undecided
+pub enum druid_rdbc::governance::two_phase::ParticipantState
+pub druid_rdbc::governance::two_phase::ParticipantState::Aborted
+pub druid_rdbc::governance::two_phase::ParticipantState::Committed
+pub druid_rdbc::governance::two_phase::ParticipantState::Mixed
+pub druid_rdbc::governance::two_phase::ParticipantState::Prepared
+pub druid_rdbc::governance::two_phase::ParticipantState::Unknown
+pub druid_rdbc::governance::two_phase::ParticipantState::Unprepared
+pub enum druid_rdbc::governance::two_phase::RecoveryAction
+pub druid_rdbc::governance::two_phase::RecoveryAction::Complete
+pub druid_rdbc::governance::two_phase::RecoveryAction::ManualAdjudication
+pub druid_rdbc::governance::two_phase::RecoveryAction::ReplayCommit
+pub druid_rdbc::governance::two_phase::RecoveryAction::ReplayRollback
+pub druid_rdbc::governance::two_phase::RecoveryAction::VerifyOnly
+pub druid_rdbc::governance::two_phase::RecoveryAction::Wait
+impl druid_rdbc::governance::two_phase::RecoveryAction
+pub const fn druid_rdbc::governance::two_phase::RecoveryAction::allows_commit_retry(self) -> bool
+pub enum druid_rdbc::governance::two_phase::TransactionState
+pub druid_rdbc::governance::two_phase::TransactionState::Aborted
+pub druid_rdbc::governance::two_phase::TransactionState::Aborting
+pub druid_rdbc::governance::two_phase::TransactionState::Active
+pub druid_rdbc::governance::two_phase::TransactionState::Committed
+pub druid_rdbc::governance::two_phase::TransactionState::Committing
+pub druid_rdbc::governance::two_phase::TransactionState::Mixed
+pub druid_rdbc::governance::two_phase::TransactionState::Prepared
+pub druid_rdbc::governance::two_phase::TransactionState::Preparing
+pub druid_rdbc::governance::two_phase::TransactionState::Unknown
+pub struct druid_rdbc::governance::two_phase::ParticipantRecord
+pub druid_rdbc::governance::two_phase::ParticipantRecord::name: alloc::string::String
+pub druid_rdbc::governance::two_phase::ParticipantRecord::state: druid_rdbc::governance::two_phase::ParticipantState
+impl druid_rdbc::governance::two_phase::ParticipantRecord
+pub fn druid_rdbc::governance::two_phase::ParticipantRecord::new(impl core::convert::Into<alloc::string::String>, druid_rdbc::governance::two_phase::ParticipantState) -> Self
+pub struct druid_rdbc::governance::two_phase::TwoPhaseLog
+pub druid_rdbc::governance::two_phase::TwoPhaseLog::decision: druid_rdbc::governance::two_phase::GlobalDecision
+pub druid_rdbc::governance::two_phase::TwoPhaseLog::participants: alloc::vec::Vec<druid_rdbc::governance::two_phase::ParticipantRecord>
+pub druid_rdbc::governance::two_phase::TwoPhaseLog::schema_version: u16
+pub druid_rdbc::governance::two_phase::TwoPhaseLog::state: druid_rdbc::governance::two_phase::TransactionState
+pub druid_rdbc::governance::two_phase::TwoPhaseLog::transaction_id: alloc::string::String
+impl druid_rdbc::governance::two_phase::TwoPhaseLog
+pub fn druid_rdbc::governance::two_phase::TwoPhaseLog::log_key(&self) -> alloc::string::String
+pub fn druid_rdbc::governance::two_phase::TwoPhaseLog::new(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<druid_rdbc::governance::two_phase::ParticipantRecord>) -> Self
+pub fn druid_rdbc::governance::two_phase::TwoPhaseLog::participant_states(&self) -> impl core::iter::traits::iterator::Iterator<Item = &druid_rdbc::governance::two_phase::ParticipantRecord>
+pub const druid_rdbc::governance::two_phase::TWO_PHASE_LOG_SCHEMA_VERSION: u16
+pub fn druid_rdbc::governance::two_phase::plan_recovery(&druid_rdbc::governance::two_phase::TwoPhaseLog) -> druid_rdbc::governance::two_phase::RecoveryAction
 pub mod druid_rdbc::governance::wall
 pub mod druid_rdbc::governance::wall::check_result
 pub struct druid_rdbc::governance::wall::check_result::WallCheckResult

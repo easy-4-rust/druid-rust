@@ -61,7 +61,7 @@
 
 ## 8. Durable 2PC 协调器
 
-- [ ] 8.1 冻结事务/参与者状态、`2pc:tx:{id}` 日志模型、决策顺序、unknown/Mixed 和恢复矩阵；验证 Mixed 明确禁止再次 commit 探测。
+- [x] 8.1 冻结事务/参与者状态、`2pc:tx:{id}` 日志模型、决策顺序、unknown/Mixed 和恢复矩阵；验证 Mixed 明确禁止再次 commit 探测。证据：`druid_rdbc::governance::two_phase` 模型 + `two_phase_recovery_model_test` 8 passed + `docs/migration/two-phase-recovery-model.md`；`RecoveryAction::allows_commit_retry` 仅对已落盘 commit 的幂等重放为真。
 - [ ] 8.2 实现 SQLite 持久化日志与 WAL/同步语义，保存 schema version、投票、决策和完成结果；验证重启后日志可读且决策顺序不可重排。
 - [ ] 8.3 实现协调器 prepare/commit/rollback 的持久化边界，外部副作用前记录必要决策；验证 prepare 后决策前崩溃不会误报终态。
 - [ ] 8.4 实现恢复重放与幂等键，跳过已完成外部效果；验证同一日志重复 replay 不产生重复提交、回滚或不可逆命令。

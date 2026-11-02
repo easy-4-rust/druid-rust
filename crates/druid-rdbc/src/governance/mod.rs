@@ -6,4 +6,5 @@
 
 pub mod hashing;
 pub mod shrink_policy;
+pub mod two_phase;
 pub mod wall;
