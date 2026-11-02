@@ -58,12 +58,12 @@
 ### 4. 其他未完成阶段
 
 - 门面收敛 6.1–6.3；静态分发 7.x；durable 2PC 8.x；真实驱动 9.2–9.8；Metrics/Admin 生产验证 10.x；最终发布 11.1/11.4–11.8；规格同步 12.x。
-- 已完成：1.6、5.4、5.5、6.4、11.2、11.3；5.1–5.3 见上表。
+- 已完成：1.5、1.6、2.1、2.2、2.4、2.5、5.1–5.5、6.4、8.1、9.1、9.2、10.2、10.4、11.2、11.3、12.1、12.2（详见上表）。
 
 ## 下一步
 
-1. 在稳定 Linux CI 或非受限 Windows 环境重跑 `--all-features` gRPC 目标，关闭 1.5。
-2. 开始 SOURCE_PARITY 语义映射：按 JDBC 核心对象、Pool/Filter、SQL/Wall 分批，先映射现有真实测试，禁止名称猜测。
-3. 3.2 从 Connection/Statement/PreparedStatement/ResultSet 开始，逐方法关联 Java 用例和 MATCH。
-4. 进行 6.1 门面收敛和 7.1–7.2 静态分发的设计/实现；保持兼容重导出和动态路径。
-5. 12.1 在最终事实稳定后统一四份迁移主文档，避免中途反复改写。
+1. 继续 2.3：按 JDBC 核心对象、Pool/Filter、SQL/Wall 分批，只映射已有真实测试与可复核断言，禁止名称猜测；当前 23 MATCH / 0 MISMATCH。
+2. 3.2 从 Connection/Statement/PreparedStatement/ResultSet 开始，逐方法关联 Java 用例和 MATCH。
+3. 进行 6.1 门面收敛和 7.1–7.2 静态分发的设计/实现；保持兼容重导出和动态路径。
+4. 9.3–9.8 在真实 MySQL/PostgreSQL/外部池/故障环境运行矩阵；未配置环境保持 NOT_RUN。
+5. 12.3 仅在全部实现、测试、验证与规格同步完成后 sync/archive。
