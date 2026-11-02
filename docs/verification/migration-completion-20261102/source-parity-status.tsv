@@ -986,7 +986,7 @@ src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest5.java#testValidate_
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest6.java#testValidate	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest7.java#testInitError	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest8.java#testInitError	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest9_phyMaxUseCount.java#test_for_phyMaxUseCount	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest9_phyMaxUseCount.java#test_for_phyMaxUseCount	ADAPTED	MATCH	crates/druid/tests/task6_recycle_complete_contract_test.rs::task6_recycle_complete_physical_connection_is_discarded_at_configured_max_use_count	cargo test -p druid --test task6_recycle_complete_contract_test (17 passed); the Rust target discards the physical connection at the configured max use count and creates a replacement.
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_autocommit.java#test_autoCommit	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_autocommit2.java#test_autoCommit	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_autocommit3.java#test_autoCommit	MISSING	NOT_RUN		
@@ -1027,7 +1027,7 @@ src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_maxActive1.java#tes
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_maxActive2.java#test_error	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_maxActive3.java#test_error	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_maxActive4.java#test_error	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_maxWait.java#test_maxWait	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_maxWait.java#test_maxWait	ADAPTED	MATCH	crates/druid/tests/pool_wait_limit_test.rs::interrupted_and_timed_out_waiters_leave_pool_reusable	cargo test -p druid --test pool_wait_limit_test (2 passed); the Rust target holds the only connection and proves an interrupted waiter and a timed-out waiter both fail then the pool is reusable.
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_notEmptyWait.java#test_error	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_notEmptyWait2.java#test_maxWaitThread	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_oracle.java#test_error	MISSING	NOT_RUN		

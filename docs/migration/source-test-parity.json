@@ -13866,16 +13866,19 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest9_phyMaxUseCount.java#test_for_phyMaxUseCount",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest9_phyMaxUseCount.java#test_for_phyMaxUseCount",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
+      "targets": [
+        "crates/druid/tests/task6_recycle_complete_contract_test.rs::task6_recycle_complete_physical_connection_is_discarded_at_configured_max_use_count"
+      ],
+      "disposition": "ADAPTED",
+      "contract_preserved": true,
       "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "cargo test -p druid --test task6_recycle_complete_contract_test (17 passed); the Rust target discards the physical connection at the configured max use count and creates a replacement.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_autocommit.java#test_autoCommit",
@@ -14449,16 +14452,19 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_maxWait.java#test_maxWait",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_maxWait.java#test_maxWait",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
+      "targets": [
+        "crates/druid/tests/pool_wait_limit_test.rs::interrupted_and_timed_out_waiters_leave_pool_reusable"
+      ],
+      "disposition": "ADAPTED",
+      "contract_preserved": true,
       "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "cargo test -p druid --test pool_wait_limit_test (2 passed); the Rust target holds the only connection and proves an interrupted waiter and a timed-out waiter both fail then the pool is reusable.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_notEmptyWait.java#test_error",
