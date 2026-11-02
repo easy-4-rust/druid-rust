@@ -52,11 +52,11 @@
 
 ### 3. JDBC 方法证据：Statement 与 Connection 已分批回填
 
-- 2001 个身份中 linked 465、unassessed 1536；已关联 Statement/PreparedStatement/Connection/CallableStatement/ResultSet/资源接口/元数据接口的现有真实测试与差分证据。
-- 分层：declaration PASS 449、contract PASS 447、adapter PASS 151、logical_proxy PASS 270、real_db PASS 54；`real_db` 来自 JDBC Agent H2/HSQLDB 真实运行（driver-matrix run `41410074184`，commit `95be0d6`），Blob/Clob/NClob/Array 与 Callable 共 40 个方法逐方法回填，Array H2 测试本次本机实跑 2 passed。
+- 2001 个身份中 linked 501、unassessed 1500；已关联 Statement/PreparedStatement/Connection/CallableStatement/ResultSet/资源接口/元数据接口的现有真实测试与差分证据。
+- 分层：declaration PASS 485、contract PASS 483、adapter PASS 151、logical_proxy PASS 306、real_db PASS 54；`real_db` 来自 JDBC Agent H2/HSQLDB 真实运行（driver-matrix run `41410074184`，commit `95be0d6`），Blob/Clob/NClob/Array 与 Callable 共 40 个方法逐方法回填，Array H2 测试本次本机实跑 2 passed。
 - 负向：RowSet/SQLInput/SQLOutput 4 个明确不支持能力登记 `UNSUPPORTED`（0A000 + SQLFeatureNotSupportedException + 精确 message）。
-- 边界：metadata 27 个 routing-only、10 个常量、Callable `getBoolean(int)` 弱证据、ResultSet 常量、资源 `TYPE`/`RowId#toString` 未回填；adapter/logical_proxy 仍覆盖不全，3.2–3.7 未完成。
-- 门禁：`verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=465 unassessed=1536`；13 个 verifier 单元测试通过。
+- 边界：metadata 27 个 routing-only、10 个常量、Callable `getBoolean(int)` 等无值级断言重载、ResultSet 常量、资源 `TYPE`/`RowId#toString` 未回填；adapter/logical_proxy 仍覆盖不全，3.2–3.7 未完成。
+- 门禁：`verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=501 unassessed=1500`；13 个 verifier 单元测试通过。
 
 ### 4. 其他未完成阶段
 

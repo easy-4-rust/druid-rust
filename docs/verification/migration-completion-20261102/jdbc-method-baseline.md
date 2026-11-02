@@ -10,11 +10,11 @@
 
 | 维度 | PASS | PARTIAL | UNSUPPORTED | UNASSESSED |
 |---|---:|---:|---:|---:|
-| capability | 0 | 461 | 4 | 1536 |
-| declaration | 449 | 0 | 0 | 1552 |
-| contract | 447 | 0 | 0 | 1554 |
+| capability | 0 | 497 | 4 | 1500 |
+| declaration | 485 | 0 | 0 | 1516 |
+| contract | 483 | 0 | 0 | 1518 |
 | adapter | 151 | 0 | 0 | 1850 |
-| logical_proxy | 270 | 0 | 0 | 1731 |
+| logical_proxy | 306 | 0 | 0 | 1695 |
 | real_db | 54 | 0 | 0 | 1947 |
 
 ## 约束
@@ -66,3 +66,12 @@
 - 真实库证据：Blob/Clob/NClob/Array 外部消费者测试与 Callable H2/HSQLDB live 测试逐方法回填 40 个 `real_db`，均来自实际 H2/HSQLDB 运行；Array H2 测试本次本机实跑 2 passed。
 - 证据边界：metadata 的 27 个 routing-only 与 10 个常量行未回填，Callable 的 `getBoolean(int)` 弱证据行、ResultSet 常量行、资源 `TYPE`/`RowId#toString` 行均被排除，不以路由或 Debug 表示冒充 Java 行为；Toasty SQLite 未被当作资源类真实库证据。
 - 门禁：`python scripts/verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=465 unassessed=1536`；Callable/Resource/Metadata/ResultSet 目标测试均通过。
+
+## 2026-11-02 Callable getter 追加批次
+
+- 当前 ledger SHA-256：`49717a31799ba0f8b07c6111af0218136a0ffa8c07603095770217a7fd042d4b`
+- 新增 36 个 `CallableStatement#getXxx` 方法：标量 index/named getter、BigDecimal（含 scale）、Date/Time/Timestamp（含 Calendar）、Blob/Clob/NClob/CharacterStream/NCharacterStream/NString/URL/Ref/Array/RowId/SQLXML。
+- 证据统一为 `task6_callable_canonical_matrix_test.rs#task6_prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle` 的真实 out 值断言，`contract` 与 `logical_proxy` 同时 PASS。
+- 结果：linked **501** / unassessed **1500**；capability PARTIAL 497 + UNSUPPORTED 4；declaration PASS 485、contract PASS 483、adapter PASS 151、logical_proxy PASS 306、real_db PASS 54。
+- 仍未回填：`getBoolean(int)`、`getBytes(int)`、`getDouble(int)`、`getFloat(int)`、`getShort(String)`、`getString(int)` 等无值级断言的重载，以及 index/named 之外的继承 Statement 方法。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=501 unassessed=1500`；`task6_callable_canonical_matrix_test` 10 passed。
