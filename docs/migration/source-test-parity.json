@@ -15140,16 +15140,19 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidPooledPreparedStatementTest.java#test_hitCount",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidPooledPreparedStatementTest.java#test_hitCount",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid-bench/tests/java_rust_prepared_cache_differential.rs::pinned_java_and_rust_compare_original_prepared_cache_case"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "APPROVED_DIFFERENCE",
+      "evidence": "Live differential case reported APPROVED_STANDARD_DIFFERENCE; artifact docs/verification/migration-completion-20261102/prepared-cache-differential-comparison.tsv",
+      "approved_difference": true
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidPooledPreparedStatementTest1.java#test_clearParameter_error",
@@ -16022,16 +16025,19 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\ExceptionSorterTest.java#test_exceptionSorter",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\ExceptionSorterTest.java#test_exceptionSorter",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid-bench/tests/java_rust_mock_sorter_differential.rs::pinned_java_and_rust_compare_original_mock_sorter_case"
+      ],
+      "disposition": "MIRRORED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "Live differential case reported MATCH; artifact docs/verification/migration-completion-20261102/mock-sorter-differential-comparison.tsv",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\FullTest.java#test_restart",

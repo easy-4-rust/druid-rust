@@ -21,11 +21,11 @@
   "assets": 822,
   "cases": 6978,
   "dispositions": {
-    "ADAPTED": 19,
+    "ADAPTED": 20,
     "BLOCKED": 2200,
     "MERGED_APPROVED": 15,
-    "MIRRORED": 46,
-    "MISSING": 4698
+    "MIRRORED": 47,
+    "MISSING": 4696
   },
   "java_baseline": "fa8dc9912637a2f729eef9f55356621fec18d40e",
   "manifest": "docs/migration/source-test-parity.json",
@@ -33,9 +33,9 @@
   "schema": 1,
   "status_table": "docs/verification/migration-completion-20261102/source-parity-status.tsv",
   "statuses": {
-    "APPROVED_DIFFERENCE": 12,
-    "MATCH": 67,
+    "APPROVED_DIFFERENCE": 13,
+    "MATCH": 68,
     "MISMATCH": 1,
-    "NOT_RUN": 6898
+    "NOT_RUN": 6896
   }
 }
