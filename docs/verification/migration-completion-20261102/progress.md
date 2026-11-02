@@ -52,7 +52,7 @@
 
 ### 3. JDBC 方法证据：首批 Statement 已回填
 
-- 2001 个身份中 linked 58、unassessed 1943；新增 30 个 `java.sql.Statement` 方法 + `CallableStatement#wasNull()` + `ResultSet` 的 `previous/getRow/getFetchSize`，声明/合同层 PASS，capability PARTIAL。
+- 2001 个身份中 linked 59、unassessed 1942；新增 30 个 `java.sql.Statement` 方法 + `CallableStatement#wasNull()` + `ResultSet` 的 `previous/getRow/getFetchSize/wasNull`，声明/合同层 PASS，capability PARTIAL。
 - `verify_java8_method_evidence.py` 通过；real_db 仍 0/2001，adapter/logical_proxy 仍未评估，3.2–3.7 未完成。
 
 ### 4. 其他未完成阶段

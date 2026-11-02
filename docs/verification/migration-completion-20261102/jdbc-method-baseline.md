@@ -26,8 +26,8 @@
 
 ## 2026-11-02 Statement 首批回填
 
-- 当前 ledger SHA-256：`625b13b21cffced6d0b39128dc7a8f9bbac12df02accf97a182e91b77a300b0f`
+- 当前 ledger SHA-256：`59f9a8c56d911dd7d9929234aa2a8b68c3a590108322a39f8d3a2c959ecde8c6`
 - 新增：30 个 `java.sql.Statement` 方法 + `CallableStatement#wasNull()` + `ResultSet` 的 `previous/getRow/getFetchSize`，关联 `java_rust_statement_errors_differential.rs#pinned_java_and_rust_compare_all_37_statement_inputs`。
-- 结果：capability PARTIAL 58 / UNASSESSED 1943；declaration PASS 42、contract PASS 47、logical_proxy PASS 9、adapter PASS 2、real_db 仍 0/2001。
-- 门禁：`python scripts/verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=58 unassessed=1943`。
+- 结果：capability PARTIAL 59 / UNASSESSED 1942；declaration PASS 43、contract PASS 48、logical_proxy PASS 9、adapter PASS 2、real_db 仍 0/2001。
+- 门禁：`python scripts/verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=59 unassessed=1942`。
 - 边界：只登记 live error differential 可支撑的 declaration/contract；adapter、logical_proxy、real_db 未评估，3.2–3.7 未完成。
