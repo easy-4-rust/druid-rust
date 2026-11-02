@@ -154,6 +154,12 @@ fn mysql_sorter_matches_every_java_fatal_branch_and_cause_depth_limit() {
     assert!(sorter.is_exception_fatal(
         &SqlException::driver(0, "connection exception").with_sql_state("08001")
     ));
+    assert!(sorter.is_exception_fatal(
+        &SqlException::driver(0, "connection exception").with_sql_state("08006")
+    ));
+    assert!(sorter.is_exception_fatal(
+        &SqlException::driver(0, "connection exception").with_sql_state("08xx")
+    ));
     assert!(!sorter
         .is_exception_fatal(&SqlException::driver(1062, "duplicate").with_sql_state("23000")));
 
@@ -167,7 +173,7 @@ fn mysql_sorter_matches_every_java_fatal_branch_and_cause_depth_limit() {
         );
     }
     for error_code in [
-        -9001, -7999, 0, 1044, 1046, 1048, 1049, 1050, 1051, 1052, 1053, 1062,
+        -10001, -10000, -9001, -7999, 0, 1044, 1046, 1048, 1049, 1050, 1051, 1052, 1053, 1062,
     ] {
         assert!(
             !sorter.is_exception_fatal(&SqlException::driver(error_code, "ordinary error")),
@@ -256,6 +262,7 @@ fn informix_sorter_matches_recoverable_and_all_java_error_codes() {
         assert!(sorter.is_exception_fatal(&SqlException::driver(error_code, "informix")));
     }
     assert!(!sorter.is_exception_fatal(&SqlException::driver(-746, "ordinary")));
+    assert!(!sorter.is_exception_fatal(&SqlException::driver(100, "ordinary")));
 }
 
 #[test]
@@ -268,6 +275,7 @@ fn sybase_sorter_matches_recoverable_nullable_message_and_jz_codes() {
     assert!(sorter.is_exception_fatal(&SqlException::driver(0, "jZ0c0 connection dead")));
     assert!(sorter.is_exception_fatal(&SqlException::driver(0, "JZ0C1 io killed connection")));
     assert!(!sorter.is_exception_fatal(&SqlException::new(0, None, None)));
+    assert!(!sorter.is_exception_fatal(&SqlException::driver(0, "")));
     assert!(!sorter.is_exception_fatal(&SqlException::driver(0, "ordinary")));
 }
 

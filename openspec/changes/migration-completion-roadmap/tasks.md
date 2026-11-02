@@ -8,14 +8,14 @@
 - [x] 1.2 将生产代码使用的 `memory-stats` 从 druid-admin dev-dependency 调整为正式依赖，或删除该生产调用；验证 `cargo check -p druid-admin --all-features --offline` 通过且 `v1_health` 不再伪造 RSS。
 - [x] 1.3 处理 `sql_parse.rs` 未使用 `kw` 与 `shared_row_set/trait_impls.rs` 通配导入；验证相关目标 `cargo clippy --all-targets --all-features -- -D warnings -A clippy::pedantic` 通过。
 - [x] 1.4 保留 Filter 类身份的 Java `String.equals` 语义，修正旧 Rust 断言并补充同大小写、不同大小写和首尾空格用例；验证 Filter 回归测试通过且未回退生产实现。
-- [ ] 1.5 在当前工作区运行默认与 `--all-features` 的 check/test/doc，记录失败与 ignored；验证无未解释失败，ignored 不记为行为通过。进展：`cargo check --workspace` 与 `--all-features` exit 0，`cargo doc --workspace --all-features --no-deps` exit 0；默认测试按 7 个 crate 逐个运行全部 exit 0（含 gRPC 51/51）；`--all-features` 除 `druid-admin` gRPC 目标外全部 exit 0，该目标在 Windows 回环上出现 `10060` 连接超时，单目标默认特性 51/51 通过，暂保留未完成。
+- [x] 1.5 在当前工作区运行默认与 `--all-features` 的 check/test/doc，记录失败与 ignored；验证无未解释失败，ignored 不记为行为通过。证据：Linux CI run `41396400600` job `rust-contracts` success；`cargo test --workspace` 4435 passed / 0 failed / 12 ignored，`--all-features` 4619 passed / 0 failed / 16 ignored；check/clippy/doc 同 job 通过。见 `linux-ci-all-features.md`。
 - [x] 1.6 完成 `filter-class-identity-parity` 和 `exception-sorter-property-parity` 的剩余验收与规格同步；验证两个 change 在全部任务有证据后才能 validate/archive。证据：filter change 已于 2026-11-02 归档；exception-sorter 严格 Clippy exit 0、17 Rust tests、576+118 差分 4 passed、`--strict` 通过，归档为 `2026-11-02-exception-sorter-property-parity`。
 
 ## 2. SOURCE_PARITY 与测试资产账本
 
-- [x] 2.1 从 Java core 全部测试根生成用例清单，展开参数化、动态、重复和 disabled 用例；验证来源分母不少于当前审计的 4759 个 `@Test` 且每个 concrete case 有稳定 ID。
+- [x] 2.1 从 Java core 全部测试根生成用例清单，展开参数化、动态、重复和 disabled 用例；验证来源分母不少于当前审计的 4759 个 `@Test` 且每个 concrete case 有稳定 ID。证据：4759 个 `@Test` + 新增 2219 个无 `@Test` 的 `public void test...`（其中 18 个已手工执行并映射），manifest 现为 6978 个唯一 case；`java-test-cases.tsv` 同步。
 - [x] 2.2 盘点全部 fixture、脚本、语料、golden 文件与数据资源，记录源路径和 SHA-256；验证资产分母与当前审计的 822 个资源一致或说明新增差异。
-- [ ] 2.3 创建 `docs/migration/source-test-parity.json`，为每个来源用例填写 MIRRORED/ADAPTED/SPLIT/MERGED_APPROVED、目标测试、保留标志与证据；验证无 MISSING/BLOCKED/NOT_APPLICABLE 被隐藏。
+- [ ] 2.3 创建 `docs/migration/source-test-parity.json`，为每个来源用例填写 MIRRORED/ADAPTED/SPLIT/MERGED_APPROVED、目标测试、保留标志与证据；验证无 MISSING/BLOCKED/NOT_APPLICABLE 被隐藏。进展：首批 18 个 `bvt.pool.vendor` ExceptionSorter 来源方法（含无 `@Test` 的手工执行方法）已映射到 `exception_sorter_semantics_test`，18 MATCH / 0 MISMATCH；其余 4759 个 `@Test` 仍 MISSING、2201 个未发现方法显式 BLOCKED。
 - [x] 2.4 将来源资产逐字节复制到目标位置，派生文件另存；运行资产 SHA-256 校验，验证全部目标文件与原件一致。
 - [x] 2.5 扩展 `crates/druid-test` 的整仓验收命令与聚合产物，输出每个 case 的 MATCH/MISMATCH/NOT_RUN；验证不存在用生产 crate 局部测试替代整仓验收。证据：`scripts/run_workspace_acceptance.sh` 逐包运行 7 个 crate（全部 exit 0），`source_parity_acceptance` 生成 `source-parity-status.tsv` / `.json`：4759 cases、822 assets、MATCH 0 / MISMATCH 0 / NOT_RUN 4759，明确保留未映射状态。
 
@@ -103,5 +103,5 @@
 ## 12. 规格与证据同步
 
 - [x] 12.1 更新四份迁移主文档和当前验证索引，保留历史快照与原始证据；验证当前事实区无相互矛盾的完成状态和第二套现行文档。证据：`docs/migration/README.md`、`迁移验收规范.md`、`迁移路线图.md`、`对象级对照表.md`、`语义迁移对照表.md`、`对象名称一致性检查.md` 均加入 2026-11-02 当前状态块（19/68、NOT_READY），历史段落保留并明确不作当前结论。
-- [x] 12.2 将本 change 的任务逐项关联到实际提交、测试和产物，未执行项保持未勾选；验证 `openspec validate migration-completion-roadmap` 通过。证据：`task-evidence.tsv` 覆盖全部 25 个已完成项；`openspec validate migration-completion-roadmap --strict` 通过。
+- [x] 12.2 将本 change 的任务逐项关联到实际提交、测试和产物，未执行项保持未勾选；验证 `openspec validate migration-completion-roadmap` 通过。证据：`task-evidence.tsv` 覆盖全部 26 个已完成项；`openspec validate migration-completion-roadmap --strict` 通过。
 - [ ] 12.3 仅在实现、测试、验证与规格同步全部完成后 sync/archive；验证主 specs 与 change 一致，Admin 和两个语义 change 仍保持各自独立事实源。

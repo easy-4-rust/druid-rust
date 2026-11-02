@@ -3,11 +3,12 @@ task	status	commits	tests	artifacts
 1.2	done	66dbd173	cargo check -p druid-admin --all-features	crates/druid-admin/Cargo.toml
 1.3	done	66dbd173	cargo clippy -p druid-admin -p druid-rdbc --all-targets --all-features -- -D warnings -A clippy::pedantic	crates/druid-admin/src/servlet/monitor_view_servlet/sql_parse.rs
 1.4	done	66dbd173	task6_filter_chain_extended_test_parity_part_01/02; filter_manager_identity_test	docs/verification/migration-completion-20261102/baseline.md
+1.5	done	5a6f6941	CI 41396400600 rust-contracts: cargo test --workspace; --all-features; check; clippy; doc	docs/verification/migration-completion-20261102/linux-ci-all-features.md; linux-ci-all-features.log
 1.6	done	ff1cdb2d	exception_sorter_property_contract_test; exception_sorter_semantics_test; task6_pooled_connection_exception_paths_test_parity; task6_owner_disposition_control_test; java_rust_exception_sorters_differential	openspec/changes/archive/2026-11-02-exception-sorter-property-parity/; docs/verification/method-semantics-20261101/logs/closeout-20261102-*.log
-2.1	done	66dbd173	-	docs/verification/migration-completion-20261102/java-test-cases.tsv
+2.1	done	66dbd173; 5a6f6941	java-test-cases.tsv + manifest expansion	docs/verification/migration-completion-20261102/java-test-cases.tsv; docs/migration/source-test-parity.json (6978 cases)
 2.2	done	66dbd173	-	docs/verification/migration-completion-20261102/java-test-assets.tsv
 2.4	done	66dbd173	asset SHA-256 verification	docs/verification/migration-completion-20261102/asset-copy-verification.tsv
-2.5	done	15fec0c3	scripts/run_workspace_acceptance.sh; source_parity_acceptance	docs/verification/migration-completion-20261102/source-parity-status.tsv; workspace-acceptance-cargo.log
+2.5	done	15fec0c3; 5a6f6941	scripts/run_workspace_acceptance.sh; source_parity_acceptance	docs/verification/migration-completion-20261102/source-parity-status.tsv (6978 cases / 18 MATCH); workspace-acceptance-cargo.log
 3.1	done	66dbd173	-	docs/verification/migration-completion-20261102/java8-method-evidence-baseline.tsv
 5.1	done	66dbd173	openspec validate admin-live-console --strict	openspec/changes/admin-live-console/tasks.md
 5.2	done	66dbd173	admin_live_console_test; admin-console-contracts.log	docs/verification/migration-completion-20261102/admin-console-contracts.log

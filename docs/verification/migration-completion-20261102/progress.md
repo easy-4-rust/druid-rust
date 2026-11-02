@@ -2,7 +2,7 @@
 
 更新：2026-11-02
 
-## 已完成（25/68）
+## 已完成（26/68）
 
 | 任务 | 证据 |
 |---|---|
@@ -10,11 +10,12 @@
 | 1.2 `memory-stats` 正式依赖 | `crates/druid-admin/Cargo.toml` 正式依赖段；`cargo check -p druid-admin --all-features` 通过 |
 | 1.3 严格 Clippy | 修复 `sql_parse.rs` 未使用 `kw`、Admin 12 个 cast/doc 错误；`cargo clippy -p druid-admin -p druid-rdbc --all-targets --all-features -- -D warnings -A clippy::pedantic` exit 0 |
 | 1.4 Filter 回归 | part_01 34 + manager 3 + part_02 6 = **43 passed**；保留 Java 大小写敏感语义 |
+| 1.5 全量默认/all-features | Linux CI run `41396400600` job success：默认 4435 passed/0 failed/12 ignored；all-features 4619 passed/0 failed/16 ignored；check/clippy/doc 通过。见 `linux-ci-all-features.md` |
 | 1.6 前置 change 收口 | `exception-sorter-property-parity`：严格 Clippy exit 0、17 Rust tests、576+118 差分 4 passed、`--strict` 通过，归档为 `2026-11-02-exception-sorter-property-parity`；filter change 已归档 |
-| 2.1 Java 用例清单 | `java-test-cases.tsv`：**4759** 个唯一 case ID |
+| 2.1 Java 用例清单 | `java-test-cases.tsv`：4759 个 `@Test` + 2219 个无 `@Test` 的 `public void test...`，manifest 共 **6978** 个唯一 case |
 | 2.2 资源清单 | `java-test-assets.tsv`：**822** 个资源、13.46 MiB |
 | 2.4 资源精确复制 | 复制到 `crates/druid-test/tests/fixtures/source-java/src/test/resources/`，SHA-256 **822/822** 一致 |
-| 2.5 整仓验收聚合 | `scripts/run_workspace_acceptance.sh` 逐包跑 7 个 crate 全部 exit 0；`source_parity_acceptance` 输出 `source-parity-status.tsv`：4759 cases、MATCH 0 / MISMATCH 0 / NOT_RUN 4759，未隐藏 MISSING |
+| 2.5 整仓验收聚合 | `scripts/run_workspace_acceptance.sh` 逐包跑 7 个 crate 全部 exit 0；`source_parity_acceptance` 输出 `source-parity-status.tsv`：6978 cases、MATCH 18 / MISMATCH 0 / NOT_RUN 6960，未隐藏 MISSING/BLOCKED |
 | 3.1 JDBC 方法基线 | `java8-method-evidence-baseline.tsv`，2001 身份，SHA-256 `cfa065c8…`，未评估状态不变 |
 | 5.2 Admin 数据合同 | Rust 合同 34 passed（`admin-console-contracts.log`）；前端 5 passed（`admin-web-tests.log`） |
 | 5.4 OpenAPI 同源 | `v1_route_table!` 同时驱动 router 与 OpenAPI paths；`route_manifest_paths_are_unique` 与 `v1_openapi_document_lists_every_served_route` 通过；健康/unavailableFields 测试覆盖 |
@@ -26,7 +27,7 @@
 | 10.4 三平台内存预算 | CI run `41396400600` 的 Ubuntu/Windows/macOS Rust contracts 全 success；`repository_churn_memory_budget_test` 与 `repository_capacity_test` 覆盖 128 MiB 预算、RSS 可测量与 TTL/身份清理 |
 | 11.2 MSRV 1.95 | 修复本机损坏工具链后 `cargo +1.95.0 check --workspace --all-targets --locked` exit 0，`msrv-1.95.log` |
 | 11.3 public-api/SemVer 外部消费者 | 同 6.4；`verify_task6_external_public_contract.py` PASS |
-| 12.1 迁移文档当前事实同步 | README + 五份主文档加入 2026-11-02 状态块（25/68、NOT_READY），历史快照保留 |
+| 12.1 迁移文档当前事实同步 | README + 五份主文档加入 2026-11-02 状态块（26/68、NOT_READY），历史快照保留 |
 | 12.2 任务证据关联 | `task-evidence.tsv` 关联 22 个已完成项到提交/测试/产物；`openspec validate migration-completion-roadmap --strict` 通过 |
 | 5.1 Admin 活跃 change | `admin-live-console` 六项任务已勾选、`--strict` 校验通过 |
 | 5.3 Admin 三尺寸浏览器 | `browser/`：Mobile 390×884、Tablet 768×1024、Desktop 1280×1024 全路由截图；Basic 登录、空态、部分数据、详情、真实点击复制、慢 SQL、连接/stack 能力态；修复登录跳旧页与 SQL/直方图误标记未上报 |
@@ -38,17 +39,16 @@
 
 ## 当前阻塞
 
-### 1. 全量测试：默认 7/7 包通过；全 feature 仅 gRPC 目标受 Windows 回环阻塞
+### 1. 全量测试：Linux CI 已完成（1.5 已关闭）
 
-- 默认：`cargo check --workspace`、`cargo doc --workspace --all-features --no-deps` exit 0；`druid`、`druid-rdbc`、`druid-admin`、`druid-wrapper`、`druid-metrics`、`druid-bench`、`druid-test` 逐包 `cargo test` 全部 exit 0（`workspace-test-per-package*.log`），含 `grpc_network_e2e_test` 51/51。
-- 全 feature：逐包测试除 `druid-admin` 的 gRPC 目标外全部 exit 0；该目标在启用全套特性后出现 `10060` 回环连接超时，而同一目标默认特性 51/51 通过。已把测试等待上限提高到 30s 并用进程内串行门降低并发，仍未消除该环境差异。
-- 因此 1.5 保持未完成；已记录这是 Windows 回环/特性组合问题，不是产品断言失败，但不用“其余都绿”替代完整门禁。
+- Linux CI run `41396400600` job `rust-contracts` success：默认 `cargo test --workspace` **4435 passed / 0 failed / 12 ignored**；`--all-features` **4619 passed / 0 failed / 16 ignored**；check/clippy/doc 同 job 通过。证据 `linux-ci-all-features.md` / `.log`。
+- 本地 Windows all-features gRPC 的 `10060` 回环异常保留为环境说明，不再阻塞 1.5。
 
-### 2. SOURCE_PARITY 有效映射尚未完成
+### 2. SOURCE_PARITY 首批映射已完成，余量仍大
 
-- `docs/migration/source-test-parity.json` 已生成 4759 个用例和 822 个资产记录。
-- 当前所有用例仍为 `MISSING/NOT_RUN`；审计确认资产 822/822 精确，但语义映射、目标测试和差分 MATCH 尚缺。
-- 禁止按测试名自动映射或伪造 MATCH。
+- `docs/migration/source-test-parity.json` 现为 **6978** 个唯一 case（4759 个 `@Test` + 2219 个无 `@Test` 的 `public void test...`），822 个资产。
+- 首批 **18** 个 `bvt.pool.vendor` ExceptionSorter 来源方法已映射到 `exception_sorter_semantics_test`：**18 MATCH / 0 MISMATCH**；其中 2201 个未发现方法显式标为 `BLOCKED`，未隐藏。
+- 其余 4759 个 `@Test` 仍为 `MISSING/NOT_RUN`；禁止按测试名自动映射或伪造 MATCH。
 
 ### 3. JDBC 方法证据仍以未评估为主
 
