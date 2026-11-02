@@ -1,0 +1,42 @@
+===== java_rust_callable_differential
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.86s
+     Running tests\java_rust_callable_differential.rs (target\debug\deps\java_rust_callable_differential-86658f845c3682b9.exe)
+
+running 3 tests
+Callable differential artifacts: D:\druid-oracle\work\callable-seven-live-75656-1793605462430485500
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+test original_callable_inputs_preserve_errors_identity_and_lifecycle_records ... ok
+7 original Callable cases compared with exact approved records
+test pinned_java_and_rust_compare_all_seven_callable_cases ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.72s
+
+EXIT_java_rust_callable_differential=0
+===== java_rust_result_set_differential
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.39s
+     Running tests\java_rust_result_set_differential.rs (target\debug\deps\java_rust_result_set_differential-50d536ac9302d49c.exe)
+
+running 3 tests
+ResultSet differential artifacts: D:\druid-oracle\work\result-set-live-2888-1793605468448046300
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+test all_original_result_set_inputs_have_complete_rust_observations_and_cleanup ... ok
+5 ResultSet cases: 5 matches or exact approved differences, 0 unapproved differences
+test pinned_java_and_rust_compare_all_five_result_set_inputs ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.37s
+
+EXIT_java_rust_result_set_differential=0
+===== java_rust_statement_errors_differential
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.23s
+     Running tests\java_rust_statement_errors_differential.rs (target\debug\deps\java_rust_statement_errors_differential-b7a85ef0203a55e5.exe)
+
+running 3 tests
+test completion_allowance_rejects_unrelated_cases_or_any_observed_field_drift ... ok
+Statement differential artifacts: D:\druid-oracle\work\statement-errors-live-7992-1793605473793550800
+test all_frozen_statement_inputs_execute_against_rust_with_full_lifecycle_observations ... ok
+37 cases: 35 exact matches, 2 approved standard differences, 0 mismatches
+test pinned_java_and_rust_compare_all_37_statement_inputs ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.69s
+
+EXIT_java_rust_statement_errors_differential=0

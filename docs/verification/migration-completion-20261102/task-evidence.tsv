@@ -8,7 +8,7 @@ task	status	commits	tests	artifacts
 2.1	done	66dbd173; 5a6f6941	java-test-cases.tsv + manifest expansion	docs/verification/migration-completion-20261102/java-test-cases.tsv; docs/migration/source-test-parity.json (6978 cases)
 2.2	done	66dbd173	-	docs/verification/migration-completion-20261102/java-test-assets.tsv
 2.4	done	66dbd173	asset SHA-256 verification	docs/verification/migration-completion-20261102/asset-copy-verification.tsv
-2.5	done	15fec0c3; 5a6f6941	scripts/run_workspace_acceptance.sh; source_parity_acceptance	docs/verification/migration-completion-20261102/source-parity-status.tsv (6978 cases / 27 MATCH / 3 APPROVED_DIFFERENCE / 1 MISMATCH); workspace-acceptance-cargo.log
+2.5	done	15fec0c3; 5a6f6941	scripts/run_workspace_acceptance.sh; source_parity_acceptance	docs/verification/migration-completion-20261102/source-parity-status.tsv (6978 cases / 67 MATCH / 12 APPROVED_DIFFERENCE / 1 MISMATCH); workspace-acceptance-cargo.log
 3.1	done	66dbd173	-	docs/verification/migration-completion-20261102/java8-method-evidence-baseline.tsv
 5.1	done	66dbd173	openspec validate admin-live-console --strict	openspec/changes/admin-live-console/tasks.md
 5.2	done	66dbd173	admin_live_console_test; admin-console-contracts.log	docs/verification/migration-completion-20261102/admin-console-contracts.log
