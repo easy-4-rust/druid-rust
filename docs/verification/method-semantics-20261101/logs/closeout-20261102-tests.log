@@ -1,0 +1,62 @@
+## rust regression
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.59s
+     Running tests\exception_sorter_property_contract_test.rs (target\debug\deps\exception_sorter_property_contract_test-56e4b5bd886f69b5.exe)
+
+running 2 tests
+test both_oracle_classifiers_use_unicode_property_codes_without_widening_defaults ... ok
+test java_integer_boundaries_preserve_exact_sets_append_and_replace ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\exception_sorter_semantics_test.rs (target\debug\deps\exception_sorter_semantics_test-d26db6fd6b5a2b62.exe)
+
+running 12 tests
+test db2_sorter_matches_recoverable_sqlstate_and_all_java_error_codes ... ok
+test informix_sorter_matches_recoverable_and_all_java_error_codes ... ok
+test abstract_oracle_sorter_matches_java_property_parsing_and_set_semantics ... ok
+test null_and_pg_sorters_match_java_recoverable_and_sqlstate_rules ... ok
+test mysql_sorter_matches_every_java_fatal_branch_and_cause_depth_limit ... ok
+test phoenix_and_mock_sorters_match_java_message_singleton_and_instanceof_rules ... ok
+test oceanbase_oracle_sorter_preserves_java_extensions_to_oracle_rules ... ok
+test oracle_sorter_matches_all_java_code_message_and_custom_code_branches ... ok
+test sql_exception_preserves_nullable_rdbc_fields_and_runtime_identity ... ok
+test sybase_sorter_matches_recoverable_nullable_message_and_jz_codes ... ok
+test mock_physical_close_makes_prepared_close_fail_and_discards_holder ... ok
+test mock_driver_uses_mock_sorter_even_with_mysql_db_type ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\task6_owner_disposition_control_test.rs (target\debug\deps\task6_owner_disposition_control_test-80aa1aae1e386ab7.exe)
+
+running 2 tests
+test native_pool_fatal_signal_is_synchronous_and_holder_transfer_is_one_shot ... ok
+test native_pool_shutdown_before_fatal_holder_return_closes_driver_once ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\task6_pooled_connection_exception_paths_test_parity.rs (target\debug\deps\task6_pooled_connection_exception_paths_test_parity-90221ac2fa636020.exe)
+
+running 1 test
+test task6_pooled_connection_exception_paths_test_every_standard_connection_error_path_invokes_exception_sorter ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+RUST_EXIT=0
+## java/rust differential
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.52s
+     Running tests\java_rust_exception_sorters_differential.rs (target\debug\deps\java_rust_exception_sorters_differential-1001a710a2504e00.exe)
+
+running 4 tests
+test shared_corpus_has_complete_unique_rust_results_without_panics ... ok
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+Java Druid 33824c3dec1612711f9bb4e409319bcab2e4cd0e; 118 cases; artifacts: D:\codex-build\druid-sorter-methods-20261101\oracle\exception-sorters-73932-1793589394322492800
+test pinned_java_and_rust_match_every_property_boundary_case ... ok
+Java Druid 33824c3dec1612711f9bb4e409319bcab2e4cd0e; 576 cases; artifacts: D:\codex-build\druid-sorter-methods-20261101\oracle\exception-sorters-73932-1793589394322559400
+test pinned_java_and_rust_match_every_shared_exception_case ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+
+DIFF_EXIT=0
+## openspec validate
+Change 'exception-sorter-property-parity' is valid
+VALIDATE_EXIT=0

@@ -5,7 +5,7 @@
 - [x] 统一运行源测试、原有/补充 live differential、Rust 及池处置回归
 - [x] 运行 cargo-llvm-cov，记录未覆盖分支和门禁限制
 - [x] 更新逐方法台账及四份迁移主文档，检查并行修改漂移
-- [ ] 完整验收门禁闭合（严格 Clippy 被既存 shared_row_set 通配导入阻断；全量验收未执行，不归档）
+- [x] 完整验收门禁闭合（2026-11-02：严格 Clippy `--workspace --all-targets --all-features` exit 0，`shared_row_set` 通配导入阻断已由并行修复消除；4 个 Rust 目标 17 passed；576+118 条 Java/Rust 差分 4 passed；`openspec validate --strict` 通过）
 
 证据：[逐方法报告](../../../docs/verification/method-semantics-20261101/README.md)。原576差分为573 MATCH+3既有批准差异，补充118全部MATCH；普通Rust17通过、分类harness4通过、冻结Mock harness2通过；当前Java vendor18原方法通过，当前Mock原断言/观测通过。不得据此授予整个对象/全仓迁移完成。
 

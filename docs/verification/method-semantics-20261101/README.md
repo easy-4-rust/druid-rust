@@ -63,8 +63,9 @@ Oracle 两构造器未进入“环境配置存在”的 5 行分支；共享解�
 
 - `rustfmt --check` 三个变动 Rust 文件：exit 0。
 - `openspec validate exception-sorter-property-parity --strict`：exit 0。
-- 严格 Clippy：exit 101，既存 `crates/druid-rdbc/src/extensions/shared_row_set/trait_impls.rs:1` 的 `use super::*` 阻断；没有关闭 lint 或改动该并行范围。后续 lint 可能尚未执行，不能声称零警告。
-- 没有进行全 workspace/all-features/MSRV/真实数据库/70+ 产品/2PC 崩溃恢复验收；本批不宣称满足整体迁移技能全部完成门禁。OpenSpec 保持未归档。
+- 严格 Clippy（2026-11-02 复验）：`cargo clippy --workspace --all-targets --all-features -- -D warnings -A clippy::pedantic` exit 0；先前 `crates/druid-rdbc/src/extensions/shared_row_set/trait_impls.rs:1` 的 `use super::*` 阻断已由并行修复消除，未关闭 lint。证据见 [closeout-20261102-clippy.log](logs/closeout-20261102-clippy.log)。
+- 2026-11-02 复验：4 个 Rust 目标 17 passed；576+118 条 Java/Rust 差分 4 passed；`openspec validate --strict` 通过。证据见 [closeout-20261102-tests.log](logs/closeout-20261102-tests.log)。本变更据此归档，但报告列出的日志/Locale/宿主配置/集合别名边界仍保留为后续工作，不随归档授予全仓迁移完成。
+- 没有进行全 workspace 全量测试、MSRV、真实数据库/70+ 产品/2PC 崩溃恢复验收；本批不宣称满足整体迁移技能全部完成门禁。
 
 ## 复现
 

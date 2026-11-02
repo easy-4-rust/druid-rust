@@ -1,0 +1,61 @@
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> vendor\libsql-http1\src\statement.rs:27:16
+   |
+27 |     fn columns(&self) -> Vec<Column>;
+   |                ^^^^^         ^^^^^^ the same lifetime is hidden here
+   |                |
+   |                the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+   |
+27 |     fn columns(&self) -> Vec<Column<'_>>;
+   |                                    ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor\libsql-http1\src\statement.rs:106:20
+    |
+106 |     pub fn columns(&self) -> Vec<Column> {
+    |                    ^^^^^         ^^^^^^ the same lifetime is hidden here
+    |                    |
+    |                    the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+106 |     pub fn columns(&self) -> Vec<Column<'_>> {
+    |                                        ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor\libsql-http1\src\hrana\hyper.rs:279:16
+    |
+279 |     fn columns(&self) -> Vec<crate::Column> {
+    |                ^^^^^         ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                |
+    |                the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+279 |     fn columns(&self) -> Vec<crate::Column<'_>> {
+    |                                           ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor\libsql-http1\src\hrana\cursor.rs:150:28
+    |
+150 |     pub async fn next_step(&mut self) -> Result<CursorStep<S>> {
+    |                            ^^^^^^^^^            ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                            |
+    |                            the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+150 |     pub async fn next_step(&mut self) -> Result<CursorStep<'_, S>> {
+    |                                                            +++
+
+warning: `libsql` (lib) generated 4 warnings (run `cargo clippy --fix --lib -p libsql -- -D warnings -A clippy::pedantic` to apply 4 suggestions)
+warning: druid-admin@0.0.0-design: embedded 25 console asset(s) from E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-admin\web/dist
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.26s
+EXIT=0

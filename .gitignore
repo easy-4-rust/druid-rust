@@ -140,3 +140,4 @@ crates/druid-admin/web/dist/
 !/docs/migration/source-test-parity.json
 !/docs/verification/migration-completion-20261102/*.json
 !/docs/verification/migration-completion-20261102/*.log
+!/docs/verification/method-semantics-20261101/logs/*.log

@@ -1,0 +1,443 @@
+===== PACKAGE druid-metrics =====
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+   Compiling druid-metrics v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-metrics)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 33.71s
+     Running unittests src\lib.rs (target\debug\deps\druid_metrics-c8e5efa3446c526e.exe)
+
+running 6 tests
+test pipeline_ownership::tests::batch_work_ids_reject_double_finish_and_cross_stage_or_cross_id_transitions ... ok
+test sanitizer::tests::sensitive_field_detected ... ok
+test sanitizer::tests::fingerprint_only_strips_raw_sql ... ok
+test pipeline_ownership::tests::keyed_command_replay_send_failure_and_overflow_cleanup_preserve_other_work ... ok
+test pipeline_ownership::tests::transport_queued_command_is_visible_before_processing_and_decrements_once ... ok
+test pipeline_ownership::tests::registered_change_observes_completion_before_first_poll ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\aggregator_output_test.rs (target\debug\deps\aggregator_output_test-386599b81b66c856.exe)
+
+running 17 tests
+test typed_encoder_limits_sql_and_applies_disabled_privacy_policy ... ok
+test typed_encoder_exports_opaque_identity_even_for_parameterized_input ... ok
+test real_unmerged_sql_never_reaches_protocol_or_debug_output ... ok
+test typed_encoder_maps_pool_wall_and_identity_fields_without_json ... ok
+test same_datasource_keeps_newest_snapshot_until_window_expires ... ok
+test explicit_flush_emits_partial_non_full_batch ... ok
+test explicit_flush_completion_acknowledges_successful_output ... ok
+test aggregator_applies_configured_sql_limit_and_text_policy ... ok
+test shutdown_drains_queued_snapshots_before_closing_output ... ok
+test closed_output_channel_stops_aggregation_and_retains_unflushed_count ... ok
+test cancellation_reports_final_flush_failure_when_output_is_closed ... ok
+test cancellation_flushes_exact_chunks_and_closes_output ... ok
+test explicit_flush_drains_snapshots_accepted_before_the_command ... ok
+test batch_size_plus_one_distinct_datasources_split_into_two_batches ... ok
+test full_output_channel_backpressures_without_dropping_the_next_batch ... ok
+test input_close_flushes_exact_chunks_and_closes_output ... ok
+test expired_window_flushes_while_snapshot_input_remains_ready ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests\config_test.rs (target\debug\deps\config_test-50f95a87cc922698.exe)
+
+running 7 tests
+test builder_produces_correct_values ... ok
+test zero_sample_interval_is_rejected ... ok
+test zero_batch_size_is_rejected ... ok
+test zero_coalesce_window_is_rejected ... ok
+test zero_flush_interval_is_rejected ... ok
+test zero_queue_capacity_is_rejected ... ok
+test default_config_has_expected_values ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\ingest_handler_test.rs (target\debug\deps\ingest_handler_test-22cf04d05dcd0f74.exe)
+
+running 10 tests
+test full_snapshot_accepted_then_normal_batches ... ok
+test duplicate_batch_only_ingested_once ... ok
+test sequence_gap_returns_resync_required ... ok
+test goodbye_releases_stream_capacity_for_next_session ... ok
+test heartbeat_extends_stream_ttl_without_allocating_new_state ... ok
+test different_streams_are_independent ... ok
+test snapshot_repository_stores_latest ... ok
+test successor_epoch_reuses_the_same_service_capacity_slot ... ok
+test new_stream_without_full_snapshot_requires_it ... ok
+test expired_disconnected_stream_releases_capacity_for_new_session ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests\prometheus_cardinality_test.rs (target\debug\deps\prometheus_cardinality_test-5ba1d7c8440a0532.exe)
+
+running 8 tests
+test allowed_labels_contain_only_expected_keys ... ok
+test prometheus_snapshot_multiple_metrics_validated_together ... ok
+test prometheus_snapshot_rejects_forbidden_fingerprint_label ... ok
+test prometheus_snapshot_rejects_bind_values_in_label ... ok
+test prometheus_snapshot_rejects_forbidden_sql_text_label ... ok
+test prometheus_snapshot_validates_clean_labels ... ok
+test prometheus_empty_snapshot_is_valid ... ok
+test prometheus_snapshot_rejects_forbidden_request_id_label ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\protocol_roundtrip_test.rs (target\debug\deps\protocol_roundtrip_test-2d30f5717856e5ca.exe)
+
+running 14 tests
+test client_goodbye_roundtrip ... ok
+test client_heartbeat_roundtrip ... ok
+test server_resync_required_roundtrip ... ok
+test client_command_ack_roundtrip ... ok
+test client_hello_roundtrip ... ok
+test empty_client_frame_roundtrip ... ok
+test empty_server_frame_roundtrip ... ok
+test server_batch_ack_roundtrip ... ok
+test server_command_request_full_snapshot_roundtrip ... ok
+test server_command_reset_stats_roundtrip ... ok
+test server_error_roundtrip ... ok
+test server_hello_ack_roundtrip ... ok
+test client_command_ack_with_error_roundtrip ... ok
+test client_snapshot_batch_roundtrip ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\push_worker_test.rs (target\debug\deps\push_worker_test-4daecd15158d5f7f.exe)
+
+running 6 tests
+test cancellation_stops_a_worker_while_the_window_is_saturated ... ok
+test resend_rejects_malformed_and_non_snapshot_frames_without_storing_them ... ok
+test resend_rejects_a_pending_sequence_that_disagrees_with_the_encoded_header ... ok
+test saturated_outbound_processes_the_oldest_ack_before_cancellation ... ok
+test disconnect_and_reconnect_resend_the_complete_frame_byte_identically ... ok
+test full_window_pauses_batch_admission_until_ack ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests\queue_semantics_test.rs (target\debug\deps\queue_semantics_test-84a0ce2c8b655461.exe)
+
+running 5 tests
+test busy_datasource_increments_snapshot_busy_total ... ok
+test saturated_metrics_queue_never_blocks_datasource_operations ... ok
+test saturated_runtime_shutdown_drains_and_joins_every_owned_task ... ok
+test runtime_end_to_end_with_many_datasources ... ok
+test queue_saturation_coalesces_live_sources_without_panicking ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running tests\registration_lifecycle_test.rs (target\debug\deps\registration_lifecycle_test-07d0e9b58ef6931d.exe)
+
+running 9 tests
+test dropping_runtime_with_live_guard_stops_owned_unregister_listener ... ok
+test runtime_holds_weak_references_only ... ok
+test dropping_one_registration_preserves_another_with_the_same_datasource_id ... ok
+test saturated_unregister_queue_coalesces_and_eventually_cleans_live_sources ... ok
+test sampler_removes_only_the_closed_registration_when_ids_match ... ok
+test guard_drop_unregisters_datasource ... ok
+test multiple_registrations_and_selective_drop ... ok
+test shutdown_within_deadline_succeeds ... ok
+test source_drop_auto_cleans_on_next_sample ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests\remote_reset_test.rs (target\debug\deps\remote_reset_test-c62dba297fec1885.exe)
+
+running 10 tests
+test mixed_unknown_or_expired_reset_targets_have_no_partial_side_effects ... ok
+test server_resolves_a_pending_reset_after_success_ack ... ok
+test server_resolves_a_pending_reset_after_failed_ack ... ok
+test reset_of_a_live_target_ignores_an_unrelated_expired_registration ... ok
+test reset_invokes_each_matching_datasource_once_before_success_ack ... ok
+test empty_unknown_and_failed_commands_return_failed_ack ... ok
+test full_snapshot_frame_precedes_its_success_ack ... ok
+test saturated_reset_ack_is_cancellation_aware_and_does_not_repeat_reset ... ok
+test saturated_full_snapshot_send_is_cancellation_aware_and_preserves_both_frames ... ok
+test full_snapshot_respects_batch_size_and_waits_for_ack_capacity_between_chunks ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\sequence_window_test.rs (target\debug\deps\sequence_window_test-d10f4069a91ad5a5.exe)
+
+running 7 tests
+test out_of_order_ack_retains_the_entire_gap ... ok
+test client_never_allocates_or_restores_server_rejected_max_sequence ... ok
+test unknown_and_duplicate_ack_are_errors ... ok
+test push_encodes_once_and_retains_exact_frame_bytes ... ok
+test restore_preserves_bytes_and_advances_the_stream_sequence ... ok
+test restore_rejects_zero_duplicate_and_full_sequences ... ok
+test ack_removes_only_the_matching_frame_and_frees_capacity ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\service_identity_test.rs (target\debug\deps\service_identity_test-3d0ef5651a25d5bc.exe)
+
+running 2 tests
+test service_identity_accepts_exact_byte_budget_and_rejects_budget_plus_one ... ok
+test canonical_service_identity_round_trips_arbitrary_utf8_without_old_slash_collisions ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\shutdown_test.rs (target\debug\deps\shutdown_test-d15cb50b1bde778d.exe)
+
+running 8 tests
+test config_shutdown_timeout_is_respected ... ok
+test shutdown_with_zero_pending_returns_ok ... ok
+test shutdown_joins_unregister_listener_even_when_guard_outlives_runtime ... ok
+test shutdown_reports_sampler_task_panic_instead_of_false_success ... ok
+test configured_shutdown_timeout_caps_a_longer_caller_deadline ... ok
+test shutdown_within_generous_deadline_succeeds ... ok
+test shutdown_stops_sampler_quickly ... ok
+test shutdown_order_stops_sampler_before_flushing ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+     Running tests\sql_privacy_test.rs (target\debug\deps\sql_privacy_test-949fa06fc9501560.exe)
+
+running 10 tests
+test sensitive_field_password_is_rejected ... ok
+test fingerprint_only_strips_raw_sql_but_keeps_fingerprint ... ok
+test bind_parameters_variant_is_stripped ... ok
+test fingerprint_only_with_formatted_sql_field ... ok
+test sensitive_field_in_array_is_rejected ... ok
+test sensitive_field_in_nested_object_is_rejected ... ok
+test raw_without_parameters_strips_bind_values ... ok
+test clean_payload_passes_all_policies ... ok
+test sensitive_field_token_is_rejected ... ok
+test disabled_policy_strips_all_sql_fields ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\task_supervision_test.rs (target\debug\deps\task_supervision_test-3bde38897c8b4974.exe)
+
+running 2 tests
+test shutdown_joins_every_task_while_registration_guard_remains_live ... ok
+test sampler_panic_returns_join_error_and_supervisor_reaps_all_tasks ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\timeline_test.rs (target\debug\deps\timeline_test-8d58c5fa1e779f46.exe)
+
+running 7 tests
+test ring_buffer_15s_has_capacity_180 ... ok
+test ring_buffer_3600s_has_capacity_360 ... ok
+test ring_buffer_60s_has_capacity_360 ... ok
+test ring_buffer_full_overwrites_oldest ... ok
+test ring_buffer_push_increases_len ... ok
+test timeline_snapshot_has_all_three_tiers ... ok
+test ring_buffer_overflow_preserves_count ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests druid_metrics
+
+running 1 test
+test crates\druid-metrics\src\config.rs - config::DruidMetricsConfig (line 124) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+
+PACKAGE_druid-metrics_EXIT=0
+===== PACKAGE druid-bench =====
+   Compiling either v1.17.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling chrono v0.4.45
+   Compiling tokio v1.54.1
+   Compiling rustix v1.1.4
+   Compiling etcetera v0.8.0
+   Compiling rusqlite v0.32.1
+   Compiling dashmap v6.2.1
+   Compiling tinytemplate v1.2.1
+   Compiling ciborium v0.2.2
+   Compiling itertools v0.10.5
+   Compiling rayon v1.12.0
+   Compiling rand_chacha v0.3.1
+   Compiling async-io v2.6.0
+   Compiling rand v0.8.7
+   Compiling async-net v2.0.0
+   Compiling num-bigint-dig v0.8.6
+   Compiling criterion-plot v0.5.0
+   Compiling rsa v0.9.10
+   Compiling criterion v0.5.1
+   Compiling tokio-stream v0.1.19
+   Compiling spawns-compat v0.2.2
+   Compiling deadpool-runtime v0.3.1
+   Compiling druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc)
+   Compiling deadpool v0.13.0
+   Compiling spawns v0.2.6
+   Compiling asyncs v0.4.0
+   Compiling zookeeper-client v0.11.2
+   Compiling sqlx-core v0.8.6
+   Compiling toasty-core v0.9.0
+   Compiling sqlx-postgres v0.8.6
+   Compiling sqlx-mysql v0.8.6
+   Compiling sqlx-sqlite v0.8.6
+   Compiling toasty-sql v0.9.0
+   Compiling toasty-driver-sqlite v0.9.0 (E:\workspaces\workspace-github-easy-4-rust\druid-rust\vendor\toasty-driver-sqlite)
+   Compiling toasty v0.9.0
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+   Compiling sqlx v0.8.6
+   Compiling druid-wrapper v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper)
+   Compiling druid-bench v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-bench)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 40.77s
+     Running unittests src\lib.rs (target\debug\deps\druid_bench-2027581fc0a92da2.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\java_rust_callable_differential.rs (target\debug\deps\java_rust_callable_differential-dbf57d4853999130.exe)
+
+running 3 tests
+test pinned_java_and_rust_compare_all_seven_callable_cases ... ignored, requires frozen Druid 1.2.28 source/build classpath and explicit JDK
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+test original_callable_inputs_preserve_errors_identity_and_lifecycle_records ... ok
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\java_rust_exception_sorters_differential.rs (target\debug\deps\java_rust_exception_sorters_differential-7b67eda1d7be2090.exe)
+
+running 4 tests
+test pinned_java_and_rust_match_every_property_boundary_case ... ignored, requires pinned Java Druid source, compiled dependency classpath and JDK
+test pinned_java_and_rust_match_every_shared_exception_case ... ignored, requires pinned Java Druid source, compiled dependency classpath and JDK
+test shared_corpus_has_complete_unique_rust_results_without_panics ... ok
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+
+test result: ok. 2 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\java_rust_jdbc42_differential.rs (target\debug\deps\java_rust_jdbc42_differential-21d72119aa50e1ff.exe)
+
+running 1 test
+test java_and_rust_agree_on_every_jdbc42_type_identity ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+
+     Running tests\java_rust_mock_sorter_differential.rs (target\debug\deps\java_rust_mock_sorter_differential-781442e6bbf789c2.exe)
+
+running 2 tests
+test pinned_java_and_rust_compare_original_mock_sorter_case ... ignored, requires frozen Druid 1.2.28 source/build classpath and explicit JDK
+test mock_sorter_physical_close_observation_is_complete ... ok
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests\java_rust_pool_differential.rs (target\debug\deps\java_rust_pool_differential-7db04821902c8c33.exe)
+
+running 3 tests
+test pinned_java_and_rust_compare_all_six_pool_cases ... ignored, requires frozen Druid 1.2.28 source/build classpath and explicit JDK
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+test original_pool_inputs_have_complete_rust_lifecycle_records ... ok
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\java_rust_prepared_cache_differential.rs (target\debug\deps\java_rust_prepared_cache_differential-fbffbd4b5930eb8e.exe)
+
+running 3 tests
+test pinned_java_and_rust_compare_original_prepared_cache_case ... ignored, requires frozen Druid 1.2.28 source/build classpath and explicit JDK
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+test prepared_cache_observation_keeps_the_complete_original_case ... ok
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests\java_rust_result_set_differential.rs (target\debug\deps\java_rust_result_set_differential-16d5fef470914481.exe)
+
+running 3 tests
+test pinned_java_and_rust_compare_all_five_result_set_inputs ... ignored, requires frozen Java 1.2.28 source/build classpath and explicit JDK; unapproved differences fail
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+test all_original_result_set_inputs_have_complete_rust_observations_and_cleanup ... ok
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests\java_rust_statement_errors_differential.rs (target\debug\deps\java_rust_statement_errors_differential-838a40b89709d869.exe)
+
+running 3 tests
+test pinned_java_and_rust_compare_all_37_statement_inputs ... ignored, requires frozen Druid 1.2.28 build classpath, source and explicit JDK
+test completion_allowance_rejects_unrelated_cases_or_any_observed_field_drift ... ok
+test all_frozen_statement_inputs_execute_against_rust_with_full_lifecycle_observations ... ok
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests\java_rust_wall_multi_differential.rs (target\debug\deps\java_rust_wall_multi_differential-234430eea4534af2.exe)
+
+running 2 tests
+test pinned_java_and_rust_compare_both_original_wall_multi_cases ... ignored, requires frozen Druid 1.2.28 source/build classpath and explicit JDK
+test both_original_wall_multi_inputs_are_rejected ... ok
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\java_rust_wall_table_differential.rs (target\debug\deps\java_rust_wall_table_differential-cad5155284079ca8.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests druid_bench
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+PACKAGE_druid-bench_EXIT=0
+===== PACKAGE druid-test =====
+   Compiling druid-test v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-test)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.87s
+     Running unittests src\lib.rs (target\debug\deps\druid_test-ca7720d465e0fcbc.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\pool_contract_test.rs (target\debug\deps\pool_contract_test-17e4008e815756e7.exe)
+
+running 1 test
+test pool_reuses_the_last_returned_holder_and_closes_cleanly ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\pool_maintenance_contract_test.rs (target\debug\deps\pool_maintenance_contract_test-d8cc0608851011ef.exe)
+
+running 1 test
+test shrink_keeps_exactly_min_idle ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests\sql_dialect_contract_test.rs (target\debug\deps\sql_dialect_contract_test-261d978761db2f03.exe)
+
+running 6 tests
+test doris_unique_key_ddl_round_trips ... ok
+test oracle_returning_into_preserves_the_bind_clause ... ok
+test hive_partitioned_insert_and_cluster_by_round_trip ... ok
+test odps_partitioned_insert_and_lateral_view_round_trip ... ok
+test doris_select_and_alter_round_trip ... ok
+test oracle_select_and_merge_parse_and_round_trip ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\standard_connection_contract_test.rs (target\debug\deps\standard_connection_contract_test-09b8695446dc4d5e.exe)
+
+running 1 test
+test pooled_connection_implements_the_standard_connection_contract ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_config_java_observation_test.rs (target\debug\deps\wall_config_java_observation_test-14e8801141f13248.exe)
+
+running 2 tests
+test all_java_scalar_defaults_match_kernel ... ok
+test every_bundled_java_rule_set_matches_kernel ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_config_kernel_boundary_test.rs (target\debug\deps\wall_config_kernel_boundary_test-bd910416d5a7a6ec.exe)
+
+running 4 tests
+test ordered_update_columns_and_clone_visibility_are_preserved ... ok
+test callback_and_handler_identity_survive_facade_round_trip ... ok
+test canonical_config_drives_existing_wall_and_old_module_paths ... ok
+test kernel_owns_bundled_rules_and_keeps_append_semantics ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests druid_test
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+PACKAGE_druid-test_EXIT=0
+PER_PACKAGE_REMAINING_EXIT=0

@@ -6,8 +6,8 @@
 - [x] 1.2 将生产代码使用的 `memory-stats` 从 druid-admin dev-dependency 调整为正式依赖，或删除该生产调用；验证 `cargo check -p druid-admin --all-features --offline` 通过且 `v1_health` 不再伪造 RSS。
 - [x] 1.3 处理 `sql_parse.rs` 未使用 `kw` 与 `shared_row_set/trait_impls.rs` 通配导入；验证相关目标 `cargo clippy --all-targets --all-features -- -D warnings -A clippy::pedantic` 通过。
 - [x] 1.4 保留 Filter 类身份的 Java `String.equals` 语义，修正旧 Rust 断言并补充同大小写、不同大小写和首尾空格用例；验证 Filter 回归测试通过且未回退生产实现。
-- [ ] 1.5 在当前工作区运行默认与 `--all-features` 的 check/test/doc，记录失败与 ignored；验证无未解释失败，ignored 不记为行为通过。
-- [ ] 1.6 完成 `filter-class-identity-parity` 和 `exception-sorter-property-parity` 的剩余验收与规格同步；验证两个 change 在全部任务有证据后才能 validate/archive。
+- [ ] 1.5 在当前工作区运行默认与 `--all-features` 的 check/test/doc，记录失败与 ignored；验证无未解释失败，ignored 不记为行为通过。进展：`cargo check --workspace` 与 `--all-features` exit 0，`cargo doc --workspace --all-features --no-deps` exit 0；默认测试按 7 个 crate 逐个运行全部 exit 0（含 gRPC 51/51）；`--all-features` 除 `druid-admin` gRPC 目标外全部 exit 0，该目标在 Windows 回环上出现 `10060` 连接超时，单目标默认特性 51/51 通过，暂保留未完成。
+- [x] 1.6 完成 `filter-class-identity-parity` 和 `exception-sorter-property-parity` 的剩余验收与规格同步；验证两个 change 在全部任务有证据后才能 validate/archive。证据：filter change 已于 2026-11-02 归档；exception-sorter 严格 Clippy exit 0、17 Rust tests、576+118 差分 4 passed、`--strict` 通过，归档为 `2026-11-02-exception-sorter-property-parity`。
 
 ## 2. SOURCE_PARITY 与测试资产账本
 
@@ -41,15 +41,15 @@
 - [x] 5.1 按 `openspec/changes/admin-live-console/tasks.md` 完成其六项任务及 API/字段/刷新合同；验证本路线不重复创建控制台或第二协议。
 - [x] 5.2 验证复合身份、poll/push 部分失败、字段可用性、有界分页、过滤先于分页和刷新最后一次结果胜出；保留新旧客户端兼容测试。
 - [x] 5.3 运行 Admin 真实进程及 Mobile/Tablet/Desktop 浏览器验收，覆盖鉴权、空/错/部分数据、详情、复制、慢 SQL 与连接/堆栈；验证无 fixture 回退。
-- [ ] 5.4 核对 OpenAPI 与 handler 同源，核对采集健康和 unavailableFields；验证未上报字段显示不支持而非默认零。
-- [ ] 5.5 若 push 需要最大耗时、错误或直方图，另立协议增量 change 扩展 `SqlStatMsg` 及兼容协商；验证不修改本路线的采集热路径且旧客户端可继续读取。
+- [x] 5.4 核对 OpenAPI 与 handler 同源，核对采集健康和 unavailableFields；验证未上报字段显示不支持而非默认零。证据：`v1_route_table!` 同时展开 router 与 OpenAPI paths，`route_manifest_paths_are_unique` + `v1_openapi_document_lists_every_served_route` 通过；`health_uses_repository_counters_and_sampling_metadata`、`push_capabilities_keep_real_values_and_mask_unreported_defaults` 覆盖不可用字段。
+- [x] 5.5 若 push 需要最大耗时、错误或直方图，另立协议增量 change 扩展 `SqlStatMsg` 及兼容协商；验证不修改本路线的采集热路径且旧客户端可继续读取。评估结论：当前 gRPC push wire 不携带这些字段，`v1_snapshot` 将默认值标为 unavailable，慢 SQL/错误/直方图由 Java 兼容 JSON 来源提供；本路线不扩展协议、不改采集热路径。证据：`admin_live_console_test` 7 passed（含 `push_capabilities_keep_real_values_and_mask_unreported_defaults`），`docs/verification/admin-live-console-20261102.md`「真实缺口与验收边界」。
 
 ## 6. ADR-CRATE-003 门面收敛
 
 - [ ] 6.1 解耦 Filter 参数与 `DruidPooledConnection` 等运行时类型，保持现有调用行为；验证原 Pool/Filter 差分 MATCH 且无公共签名意外变化。
 - [ ] 6.2 按 P3.3b 移动 Filter/Wall 接口及实现并保留兼容重导出；验证依赖方向仍为 `druid → druid-rdbc`，无 Tokio/Axum/Tonic/具体驱动污染。
 - [ ] 6.3 按 P3.4 将 `druid` 收敛为 DataSource、sql::*、builder 和重导出，删除重复实现；验证外部消费者编译、行为差分和 `cargo tree` 均通过。
-- [ ] 6.4 生成 public-api/SemVer 报告并复核结构债；验证 EX-002/EX-003 文件未增长、例外复审日期保留、没有新增超 800 行 authored 文件。
+- [x] 6.4 生成 public-api/SemVer 报告并复核结构债；验证 EX-002/EX-003 文件未增长、例外复审日期保留、没有新增超 800 行 authored 文件。证据：`docs/verification/migration-completion-20261102/structural-and-public-api.md`；30 个 SemVer 类别精确匹配，EX-002 1,128 行、EX-003 1,216 行，无新增超 800 行文件。
 
 ## 7. 静态驱动分发
 
@@ -90,8 +90,8 @@
 ## 11. 最终门禁与发布判定
 
 - [ ] 11.1 运行 `cargo fmt --all -- --check`、默认/all-features check/test/doc 和严格 Clippy，保存原始日志；验证无未批准警告和失败。
-- [ ] 11.2 使用 Rust 1.95 运行 MSRV 门禁，验证未通过降低 `rust-version` 或更换不受支持工具链伪造通过。
-- [ ] 11.3 生成 public-api 快照与 SemVer 报告，逐项核对公开变更、外部消费者和精确 allowlist；验证无未批准差异。
+- [x] 11.2 使用 Rust 1.95 运行 MSRV 门禁，验证未通过降低 `rust-version` 或更换不受支持工具链伪造通过。证据：修复本机损坏的 1.95.0 工具链后，`cargo +1.95.0 check --workspace --all-targets --locked` exit 0；日志 `msrv-1.95.log`。
+- [x] 11.3 生成 public-api 快照与 SemVer 报告，逐项核对公开变更、外部消费者和精确 allowlist；验证无未批准差异。证据：`structural-and-public-api.md`；30 个 SemVer 类别精确匹配，`verify_task6_external_public_contract.py` PASS。
 - [ ] 11.4 在冻结工作区运行全量 `cargo llvm-cov --workspace --all-features`，记录 crate/生产文件/排除项/feature/测试范围；验证报告真实生成，scoped 结果不外推全仓。
 - [ ] 11.5 运行完整 Java/Rust 源套件和整仓 differential，验证 SOURCE_PARITY 全映射、TEST_ASSET 全哈希、每 case MATCH、harness failure=0、not-run=0。
 - [ ] 11.6 运行 benchmark、供应链和真实数据库矩阵，保留性能、依赖和宿主证据；验证无被忽略的必需场景。
