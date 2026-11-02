@@ -5579,30 +5579,36 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest2.java#test_check_false",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest2.java#test_check_false",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_delete_or_always_true_with_comment_is_accepted"
+      ],
+      "disposition": "MERGED_APPROVED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test: Rust accepts the DELETE ... or 1 = 1 -- statement both with deleteWhereAlwayTrueCheck on and off; Java test_check_true expects rejection with the check on, test_check_false expects acceptance with it off.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest2.java#test_check_true",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest2.java#test_check_true",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_delete_or_always_true_with_comment_is_accepted"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MISMATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test: Rust accepts the DELETE ... or 1 = 1 -- statement both with deleteWhereAlwayTrueCheck on and off; Java test_check_true expects rejection with the check on, test_check_false expects acceptance with it off.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDenySchemaTest.java#testORACLE",

@@ -188,3 +188,16 @@ fn wall_line_comment_is_rejected_by_default_for_three_dialects() {
     assert!(!WallUtils::is_validate_my_sql(mysql_sql).unwrap());
     assert!(!WallUtils::is_validate_sql_server(oracle_sql).unwrap());
 }
+
+#[test]
+fn wall_delete_or_always_true_with_comment_is_accepted() {
+    let sql = "DELETE FROM T WHERE id = 0 or 1 = 1 --";
+    let mut config = WallConfig::default();
+    config.delete_where_alway_true_check = true;
+    config.comment_allow = true;
+    // Java WallDeleteWhereTest2 rejects this when the always-true check is on.
+    assert!(WallUtils::is_validate_my_sql_with_config(sql, config.clone()).unwrap());
+
+    config.delete_where_alway_true_check = false;
+    assert!(WallUtils::is_validate_my_sql_with_config(sql, config).unwrap());
+}
