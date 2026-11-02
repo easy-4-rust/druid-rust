@@ -36,7 +36,18 @@ use tokio_util::sync::CancellationToken;
 use tonic::transport::{Endpoint, Server};
 use tonic::{Request, Response, Status, Streaming};
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(5);
+/// 网络夹具的总超时。
+///
+/// 这里只限制测试等待上限，不改变产品端的重连/关闭期限；整套 workspace
+/// 并行运行时，2–5 秒的等待会被调度延迟误伤，因此保留足够裕量。
+const TEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// 逐个运行真实 TCP 测试。
+///
+/// 这些用例各自会建立多个回环监听与连接；整套 workspace 并行执行时，
+/// Windows 回环端口会在 SYN 压力下超时。串行化只改变测试调度，不改变
+/// 产品端的并发/重连语义。
+static E2E_GATE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[test]
 fn grpc_client_builder_defaults_ack_window_to_256_and_rejects_zero() {
@@ -328,6 +339,7 @@ async fn datasource_content(http_addr: SocketAddr) -> Vec<Value> {
 
 #[tokio::test]
 async fn grpc_snapshot_is_visible_through_datasource_sql_and_wall_rest() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     let client = GrpcMetricsClient::connect(grpc_config(&fixture.grpc_endpoint, "projection"))
         .await
@@ -369,6 +381,7 @@ async fn grpc_snapshot_is_visible_through_datasource_sql_and_wall_rest() {
 
 #[tokio::test]
 async fn authoritative_snapshot_replaces_only_after_end_and_empty_snapshot_clears_stream() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("authoritative-replace", 12_001);
     let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
@@ -475,6 +488,7 @@ async fn authoritative_snapshot_replaces_only_after_end_and_empty_snapshot_clear
 
 #[tokio::test]
 async fn incomplete_snapshot_survives_disconnect_without_partial_visibility() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("authoritative-resume", 12_002);
     let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
@@ -545,6 +559,7 @@ async fn incomplete_snapshot_survives_disconnect_without_partial_visibility() {
 
 #[tokio::test]
 async fn out_of_order_snapshot_chunk_fails_closed_without_replacing_visible_state() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("authoritative-order", 12_003);
     let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
@@ -588,6 +603,7 @@ async fn out_of_order_snapshot_chunk_fails_closed_without_replacing_visible_stat
 
 #[tokio::test]
 async fn snapshot_transaction_capacity_is_enforced_before_staging() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let repository = MetricsRepository::with_config(
         druid_admin::repository::MetricsRepositoryConfig::try_new(
             4,
@@ -633,6 +649,7 @@ async fn snapshot_transaction_capacity_is_enforced_before_staging() {
 
 #[tokio::test]
 async fn grpc_newer_sequence_updates_rest_state() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("newer", 1);
     let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
@@ -660,6 +677,7 @@ async fn grpc_newer_sequence_updates_rest_state() {
 
 #[tokio::test]
 async fn successor_stream_fences_old_epoch_before_it_can_overwrite_repository() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let repository = MetricsRepository::new();
     let service = IngestService::new(repository.clone());
     let reservation = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -725,6 +743,7 @@ async fn successor_stream_fences_old_epoch_before_it_can_overwrite_repository() 
 
 #[tokio::test]
 async fn grpc_duplicate_and_increasing_sequences_are_handled_over_network() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("duplicate", 10);
     let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
@@ -762,6 +781,7 @@ async fn grpc_duplicate_and_increasing_sequences_are_handled_over_network() {
 
 #[tokio::test]
 async fn health_and_metrics_remain_truthful_after_grpc_ingest() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("health", 20);
     let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
@@ -801,6 +821,7 @@ async fn health_and_metrics_remain_truthful_after_grpc_ingest() {
 
 #[tokio::test]
 async fn grpc_multi_entry_batch_is_atomically_visible_and_counted_once() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("atomic-batch", 25);
     let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
@@ -853,6 +874,7 @@ async fn grpc_multi_entry_batch_is_atomically_visible_and_counted_once() {
 
 #[tokio::test]
 async fn repository_rejection_does_not_ack_or_advance_and_same_sequence_can_retry() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("atomic-rejection", 27);
     let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
@@ -909,6 +931,7 @@ async fn repository_rejection_does_not_ack_or_advance_and_same_sequence_can_retr
 
 #[tokio::test]
 async fn prometheus_escapes_client_controlled_label_values() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("prometheus-escape", 26);
     let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
@@ -937,6 +960,7 @@ async fn prometheus_escapes_client_controlled_label_values() {
 
 #[tokio::test]
 async fn grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("protocol-guards", 30);
     let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
@@ -1042,6 +1066,7 @@ async fn grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames()
 
 #[tokio::test]
 async fn grpc_rejects_zero_and_max_sequences_without_poisoning_other_streams() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     for (suffix, sequence) in [("zero-sequence", 0), ("max-sequence", u64::MAX)] {
         let identity = StreamIdentity::new(suffix, sequence);
@@ -1168,6 +1193,7 @@ impl MetricsIngest for ReconnectProbe {
 
 #[tokio::test]
 async fn grpc_client_reconnects_and_resends_only_pending_frame_bytes() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let (replay_tx, mut replay_rx) = mpsc::unbounded_channel();
     let (authorization_tx, mut authorization_rx) = mpsc::unbounded_channel();
     let service = ReconnectProbe {
@@ -1324,6 +1350,7 @@ impl MetricsIngest for InvalidAckProbe {
 
 #[tokio::test]
 async fn invalid_ack_headers_close_transport_and_preserve_pending_frame() {
+    let _e2e_gate = E2E_GATE.lock().await;
     for kind in [
         InvalidAckKind::MissingHeader,
         InvalidAckKind::WrongIdentity,
@@ -1454,6 +1481,7 @@ impl MetricsIngest for ResyncThenAckProbe {
 
 #[tokio::test]
 async fn resync_required_supersedes_pending_with_monotonic_registry_full_snapshot() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let source = Arc::new(MutableSource::new(9, 10));
     let (_registry, executor) = registry_executor(&source);
     let (replacement_tx, mut replacement_rx) = mpsc::unbounded_channel();
@@ -1675,6 +1703,7 @@ fn snapshot_observation(frame: &ClientFrame) -> (u64, u32, bool) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn resync_cutoff_preserves_live_update_queued_after_snapshot_sampling() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let source = Arc::new(CutoffBarrierSource::new(9));
     let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
     let executor = RegistryCommandExecutor::new(
@@ -1894,6 +1923,7 @@ fn full_chunk_identity(frame: &ClientFrame) -> (u64, u64) {
 
 #[tokio::test]
 async fn remote_full_snapshot_chunks_and_command_survive_mid_stream_disconnect() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let sources = [
         Arc::new(CommandSource::new(41)),
         Arc::new(CommandSource::new(42)),
@@ -2090,6 +2120,7 @@ fn successful_command_ack(frame: &ClientFrame, command_id: &str) -> bool {
 
 #[tokio::test]
 async fn final_command_reply_replays_after_half_close_and_duplicate_id_is_idempotent() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let source = Arc::new(CommandSource::new(52));
     let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
     let executor = RegistryCommandExecutor::new(
@@ -2247,6 +2278,7 @@ impl MetricsIngest for SequentialCommandsProbe {
 
 #[tokio::test]
 async fn live_client_completes_two_different_commands_then_resumes_batches() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let source = Arc::new(CommandSource::new(61));
     let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
     let executor = RegistryCommandExecutor::new(
@@ -2445,6 +2477,7 @@ impl MetricsIngest for SuccessorBackpressureProbe {
 
 #[tokio::test]
 async fn validated_w_plus_one_commands_survive_teardown_backpressure_and_live_traffic_resumes() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let source = Arc::new(CountingCommandSource {
         snapshots: AtomicUsize::new(0),
     });
@@ -2743,11 +2776,13 @@ async fn assert_migration_violation_fails_closed(
 
 #[tokio::test]
 async fn two_w_plus_one_unique_commands_fail_closed_without_successor_execution() {
+    let _e2e_gate = E2E_GATE.lock().await;
     assert_migration_violation_fails_closed(MigrationViolation::Overflow, "queue full").await;
 }
 
 #[tokio::test]
 async fn same_command_id_with_different_payload_fails_closed() {
+    let _e2e_gate = E2E_GATE.lock().await;
     assert_migration_violation_fails_closed(
         MigrationViolation::ConflictingPayload,
         "conflicting payload",
@@ -2940,6 +2975,7 @@ impl DataSourceMonitorable for CountingCommandSource {
 
 #[tokio::test]
 async fn command_received_before_rotation_goodbye_survives_into_successor_session() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let source = Arc::new(CountingCommandSource {
         snapshots: AtomicUsize::new(0),
     });
@@ -3087,6 +3123,7 @@ impl MetricsIngest for WrongHelloVersionProbe {
 
 #[tokio::test]
 async fn hello_ack_server_protocol_version_must_match() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let (endpoint, shutdown, server_handle) = start_probe_server(WrongHelloVersionProbe).await;
     let result = GrpcMetricsClient::connect(grpc_config(&endpoint, "wrong-hello-version")).await;
     assert!(
@@ -3163,6 +3200,7 @@ impl MetricsIngest for AckThenHoldProbe {
 
 #[tokio::test]
 async fn shutdown_timeout_reports_only_actual_pending_and_queued_work() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let service = AckThenHoldProbe { ack_limit: 5 };
     let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
     let client = GrpcMetricsClient::connect(grpc_config(&endpoint, "unflushed-count"))
@@ -3264,6 +3302,7 @@ impl MetricsIngest for CleanupProbe {
 
 #[tokio::test]
 async fn grpc_client_shutdown_joins_transport_and_leaves_no_active_stream() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let active_streams = Arc::new(AtomicUsize::new(0));
     let idle = Arc::new(Notify::new());
     let goodbyes = Arc::new(AtomicUsize::new(0));
@@ -3519,6 +3558,7 @@ fn registry_executor(
 
 #[tokio::test]
 async fn grpc_reconnect_after_fully_acked_batch_keeps_next_sequence_and_updates_rest() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let repository = MetricsRepository::new();
     let service = IngestService::new(repository.clone());
     let grpc_addr = reserve_loopback_addr().await;
@@ -3574,6 +3614,7 @@ async fn grpc_reconnect_after_fully_acked_batch_keeps_next_sequence_and_updates_
 
 #[tokio::test]
 async fn admin_restart_without_pending_triggers_registry_full_snapshot() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let source = Arc::new(MutableSource::new(3, 4));
     let (_registry, executor) = registry_executor(&source);
     let grpc_addr = reserve_loopback_addr().await;
@@ -3698,6 +3739,7 @@ impl MetricsIngest for HoldSecondAckProbe {
 
 #[tokio::test]
 async fn admin_restart_with_pending_incremental_supersedes_it_with_monotonic_full_snapshot() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let source = Arc::new(MutableSource::new(2, 3));
     let (_registry, executor) = registry_executor(&source);
     let grpc_addr = reserve_loopback_addr().await;
@@ -3835,6 +3877,7 @@ impl DataSourceMonitorable for RuntimeProbe {
 
 #[tokio::test]
 async fn runtime_shutdown_flushes_last_aggregated_batch_over_grpc() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let fixture = AdminFixture::start().await;
     let runtime = DruidMetricsRuntime::start_with_grpc(
         DruidMetricsConfig::builder()
@@ -3874,6 +3917,7 @@ async fn runtime_shutdown_flushes_last_aggregated_batch_over_grpc() {
 
 #[tokio::test]
 async fn unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushed() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let (endpoint, shutdown, server_handle) =
         start_probe_server(AckThenHoldProbe { ack_limit: 0 }).await;
     let runtime = DruidMetricsRuntime::start_with_grpc(
@@ -3924,6 +3968,7 @@ async fn unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushe
 
 #[tokio::test]
 async fn blocked_exporter_to_client_handoff_counts_each_batch_exactly_once() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let (endpoint, shutdown, server_handle) =
         start_probe_server(AckThenHoldProbe { ack_limit: 0 }).await;
     let mut client_config = grpc_config(&endpoint, "blocked-handoff-exact");
@@ -3989,6 +4034,7 @@ async fn blocked_exporter_to_client_handoff_counts_each_batch_exactly_once() {
 
 #[tokio::test]
 async fn admin_shutdown_cancels_and_joins_every_owned_ingest_stream() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let service = IngestService::new(MetricsRepository::new());
     let observer = service.clone();
     let reservation = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -4023,6 +4069,7 @@ async fn admin_shutdown_cancels_and_joins_every_owned_ingest_stream() {
 
 #[tokio::test]
 async fn admin_shutdown_releases_command_waiter_without_an_ack() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let broker = CommandBroker::new(8, Duration::from_secs(10));
     let service = IngestService::new(MetricsRepository::new()).with_command_broker(broker.clone());
     let observer = service.clone();
@@ -4080,6 +4127,7 @@ async fn admin_shutdown_releases_command_waiter_without_an_ack() {
 
 #[tokio::test]
 async fn production_builder_order_binds_shared_command_broker_shutdown() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let shutdown = CancellationToken::new();
     let broker = CommandBroker::new(1, Duration::from_secs(10));
     let _service = IngestService::new(MetricsRepository::new())
@@ -4096,6 +4144,7 @@ async fn production_builder_order_binds_shared_command_broker_shutdown() {
 
 #[tokio::test]
 async fn dropping_tonic_response_detaches_exact_broker_sender_and_reuses_capacity() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let broker = CommandBroker::new(1, Duration::from_millis(100));
     let service = IngestService::new(MetricsRepository::new()).with_command_broker(broker.clone());
     let observer = service.clone();
@@ -4150,6 +4199,7 @@ async fn dropping_tonic_response_detaches_exact_broker_sender_and_reuses_capacit
 
 #[tokio::test]
 async fn full_capacity_command_journal_reconnects_after_hello_ack_without_partial_replay() {
+    let _e2e_gate = E2E_GATE.lock().await;
     const CAPACITY: usize = 64;
 
     let broker = CommandBroker::new(CAPACITY, Duration::from_secs(30));
@@ -4232,6 +4282,7 @@ async fn full_capacity_command_journal_reconnects_after_hello_ack_without_partia
 
 #[tokio::test]
 async fn old_slash_collision_pair_stays_distinct_across_broker_repository_rest_and_prometheus() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let repository = MetricsRepository::new();
     let broker = CommandBroker::new(8, TEST_TIMEOUT);
     let grpc_addr = reserve_loopback_addr().await;
@@ -4435,6 +4486,7 @@ async fn old_slash_collision_pair_stays_distinct_across_broker_repository_rest_a
 
 #[tokio::test]
 async fn overlong_identity_is_rejected_before_hello_attachment_repository_or_rest_lookup() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let repository = MetricsRepository::new();
     let broker = CommandBroker::new(4, TEST_TIMEOUT);
     let grpc_addr = reserve_loopback_addr().await;
@@ -4536,6 +4588,7 @@ async fn overlong_identity_is_rejected_before_hello_attachment_repository_or_res
 
 #[tokio::test]
 async fn remote_plaintext_authorization_fails_before_the_probe_observes_a_connection() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0")
         .await
         .expect("bind remote plaintext probe");
@@ -4597,6 +4650,7 @@ impl MetricsIngest for DelayedNeverHelloProbe {
 
 #[tokio::test]
 async fn initial_connect_rpc_and_hello_ack_share_one_configured_deadline() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let entered = Arc::new(Notify::new());
     let release_rpc = Arc::new(Notify::new());
     let response_senders = Arc::new(Mutex::new(Vec::new()));
@@ -4707,6 +4761,7 @@ async fn successor_starts_after_stalled_rpc(
     stalled_rpc_entered: &Notify,
     changed: &Notify,
     connections: &AtomicUsize,
+    retry_window: Duration,
 ) -> bool {
     if tokio::time::timeout(TEST_TIMEOUT, stalled_rpc_entered.notified())
         .await
@@ -4714,7 +4769,7 @@ async fn successor_starts_after_stalled_rpc(
     {
         return false;
     }
-    tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(retry_window, async {
         loop {
             // 先注册通知再检查计数，避免重连恰好发生在检查与等待之间时丢失唤醒。
             let notified = changed.notified();
@@ -4732,10 +4787,16 @@ async fn successor_starts_after_stalled_rpc(
 
 #[tokio::test(start_paused = true)]
 async fn reconnect_observation_excludes_setup_but_keeps_the_retry_deadline() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let stalled = Notify::new();
     let changed = Notify::new();
     let connections = AtomicUsize::new(1);
-    let observation = successor_starts_after_stalled_rpc(&stalled, &changed, &connections);
+    let observation = successor_starts_after_stalled_rpc(
+        &stalled,
+        &changed,
+        &connections,
+        Duration::from_secs(2),
+    );
     tokio::pin!(observation);
     // 超过旧的两秒窗口，但尚未进入故障时，不能误判重试失败。
     assert!(
@@ -4752,7 +4813,12 @@ async fn reconnect_observation_excludes_setup_but_keeps_the_retry_deadline() {
 
     let stalled = Notify::new();
     stalled.notify_one();
-    let observation = successor_starts_after_stalled_rpc(&stalled, &changed, &connections);
+    let observation = successor_starts_after_stalled_rpc(
+        &stalled,
+        &changed,
+        &connections,
+        Duration::from_secs(2),
+    );
     tokio::pin!(observation);
     assert!(
         tokio::time::timeout(Duration::from_secs(1), observation.as_mut())
@@ -4766,6 +4832,7 @@ async fn reconnect_observation_excludes_setup_but_keeps_the_retry_deadline() {
 
 #[tokio::test]
 async fn reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let connections = Arc::new(AtomicUsize::new(0));
     let changed = Arc::new(Notify::new());
     let stalled_rpc_entered = Arc::new(Notify::new());
@@ -4788,8 +4855,13 @@ async fn reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries() {
         .await
         .expect("queue one replayable batch");
 
-    let retried_after_stall =
-        successor_starts_after_stalled_rpc(&stalled_rpc_entered, &changed, &connections).await;
+    let retried_after_stall = successor_starts_after_stalled_rpc(
+        &stalled_rpc_entered,
+        &changed,
+        &connections,
+        TEST_TIMEOUT,
+    )
+    .await;
     let shutdown_result = client.shutdown(TEST_TIMEOUT).await;
     shutdown.cancel();
     server_handle
@@ -4810,6 +4882,7 @@ async fn reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries() {
 
 #[tokio::test]
 async fn production_command_entry_is_authenticated_and_fails_closed_without_a_live_stream() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind command HTTP listener");
@@ -4872,6 +4945,7 @@ async fn production_command_entry_is_authenticated_and_fails_closed_without_a_li
 #[tokio::test]
 async fn command_route_requires_explicit_basic_even_when_admin_auth_is_disabled_or_session_exists()
 {
+    let _e2e_gate = E2E_GATE.lock().await;
     async fn start_command_http(
         auth: AdminAuthMode,
     ) -> (
@@ -5050,6 +5124,7 @@ impl DataSourceMonitorable for BrokerCommandProbe {
 
 #[tokio::test]
 async fn authenticated_broker_executes_reset_and_full_snapshot_through_real_ingest_service() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let repository = MetricsRepository::new();
     let broker = CommandBroker::new(16, TEST_TIMEOUT);
     let http_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -5172,6 +5247,7 @@ async fn authenticated_broker_executes_reset_and_full_snapshot_through_real_inge
 
 #[tokio::test]
 async fn command_ack_error_does_not_expose_client_supplied_credentials_over_http() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let repository = MetricsRepository::new();
     let broker = CommandBroker::new(16, TEST_TIMEOUT);
     let http_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -5354,6 +5430,7 @@ impl DataSourceMonitorable for BlockingResetCommandProbe {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn reset_result_survives_real_tonic_half_close_and_reconnect_without_reexecution() {
+    let _e2e_gate = E2E_GATE.lock().await;
     let repository = MetricsRepository::new();
     let broker = CommandBroker::new(16, TEST_TIMEOUT);
     let http_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
