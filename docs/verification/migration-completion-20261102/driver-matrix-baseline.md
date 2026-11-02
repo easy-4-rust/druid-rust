@@ -1,7 +1,7 @@
 # 驱动 profile 证据基线（2026-11-02）
 
 - 来源：`crates/druid-wrapper/assets/database-drivers.manifest.json`（schema v3）
-- 明细：`driver-profiles-baseline.tsv`
+- 明细：`driver-profiles-baseline.tsv`（由 `cargo run -p druid-test --bin driver_profile_baseline` 重新生成；含 profile_id、display_name、artifact、platform）
 - 目录 profile 总数：**80**
 
 ## 当前支持状态

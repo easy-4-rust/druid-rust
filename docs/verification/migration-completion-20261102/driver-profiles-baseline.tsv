@@ -1,81 +1,81 @@
-profile_id	support_status	runtime_mode	provider_id	protocol_family	counts_as_supported
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	sqlite	False
-	declared	native	duckdb-rs	embedded	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	mysql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	experimental	sqlx	sqlx	postgresql	False
-	declared	http_sql	rqlite-http	http_sql	False
-	declared	native	libsql	sqlite	False
-	declared	http_sql	cloudflare-d1-http	http_sql	False
-	declared	jdbc_agent	jdbc-agent	embedded	False
-	declared	jdbc_agent	jdbc-agent	embedded	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	embedded	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	oracle	False
-	declared	jdbc_agent	jdbc-agent	oracle	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	oracle	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	sqlserver	False
-	declared	jdbc_agent	jdbc-agent	sqlserver	False
-	declared	jdbc_agent	jdbc-agent	sqlserver	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
-	declared	jdbc_agent	jdbc-agent	jdbc	False
+profile_id	display_name	support_status	runtime_mode	provider_id	protocol_family	artifact_id	artifact_version	platform	counts_as_supported
+mysql	MySQL	experimental	sqlx	sqlx	mysql	mysql	-	windows/x86_64	false
+mariadb	MariaDB	experimental	sqlx	sqlx	mysql	mariadb	-	windows/x86_64	false
+tidb	TiDB	experimental	sqlx	sqlx	mysql	tidb	-	windows/x86_64	false
+oceanbase-mysql	OceanBase MySQL Mode	experimental	sqlx	sqlx	mysql	oceanbase-mysql	-	windows/x86_64	false
+polardb-mysql	PolarDB for MySQL	experimental	sqlx	sqlx	mysql	polardb-mysql	-	windows/x86_64	false
+tdsql-mysql	TencentDB for MySQL	experimental	sqlx	sqlx	mysql	tdsql-mysql	-	windows/x86_64	false
+greatsql	GreatSQL	experimental	sqlx	sqlx	mysql	greatsql	-	windows/x86_64	false
+doris	Apache Doris	experimental	sqlx	sqlx	mysql	doris	-	windows/x86_64	false
+starrocks	StarRocks	experimental	sqlx	sqlx	mysql	starrocks	-	windows/x86_64	false
+postgresql	PostgreSQL	experimental	sqlx	sqlx	postgresql	postgresql	-	windows/x86_64	false
+cockroachdb	CockroachDB	experimental	sqlx	sqlx	postgresql	cockroachdb	-	windows/x86_64	false
+redshift	Amazon Redshift	experimental	sqlx	sqlx	postgresql	redshift	-	windows/x86_64	false
+opengauss	openGauss	experimental	sqlx	sqlx	postgresql	opengauss	-	windows/x86_64	false
+sqlite	SQLite	experimental	sqlx	sqlx	sqlite	sqlite	-	windows/x86_64	false
+duckdb	DuckDB	declared	native	duckdb-rs	embedded	duckdb	-	windows/x86_64	false
+selectdb	SelectDB	experimental	sqlx	sqlx	mysql	selectdb	-	windows/x86_64	false
+goldendb	GoldenDB	experimental	sqlx	sqlx	mysql	goldendb	-	windows/x86_64	false
+drds	Alibaba DRDS	experimental	sqlx	sqlx	mysql	drds	-	windows/x86_64	false
+polardb-x	PolarDB-X	experimental	sqlx	sqlx	mysql	polardb-x	-	windows/x86_64	false
+analyticdb-mysql	AnalyticDB for MySQL	experimental	sqlx	sqlx	mysql	analyticdb-mysql	-	windows/x86_64	false
+manticore-search	Manticore Search	experimental	sqlx	sqlx	mysql	manticore-search	-	windows/x86_64	false
+yugabytedb	YugabyteDB	experimental	sqlx	sqlx	postgresql	yugabytedb	-	windows/x86_64	false
+greenplum	Greenplum	experimental	sqlx	sqlx	postgresql	greenplum	-	windows/x86_64	false
+cloudberry	Apache Cloudberry	experimental	sqlx	sqlx	postgresql	cloudberry	-	windows/x86_64	false
+gaussdb	GaussDB	experimental	sqlx	sqlx	postgresql	gaussdb	-	windows/x86_64	false
+kingbase	KingbaseES	experimental	sqlx	sqlx	postgresql	kingbase	-	windows/x86_64	false
+highgo	HighGo Database	experimental	sqlx	sqlx	postgresql	highgo	-	windows/x86_64	false
+uxdb	UXDB	experimental	sqlx	sqlx	postgresql	uxdb	-	windows/x86_64	false
+vastbase	Vastbase	experimental	sqlx	sqlx	postgresql	vastbase	-	windows/x86_64	false
+edb	EDB Postgres Advanced Server	experimental	sqlx	sqlx	postgresql	edb	-	windows/x86_64	false
+hologres	Alibaba Hologres	experimental	sqlx	sqlx	postgresql	hologres	-	windows/x86_64	false
+kwdb	KWDB	experimental	sqlx	sqlx	postgresql	kwdb	-	windows/x86_64	false
+questdb	QuestDB	experimental	sqlx	sqlx	postgresql	questdb	-	windows/x86_64	false
+timescaledb	TimescaleDB	experimental	sqlx	sqlx	postgresql	timescaledb	-	windows/x86_64	false
+cratedb	CrateDB	experimental	sqlx	sqlx	postgresql	cratedb	-	windows/x86_64	false
+rqlite	rqlite	declared	httpsql	rqlite-http	httpsql	rqlite	-	windows/x86_64	false
+turso	Turso/libSQL	declared	native	libsql	sqlite	turso	-	windows/x86_64	false
+cloudflare-d1	Cloudflare D1	declared	httpsql	cloudflare-d1-http	httpsql	cloudflare-d1	-	windows/x86_64	false
+h2	H2 Database	declared	jdbcagent	jdbc-agent	embedded	h2	-	windows/x86_64	false
+hsqldb	HSQLDB	declared	jdbcagent	jdbc-agent	embedded	hsqldb	-	windows/x86_64	false
+access	Microsoft Access	declared	jdbcagent	jdbc-agent	jdbc	access	-	windows/x86_64	false
+derby	Apache Derby	declared	jdbcagent	jdbc-agent	embedded	derby	-	windows/x86_64	false
+firebird	Firebird	declared	jdbcagent	jdbc-agent	jdbc	firebird	-	windows/x86_64	false
+oracle	Oracle Database	declared	jdbcagent	jdbc-agent	oracle	oracle	-	windows/x86_64	false
+oceanbase-oracle	OceanBase Oracle Mode	declared	jdbcagent	jdbc-agent	oracle	oceanbase-oracle	-	windows/x86_64	false
+dameng	Dameng Database	declared	jdbcagent	jdbc-agent	jdbc	dameng	-	windows/x86_64	false
+yashandb	YashanDB	declared	jdbcagent	jdbc-agent	oracle	yashandb	-	windows/x86_64	false
+gbase8a	GBase 8a	declared	jdbcagent	jdbc-agent	jdbc	gbase8a	-	windows/x86_64	false
+gbase8s	GBase 8s	declared	jdbcagent	jdbc-agent	jdbc	gbase8s	-	windows/x86_64	false
+xugudb	XuGu Database	declared	jdbcagent	jdbc-agent	jdbc	xugudb	-	windows/x86_64	false
+oscar	OSCAR Database	declared	jdbcagent	jdbc-agent	jdbc	oscar	-	windows/x86_64	false
+sundb	SUNDB	declared	jdbcagent	jdbc-agent	jdbc	sundb	-	windows/x86_64	false
+iris	InterSystems IRIS	declared	jdbcagent	jdbc-agent	jdbc	iris	-	windows/x86_64	false
+sap-hana	SAP HANA	declared	jdbcagent	jdbc-agent	jdbc	sap-hana	-	windows/x86_64	false
+db2	IBM Db2	declared	jdbcagent	jdbc-agent	jdbc	db2	-	windows/x86_64	false
+informix	IBM Informix	declared	jdbcagent	jdbc-agent	jdbc	informix	-	windows/x86_64	false
+db2-for-i	IBM Db2 for i	declared	jdbcagent	jdbc-agent	jdbc	db2-for-i	-	windows/x86_64	false
+sap-maxdb	SAP MaxDB	declared	jdbcagent	jdbc-agent	jdbc	sap-maxdb	-	windows/x86_64	false
+sqlserver	Microsoft SQL Server	declared	jdbcagent	jdbc-agent	sqlserver	sqlserver	-	windows/x86_64	false
+azure-sql	Azure SQL Database	declared	jdbcagent	jdbc-agent	sqlserver	azure-sql	-	windows/x86_64	false
+azure-synapse	Azure Synapse Analytics	declared	jdbcagent	jdbc-agent	sqlserver	azure-synapse	-	windows/x86_64	false
+sybase-ase	SAP Sybase ASE	declared	jdbcagent	jdbc-agent	jdbc	sybase-ase	-	windows/x86_64	false
+clickhouse	ClickHouse	declared	jdbcagent	jdbc-agent	jdbc	clickhouse	-	windows/x86_64	false
+databend	Databend	declared	jdbcagent	jdbc-agent	jdbc	databend	-	windows/x86_64	false
+databricks-sql	Databricks SQL	declared	jdbcagent	jdbc-agent	jdbc	databricks-sql	-	windows/x86_64	false
+snowflake	Snowflake	declared	jdbcagent	jdbc-agent	jdbc	snowflake	-	windows/x86_64	false
+teradata	Teradata	declared	jdbcagent	jdbc-agent	jdbc	teradata	-	windows/x86_64	false
+vertica	Vertica	declared	jdbcagent	jdbc-agent	jdbc	vertica	-	windows/x86_64	false
+exasol	Exasol	declared	jdbcagent	jdbc-agent	jdbc	exasol	-	windows/x86_64	false
+trino	Trino	declared	jdbcagent	jdbc-agent	jdbc	trino	-	windows/x86_64	false
+prestosql	Presto	declared	jdbcagent	jdbc-agent	jdbc	prestosql	-	windows/x86_64	false
+hive	Apache Hive	declared	jdbcagent	jdbc-agent	jdbc	hive	-	windows/x86_64	false
+spark-sql	Apache Spark SQL	declared	jdbcagent	jdbc-agent	jdbc	spark-sql	-	windows/x86_64	false
+bigquery	Google BigQuery	declared	jdbcagent	jdbc-agent	jdbc	bigquery	-	windows/x86_64	false
+kylin	Apache Kylin	declared	jdbcagent	jdbc-agent	jdbc	kylin	-	windows/x86_64	false
+phoenix	Apache Phoenix	declared	jdbcagent	jdbc-agent	jdbc	phoenix	-	windows/x86_64	false
+impala	Apache Impala	declared	jdbcagent	jdbc-agent	jdbc	impala	-	windows/x86_64	false
+athena	Amazon Athena	declared	jdbcagent	jdbc-agent	jdbc	athena	-	windows/x86_64	false
+maxcompute	Alibaba MaxCompute	declared	jdbcagent	jdbc-agent	jdbc	maxcompute	-	windows/x86_64	false
+tdengine	TDengine	declared	jdbcagent	jdbc-agent	jdbc	tdengine	-	windows/x86_64	false

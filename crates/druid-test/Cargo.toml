@@ -13,9 +13,9 @@ workspace = true
 [dependencies]
 druid        = { version = "0.0.0-design", path = "../druid" }
 druid-rdbc   = { version = "0.0.0-design", path = "../druid-rdbc" }
+druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false, features = ["driver-catalog", "toasty"] }
 async-trait  = { workspace = true }
 tokio        = { workspace = true }
 serde_json   = { workspace = true }
 
 [dev-dependencies]
-druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false, features = ["toasty"] }
