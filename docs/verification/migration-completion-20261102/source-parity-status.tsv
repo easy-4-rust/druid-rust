@@ -937,7 +937,7 @@ src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceFactoryTest1.java#test_i
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceFactoryTest1.java#test_integer	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceFactoryTest1.java#test_other	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceFactoryTest2.java#test_factory	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceFilterTest.java#test_filter	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceFilterTest.java#test_filter	ADAPTED	MATCH	crates/druid/tests/task6_data_source_filter_config_test_parity.rs::task6_data_source_filter_config_test_builtin_stat_alias_is_the_default_sqlite_datasource_filter	Rust target passes in cargo test -p druid --test task6_data_source_filter_config_test_parity (4 passed); Java setFilters("stat") grows 0->1 filter; the Rust target applies default+stat and asserts the same single StatFilter after de-duplication. Input spelling differs, contract/assertion preserved.
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceFilterTest.java#test_filter_3	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceShrinkTest.java#test	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest.java#test_getInitStackTrace	MISSING	NOT_RUN		

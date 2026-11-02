@@ -13167,16 +13167,18 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceFilterTest.java#test_filter",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceFilterTest.java#test_filter",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
+      "targets": [
+        "crates/druid/tests/task6_data_source_filter_config_test_parity.rs::task6_data_source_filter_config_test_builtin_stat_alias_is_the_default_sqlite_datasource_filter"
+      ],
+      "disposition": "ADAPTED",
+      "contract_preserved": true,
       "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "Rust target passes in cargo test -p druid --test task6_data_source_filter_config_test_parity (4 passed); Java setFilters(\"stat\") grows 0->1 filter; the Rust target applies default+stat and asserts the same single StatFilter after de-duplication. Input spelling differs, contract/assertion preserved."
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceFilterTest.java#test_filter_3",
