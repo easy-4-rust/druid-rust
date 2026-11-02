@@ -123,7 +123,21 @@ def apply_method(report: Path, apply: bool) -> int:
                 continue
             rust_method = (candidate.get("rust_method_entry") or "").strip()
             method_name = rust_method.rsplit("::", 1)[-1] if rust_method else ""
-            source = find_rust_source(method_name) if method_name else ""
+            declared_source = (candidate.get("rust_source") or "").strip()
+            if declared_source:
+                declared_path = ROOT / declared_source
+                if declared_path.is_file() and re.search(
+                    rf"\bfn\s+{re.escape(method_name)}\s*(?:<|\()",
+                    declared_path.read_text(encoding="utf-8", errors="replace"),
+                ):
+                    source = declared_source
+                else:
+                    errors.append(
+                        f"{identity}: declared rust_source lacks fn {method_name}: {declared_source}"
+                    )
+                    continue
+            else:
+                source = find_rust_source(method_name) if method_name else ""
             if not source:
                 errors.append(f"{identity}: rust method {method_name} not found in druid-rdbc")
                 continue
@@ -133,14 +147,22 @@ def apply_method(report: Path, apply: bool) -> int:
             row["batch"] = "jdbc-agent-wave-20261102"
             row["declaration"] = "PASS"
             row["contract"] = "PASS" if contract not in ("", "NONE", "-") else "UNASSESSED"
+            real_db = select_evidence(
+                candidate.get("real_db_evidence") or "", identity, "real_db_evidence", errors
+            )
             row["adapter"] = "PASS" if adapter not in ("", "NONE", "-") else "UNASSESSED"
             row["logical_proxy"] = "PASS" if logical not in ("", "NONE", "-") else "UNASSESSED"
-            row["real_db"] = "UNASSESSED"
+            row["real_db"] = "PASS" if real_db else "UNASSESSED"
             row["capability"] = "PARTIAL"
             row["rust_source"] = source
             row["rust_source_sha256"] = digest(source)
             note = (candidate.get("notes") or "").strip()
-            row["backend"] = "Rust canonical interface; existing parity tests"
+            if real_db:
+                note = f"{note} real_db covered by {real_db}.".strip()
+            row["backend"] = (
+                "Rust canonical interface; existing parity tests; real H2 XA via JDBC Agent"
+                if real_db else "Rust canonical interface; existing parity tests"
+            )
             missing = [layer for layer in ("contract", "adapter", "logical_proxy", "real_db") if row[layer] != "PASS"]
             row["not_run_reason"] = (
                 f"{', '.join(missing)} remain unassessed; {note}" if note else

@@ -10,12 +10,12 @@
 
 | 维度 | PASS | PARTIAL | UNSUPPORTED | UNASSESSED |
 |---|---:|---:|---:|---:|
-| capability | 0 | 497 | 4 | 1500 |
-| declaration | 485 | 0 | 0 | 1516 |
-| contract | 483 | 0 | 0 | 1518 |
-| adapter | 151 | 0 | 0 | 1850 |
+| capability | 0 | 532 | 4 | 1465 |
+| declaration | 520 | 0 | 0 | 1481 |
+| contract | 516 | 0 | 0 | 1485 |
+| adapter | 155 | 0 | 0 | 1846 |
 | logical_proxy | 306 | 0 | 0 | 1695 |
-| real_db | 54 | 0 | 0 | 1947 |
+| real_db | 58 | 0 | 0 | 1943 |
 
 ## 约束
 
@@ -75,3 +75,12 @@
 - 结果：linked **501** / unassessed **1500**；capability PARTIAL 497 + UNSUPPORTED 4；declaration PASS 485、contract PASS 483、adapter PASS 151、logical_proxy PASS 306、real_db PASS 54。
 - 仍未回填：`getBoolean(int)`、`getBytes(int)`、`getDouble(int)`、`getFloat(int)`、`getShort(String)`、`getString(int)` 等无值级断言的重载，以及 index/named 之外的继承 Statement 方法。
 - 门禁：`EVIDENCE_INTEGRITY_PASS linked=501 unassessed=1500`；`task6_callable_canonical_matrix_test` 10 passed。
+
+## 2026-11-03 XA / DataSource / 事件 / RowSet SPI 批次
+
+- 当前 ledger SHA-256：`79fdfa98c93f2d9513579b32bd418523d1ccfc05fa2f9239189747cf57575095`
+- 新增 35 个 `javax.sql` 方法：PooledConnection 获取与连接事件监听、DataSource 获取与 Wrapper、四类 DataSource 家族的 log writer/parent logger、XAConnection#getXAResource、ConnectionEvent/StatementEvent 构造与 getter、RowSetInternal/Reader/Writer/Listener。
+- 真实库：`jdbc_agent_xa_external_consumer` 的 H2 XA 场景本机实跑通过（含 `external_pool_returns_logical_lease_and_reuses_live_xa_owner`），为 PooledConnection 获取/监听与 XAConnection 获取/资源增加 4 个 `real_db` PASS；同文件 PostgreSQL 恢复用例因缺少 `POSTGRES_*` 环境前置失败，未计入证据。
+- 结果：linked **536** / unassessed **1465**；capability PARTIAL 532 + UNSUPPORTED 4；declaration PASS 520、contract PASS 516、adapter PASS 155、logical_proxy 306、real_db PASS 58。
+- 边界：`DataSource#getConnection(String,String)`、`XA#getXAConnection(String,String)` 仅默认 0A000，未回填；PooledConnection/XA 的 statement listener 无 trait 级测试；RowSetListener#rowChanged 无正向事件断言；XAConnection/XADataSource 的 close/TYPE 与 ConnectionPoolDataSource 获取仍未评估。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=536 unassessed=1465`；ledger 校验与 OpenSpec `--strict` 通过。
