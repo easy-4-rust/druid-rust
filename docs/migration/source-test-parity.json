@@ -24111,16 +24111,18 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\proxy\\utils\\DruidLoaderUtilsTest.java#testLoadFilter",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\proxy\\utils\\DruidLoaderUtilsTest.java#testLoadFilter",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid/tests/task6_filter_manager_semantics_test_parity.rs::task6_filter_manager_semantics_test_bundled_aliases_and_java_utf16_fallback_match_filter_manager_contract"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
       "inputs_preserved": false,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MISMATCH",
+      "evidence": "Java expects log4j/stat/default/commonLogging/encoding class aliases; the Rust manager supports stat/default/log and deliberately returns unknown commonLogging/encoding identifiers unchanged. The Rust test asserts this current behavior, so alias coverage is a real divergence, not a hidden MISSING."
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\spring\\DruidJdbcExtractorTest.java#test_spring",

@@ -1716,7 +1716,7 @@ src\test\java\com\alibaba\druid\bvt\proxy\filter\StatFilterTest3.java#test_merge
 src\test\java\com\alibaba\druid\bvt\proxy\filter\encoding\CharsetConvertTest.java#testEncoding	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\proxy\filter\encoding\CharsetConvertTest.java#testIsEmpty	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\proxy\filter\encoding\CharsetParameterTest.java#testQ	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\proxy\utils\DruidLoaderUtilsTest.java#testLoadFilter	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\proxy\utils\DruidLoaderUtilsTest.java#testLoadFilter	ADAPTED	MISMATCH	crates/druid/tests/task6_filter_manager_semantics_test_parity.rs::task6_filter_manager_semantics_test_bundled_aliases_and_java_utf16_fallback_match_filter_manager_contract	Java expects log4j/stat/default/commonLogging/encoding class aliases; the Rust manager supports stat/default/log and deliberately returns unknown commonLogging/encoding identifiers unchanged. The Rust test asserts this current behavior, so alias coverage is a real divergence, not a hidden MISSING.
 src\test\java\com\alibaba\druid\bvt\spring\DruidJdbcExtractorTest.java#test_spring	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\spring\DruidJdbcExtractorTest.java#test_spring_filter	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\spring\SpringMethodInfoTest.java#test_equals	MISSING	NOT_RUN		
