@@ -1,0 +1,7 @@
+case_id	java_class	method	user	password	auto_commit	rollback_filter	sql	max_active
+DruidDataSourceTest_getConnection.test_conn_ok	DruidDataSourceTest_getConnection	test_conn_ok	-	-	true	false	-	8
+DruidDataSourceTest_getConnection.test_conn_user_error	DruidDataSourceTest_getConnection	test_conn_user_error	a	-	true	false	-	8
+DruidDataSourceTest_getConnection.test_conn_password_error	DruidDataSourceTest_getConnection	test_conn_password_error	-	a	true	false	-	8
+DruidDataSourceTest_recycle.test_recycle	DruidDataSourceTest_recycle	test_recycle	-	-	false	false	select 1	1
+DruidDataSourceTest_recycle2.test_recycle	DruidDataSourceTest_recycle2	test_recycle	-	-	true	true	select 1	8
+DruidDataSourceTest_recycle2.test_recycle_error	DruidDataSourceTest_recycle2	test_recycle_error	-	-	false	true	select 1	8

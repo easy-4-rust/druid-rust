@@ -14121,44 +14121,53 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_getConnection.java#test_conn_ok",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_getConnection.java#test_conn_ok",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid-bench/tests/java_rust_pool_differential.rs::pinned_java_and_rust_compare_all_six_pool_cases"
+      ],
+      "disposition": "MIRRORED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "Live Java/Rust pool differential passes (3 tests, 6 cases); comparison.tsv status MATCH: return, active/idle and replacement fields are byte-identical. Artifact: docs/verification/migration-completion-20261102/pool-differential-comparison.tsv",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_getConnection.java#test_conn_password_error",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_getConnection.java#test_conn_password_error",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid-bench/tests/java_rust_pool_differential.rs::pinned_java_and_rust_compare_all_six_pool_cases"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "APPROVED_DIFFERENCE",
+      "evidence": "Live Java/Rust pool differential passes (3 tests, 6 cases); comparison.tsv status APPROVED_STANDARD_DIFFERENCE: Java UnsupportedOperationException vs Rust SQLFeatureNotSupported 0A000; recorded in the approved difference ledger. Artifact: docs/verification/migration-completion-20261102/pool-differential-comparison.tsv",
+      "approved_difference": true
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_getConnection.java#test_conn_user_error",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_getConnection.java#test_conn_user_error",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid-bench/tests/java_rust_pool_differential.rs::pinned_java_and_rust_compare_all_six_pool_cases"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "APPROVED_DIFFERENCE",
+      "evidence": "Live Java/Rust pool differential passes (3 tests, 6 cases); comparison.tsv status APPROVED_STANDARD_DIFFERENCE: Java UnsupportedOperationException vs Rust SQLFeatureNotSupported 0A000; recorded in the approved difference ledger. Artifact: docs/verification/migration-completion-20261102/pool-differential-comparison.tsv",
+      "approved_difference": true
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_getConnection_2.java#test_conn_ok",
@@ -14527,44 +14536,53 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_recycle.java#test_recycle",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_recycle.java#test_recycle",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid-bench/tests/java_rust_pool_differential.rs::pinned_java_and_rust_compare_all_six_pool_cases"
+      ],
+      "disposition": "MIRRORED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "Live Java/Rust pool differential passes (3 tests, 6 cases); comparison.tsv status MATCH: pool active/idle, statement/connection closed and replacement fields are byte-identical. Artifact: docs/verification/migration-completion-20261102/pool-differential-comparison.tsv",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_recycle2.java#test_recycle",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_recycle2.java#test_recycle",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid-bench/tests/java_rust_pool_differential.rs::pinned_java_and_rust_compare_all_six_pool_cases"
+      ],
+      "disposition": "MIRRORED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "Live Java/Rust pool differential passes (3 tests, 6 cases); comparison.tsv status MATCH: pool active/idle, statement/connection closed and replacement fields are byte-identical. Artifact: docs/verification/migration-completion-20261102/pool-differential-comparison.tsv",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_recycle2.java#test_recycle_error",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_recycle2.java#test_recycle_error",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid-bench/tests/java_rust_pool_differential.rs::pinned_java_and_rust_compare_all_six_pool_cases"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "APPROVED_DIFFERENCE",
+      "evidence": "Live Java/Rust pool differential passes (3 tests, 6 cases); comparison.tsv status APPROVED_STANDARD_DIFFERENCE: Java leaves statement_closed=false, Rust reports true; recorded in the approved difference ledger. Artifact: docs/verification/migration-completion-20261102/pool-differential-comparison.tsv",
+      "approved_difference": true
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_testOnBorrowFailed.java#test_conn",

@@ -109,6 +109,7 @@ fn run() -> Result<(), String> {
         let status = match result_parity {
             "MATCH" => "MATCH",
             "MISMATCH" => "MISMATCH",
+            "APPROVED_DIFFERENCE" => "APPROVED_DIFFERENCE",
             _ => "NOT_RUN",
         };
         *counts.entry(status).or_default() += 1;
@@ -152,10 +153,11 @@ fn run() -> Result<(), String> {
         )?;
     }
     println!(
-        "SOURCE_PARITY_ACCEPTANCE cases={} assets={} match={} mismatch={} not_run={}",
+        "SOURCE_PARITY_ACCEPTANCE cases={} assets={} match={} approved_difference={} mismatch={} not_run={}",
         cases.len(),
         assets.len(),
         counts.get("MATCH").copied().unwrap_or(0),
+        counts.get("APPROVED_DIFFERENCE").copied().unwrap_or(0),
         counts.get("MISMATCH").copied().unwrap_or(0),
         counts.get("NOT_RUN").copied().unwrap_or(0),
     );

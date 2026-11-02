@@ -15,7 +15,7 @@
 | 2.1 Java 用例清单 | `java-test-cases.tsv`：4759 个 `@Test` + 2219 个无 `@Test` 的 `public void test...`，manifest 共 **6978** 个唯一 case |
 | 2.2 资源清单 | `java-test-assets.tsv`：**822** 个资源、13.46 MiB |
 | 2.4 资源精确复制 | 复制到 `crates/druid-test/tests/fixtures/source-java/src/test/resources/`，SHA-256 **822/822** 一致 |
-| 2.5 整仓验收聚合 | `scripts/run_workspace_acceptance.sh` 逐包跑 7 个 crate 全部 exit 0；`source_parity_acceptance` 输出 `source-parity-status.tsv`：6978 cases、MATCH 24 / MISMATCH 1 / NOT_RUN 6953，未隐藏 MISSING/BLOCKED |
+| 2.5 整仓验收聚合 | `scripts/run_workspace_acceptance.sh` 逐包跑 7 个 crate 全部 exit 0；`source_parity_acceptance` 输出 `source-parity-status.tsv`：6978 cases、MATCH 27 / APPROVED_DIFFERENCE 3 / MISMATCH 1 / NOT_RUN 6947，未隐藏 MISSING/BLOCKED |
 | 3.1 JDBC 方法基线 | `java8-method-evidence-baseline.tsv`，2001 身份，SHA-256 `cfa065c8…`，未评估状态不变 |
 | 5.2 Admin 数据合同 | Rust 合同 34 passed（`admin-console-contracts.log`）；前端 5 passed（`admin-web-tests.log`） |
 | 5.4 OpenAPI 同源 | `v1_route_table!` 同时驱动 router 与 OpenAPI paths；`route_manifest_paths_are_unique` 与 `v1_openapi_document_lists_every_served_route` 通过；健康/unavailableFields 测试覆盖 |
@@ -47,7 +47,7 @@
 ### 2. SOURCE_PARITY 首批映射已完成，余量仍大
 
 - `docs/migration/source-test-parity.json` 现为 **6978** 个唯一 case（4759 个 `@Test` + 2219 个无 `@Test` 的 `public void test...`），822 个资产。
-- 首批 **24** 个来源方法已映射：18 个 `bvt.pool.vendor` ExceptionSorter 方法 → `exception_sorter_semantics_test`；4 个 `FilterManagerTest` 方法 + `ClearFilterTest#test_filters` + `DruidDataSourceFilterTest#test_filter` → FilterManager/DataSource filter parity 测试。**24 MATCH / 1 MISMATCH**；2201 个未发现方法显式标为 `BLOCKED`；另记录 `DruidLoaderUtilsTest#testLoadFilter` 的 log4j/encoding 别名差异为 1 个 MISMATCH，未隐藏。
+- 首批 **31** 个来源方法已映射：18 个 `bvt.pool.vendor` ExceptionSorter 方法 → `exception_sorter_semantics_test`；4 个 `FilterManagerTest` 方法 + `ClearFilterTest#test_filters` + `DruidDataSourceFilterTest#test_filter` → FilterManager/DataSource filter parity 测试。**27 MATCH / 3 APPROVED_DIFFERENCE / 1 MISMATCH**；2201 个未发现方法显式标为 `BLOCKED`；Pool 差分 6 例：3 MATCH + 3 APPROVED_STANDARD_DIFFERENCE（getConnection 用户/密码错误、recycle_error）。另记录 `DruidLoaderUtilsTest#testLoadFilter` 的 log4j/encoding 别名差异为 1 个 MISMATCH，未隐藏。
 - 其余 4759 个 `@Test` 仍为 `MISSING/NOT_RUN`；禁止按测试名自动映射或伪造 MATCH。
 
 ### 3. JDBC 方法证据仍以未评估为主
@@ -62,7 +62,7 @@
 
 ## 下一步
 
-1. 继续 2.3：按 JDBC 核心对象、Pool/Filter、SQL/Wall 分批，只映射已有真实测试与可复核断言，禁止名称猜测；当前 24 MATCH / 1 MISMATCH。
+1. 继续 2.3：按 JDBC 核心对象、Pool/Filter、SQL/Wall 分批，只映射已有真实测试与可复核断言，禁止名称猜测；当前 27 MATCH / 3 APPROVED_DIFFERENCE / 1 MISMATCH。
 2. 3.2 从 Connection/Statement/PreparedStatement/ResultSet 开始，逐方法关联 Java 用例和 MATCH。
 3. 进行 6.1 门面收敛和 7.1–7.2 静态分发的设计/实现；保持兼容重导出和动态路径。
 4. 9.3–9.8 在真实 MySQL/PostgreSQL/外部池/故障环境运行矩阵；未配置环境保持 NOT_RUN。
