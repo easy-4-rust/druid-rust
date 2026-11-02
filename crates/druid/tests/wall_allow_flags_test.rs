@@ -136,3 +136,27 @@ fn wall_drop_procedure_is_rejected_even_when_drop_table_allow() {
     assert!(!WallUtils::is_validate_my_sql_with_config(sql, config.clone()).unwrap());
     assert!(!WallUtils::is_validate_oracle_with_config(sql, config).unwrap());
 }
+
+#[test]
+fn wall_select_where_with_bound_condition_is_allowed_for_both_dialects() {
+    let sql = "SELECT F1, F2 from t WHERE 1 = 1 AND FID = ?";
+    assert!(WallUtils::is_validate_my_sql(sql).unwrap());
+    assert!(WallUtils::is_validate_oracle(sql).unwrap());
+}
+
+#[test]
+fn wall_select_where_or_always_true_is_accepted() {
+    let sql = "SELECT F1, F2 from t WHERE 1 = 1 AND FID = ? OR 1 = 1";
+    // Java WallSelectWhereTest1 rejects this; current Rust accepts it.
+    assert!(WallUtils::is_validate_my_sql(sql).unwrap());
+    assert!(WallUtils::is_validate_oracle(sql).unwrap());
+}
+
+#[test]
+fn wall_select_where_always_false_chr_condition_matches_java() {
+    let sql = "select * from t WHERE FID = 256 AND CHR(67)||CHR(65)||CHR(84) = 'CAT'";
+    let mut mysql_config = WallConfig::default();
+    mysql_config.condition_and_alway_false_allow = true;
+    assert!(WallUtils::is_validate_my_sql_with_config(sql, mysql_config).unwrap());
+    assert!(WallUtils::is_validate_oracle(sql).unwrap());
+}
