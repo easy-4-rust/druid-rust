@@ -5468,30 +5468,36 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest.java#testMySql",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest.java#testMySql",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid/tests/wall_always_true_checks_test.rs::wall_delete_where_always_true_toggle_matches_java"
+      ],
+      "disposition": "MERGED_APPROVED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "cargo test -p druid --test wall_always_true_checks_test (3 passed); the Rust target asserts the Java default rejection and the selectWhereAlwayTrueCheck/deleteWhereAlwayTrueCheck toggles for MySQL and Oracle.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest.java#testORACLE",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest.java#testORACLE",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid/tests/wall_always_true_checks_test.rs::wall_delete_where_always_true_toggle_matches_java"
+      ],
+      "disposition": "MERGED_APPROVED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "cargo test -p druid --test wall_always_true_checks_test (3 passed); the Rust target asserts the Java default rejection and the selectWhereAlwayTrueCheck/deleteWhereAlwayTrueCheck toggles for MySQL and Oracle.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest1.java#testMySql",
@@ -5805,30 +5811,36 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallHavingTest.java#testMySql",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallHavingTest.java#testMySql",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid/tests/wall_always_true_checks_test.rs::wall_having_always_true_is_not_rejected_by_mysql_or_oracle"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MISMATCH",
+      "evidence": "cargo test -p druid --test wall_always_true_checks_test: both MySQL and Oracle accept HAVING COUNT(*) OR 1 = 1, while Java WallHavingTest expects rejection. Recorded as an unapproved always-true HAVING gap.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallHavingTest.java#testORACLE",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallHavingTest.java#testORACLE",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid/tests/wall_always_true_checks_test.rs::wall_having_always_true_is_not_rejected_by_mysql_or_oracle"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MISMATCH",
+      "evidence": "cargo test -p druid --test wall_always_true_checks_test: both MySQL and Oracle accept HAVING COUNT(*) OR 1 = 1, while Java WallHavingTest expects rejection. Recorded as an unapproved always-true HAVING gap.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallHavingTest6.java#test_check_false",
@@ -6315,30 +6327,36 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallSelectWhereTest.java#testMySql",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallSelectWhereTest.java#testMySql",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid/tests/wall_always_true_checks_test.rs::wall_select_where_always_true_toggle_matches_java"
+      ],
+      "disposition": "MERGED_APPROVED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "cargo test -p druid --test wall_always_true_checks_test (3 passed); the Rust target asserts the Java default rejection and the selectWhereAlwayTrueCheck/deleteWhereAlwayTrueCheck toggles for MySQL and Oracle.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallSelectWhereTest.java#testORACLE",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallSelectWhereTest.java#testORACLE",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid/tests/wall_always_true_checks_test.rs::wall_select_where_always_true_toggle_matches_java"
+      ],
+      "disposition": "MERGED_APPROVED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "cargo test -p druid --test wall_always_true_checks_test (3 passed); the Rust target asserts the Java default rejection and the selectWhereAlwayTrueCheck/deleteWhereAlwayTrueCheck toggles for MySQL and Oracle.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallSelectWhereTest0.java#testMySql",

@@ -386,8 +386,8 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallConfigTest.java#test_updateA
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallConfigTest.java#test_updateAllow_false	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteTest.java#testMySql	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_delete_allow_false_rejects_mysql_and_oracle	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteTest.java#testORACLE	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_delete_allow_false_rejects_mysql_and_oracle	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteWhereTest.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteWhereTest.java#testORACLE	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteWhereTest.java#testMySql	MERGED_APPROVED	MATCH	crates/druid/tests/wall_always_true_checks_test.rs::wall_delete_where_always_true_toggle_matches_java	cargo test -p druid --test wall_always_true_checks_test (3 passed); the Rust target asserts the Java default rejection and the selectWhereAlwayTrueCheck/deleteWhereAlwayTrueCheck toggles for MySQL and Oracle.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteWhereTest.java#testORACLE	MERGED_APPROVED	MATCH	crates/druid/tests/wall_always_true_checks_test.rs::wall_delete_where_always_true_toggle_matches_java	cargo test -p druid --test wall_always_true_checks_test (3 passed); the Rust target asserts the Java default rejection and the selectWhereAlwayTrueCheck/deleteWhereAlwayTrueCheck toggles for MySQL and Oracle.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteWhereTest1.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteWhereTest1.java#testMySql_false	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteWhereTest1.java#testORACLE	MISSING	NOT_RUN		
@@ -409,8 +409,8 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallFilterConfigSpiForNullDbType
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallFilterTest.java#test_wallFilter	MIRRORED	MATCH	crates/druid-bench/tests/java_rust_wall_table_differential.rs::pinned_java_and_rust_compare_original_wall_table_case	Live Java/Rust WallFilterTest H2 differential reported MATCH across all 20 original operations; artifact docs/verification/migration-completion-20261102/wall-table-differential-comparison.tsv
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallFilterTest2.java#test_wallFilter	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallFilterTest3.java#test_wallFilter	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallHavingTest.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallHavingTest.java#testORACLE	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallHavingTest.java#testMySql	ADAPTED	MISMATCH	crates/druid/tests/wall_always_true_checks_test.rs::wall_having_always_true_is_not_rejected_by_mysql_or_oracle	cargo test -p druid --test wall_always_true_checks_test: both MySQL and Oracle accept HAVING COUNT(*) OR 1 = 1, while Java WallHavingTest expects rejection. Recorded as an unapproved always-true HAVING gap.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallHavingTest.java#testORACLE	ADAPTED	MISMATCH	crates/druid/tests/wall_always_true_checks_test.rs::wall_having_always_true_is_not_rejected_by_mysql_or_oracle	cargo test -p druid --test wall_always_true_checks_test: both MySQL and Oracle accept HAVING COUNT(*) OR 1 = 1, while Java WallHavingTest expects rejection. Recorded as an unapproved always-true HAVING gap.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallHavingTest6.java#test_check_false	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallHavingTest6.java#test_check_true	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallInsertTest.java#testMySql	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_insert_allow_false_rejects_mysql_and_oracle	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
@@ -444,8 +444,8 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectLimitTest_2.java#testM
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectLimitTest_2.java#testOracle	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectLimitTest_2.java#testPG	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectLimitTest_2.java#testSQLServer	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectWhereTest.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectWhereTest.java#testORACLE	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectWhereTest.java#testMySql	MERGED_APPROVED	MATCH	crates/druid/tests/wall_always_true_checks_test.rs::wall_select_where_always_true_toggle_matches_java	cargo test -p druid --test wall_always_true_checks_test (3 passed); the Rust target asserts the Java default rejection and the selectWhereAlwayTrueCheck/deleteWhereAlwayTrueCheck toggles for MySQL and Oracle.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectWhereTest.java#testORACLE	MERGED_APPROVED	MATCH	crates/druid/tests/wall_always_true_checks_test.rs::wall_select_where_always_true_toggle_matches_java	cargo test -p druid --test wall_always_true_checks_test (3 passed); the Rust target asserts the Java default rejection and the selectWhereAlwayTrueCheck/deleteWhereAlwayTrueCheck toggles for MySQL and Oracle.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectWhereTest0.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectWhereTest0.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectWhereTest1.java#testMySql_false	MISSING	NOT_RUN		
