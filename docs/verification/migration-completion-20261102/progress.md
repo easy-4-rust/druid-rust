@@ -52,9 +52,11 @@
 
 ### 3. JDBC 方法证据：Statement 与 Connection 已分批回填
 
-- 2001 个身份中 linked 193、unassessed 1808；已关联 30 个 `java.sql.Statement` 方法 + `CallableStatement#wasNull()` + `ResultSet` 的 `previous/getRow/getFetchSize/wasNull` + 22 个 PreparedStatement 属性/生命周期方法 + 52 个 `java.sql.Connection` 方法 + 56 个 PreparedStatement typed setter/执行/结果状态方法 + 4 个明确不支持能力。
-- Connection 批次：declaration PASS 177、contract PASS 175；14 个方法在 JDBC Agent H2/HSQLDB 真实运行中通过（driver-matrix run `41410074184`，commit `95be0d6`），`real_db` 从 0 增至 14/2001；RowSet/SQLInput/SQLOutput 负向测试登记 4 个 UNSUPPORTED（0A000 + SQLFeatureNotSupportedException + 精确 message）；adapter/logical_proxy 仍未评估，3.2–3.7 未完成。
-- 门禁：`verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=193 unassessed=1808`；13 个 verifier 单元测试通过。
+- 2001 个身份中 linked 465、unassessed 1536；已关联 Statement/PreparedStatement/Connection/CallableStatement/ResultSet/资源接口/元数据接口的现有真实测试与差分证据。
+- 分层：declaration PASS 449、contract PASS 447、adapter PASS 151、logical_proxy PASS 270、real_db PASS 54；`real_db` 来自 JDBC Agent H2/HSQLDB 真实运行（driver-matrix run `41410074184`，commit `95be0d6`），Blob/Clob/NClob/Array 与 Callable 共 40 个方法逐方法回填，Array H2 测试本次本机实跑 2 passed。
+- 负向：RowSet/SQLInput/SQLOutput 4 个明确不支持能力登记 `UNSUPPORTED`（0A000 + SQLFeatureNotSupportedException + 精确 message）。
+- 边界：metadata 27 个 routing-only、10 个常量、Callable `getBoolean(int)` 弱证据、ResultSet 常量、资源 `TYPE`/`RowId#toString` 未回填；adapter/logical_proxy 仍覆盖不全，3.2–3.7 未完成。
+- 门禁：`verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=465 unassessed=1536`；13 个 verifier 单元测试通过。
 
 ### 4. 其他未完成阶段
 

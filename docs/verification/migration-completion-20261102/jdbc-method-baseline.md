@@ -13,9 +13,9 @@
 | capability | 0 | 461 | 4 | 1536 |
 | declaration | 449 | 0 | 0 | 1552 |
 | contract | 447 | 0 | 0 | 1554 |
-| adapter | 105 | 0 | 0 | 1896 |
-| logical_proxy | 199 | 0 | 0 | 1802 |
-| real_db | 14 | 0 | 0 | 1987 |
+| adapter | 151 | 0 | 0 | 1850 |
+| logical_proxy | 270 | 0 | 0 | 1731 |
+| real_db | 54 | 0 | 0 | 1947 |
 
 ## 约束
 
@@ -60,8 +60,9 @@
 
 ## 2026-11-02 多智能体批次（Callable/Resource/ResultSet/Statement/Metadata）
 
-- 当前 ledger SHA-256：`fb1ebb001582407e76ec41229df7b161e222b7726d173b942b055463a2776acf`
-- 新增 **272** 个方法的证据：79 个 `CallableStatement`、87 个 Blob/Clob/NClob/Array/Struct/Ref/SQLXML/RowId/SQLInput/SQLOutput、63 个 ResultSet/Statement、43 个 DatabaseMetaData/ResultSetMetaData/ParameterMetaData。
-- 结果：linked **465** / unassessed **1536**；capability PARTIAL 461 + UNSUPPORTED 4；declaration PASS 449、contract PASS 447、adapter PASS 105、logical_proxy PASS 199、real_db 仍 14。
-- 证据边界：`adapter`/`logical_proxy` 主要来自 Toasty SQLite 池化路径和 JDBC Agent H2/HSQLDB 外部消费者测试；metadata 的 27 个 routing-only 与 10 个常量行未回填，Callable 的 `getBoolean(int)` 弱证据行、ResultSet 常量行、资源 `TYPE`/`RowId#toString` 行均被排除，不以路由或 Debug 表示冒充 Java 行为。
+- 当前 ledger SHA-256：`6988bbccffabd58589241cf7a3deb14ab9b5e30d911c57f0d9058defc02b871d`
+- 新增 **272** 个方法的证据：79 个 `CallableStatement`、87 个 Blob/Clob/NClob/Array/Struct/Ref/SQLXML/RowId/SQLInput/SQLOutput、63 个 ResultSet/Statement、43 个 DatabaseMetaData/ResultSetMetaData/ParameterMetaData；另回填 120 条 adapter/logical_proxy 层证据（46 adapter + 74 logical_proxy）。
+- 结果：linked **465** / unassessed **1536**；capability PARTIAL 461 + UNSUPPORTED 4；declaration PASS 449、contract PASS 447、adapter PASS 151、logical_proxy PASS 270、real_db PASS 54。
+- 真实库证据：Blob/Clob/NClob/Array 外部消费者测试与 Callable H2/HSQLDB live 测试逐方法回填 40 个 `real_db`，均来自实际 H2/HSQLDB 运行；Array H2 测试本次本机实跑 2 passed。
+- 证据边界：metadata 的 27 个 routing-only 与 10 个常量行未回填，Callable 的 `getBoolean(int)` 弱证据行、ResultSet 常量行、资源 `TYPE`/`RowId#toString` 行均被排除，不以路由或 Debug 表示冒充 Java 行为；Toasty SQLite 未被当作资源类真实库证据。
 - 门禁：`python scripts/verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=465 unassessed=1536`；Callable/Resource/Metadata/ResultSet 目标测试均通过。
