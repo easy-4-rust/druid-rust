@@ -155,8 +155,21 @@ def apply_method(report: Path, apply: bool) -> int:
             real_db = select_evidence(
                 candidate.get("real_db_evidence") or "", identity, "real_db_evidence", errors
             )
-            constant = (candidate.get("applicability") or "").strip() == "constant"
-            if constant:
+            mode = (candidate.get("applicability") or "").strip()
+            constant = mode == "constant"
+            unsupported = mode == "unsupported"
+            if unsupported:
+                row["adapter"] = "UNASSESSED"
+                row["logical_proxy"] = "UNASSESSED"
+                row["real_db"] = "UNASSESSED"
+                row["capability"] = "UNSUPPORTED"
+                row["positive_evidence"] = ""
+                row["positive_evidence_sha256"] = ""
+                row["unsupported_evidence"] = contract
+                row["unsupported_evidence_sha256"] = digest(contract.partition("#")[0])
+                row["unsupported_result"] = (candidate.get("unsupported_result") or "").strip()
+                row["not_run_reason"] = ""
+            elif constant:
                 row["adapter"] = "NOT_APPLICABLE"
                 row["logical_proxy"] = "NOT_APPLICABLE"
                 row["real_db"] = "NOT_APPLICABLE"
