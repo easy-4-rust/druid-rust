@@ -1,5 +1,7 @@
 # Tasks
 
+完成项对应的提交、测试与产物索引见 `docs/verification/migration-completion-20261102/task-evidence.tsv`；未执行项保持未勾选。
+
 ## 1. P0 基线冻结与修复
 
 - [x] 1.1 记录 Java/Rust SHA、dirty 文件、工具链、feature 与当前 CI 失败清单，生成新的基线说明；验证基线包含工作区哈希且不把历史通过报告当作当前结果。
@@ -101,5 +103,5 @@
 ## 12. 规格与证据同步
 
 - [x] 12.1 更新四份迁移主文档和当前验证索引，保留历史快照与原始证据；验证当前事实区无相互矛盾的完成状态和第二套现行文档。证据：`docs/migration/README.md`、`迁移验收规范.md`、`迁移路线图.md`、`对象级对照表.md`、`语义迁移对照表.md`、`对象名称一致性检查.md` 均加入 2026-11-02 当前状态块（19/68、NOT_READY），历史段落保留并明确不作当前结论。
-- [ ] 12.2 将本 change 的任务逐项关联到实际提交、测试和产物，未执行项保持未勾选；验证 `openspec validate migration-completion-roadmap` 通过。
+- [x] 12.2 将本 change 的任务逐项关联到实际提交、测试和产物，未执行项保持未勾选；验证 `openspec validate migration-completion-roadmap` 通过。证据：`task-evidence.tsv` 覆盖全部 22 个已完成项；`openspec validate migration-completion-roadmap --strict` 通过。
 - [ ] 12.3 仅在实现、测试、验证与规格同步全部完成后 sync/archive；验证主 specs 与 change 一致，Admin 和两个语义 change 仍保持各自独立事实源。

@@ -1,0 +1,24 @@
+task	status	commits	tests	artifacts
+1.1	done	66dbd173	-	docs/verification/migration-completion-20261102/baseline.md; baseline-dirty-paths.txt
+1.2	done	66dbd173	cargo check -p druid-admin --all-features	crates/druid-admin/Cargo.toml
+1.3	done	66dbd173	cargo clippy -p druid-admin -p druid-rdbc --all-targets --all-features -- -D warnings -A clippy::pedantic	crates/druid-admin/src/servlet/monitor_view_servlet/sql_parse.rs
+1.4	done	66dbd173	task6_filter_chain_extended_test_parity_part_01/02; filter_manager_identity_test	docs/verification/migration-completion-20261102/baseline.md
+1.6	done	ff1cdb2d	exception_sorter_property_contract_test; exception_sorter_semantics_test; task6_pooled_connection_exception_paths_test_parity; task6_owner_disposition_control_test; java_rust_exception_sorters_differential	openspec/changes/archive/2026-11-02-exception-sorter-property-parity/; docs/verification/method-semantics-20261101/logs/closeout-20261102-*.log
+2.1	done	66dbd173	-	docs/verification/migration-completion-20261102/java-test-cases.tsv
+2.2	done	66dbd173	-	docs/verification/migration-completion-20261102/java-test-assets.tsv
+2.4	done	66dbd173	asset SHA-256 verification	docs/verification/migration-completion-20261102/asset-copy-verification.tsv
+2.5	done	15fec0c3	scripts/run_workspace_acceptance.sh; source_parity_acceptance	docs/verification/migration-completion-20261102/source-parity-status.tsv; workspace-acceptance-cargo.log
+3.1	done	66dbd173	-	docs/verification/migration-completion-20261102/java8-method-evidence-baseline.tsv
+5.1	done	66dbd173	openspec validate admin-live-console --strict	openspec/changes/admin-live-console/tasks.md
+5.2	done	66dbd173	admin_live_console_test; admin-console-contracts.log	docs/verification/migration-completion-20261102/admin-console-contracts.log
+5.3	done	66dbd173	Admin real process + browser matrix	docs/verification/migration-completion-20261102/browser/
+5.4	done	9cf3e49f	route_manifest_paths_are_unique; v1_openapi_document_lists_every_served_route; admin_live_console_test	crates/druid-admin/src/servlet/monitor_view_servlet/v1_api.rs
+5.5	done	ff1cdb2d	admin_live_console_test	push_capabilities_keep_real_values_and_mask_unreported_defaults; docs/verification/admin-live-console-20261102.md
+6.4	done	592504bc; ff1cdb2d	verify_rdbc_single_standard_breaking_api.py; verify_task6_external_public_contract.py	docs/verification/migration-completion-20261102/structural-and-public-api.md
+8.1	done	e75339ec	two_phase_recovery_model_test	docs/migration/two-phase-recovery-model.md; crates/druid-rdbc/src/governance/two_phase/
+9.1	done	66dbd173	-	docs/verification/migration-completion-20261102/driver-profiles-baseline.tsv
+10.2	done	a490aaf3	grpc_network_e2e_test (3 consecutive runs)	docs/verification/migration-completion-20261102/grpc-recovery-3x.log; grpc-recovery-matrix.md
+11.2	done	ff1cdb2d	cargo +1.95.0 check --workspace --all-targets --locked	docs/verification/migration-completion-20261102/msrv-1.95.log
+11.3	done	592504bc; ff1cdb2d	verify_rdbc_single_standard_breaking_api.py; verify_task6_external_public_contract.py	docs/verification/migration-completion-20261102/structural-and-public-api.md
+12.1	done	dfea440d; a490aaf3	openspec validate migration-completion-roadmap --strict	docs/migration/README.md; 迁移验收规范.md; 迁移路线图.md; 对象级对照表.md; 语义迁移对照表.md
+12.2	done	-	openspec validate migration-completion-roadmap --strict	docs/verification/migration-completion-20261102/task-evidence.tsv
