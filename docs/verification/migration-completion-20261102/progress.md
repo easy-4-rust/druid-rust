@@ -2,7 +2,7 @@
 
 更新：2026-11-02
 
-## 已完成（23/68）
+## 已完成（24/68）
 
 | 任务 | 证据 |
 |---|---|
@@ -21,10 +21,11 @@
 | 6.4 结构债与 public-api/SemVer | `structural-and-public-api.md`：30 个 SemVer 类别精确匹配，EX-002 1,128 行、EX-003 1,216 行未增长，无新增 >800 行文件 |
 | 8.1 2PC 恢复模型冻结 | `druid_rdbc::governance::two_phase` + `two_phase_recovery_model_test` 8 passed；Mixed 永不返回 commit 重放，Unknown 只读核验；见 `docs/migration/two-phase-recovery-model.md` |
 | 9.1 驱动支持基线 | `driver-profiles-baseline.tsv`：80 profiles，declared 46 / experimental 34 / verified+certified **0** |
+| 9.2 统一驱动矩阵 runner | `driver_matrix` 输出 80 profiles × 13 操作；SQLite/sqlx 13/13 PASS，其余 1027 NOT_RUN；见 `driver-matrix-results.tsv` |
 | 10.2 gRPC 恢复矩阵 | `grpc-recovery-3x.log` 连续 3 轮 51 passed / 0 failed；断连/重连、重复/乱序 ACK、Admin 重启、饱和停机与未刷出映射见 `grpc-recovery-matrix.md` |
 | 11.2 MSRV 1.95 | 修复本机损坏工具链后 `cargo +1.95.0 check --workspace --all-targets --locked` exit 0，`msrv-1.95.log` |
 | 11.3 public-api/SemVer 外部消费者 | 同 6.4；`verify_task6_external_public_contract.py` PASS |
-| 12.1 迁移文档当前事实同步 | README + 五份主文档加入 2026-11-02 状态块（23/68、NOT_READY），历史快照保留 |
+| 12.1 迁移文档当前事实同步 | README + 五份主文档加入 2026-11-02 状态块（24/68、NOT_READY），历史快照保留 |
 | 12.2 任务证据关联 | `task-evidence.tsv` 关联 22 个已完成项到提交/测试/产物；`openspec validate migration-completion-roadmap --strict` 通过 |
 | 5.1 Admin 活跃 change | `admin-live-console` 六项任务已勾选、`--strict` 校验通过 |
 | 5.3 Admin 三尺寸浏览器 | `browser/`：Mobile 390×884、Tablet 768×1024、Desktop 1280×1024 全路由截图；Basic 登录、空态、部分数据、详情、真实点击复制、慢 SQL、连接/stack 能力态；修复登录跳旧页与 SQL/直方图误标记未上报 |

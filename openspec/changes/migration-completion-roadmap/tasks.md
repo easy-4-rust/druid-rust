@@ -74,7 +74,7 @@
 ## 9. 真实驱动证据矩阵
 
 - [x] 9.1 生成 80 个 profile 的支持基线，记录 declared/experimental/verified/certified、runtimeMode、provider 和平台；验证公开支持数量只统计 verified/certified。
-- [ ] 9.2 建立统一矩阵 runner，覆盖连接、查询、更新、预编译、元数据、类型、NULL、批处理、事务、保存点、取消、关闭和异常；验证每个结果含产品/版本/feature/平台。
+- [x] 9.2 建立统一矩阵 runner，覆盖连接、查询、更新、预编译、元数据、类型、NULL、批处理、事务、保存点、取消、关闭和异常；验证每个结果含产品/版本/feature/平台。证据：`driver_matrix` 输出 `driver-matrix-results.tsv`；SQLite/sqlx 13/13 PASS，其余 79 profiles 1027 NOT_RUN 并保留原因。
 - [ ] 9.3 对 SQLx 支持的 MySQL/PostgreSQL/SQLite 运行真实数据库合同与负能力测试；验证未配置环境写 NOT_RUN，ignored 不晋升支持状态。
 - [ ] 9.4 对 Toasty、RBDC、DuckDB、libSQL、HTTP SQL 运行其真实适配合同，区分原生与协议兼容；验证不支持能力返回精确错误。
 - [ ] 9.5 对 JDBC Agent 支持的后端运行真实 XA session、recover 和数据库终态测试；验证跨 session 恢复不被忽略或仅以 mock 代替。
@@ -103,5 +103,5 @@
 ## 12. 规格与证据同步
 
 - [x] 12.1 更新四份迁移主文档和当前验证索引，保留历史快照与原始证据；验证当前事实区无相互矛盾的完成状态和第二套现行文档。证据：`docs/migration/README.md`、`迁移验收规范.md`、`迁移路线图.md`、`对象级对照表.md`、`语义迁移对照表.md`、`对象名称一致性检查.md` 均加入 2026-11-02 当前状态块（19/68、NOT_READY），历史段落保留并明确不作当前结论。
-- [x] 12.2 将本 change 的任务逐项关联到实际提交、测试和产物，未执行项保持未勾选；验证 `openspec validate migration-completion-roadmap` 通过。证据：`task-evidence.tsv` 覆盖全部 22 个已完成项；`openspec validate migration-completion-roadmap --strict` 通过。
+- [x] 12.2 将本 change 的任务逐项关联到实际提交、测试和产物，未执行项保持未勾选；验证 `openspec validate migration-completion-roadmap` 通过。证据：`task-evidence.tsv` 覆盖全部 24 个已完成项；`openspec validate migration-completion-roadmap --strict` 通过。
 - [ ] 12.3 仅在实现、测试、验证与规格同步全部完成后 sync/archive；验证主 specs 与 change 一致，Admin 和两个语义 change 仍保持各自独立事实源。

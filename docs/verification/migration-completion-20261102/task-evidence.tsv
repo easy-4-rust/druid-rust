@@ -17,6 +17,7 @@ task	status	commits	tests	artifacts
 6.4	done	592504bc; ff1cdb2d	verify_rdbc_single_standard_breaking_api.py; verify_task6_external_public_contract.py	docs/verification/migration-completion-20261102/structural-and-public-api.md
 8.1	done	e75339ec	two_phase_recovery_model_test	docs/migration/two-phase-recovery-model.md; crates/druid-rdbc/src/governance/two_phase/
 9.1	done	66dbd173	-	docs/verification/migration-completion-20261102/driver-profiles-baseline.tsv
+9.2	done	548af80c	driver_matrix (80 profiles × 13 operations)	docs/verification/migration-completion-20261102/driver-matrix-results.tsv
 10.2	done	a490aaf3	grpc_network_e2e_test (3 consecutive runs)	docs/verification/migration-completion-20261102/grpc-recovery-3x.log; grpc-recovery-matrix.md
 11.2	done	ff1cdb2d	cargo +1.95.0 check --workspace --all-targets --locked	docs/verification/migration-completion-20261102/msrv-1.95.log
 11.3	done	592504bc; ff1cdb2d	verify_rdbc_single_standard_breaking_api.py; verify_task6_external_public_contract.py	docs/verification/migration-completion-20261102/structural-and-public-api.md

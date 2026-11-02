@@ -28,3 +28,14 @@
 - 每个 verified/certified 行必须有数据库产品版本、驱动版本、feature、平台、正向/负向合同和真实运行产物。
 - 未配置环境记录 `NOT_RUN`，ignored 不计通过。
 - 逐产品矩阵任务（9.2-9.8）完成前，该文件保持基线而非完成声明。
+
+## 9.2 统一矩阵 runner 结果（2026-11-02）
+
+命令：`cargo run -p druid-test --bin driver_matrix`，输出 `driver-matrix-results.tsv`。
+
+| 产品 | feature | 平台 | 结果 |
+|---|---|---|---|
+| SQLite | sqlx | windows/x86_64 | **13/13 PASS**：connect、query、update、prepared、metadata、types、null、batch、transaction、savepoint、cancel、close、error |
+| 其余 79 个 profile | 各 runtime/provider | windows/x86_64 | **1027 NOT_RUN**：未配置对应数据库/凭据；每个 profile × 13 操作均保留原因 |
+
+每个结果行包含 `profile_id`、产品版本（未验证时为 `unverified`）、feature/provider、平台、capability、status、detail。SQLite 的行是真实 SQLx 内存库执行结果，不是 mock；其余产品未因目录存在或 SQLite 通过而晋升。9.3 仍需 MySQL/PostgreSQL 真实实例，9.4-9.8 仍需各自宿主。
