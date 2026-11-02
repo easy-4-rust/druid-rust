@@ -5280,44 +5280,53 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallCommentTest.java#testORACLE",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallCommentTest.java#testORACLE",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_line_comment_is_rejected_by_default_for_three_dialects"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MISMATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test: the Rust target rejects the comment for all three dialects like Java checkValid, but WallProvider has no commentDenyStat counter, so the Java denyCount assertion is not preserved.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallCommentTest.java#testmysql",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallCommentTest.java#testmysql",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_line_comment_is_rejected_by_default_for_three_dialects"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MISMATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test: the Rust target rejects the comment for all three dialects like Java checkValid, but WallProvider has no commentDenyStat counter, so the Java denyCount assertion is not preserved.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallCommentTest.java#testsqlserver",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallCommentTest.java#testsqlserver",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_line_comment_is_rejected_by_default_for_three_dialects"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MISMATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test: the Rust target rejects the comment for all three dialects like Java checkValid, but WallProvider has no commentDenyStat counter, so the Java denyCount assertion is not preserved.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallConfigTest.java#test_deleteAllow",

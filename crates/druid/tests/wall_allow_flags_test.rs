@@ -179,3 +179,12 @@ fn wall_having_with_comment_always_true_is_accepted() {
     config.select_having_alway_true_check = false;
     assert!(WallUtils::is_validate_my_sql_with_config(sql, config).unwrap());
 }
+
+#[test]
+fn wall_line_comment_is_rejected_by_default_for_three_dialects() {
+    let oracle_sql = "SELECT F1, F2 FROM ABC --test";
+    let mysql_sql = "SELECT F1, F2 FROM ABC -- test";
+    assert!(!WallUtils::is_validate_oracle(oracle_sql).unwrap());
+    assert!(!WallUtils::is_validate_my_sql(mysql_sql).unwrap());
+    assert!(!WallUtils::is_validate_sql_server(oracle_sql).unwrap());
+}
