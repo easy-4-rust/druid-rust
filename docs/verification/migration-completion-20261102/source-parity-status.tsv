@@ -406,7 +406,7 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest2.java#testMySql	MIS
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest2.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallFilterConfigSpiForNoMatchDbTypeTest.java#test_wallFilter	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallFilterConfigSpiForNullDbTypeTest.java#test_wallFilter	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallFilterTest.java#test_wallFilter	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallFilterTest.java#test_wallFilter	MIRRORED	MATCH	crates/druid-bench/tests/java_rust_wall_table_differential.rs::pinned_java_and_rust_compare_original_wall_table_case	Live Java/Rust WallFilterTest H2 differential reported MATCH across all 20 original operations; artifact docs/verification/migration-completion-20261102/wall-table-differential-comparison.tsv
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallFilterTest2.java#test_wallFilter	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallFilterTest3.java#test_wallFilter	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallHavingTest.java#testMySql	MISSING	NOT_RUN		

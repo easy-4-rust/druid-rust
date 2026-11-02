@@ -5733,16 +5733,19 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallFilterTest.java#test_wallFilter",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallFilterTest.java#test_wallFilter",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid-bench/tests/java_rust_wall_table_differential.rs::pinned_java_and_rust_compare_original_wall_table_case"
+      ],
+      "disposition": "MIRRORED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "Live Java/Rust WallFilterTest H2 differential reported MATCH across all 20 original operations; artifact docs/verification/migration-completion-20261102/wall-table-differential-comparison.tsv",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallFilterTest2.java#test_wallFilter",
