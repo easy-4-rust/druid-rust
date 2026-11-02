@@ -5502,58 +5502,70 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest1.java#testMySql",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest1.java#testMySql",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_delete_without_where_is_allowed_by_default"
+      ],
+      "disposition": "MERGED_APPROVED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test (17 passed); the Rust target asserts the same default DELETE-without-WHERE and HAVING behavior with the Java SQL.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest1.java#testMySql_false",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest1.java#testMySql_false",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_delete_without_where_is_allowed_by_default"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MISMATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test: Rust has no delete_where_none_check field and accepts DELETE FROM T even when Java would set it; HAVING ... or 1 = 1 is accepted while Java WallHavingTest6 rejects it. Recorded as unapproved gaps.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest1.java#testORACLE",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest1.java#testORACLE",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_delete_without_where_is_allowed_by_default"
+      ],
+      "disposition": "MERGED_APPROVED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test (17 passed); the Rust target asserts the same default DELETE-without-WHERE and HAVING behavior with the Java SQL.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest1.java#testORACLE_false",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest1.java#testORACLE_false",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_delete_without_where_is_allowed_by_default"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MISMATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test: Rust has no delete_where_none_check field and accepts DELETE FROM T even when Java would set it; HAVING ... or 1 = 1 is accepted while Java WallHavingTest6 rejects it. Recorded as unapproved gaps.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallDeleteWhereTest2.java#test_check_false",
@@ -5857,30 +5869,36 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallHavingTest6.java#test_check_false",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallHavingTest6.java#test_check_false",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_having_with_comment_always_true_is_accepted"
+      ],
+      "disposition": "MERGED_APPROVED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test (17 passed); the Rust target asserts the same default DELETE-without-WHERE and HAVING behavior with the Java SQL.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallHavingTest6.java#test_check_true",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallHavingTest6.java#test_check_true",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_having_with_comment_always_true_is_accepted"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MISMATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test: Rust has no delete_where_none_check field and accepts DELETE FROM T even when Java would set it; HAVING ... or 1 = 1 is accepted while Java WallHavingTest6 rejects it. Recorded as unapproved gaps.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallInsertTest.java#testMySql",

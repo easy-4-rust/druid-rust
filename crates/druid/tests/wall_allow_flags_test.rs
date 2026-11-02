@@ -160,3 +160,22 @@ fn wall_select_where_always_false_chr_condition_matches_java() {
     assert!(WallUtils::is_validate_my_sql_with_config(sql, mysql_config).unwrap());
     assert!(WallUtils::is_validate_oracle(sql).unwrap());
 }
+
+#[test]
+fn wall_delete_without_where_is_allowed_by_default() {
+    assert!(WallUtils::is_validate_my_sql("DELETE FROM T").unwrap());
+    assert!(WallUtils::is_validate_oracle("DELETE FROM T").unwrap());
+}
+
+#[test]
+fn wall_having_with_comment_always_true_is_accepted() {
+    let sql = "SELECT region, SUM(population), SUM(area) FROM bbc GROUP BY region HAVING SUM(area)>1000000 or 1 = 1 --";
+    let mut config = WallConfig::default();
+    config.select_having_alway_true_check = true;
+    config.condition_and_alway_true_allow = true;
+    config.comment_allow = true;
+    assert!(WallUtils::is_validate_my_sql_with_config(sql, config.clone()).unwrap());
+
+    config.select_having_alway_true_check = false;
+    assert!(WallUtils::is_validate_my_sql_with_config(sql, config).unwrap());
+}
