@@ -55,7 +55,7 @@ class Java8EvidenceTest(unittest.TestCase):
 
     def test_actual_ledger_keeps_partial_evidence_and_full_denominator(self):
         result = self.verify()
-        self.assertEqual((result["inventory"], result["ledger"], result["linked"], result["unassessed"]), (2001, 2001, 133, 1868))
+        self.assertEqual((result["inventory"], result["ledger"], result["linked"], result["unassessed"]), (2001, 2001, 193, 1808))
         self.assertEqual(result["incomplete"], 2001)
 
     def test_frozen_inventory_uses_committed_lf_bytes(self):

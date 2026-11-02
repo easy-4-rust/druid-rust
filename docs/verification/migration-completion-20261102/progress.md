@@ -52,9 +52,9 @@
 
 ### 3. JDBC 方法证据：Statement 与 Connection 已分批回填
 
-- 2001 个身份中 linked 133、unassessed 1868；已关联 30 个 `java.sql.Statement` 方法 + `CallableStatement#wasNull()` + `ResultSet` 的 `previous/getRow/getFetchSize/wasNull` + 22 个 PreparedStatement 属性/生命周期方法 + 52 个 `java.sql.Connection` 方法。
-- Connection 批次：declaration PASS 117、contract PASS 119；14 个方法在 JDBC Agent H2/HSQLDB 真实运行中通过（driver-matrix run `41410074184`，commit `95be0d6`），`real_db` 从 0 增至 14/2001；adapter/logical_proxy 仍未评估，3.2–3.7 未完成。
-- 门禁：`verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=133 unassessed=1868`；13 个 verifier 单元测试通过。
+- 2001 个身份中 linked 193、unassessed 1808；已关联 30 个 `java.sql.Statement` 方法 + `CallableStatement#wasNull()` + `ResultSet` 的 `previous/getRow/getFetchSize/wasNull` + 22 个 PreparedStatement 属性/生命周期方法 + 52 个 `java.sql.Connection` 方法 + 56 个 PreparedStatement typed setter/执行/结果状态方法 + 4 个明确不支持能力。
+- Connection 批次：declaration PASS 177、contract PASS 175；14 个方法在 JDBC Agent H2/HSQLDB 真实运行中通过（driver-matrix run `41410074184`，commit `95be0d6`），`real_db` 从 0 增至 14/2001；RowSet/SQLInput/SQLOutput 负向测试登记 4 个 UNSUPPORTED（0A000 + SQLFeatureNotSupportedException + 精确 message）；adapter/logical_proxy 仍未评估，3.2–3.7 未完成。
+- 门禁：`verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=193 unassessed=1808`；13 个 verifier 单元测试通过。
 
 ### 4. 其他未完成阶段
 

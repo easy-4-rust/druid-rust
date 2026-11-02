@@ -8,14 +8,14 @@
 
 ## 各维度当前状态
 
-| 维度 | PASS | PARTIAL | UNASSESSED |
-|---|---:|---:|---:|
-| capability | 0 | 133 | 1868 |
-| declaration | 117 | 0 | 1884 |
-| contract | 119 | 0 | 1882 |
-| adapter | 2 | 0 | 1999 |
-| logical_proxy | 9 | 0 | 1992 |
-| real_db | 14 | 0 | 1987 |
+| 维度 | PASS | PARTIAL | UNSUPPORTED | UNASSESSED |
+|---|---:|---:|---:|---:|
+| capability | 0 | 189 | 4 | 1808 |
+| declaration | 177 | 0 | 0 | 1824 |
+| contract | 175 | 0 | 0 | 1826 |
+| adapter | 2 | 0 | 0 | 1999 |
+| logical_proxy | 9 | 0 | 0 | 1992 |
+| real_db | 14 | 0 | 0 | 1987 |
 
 ## 约束
 
@@ -40,3 +40,20 @@
 - 真实库覆盖：`getAutoCommit/setAutoCommit`、`commit/rollback/rollback(Savepoint)`、`setSavepoint(String)/releaseSavepoint`、`getCatalog/setCatalog`、`getSchema/setSchema`、`getMetaData`、`prepareStatement(String)`、`close`。
 - 边界：`isValid` 与两个带结果集参数的 `prepareCall` 重载只有声明证据；`getHoldability/setHoldability`、`getNetworkTimeout/setNetworkTimeout`、`getTypeMap/setTypeMap`、`nativeSQL`、`setReadOnly` 只有默认 trait 合同证据；adapter/logical_proxy 仍未评估，3.2 未完成。
 - 门禁：`python scripts/verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=133 unassessed=1868`；13 个 verifier 单元测试通过。
+
+## 2026-11-02 PreparedStatement 第二批回填
+
+- 当前 ledger SHA-256：`b83955dad53d175bac2cc476ff44f20861cdf741b8187ae1c47f0d9236112b77`
+- 新增：56 个 `java.sql.PreparedStatement` 方法，覆盖 41 个 typed setter、`clearParameters/addBatch/clearBatch/executeBatch/executeLargeBatch`、`executeQuery/executeUpdate/executeLargeUpdate`、`getGeneratedKeys/getMoreResults/getUpdateCount/isClosed`、`isWrapperFor/unwrap`、`getParameterMetaData`。
+- 结果：capability PARTIAL 189 / UNASSESSED 1812；declaration PASS 173、contract PASS 175、adapter PASS 2、logical_proxy PASS 9、real_db 14。
+- 边界：`setBigDecimal`、`setArray`、`setBlob(Blob)`、`setClob(Clob)`、`setNClob(NClob)`、`setRef`、`setRowId`、`setSQLXML`、`setURL`、`getMetaData/getConnection/getLargeMaxRows/setLargeMaxRows/getLargeUpdateCount` 以及继承的字面 SQL 重载仍 UNASSESSED；本批 setter 通过 `set_input_parameter` 的 typed 变体验证，不宣称 Java 重载逐一经过 adapter。
+- 门禁：`python scripts/verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=189 unassessed=1812`；13 个 verifier 单元测试通过。
+
+## 2026-11-02 不支持能力负向证据
+
+- 当前 ledger SHA-256：`59b9119660be85b9a9026d5395d7f91c05957be140056122add02fcf744cb236`
+- 新增负向测试 `unsupported_interface_negative_test.rs`，登记 4 个 `UNSUPPORTED` 身份：`SQLInput#readObject(Class)`、`SQLOutput#writeObject(Object, SQLType)`、`RowSet#updateBlob(int, InputStream)`、`RowSet#updateBlob(int, InputStream, long)`。
+- 精确观测：SQLState `0A000`、class `java.sql.SQLFeatureNotSupportedException`、message 分别包含 `SQLInput#readObject(Class)`、`SQLOutput#writeObject(Object, SQLType)`、`row_set_lob_stream_update`；不是仅以 0A000 泛化声明。
+- 结果：linked 193 / unassessed 1808；capability PARTIAL 189 + UNSUPPORTED 4；declaration PASS 177、contract PASS 175、adapter PASS 2、logical_proxy PASS 9、real_db PASS 14。
+- 边界：RowSet 其余 319 个身份仍 UNASSESSED，不能因 2 个流更新负例推断整个 RowSet 不支持；SQLInput/SQLOutput 的已实现方法仍 UNASSESSED。
+- 门禁：`python scripts/verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=193 unassessed=1808`；`unsupported_interface_negative_test` 3 passed。
