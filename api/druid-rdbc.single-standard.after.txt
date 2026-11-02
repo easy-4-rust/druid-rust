@@ -1786,6 +1786,17 @@ pub druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::update_d
 impl druid_rdbc::governance::wall::table_stat_value::WallTableStatValue
 pub fn druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::to_map(&self) -> serde_json::map::Map<alloc::string::String, serde_json::value::Value>
 pub fn druid_rdbc::governance::wall::table_stat_value::WallTableStatValue::total_execute_count(&self) -> u64
+pub mod druid_rdbc::governance::wall::tenant_call_back
+pub enum druid_rdbc::governance::wall::tenant_call_back::TenantStatementType
+pub druid_rdbc::governance::wall::tenant_call_back::TenantStatementType::Delete
+pub druid_rdbc::governance::wall::tenant_call_back::TenantStatementType::Insert
+pub druid_rdbc::governance::wall::tenant_call_back::TenantStatementType::Select
+pub druid_rdbc::governance::wall::tenant_call_back::TenantStatementType::Update
+pub trait druid_rdbc::governance::wall::tenant_call_back::TenantCallBack: core::marker::Send + core::marker::Sync
+pub fn druid_rdbc::governance::wall::tenant_call_back::TenantCallBack::filter_resultset_tenant_column(&self, &druid_rdbc::types::Value)
+pub fn druid_rdbc::governance::wall::tenant_call_back::TenantCallBack::hidden_column(&self, &str) -> core::option::Option<alloc::string::String>
+pub fn druid_rdbc::governance::wall::tenant_call_back::TenantCallBack::tenant_column(&self, druid_rdbc::governance::wall::tenant_call_back::TenantStatementType, &str) -> core::option::Option<alloc::string::String>
+pub fn druid_rdbc::governance::wall::tenant_call_back::TenantCallBack::tenant_value(&self, druid_rdbc::governance::wall::tenant_call_back::TenantStatementType, &str) -> core::option::Option<druid_rdbc::types::Value>
 pub mod druid_rdbc::governance::wall::update_check_item
 pub struct druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem
 pub druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem::column_name: alloc::string::String
@@ -1830,6 +1841,292 @@ pub druid_rdbc::governance::wall::violation::WallViolation::XorNotAllowed
 impl core::error::Error for druid_rdbc::governance::wall::violation::WallViolation
 impl core::fmt::Display for druid_rdbc::governance::wall::violation::WallViolation
 pub fn druid_rdbc::governance::wall::violation::WallViolation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod druid_rdbc::governance::wall::wall_config
+pub struct druid_rdbc::governance::wall::wall_config::WallConfig
+pub druid_rdbc::governance::wall::wall_config::WallConfig::alter_table_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::block_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::call_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::case_condition_const_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::comment_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::commit_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::complete_insert_values_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::condition_and_alway_false_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::condition_and_alway_true_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::condition_double_const_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::condition_like_true_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::condition_op_bitwise_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::condition_op_xor_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::const_arithmetic_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::create_table_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::delete_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::delete_must_have_where: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::delete_where_alway_true_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::deny_functions: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::wall_config::WallConfig::deny_objects: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::wall_config::WallConfig::deny_schemas: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::wall_config::WallConfig::deny_tables: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::wall_config::WallConfig::deny_variants: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::wall_config::WallConfig::describe_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::dir: core::option::Option<alloc::string::String>
+pub druid_rdbc::governance::wall::wall_config::WallConfig::do_privileged_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::drop_table_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::function_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::function_white_list: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::hint_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::inited: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::insert_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::insert_values_check_size: i32
+pub druid_rdbc::governance::wall::wall_config::WallConfig::intersect_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::limit_zero_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::lock_table_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::merge_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::metadata_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::minus_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::multi_statement_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::must_parameterized: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::none_base_statement_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::object_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::permit_functions: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::wall_config::WallConfig::permit_schemas: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::wall_config::WallConfig::permit_tables: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::wall_config::WallConfig::permit_variants: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::wall_config::WallConfig::read_only_tables: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::wall_config::WallConfig::rename_table_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::replace_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::rollback_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::schema_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::schema_white_list: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::select_all_column_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::select_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::select_except_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::select_having_alway_true_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::select_intersect_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::select_into_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::select_into_outfile_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::select_limit: i32
+pub druid_rdbc::governance::wall::wall_config::WallConfig::select_minus_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::select_union_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::select_where_alway_true_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::select_white_list: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::set_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::show_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::start_transaction_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::strict_syntax_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::table_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::tenant_column: alloc::string::String
+pub druid_rdbc::governance::wall::wall_config::WallConfig::tenant_table_pattern: alloc::string::String
+pub druid_rdbc::governance::wall::wall_config::WallConfig::truncate_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::update_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::update_must_have_where: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::update_where_alway_true_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::use_allow: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::variant_check: bool
+pub druid_rdbc::governance::wall::wall_config::WallConfig::wrap_allow: bool
+impl druid_rdbc::governance::wall::wall_config::WallConfig
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::add_update_check_columns(&self, &str)
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::builder() -> druid_rdbc::governance::wall::wall_config::WallConfigBuilder
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::is_update_check_table(&self, &str) -> bool
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::load_config(&mut self, impl core::convert::Into<alloc::string::String>)
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::set_tenant_call_back(&self, core::option::Option<alloc::sync::Arc<dyn druid_rdbc::governance::wall::tenant_call_back::TenantCallBack>>)
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::set_update_check_handler(&self, core::option::Option<alloc::sync::Arc<dyn druid_rdbc::governance::wall::wall_update_check_handler::WallUpdateCheckHandler>>)
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::tenant_call_back(&self) -> core::option::Option<alloc::sync::Arc<dyn druid_rdbc::governance::wall::tenant_call_back::TenantCallBack>>
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::update_check_handler(&self) -> core::option::Option<alloc::sync::Arc<dyn druid_rdbc::governance::wall::wall_update_check_handler::WallUpdateCheckHandler>>
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::update_check_table(&self, &str) -> core::option::Option<indexmap::set::IndexSet<alloc::string::String>>
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::with_config_dir(impl core::convert::Into<alloc::string::String>) -> Self
+impl core::default::Default for druid_rdbc::governance::wall::wall_config::WallConfig
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::default() -> Self
+pub struct druid_rdbc::governance::wall::wall_config::WallConfigBuilder(_)
+impl druid_rdbc::governance::wall::wall_config::WallConfigBuilder
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::alter_table_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::build(self) -> druid_rdbc::governance::wall::wall_config::WallConfig
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::call_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::case_condition_const_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::comment_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::condition_and_alway_true_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::condition_double_const_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::condition_op_bitwise_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::const_arithmetic_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::delete_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::delete_must_have_where(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::deny_function(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::deny_schema(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::deny_table(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::deny_variant(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::describe_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::do_privileged_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::drop_table_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::hint_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::insert_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::intersect_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::limit_zero_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::multi_statement_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::must_parameterized(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::read_only_table(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::select_all_column_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::select_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::select_into_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::show_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::start_transaction_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::tenant_call_back(self, alloc::sync::Arc<dyn druid_rdbc::governance::wall::tenant_call_back::TenantCallBack>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::tenant_column(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::tenant_table_pattern(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::truncate_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::update_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::update_check_column(self, impl core::convert::AsRef<str>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::update_check_handler(self, alloc::sync::Arc<dyn druid_rdbc::governance::wall::wall_update_check_handler::WallUpdateCheckHandler>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::update_must_have_where(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::use_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::variant_check(self, bool) -> Self
+pub mod druid_rdbc::governance::wall::wall_update_check_handler
+pub trait druid_rdbc::governance::wall::wall_update_check_handler::WallUpdateCheckHandler: core::marker::Send + core::marker::Sync
+pub fn druid_rdbc::governance::wall::wall_update_check_handler::WallUpdateCheckHandler::check(&self, &str, &str, &druid_rdbc::types::Value, &[druid_rdbc::types::Value]) -> bool
+pub enum druid_rdbc::governance::wall::TenantStatementType
+pub druid_rdbc::governance::wall::TenantStatementType::Delete
+pub druid_rdbc::governance::wall::TenantStatementType::Insert
+pub druid_rdbc::governance::wall::TenantStatementType::Select
+pub druid_rdbc::governance::wall::TenantStatementType::Update
+pub struct druid_rdbc::governance::wall::WallConfig
+pub druid_rdbc::governance::wall::WallConfig::alter_table_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::block_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::call_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::case_condition_const_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::comment_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::commit_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::complete_insert_values_check: bool
+pub druid_rdbc::governance::wall::WallConfig::condition_and_alway_false_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::condition_and_alway_true_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::condition_double_const_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::condition_like_true_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::condition_op_bitwise_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::condition_op_xor_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::const_arithmetic_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::create_table_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::delete_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::delete_must_have_where: bool
+pub druid_rdbc::governance::wall::WallConfig::delete_where_alway_true_check: bool
+pub druid_rdbc::governance::wall::WallConfig::deny_functions: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::WallConfig::deny_objects: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::WallConfig::deny_schemas: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::WallConfig::deny_tables: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::WallConfig::deny_variants: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::WallConfig::describe_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::dir: core::option::Option<alloc::string::String>
+pub druid_rdbc::governance::wall::WallConfig::do_privileged_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::drop_table_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::function_check: bool
+pub druid_rdbc::governance::wall::WallConfig::function_white_list: bool
+pub druid_rdbc::governance::wall::WallConfig::hint_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::inited: bool
+pub druid_rdbc::governance::wall::WallConfig::insert_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::insert_values_check_size: i32
+pub druid_rdbc::governance::wall::WallConfig::intersect_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::limit_zero_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::lock_table_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::merge_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::metadata_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::minus_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::multi_statement_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::must_parameterized: bool
+pub druid_rdbc::governance::wall::WallConfig::none_base_statement_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::object_check: bool
+pub druid_rdbc::governance::wall::WallConfig::permit_functions: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::WallConfig::permit_schemas: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::WallConfig::permit_tables: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::WallConfig::permit_variants: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::WallConfig::read_only_tables: alloc::vec::Vec<alloc::string::String>
+pub druid_rdbc::governance::wall::WallConfig::rename_table_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::replace_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::rollback_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::schema_check: bool
+pub druid_rdbc::governance::wall::WallConfig::schema_white_list: bool
+pub druid_rdbc::governance::wall::WallConfig::select_all_column_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::select_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::select_except_check: bool
+pub druid_rdbc::governance::wall::WallConfig::select_having_alway_true_check: bool
+pub druid_rdbc::governance::wall::WallConfig::select_intersect_check: bool
+pub druid_rdbc::governance::wall::WallConfig::select_into_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::select_into_outfile_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::select_limit: i32
+pub druid_rdbc::governance::wall::WallConfig::select_minus_check: bool
+pub druid_rdbc::governance::wall::WallConfig::select_union_check: bool
+pub druid_rdbc::governance::wall::WallConfig::select_where_alway_true_check: bool
+pub druid_rdbc::governance::wall::WallConfig::select_white_list: bool
+pub druid_rdbc::governance::wall::WallConfig::set_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::show_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::start_transaction_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::strict_syntax_check: bool
+pub druid_rdbc::governance::wall::WallConfig::table_check: bool
+pub druid_rdbc::governance::wall::WallConfig::tenant_column: alloc::string::String
+pub druid_rdbc::governance::wall::WallConfig::tenant_table_pattern: alloc::string::String
+pub druid_rdbc::governance::wall::WallConfig::truncate_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::update_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::update_must_have_where: bool
+pub druid_rdbc::governance::wall::WallConfig::update_where_alway_true_check: bool
+pub druid_rdbc::governance::wall::WallConfig::use_allow: bool
+pub druid_rdbc::governance::wall::WallConfig::variant_check: bool
+pub druid_rdbc::governance::wall::WallConfig::wrap_allow: bool
+impl druid_rdbc::governance::wall::wall_config::WallConfig
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::add_update_check_columns(&self, &str)
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::builder() -> druid_rdbc::governance::wall::wall_config::WallConfigBuilder
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::is_update_check_table(&self, &str) -> bool
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::load_config(&mut self, impl core::convert::Into<alloc::string::String>)
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::set_tenant_call_back(&self, core::option::Option<alloc::sync::Arc<dyn druid_rdbc::governance::wall::tenant_call_back::TenantCallBack>>)
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::set_update_check_handler(&self, core::option::Option<alloc::sync::Arc<dyn druid_rdbc::governance::wall::wall_update_check_handler::WallUpdateCheckHandler>>)
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::tenant_call_back(&self) -> core::option::Option<alloc::sync::Arc<dyn druid_rdbc::governance::wall::tenant_call_back::TenantCallBack>>
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::update_check_handler(&self) -> core::option::Option<alloc::sync::Arc<dyn druid_rdbc::governance::wall::wall_update_check_handler::WallUpdateCheckHandler>>
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::update_check_table(&self, &str) -> core::option::Option<indexmap::set::IndexSet<alloc::string::String>>
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::with_config_dir(impl core::convert::Into<alloc::string::String>) -> Self
+impl core::default::Default for druid_rdbc::governance::wall::wall_config::WallConfig
+pub fn druid_rdbc::governance::wall::wall_config::WallConfig::default() -> Self
+pub struct druid_rdbc::governance::wall::WallConfigBuilder(_)
+impl druid_rdbc::governance::wall::wall_config::WallConfigBuilder
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::alter_table_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::build(self) -> druid_rdbc::governance::wall::wall_config::WallConfig
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::call_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::case_condition_const_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::comment_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::condition_and_alway_true_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::condition_double_const_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::condition_op_bitwise_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::const_arithmetic_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::delete_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::delete_must_have_where(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::deny_function(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::deny_schema(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::deny_table(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::deny_variant(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::describe_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::do_privileged_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::drop_table_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::hint_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::insert_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::intersect_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::limit_zero_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::multi_statement_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::must_parameterized(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::read_only_table(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::select_all_column_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::select_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::select_into_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::show_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::start_transaction_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::tenant_call_back(self, alloc::sync::Arc<dyn druid_rdbc::governance::wall::tenant_call_back::TenantCallBack>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::tenant_column(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::tenant_table_pattern(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::truncate_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::update_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::update_check_column(self, impl core::convert::AsRef<str>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::update_check_handler(self, alloc::sync::Arc<dyn druid_rdbc::governance::wall::wall_update_check_handler::WallUpdateCheckHandler>) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::update_must_have_where(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::use_allow(self, bool) -> Self
+pub fn druid_rdbc::governance::wall::wall_config::WallConfigBuilder::variant_check(self, bool) -> Self
+pub trait druid_rdbc::governance::wall::TenantCallBack: core::marker::Send + core::marker::Sync
+pub fn druid_rdbc::governance::wall::TenantCallBack::filter_resultset_tenant_column(&self, &druid_rdbc::types::Value)
+pub fn druid_rdbc::governance::wall::TenantCallBack::hidden_column(&self, &str) -> core::option::Option<alloc::string::String>
+pub fn druid_rdbc::governance::wall::TenantCallBack::tenant_column(&self, druid_rdbc::governance::wall::tenant_call_back::TenantStatementType, &str) -> core::option::Option<alloc::string::String>
+pub fn druid_rdbc::governance::wall::TenantCallBack::tenant_value(&self, druid_rdbc::governance::wall::tenant_call_back::TenantStatementType, &str) -> core::option::Option<druid_rdbc::types::Value>
+pub trait druid_rdbc::governance::wall::WallUpdateCheckHandler: core::marker::Send + core::marker::Sync
+pub fn druid_rdbc::governance::wall::WallUpdateCheckHandler::check(&self, &str, &str, &druid_rdbc::types::Value, &[druid_rdbc::types::Value]) -> bool
 pub mod druid_rdbc::metadata
 #[non_exhaustive] pub enum druid_rdbc::metadata::ColumnNullability
 pub druid_rdbc::metadata::ColumnNullability::NoNulls

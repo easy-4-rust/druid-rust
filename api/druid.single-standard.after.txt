@@ -8635,7 +8635,7 @@ pub fn druid::pool::config::DruidPoolBuilder::transaction_query_timeout(self, i3
 pub fn druid::pool::config::DruidPoolBuilder::url(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn druid::pool::config::DruidPoolBuilder::validation_query(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn druid::pool::config::DruidPoolBuilder::validation_query_timeout(self, core::time::Duration) -> Self
-pub fn druid::pool::config::DruidPoolBuilder::wall_config(self, druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::pool::config::DruidPoolBuilder::wall_config(self, druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl druid::pool::config::DruidPoolBuilder
 pub fn druid::pool::config::DruidPoolBuilder::add_filters(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid::core::error::DruidError>
 pub async fn druid::pool::config::DruidPoolBuilder::build(self) -> core::result::Result<druid::pool::druid_pool::DruidPool, druid::core::error::DruidError>
@@ -9313,7 +9313,7 @@ pub fn druid::pool::config::DruidPoolBuilder::transaction_query_timeout(self, i3
 pub fn druid::pool::config::DruidPoolBuilder::url(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn druid::pool::config::DruidPoolBuilder::validation_query(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn druid::pool::config::DruidPoolBuilder::validation_query_timeout(self, core::time::Duration) -> Self
-pub fn druid::pool::config::DruidPoolBuilder::wall_config(self, druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::pool::config::DruidPoolBuilder::wall_config(self, druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl druid::pool::config::DruidPoolBuilder
 pub fn druid::pool::config::DruidPoolBuilder::add_filters(&mut self, core::option::Option<&str>) -> core::result::Result<(), druid::core::error::DruidError>
 pub async fn druid::pool::config::DruidPoolBuilder::build(self) -> core::result::Result<druid::pool::druid_pool::DruidPool, druid::core::error::DruidError>
@@ -9638,10 +9638,14 @@ pub use druid::sql::SqlTransientException
 pub use druid::sql::SqlWarning
 pub use druid::sql::SqlXml
 pub use druid::sql::StandardUnwrapped
+pub use druid::sql::TenantCallBack
+pub use druid::sql::TenantStatementType
 pub use druid::sql::Time
 pub use druid::sql::Timestamp
 pub use druid::sql::Types
 pub use druid::sql::WallCheckResult
+pub use druid::sql::WallConfig
+pub use druid::sql::WallConfigBuilder
 pub use druid::sql::WallDenyStat
 pub use druid::sql::WallSqlFunctionStat
 pub use druid::sql::WallSqlStat
@@ -9649,6 +9653,7 @@ pub use druid::sql::WallSqlStatValue
 pub use druid::sql::WallSqlTableStat
 pub use druid::sql::WallTableStat
 pub use druid::sql::WallTableStatValue
+pub use druid::sql::WallUpdateCheckHandler
 pub use druid::sql::WallUpdateCheckItem
 pub use druid::sql::WallViolation
 pub use druid::sql::Wrapper
@@ -9776,7 +9781,7 @@ impl druid::sql::clickhouse::ck_wall_provider::CkWallProvider
 pub const druid::sql::clickhouse::ck_wall_provider::CkWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::new() -> Self
-pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::clickhouse::ck_wall_provider::CkWallProvider
 pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::clickhouse::ck_wall_provider::CkWallProvider
@@ -9790,7 +9795,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::clickhouse::clickhous
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -9804,7 +9809,7 @@ impl druid::sql::clickhouse::ck_wall_provider::CkWallProvider
 pub const druid::sql::clickhouse::ck_wall_provider::CkWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::new() -> Self
-pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::clickhouse::ck_wall_provider::CkWallProvider
 pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::clickhouse::ck_wall_provider::CkWallProvider
@@ -9817,7 +9822,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::clickhouse::clickhous
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -9957,7 +9962,7 @@ impl druid::sql::db2::db2_wall_provider::Db2WallProvider
 pub const druid::sql::db2::db2_wall_provider::Db2WallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::new() -> Self
-pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::db2::db2_wall_provider::Db2WallProvider
 pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::db2::db2_wall_provider::Db2WallProvider
@@ -9971,7 +9976,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::db2::db2_wall_visitor
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -9985,7 +9990,7 @@ impl druid::sql::db2::db2_wall_provider::Db2WallProvider
 pub const druid::sql::db2::db2_wall_provider::Db2WallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::new() -> Self
-pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::db2::db2_wall_provider::Db2WallProvider
 pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::db2::db2_wall_provider::Db2WallProvider
@@ -9998,7 +10003,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::db2::db2_wall_visitor
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -10335,7 +10340,7 @@ impl druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider
 pub const druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::new() -> Self
-pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider
 pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider
@@ -10349,7 +10354,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::mysql::my_sql_wall_vi
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -10363,7 +10368,7 @@ impl druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider
 pub const druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::new() -> Self
-pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider
 pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider
@@ -10376,7 +10381,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::mysql::my_sql_wall_vi
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -10412,7 +10417,7 @@ impl druid::sql::oracle::oracle_wall_provider::OracleWallProvider
 pub const druid::sql::oracle::oracle_wall_provider::OracleWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::new() -> Self
-pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::oracle::oracle_wall_provider::OracleWallProvider
 pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::oracle::oracle_wall_provider::OracleWallProvider
@@ -10426,7 +10431,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::oracle::oracle_wall_v
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -10440,7 +10445,7 @@ impl druid::sql::oracle::oracle_wall_provider::OracleWallProvider
 pub const druid::sql::oracle::oracle_wall_provider::OracleWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::new() -> Self
-pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::oracle::oracle_wall_provider::OracleWallProvider
 pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::oracle::oracle_wall_provider::OracleWallProvider
@@ -10453,7 +10458,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::oracle::oracle_wall_v
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -10525,7 +10530,7 @@ impl druid::sql::postgresql::pg_wall_provider::PgWallProvider
 pub const druid::sql::postgresql::pg_wall_provider::PgWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::new() -> Self
-pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::postgresql::pg_wall_provider::PgWallProvider
 pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::postgresql::pg_wall_provider::PgWallProvider
@@ -10539,7 +10544,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::postgresql::pg_wall_v
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -10553,7 +10558,7 @@ impl druid::sql::postgresql::pg_wall_provider::PgWallProvider
 pub const druid::sql::postgresql::pg_wall_provider::PgWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::new() -> Self
-pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::postgresql::pg_wall_provider::PgWallProvider
 pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::postgresql::pg_wall_provider::PgWallProvider
@@ -10566,7 +10571,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::postgresql::pg_wall_v
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -11059,7 +11064,7 @@ impl druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider
 pub const druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::new() -> Self
-pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider
 pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider
@@ -11073,7 +11078,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::sqlite::sqlite_wall_v
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -11087,7 +11092,7 @@ impl druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider
 pub const druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::new() -> Self
-pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider
 pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider
@@ -11100,7 +11105,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::sqlite::sqlite_wall_v
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -11116,7 +11121,7 @@ impl druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider
 pub const druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::new() -> Self
-pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider
 pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider
@@ -11130,7 +11135,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::sqlserver::sql_server
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -11144,7 +11149,7 @@ impl druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider
 pub const druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::new() -> Self
-pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider
 pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider
@@ -11157,7 +11162,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::sqlserver::sql_server
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -11251,16 +11256,8 @@ pub fn druid::sql::symbol_table::SymbolTable::find_symbol(&self, i64) -> core::o
 pub fn druid::sql::symbol_table::SymbolTable::new(usize) -> Self
 pub static druid::sql::symbol_table::GLOBAL_SYMBOL_TABLE: std::sync::lazy_lock::LazyLock<std::sync::poison::mutex::Mutex<druid::sql::symbol_table::SymbolTable>>
 pub mod druid::sql::tenant_call_back
-pub enum druid::sql::tenant_call_back::TenantStatementType
-pub druid::sql::tenant_call_back::TenantStatementType::Delete
-pub druid::sql::tenant_call_back::TenantStatementType::Insert
-pub druid::sql::tenant_call_back::TenantStatementType::Select
-pub druid::sql::tenant_call_back::TenantStatementType::Update
-pub trait druid::sql::tenant_call_back::TenantCallBack: core::marker::Send + core::marker::Sync
-pub fn druid::sql::tenant_call_back::TenantCallBack::filter_resultset_tenant_column(&self, &druid_rdbc::types::value::Value)
-pub fn druid::sql::tenant_call_back::TenantCallBack::hidden_column(&self, &str) -> core::option::Option<alloc::string::String>
-pub fn druid::sql::tenant_call_back::TenantCallBack::tenant_column(&self, druid::sql::tenant_call_back::TenantStatementType, &str) -> core::option::Option<alloc::string::String>
-pub fn druid::sql::tenant_call_back::TenantCallBack::tenant_value(&self, druid::sql::tenant_call_back::TenantStatementType, &str) -> core::option::Option<druid_rdbc::types::value::Value>
+pub use druid::sql::tenant_call_back::TenantCallBack
+pub use druid::sql::tenant_call_back::TenantStatementType
 pub mod druid::sql::time
 pub use druid::sql::time::Time
 pub mod druid::sql::timestamp
@@ -11614,149 +11611,16 @@ pub mod druid::sql::wall
 pub struct druid::sql::wall::Wall
 impl druid::sql::wall::Wall
 pub fn druid::sql::wall::Wall::check(&self, &str) -> core::result::Result<(), alloc::vec::Vec<druid_rdbc::governance::wall::violation::WallViolation>>
-pub fn druid::sql::wall::Wall::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::wall::Wall::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::wall::Wall::db_type(&self) -> druid::sql::db_type::DbType
-pub fn druid::sql::wall::Wall::new(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::wall::Wall::new(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 pub fn druid::sql::wall::Wall::set_db_type(&self, druid::sql::db_type::DbType)
-pub fn druid::sql::wall::Wall::with_db_type(druid::sql::wall_config::WallConfig, druid::sql::db_type::DbType) -> Self
+pub fn druid::sql::wall::Wall::with_db_type(druid_rdbc::governance::wall::wall_config::WallConfig, druid::sql::db_type::DbType) -> Self
 pub mod druid::sql::wall_check_result
 pub use druid::sql::wall_check_result::<<druid_rdbc::governance::wall::check_result::*>>
 pub mod druid::sql::wall_config
-pub struct druid::sql::wall_config::WallConfig
-pub druid::sql::wall_config::WallConfig::alter_table_allow: bool
-pub druid::sql::wall_config::WallConfig::block_allow: bool
-pub druid::sql::wall_config::WallConfig::call_allow: bool
-pub druid::sql::wall_config::WallConfig::case_condition_const_allow: bool
-pub druid::sql::wall_config::WallConfig::comment_allow: bool
-pub druid::sql::wall_config::WallConfig::commit_allow: bool
-pub druid::sql::wall_config::WallConfig::complete_insert_values_check: bool
-pub druid::sql::wall_config::WallConfig::condition_and_alway_false_allow: bool
-pub druid::sql::wall_config::WallConfig::condition_and_alway_true_allow: bool
-pub druid::sql::wall_config::WallConfig::condition_double_const_allow: bool
-pub druid::sql::wall_config::WallConfig::condition_like_true_allow: bool
-pub druid::sql::wall_config::WallConfig::condition_op_bitwise_allow: bool
-pub druid::sql::wall_config::WallConfig::condition_op_xor_allow: bool
-pub druid::sql::wall_config::WallConfig::const_arithmetic_allow: bool
-pub druid::sql::wall_config::WallConfig::create_table_allow: bool
-pub druid::sql::wall_config::WallConfig::delete_allow: bool
-pub druid::sql::wall_config::WallConfig::delete_must_have_where: bool
-pub druid::sql::wall_config::WallConfig::delete_where_alway_true_check: bool
-pub druid::sql::wall_config::WallConfig::deny_functions: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::wall_config::WallConfig::deny_objects: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::wall_config::WallConfig::deny_schemas: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::wall_config::WallConfig::deny_tables: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::wall_config::WallConfig::deny_variants: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::wall_config::WallConfig::describe_allow: bool
-pub druid::sql::wall_config::WallConfig::dir: core::option::Option<alloc::string::String>
-pub druid::sql::wall_config::WallConfig::do_privileged_allow: bool
-pub druid::sql::wall_config::WallConfig::drop_table_allow: bool
-pub druid::sql::wall_config::WallConfig::function_check: bool
-pub druid::sql::wall_config::WallConfig::function_white_list: bool
-pub druid::sql::wall_config::WallConfig::hint_allow: bool
-pub druid::sql::wall_config::WallConfig::inited: bool
-pub druid::sql::wall_config::WallConfig::insert_allow: bool
-pub druid::sql::wall_config::WallConfig::insert_values_check_size: i32
-pub druid::sql::wall_config::WallConfig::intersect_allow: bool
-pub druid::sql::wall_config::WallConfig::limit_zero_allow: bool
-pub druid::sql::wall_config::WallConfig::lock_table_allow: bool
-pub druid::sql::wall_config::WallConfig::merge_allow: bool
-pub druid::sql::wall_config::WallConfig::metadata_allow: bool
-pub druid::sql::wall_config::WallConfig::minus_allow: bool
-pub druid::sql::wall_config::WallConfig::multi_statement_allow: bool
-pub druid::sql::wall_config::WallConfig::must_parameterized: bool
-pub druid::sql::wall_config::WallConfig::none_base_statement_allow: bool
-pub druid::sql::wall_config::WallConfig::object_check: bool
-pub druid::sql::wall_config::WallConfig::permit_functions: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::wall_config::WallConfig::permit_schemas: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::wall_config::WallConfig::permit_tables: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::wall_config::WallConfig::permit_variants: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::wall_config::WallConfig::read_only_tables: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::wall_config::WallConfig::rename_table_allow: bool
-pub druid::sql::wall_config::WallConfig::replace_allow: bool
-pub druid::sql::wall_config::WallConfig::rollback_allow: bool
-pub druid::sql::wall_config::WallConfig::schema_check: bool
-pub druid::sql::wall_config::WallConfig::schema_white_list: bool
-pub druid::sql::wall_config::WallConfig::select_all_column_allow: bool
-pub druid::sql::wall_config::WallConfig::select_allow: bool
-pub druid::sql::wall_config::WallConfig::select_except_check: bool
-pub druid::sql::wall_config::WallConfig::select_having_alway_true_check: bool
-pub druid::sql::wall_config::WallConfig::select_intersect_check: bool
-pub druid::sql::wall_config::WallConfig::select_into_allow: bool
-pub druid::sql::wall_config::WallConfig::select_into_outfile_allow: bool
-pub druid::sql::wall_config::WallConfig::select_limit: i32
-pub druid::sql::wall_config::WallConfig::select_minus_check: bool
-pub druid::sql::wall_config::WallConfig::select_union_check: bool
-pub druid::sql::wall_config::WallConfig::select_where_alway_true_check: bool
-pub druid::sql::wall_config::WallConfig::select_white_list: bool
-pub druid::sql::wall_config::WallConfig::set_allow: bool
-pub druid::sql::wall_config::WallConfig::show_allow: bool
-pub druid::sql::wall_config::WallConfig::start_transaction_allow: bool
-pub druid::sql::wall_config::WallConfig::strict_syntax_check: bool
-pub druid::sql::wall_config::WallConfig::table_check: bool
-pub druid::sql::wall_config::WallConfig::tenant_column: alloc::string::String
-pub druid::sql::wall_config::WallConfig::tenant_table_pattern: alloc::string::String
-pub druid::sql::wall_config::WallConfig::truncate_allow: bool
-pub druid::sql::wall_config::WallConfig::update_allow: bool
-pub druid::sql::wall_config::WallConfig::update_must_have_where: bool
-pub druid::sql::wall_config::WallConfig::update_where_alway_true_check: bool
-pub druid::sql::wall_config::WallConfig::use_allow: bool
-pub druid::sql::wall_config::WallConfig::variant_check: bool
-pub druid::sql::wall_config::WallConfig::wrap_allow: bool
-impl druid::sql::wall_config::WallConfig
-pub fn druid::sql::wall_config::WallConfig::add_update_check_columns(&self, &str)
-pub fn druid::sql::wall_config::WallConfig::builder() -> druid::sql::wall_config::WallConfigBuilder
-pub fn druid::sql::wall_config::WallConfig::is_update_check_table(&self, &str) -> bool
-pub fn druid::sql::wall_config::WallConfig::load_config(&mut self, impl core::convert::Into<alloc::string::String>)
-pub fn druid::sql::wall_config::WallConfig::set_tenant_call_back(&self, core::option::Option<alloc::sync::Arc<dyn druid::sql::tenant_call_back::TenantCallBack>>)
-pub fn druid::sql::wall_config::WallConfig::set_update_check_handler(&self, core::option::Option<alloc::sync::Arc<dyn druid::sql::wall_update_check_handler::WallUpdateCheckHandler>>)
-pub fn druid::sql::wall_config::WallConfig::tenant_call_back(&self) -> core::option::Option<alloc::sync::Arc<dyn druid::sql::tenant_call_back::TenantCallBack>>
-pub fn druid::sql::wall_config::WallConfig::update_check_handler(&self) -> core::option::Option<alloc::sync::Arc<dyn druid::sql::wall_update_check_handler::WallUpdateCheckHandler>>
-pub fn druid::sql::wall_config::WallConfig::update_check_table(&self, &str) -> core::option::Option<indexmap::set::IndexSet<alloc::string::String>>
-pub fn druid::sql::wall_config::WallConfig::with_config_dir(impl core::convert::Into<alloc::string::String>) -> Self
-impl core::default::Default for druid::sql::wall_config::WallConfig
-pub fn druid::sql::wall_config::WallConfig::default() -> Self
-pub struct druid::sql::wall_config::WallConfigBuilder(_)
-impl druid::sql::wall_config::WallConfigBuilder
-pub fn druid::sql::wall_config::WallConfigBuilder::alter_table_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::build(self) -> druid::sql::wall_config::WallConfig
-pub fn druid::sql::wall_config::WallConfigBuilder::call_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::case_condition_const_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::comment_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::condition_and_alway_true_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::condition_double_const_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::condition_op_bitwise_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::const_arithmetic_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::delete_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::delete_must_have_where(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::deny_function(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::deny_schema(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::deny_table(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::deny_variant(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::describe_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::do_privileged_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::drop_table_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::hint_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::insert_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::intersect_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::limit_zero_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::multi_statement_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::must_parameterized(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::read_only_table(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::select_all_column_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::select_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::select_into_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::show_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::start_transaction_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::tenant_call_back(self, alloc::sync::Arc<dyn druid::sql::tenant_call_back::TenantCallBack>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::tenant_column(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::tenant_table_pattern(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::truncate_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::update_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::update_check_column(self, impl core::convert::AsRef<str>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::update_check_handler(self, alloc::sync::Arc<dyn druid::sql::wall_update_check_handler::WallUpdateCheckHandler>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::update_must_have_where(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::use_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::variant_check(self, bool) -> Self
+pub use druid::sql::wall_config::WallConfig
+pub use druid::sql::wall_config::WallConfigBuilder
 pub mod druid::sql::wall_context
 pub struct druid::sql::wall_context::WallContext
 impl druid::sql::wall_context::WallContext
@@ -11793,13 +11657,13 @@ pub mod druid::sql::wall_filter
 pub struct druid::sql::wall_filter::WallFilter
 impl druid::sql::wall_filter::WallFilter
 pub fn druid::sql::wall_filter::WallFilter::clear_provider_cache(&self)
-pub fn druid::sql::wall_filter::WallFilter::create_provider(core::option::Option<&str>, core::option::Option<&str>, core::option::Option<druid::sql::db_type::DbType>, core::option::Option<druid::sql::wall_config::WallConfig>) -> core::result::Result<alloc::sync::Arc<druid::sql::wall_provider::WallProvider>, druid::core::error::DruidError>
+pub fn druid::sql::wall_filter::WallFilter::create_provider(core::option::Option<&str>, core::option::Option<&str>, core::option::Option<druid::sql::db_type::DbType>, core::option::Option<druid_rdbc::governance::wall::wall_config::WallConfig>) -> core::result::Result<alloc::sync::Arc<druid::sql::wall_provider::WallProvider>, druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::new(alloc::sync::Arc<druid::sql::wall_provider::WallProvider>) -> Self
 pub fn druid::sql::wall_filter::WallFilter::provider(&self) -> &alloc::sync::Arc<druid::sql::wall_provider::WallProvider>
 pub fn druid::sql::wall_filter::WallFilter::provider_white_list(&self) -> std::collections::hash::set::HashSet<alloc::string::String>
 pub fn druid::sql::wall_filter::WallFilter::set_log_violation(&self, bool)
 pub fn druid::sql::wall_filter::WallFilter::set_throw_exception(&self, bool)
-pub fn druid::sql::wall_filter::WallFilter::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::wall_filter::WallFilter::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::wall_filter::WallFilter
 pub fn druid::sql::wall_filter::WallFilter::default() -> Self
 impl druid::core::filter::AfterFilter for druid::sql::wall_filter::WallFilter
@@ -11914,14 +11778,14 @@ pub fn druid::sql::wall_provider::WallProvider::check(&self, &str) -> druid_rdbc
 pub fn druid::sql::wall_provider::WallProvider::check_count(&self) -> u64
 pub fn druid::sql::wall_provider::WallProvider::check_valid(&self, &str) -> core::result::Result<bool, druid::core::error::DruidError>
 pub fn druid::sql::wall_provider::WallProvider::clear_cache(&self)
-pub fn druid::sql::wall_provider::WallProvider::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::wall_provider::WallProvider::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::wall_provider::WallProvider::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::wall_provider::WallProvider::do_privileged<T>(impl core::ops::function::FnOnce() -> T) -> T
 pub fn druid::sql::wall_provider::WallProvider::function_stat_values(&self, bool) -> alloc::vec::Vec<druid::sql::wall_function_stat_value::WallFunctionStatValue>
 pub fn druid::sql::wall_provider::WallProvider::hard_check_count(&self) -> u64
 pub fn druid::sql::wall_provider::WallProvider::is_privileged() -> bool
 pub fn druid::sql::wall_provider::WallProvider::name(&self) -> core::option::Option<alloc::string::String>
-pub fn druid::sql::wall_provider::WallProvider::new(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::wall_provider::WallProvider::new(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 pub fn druid::sql::wall_provider::WallProvider::record_effect_rows(&self, &str, u64, core::option::Option<u64>)
 pub fn druid::sql::wall_provider::WallProvider::reset(&self)
 pub async fn druid::sql::wall_provider::WallProvider::scope_privileged<F>(F) -> <F as core::future::future::Future>::Output where F: core::future::future::Future
@@ -11951,7 +11815,7 @@ pub druid::sql::wall_provider_creator::WallProviderCreatorRegistration::construc
 pub druid::sql::wall_provider_creator::WallProviderCreatorRegistration::name: &'static str
 impl inventory::Collect for druid::sql::wall_provider_creator::WallProviderCreatorRegistration
 pub trait druid::sql::wall_provider_creator::WallProviderCreator: core::marker::Send + core::marker::Sync + 'static
-pub fn druid::sql::wall_provider_creator::WallProviderCreator::create_wall_config(&self, core::option::Option<&str>, core::option::Option<&str>, core::option::Option<&druid::sql::wall_config::WallConfig>, core::option::Option<druid::sql::db_type::DbType>) -> core::option::Option<druid::sql::wall_provider::WallProvider>
+pub fn druid::sql::wall_provider_creator::WallProviderCreator::create_wall_config(&self, core::option::Option<&str>, core::option::Option<&str>, core::option::Option<&druid_rdbc::governance::wall::wall_config::WallConfig>, core::option::Option<druid::sql::db_type::DbType>) -> core::option::Option<druid::sql::wall_provider::WallProvider>
 pub fn druid::sql::wall_provider_creator::WallProviderCreator::order(&self) -> i32
 pub fn druid::sql::wall_provider_creator::registered_wall_provider_creators() -> alloc::vec::Vec<alloc::boxed::Box<dyn druid::sql::wall_provider_creator::WallProviderCreator>>
 pub mod druid::sql::wall_provider_stat_value
@@ -11983,23 +11847,22 @@ pub use druid::sql::wall_table_stat::<<druid_rdbc::governance::wall::table_stat:
 pub mod druid::sql::wall_table_stat_value
 pub use druid::sql::wall_table_stat_value::<<druid_rdbc::governance::wall::table_stat_value::*>>
 pub mod druid::sql::wall_update_check_handler
-pub trait druid::sql::wall_update_check_handler::WallUpdateCheckHandler: core::marker::Send + core::marker::Sync
-pub fn druid::sql::wall_update_check_handler::WallUpdateCheckHandler::check(&self, &str, &str, &druid_rdbc::types::value::Value, &[druid_rdbc::types::value::Value]) -> bool
+pub use druid::sql::wall_update_check_handler::WallUpdateCheckHandler
 pub mod druid::sql::wall_update_check_item
 pub use druid::sql::wall_update_check_item::<<druid_rdbc::governance::wall::update_check_item::*>>
 pub mod druid::sql::wall_utils
 pub struct druid::sql::wall_utils::WallUtils
 impl druid::sql::wall_utils::WallUtils
 pub fn druid::sql::wall_utils::WallUtils::is_validate_db2(&str) -> core::result::Result<bool, druid::core::error::DruidError>
-pub fn druid::sql::wall_utils::WallUtils::is_validate_db2_with_config(&str, druid::sql::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
+pub fn druid::sql::wall_utils::WallUtils::is_validate_db2_with_config(&str, druid_rdbc::governance::wall::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
 pub fn druid::sql::wall_utils::WallUtils::is_validate_my_sql(&str) -> core::result::Result<bool, druid::core::error::DruidError>
-pub fn druid::sql::wall_utils::WallUtils::is_validate_my_sql_with_config(&str, druid::sql::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
+pub fn druid::sql::wall_utils::WallUtils::is_validate_my_sql_with_config(&str, druid_rdbc::governance::wall::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
 pub fn druid::sql::wall_utils::WallUtils::is_validate_oracle(&str) -> core::result::Result<bool, druid::core::error::DruidError>
-pub fn druid::sql::wall_utils::WallUtils::is_validate_oracle_with_config(&str, druid::sql::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
+pub fn druid::sql::wall_utils::WallUtils::is_validate_oracle_with_config(&str, druid_rdbc::governance::wall::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
 pub fn druid::sql::wall_utils::WallUtils::is_validate_postgres(&str) -> core::result::Result<bool, druid::core::error::DruidError>
-pub fn druid::sql::wall_utils::WallUtils::is_validate_postgres_with_config(&str, druid::sql::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
+pub fn druid::sql::wall_utils::WallUtils::is_validate_postgres_with_config(&str, druid_rdbc::governance::wall::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
 pub fn druid::sql::wall_utils::WallUtils::is_validate_sql_server(&str) -> core::result::Result<bool, druid::core::error::DruidError>
-pub fn druid::sql::wall_utils::WallUtils::is_validate_sql_server_with_config(&str, druid::sql::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
+pub fn druid::sql::wall_utils::WallUtils::is_validate_sql_server_with_config(&str, druid_rdbc::governance::wall::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
 pub mod druid::sql::wall_violation
 pub use druid::sql::wall_violation::<<druid_rdbc::governance::wall::violation::*>>
 pub mod druid::sql::wall_visitor
@@ -12007,7 +11870,7 @@ pub trait druid::sql::wall_visitor::WallVisitor
 pub fn druid::sql::wall_visitor::WallVisitor::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::wall_visitor::WallVisitor::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::wall_visitor::WallVisitor::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::wall_visitor::WallVisitor::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::wall_visitor::WallVisitor::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::wall_visitor::WallVisitor::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::wall_visitor::WallVisitor::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::wall_visitor::WallVisitor::set_sql_end_of_comment(&mut self, bool)
@@ -12020,7 +11883,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::clickhouse::clickhous
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -12033,7 +11896,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::db2::db2_wall_visitor
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -12046,7 +11909,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::mysql::my_sql_wall_vi
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -12059,7 +11922,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::oracle::oracle_wall_v
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -12072,7 +11935,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::postgresql::pg_wall_v
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -12085,7 +11948,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::sqlite::sqlite_wall_v
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -12098,7 +11961,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::sqlserver::sql_server
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -12127,7 +11990,7 @@ pub fn druid::sql::wall_visitor_base::WallVisitorBase<'a>::violations(&self) -> 
 pub mod druid::sql::wall_visitor_utils
 pub struct druid::sql::wall_visitor_utils::WallVisitorUtils
 impl druid::sql::wall_visitor_utils::WallVisitorUtils
-pub fn druid::sql::wall_visitor_utils::WallVisitorUtils::rewrite_for_multi_tenant(&mut [sqlparser::ast::Statement], &druid::sql::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
+pub fn druid::sql::wall_visitor_utils::WallVisitorUtils::rewrite_for_multi_tenant(&mut [sqlparser::ast::Statement], &druid_rdbc::governance::wall::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
 pub mod druid::sql::wrapper
 pub use druid::sql::wrapper::StandardUnwrapped
 pub use druid::sql::wrapper::Wrapper
@@ -12522,11 +12385,6 @@ pub const druid::sql::sql_type::SqlType::ALL: &'static [Self]
 pub const fn druid::sql::sql_type::SqlType::java_name(self) -> &'static str
 pub const fn druid::sql::sql_type::SqlType::ordinal(self) -> u16
 pub fn druid::sql::sql_type::SqlType::value_of(&str) -> core::option::Option<Self>
-pub enum druid::sql::TenantStatementType
-pub druid::sql::TenantStatementType::Delete
-pub druid::sql::TenantStatementType::Insert
-pub druid::sql::TenantStatementType::Select
-pub druid::sql::TenantStatementType::Update
 #[repr(u16)] pub enum druid::sql::Token
 pub druid::sql::Token::Access
 pub druid::sql::Token::Add
@@ -12982,7 +12840,7 @@ impl druid::sql::clickhouse::ck_wall_provider::CkWallProvider
 pub const druid::sql::clickhouse::ck_wall_provider::CkWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::new() -> Self
-pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::clickhouse::ck_wall_provider::CkWallProvider
 pub fn druid::sql::clickhouse::ck_wall_provider::CkWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::clickhouse::ck_wall_provider::CkWallProvider
@@ -12995,7 +12853,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::clickhouse::clickhous
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -13110,7 +12968,7 @@ impl druid::sql::db2::db2_wall_provider::Db2WallProvider
 pub const druid::sql::db2::db2_wall_provider::Db2WallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::new() -> Self
-pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::db2::db2_wall_provider::Db2WallProvider
 pub fn druid::sql::db2::db2_wall_provider::Db2WallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::db2::db2_wall_provider::Db2WallProvider
@@ -13123,7 +12981,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::db2::db2_wall_visitor
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -13225,7 +13083,7 @@ impl druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider
 pub const druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::new() -> Self
-pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider
 pub fn druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::mysql::my_sql_wall_provider::MySqlWallProvider
@@ -13238,7 +13096,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::mysql::my_sql_wall_vi
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -13268,7 +13126,7 @@ impl druid::sql::oracle::oracle_wall_provider::OracleWallProvider
 pub const druid::sql::oracle::oracle_wall_provider::OracleWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::new() -> Self
-pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::oracle::oracle_wall_provider::OracleWallProvider
 pub fn druid::sql::oracle::oracle_wall_provider::OracleWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::oracle::oracle_wall_provider::OracleWallProvider
@@ -13281,7 +13139,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::oracle::oracle_wall_v
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -13340,7 +13198,7 @@ impl druid::sql::postgresql::pg_wall_provider::PgWallProvider
 pub const druid::sql::postgresql::pg_wall_provider::PgWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::new() -> Self
-pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::postgresql::pg_wall_provider::PgWallProvider
 pub fn druid::sql::postgresql::pg_wall_provider::PgWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::postgresql::pg_wall_provider::PgWallProvider
@@ -13353,7 +13211,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::postgresql::pg_wall_v
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -13574,7 +13432,7 @@ impl druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider
 pub const druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::new() -> Self
-pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider
 pub fn druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::sqlite::sqlite_wall_provider::SQLiteWallProvider
@@ -13587,7 +13445,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::sqlite::sqlite_wall_v
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -13664,7 +13522,7 @@ impl druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider
 pub const druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::DEFAULT_CONFIG_DIR: &'static str
 pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::into_inner(self) -> druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::new() -> Self
-pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider
 pub fn druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider::default() -> Self
 impl core::ops::deref::Deref for druid::sql::sqlserver::sql_server_wall_provider::SqlServerWallProvider
@@ -13677,7 +13535,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::sqlserver::sql_server
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -13777,146 +13635,11 @@ pub fn druid::sql::symbol_table::SymbolTable::new(usize) -> Self
 pub struct druid::sql::Wall
 impl druid::sql::wall::Wall
 pub fn druid::sql::wall::Wall::check(&self, &str) -> core::result::Result<(), alloc::vec::Vec<druid_rdbc::governance::wall::violation::WallViolation>>
-pub fn druid::sql::wall::Wall::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::wall::Wall::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::wall::Wall::db_type(&self) -> druid::sql::db_type::DbType
-pub fn druid::sql::wall::Wall::new(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::wall::Wall::new(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 pub fn druid::sql::wall::Wall::set_db_type(&self, druid::sql::db_type::DbType)
-pub fn druid::sql::wall::Wall::with_db_type(druid::sql::wall_config::WallConfig, druid::sql::db_type::DbType) -> Self
-pub struct druid::sql::WallConfig
-pub druid::sql::WallConfig::alter_table_allow: bool
-pub druid::sql::WallConfig::block_allow: bool
-pub druid::sql::WallConfig::call_allow: bool
-pub druid::sql::WallConfig::case_condition_const_allow: bool
-pub druid::sql::WallConfig::comment_allow: bool
-pub druid::sql::WallConfig::commit_allow: bool
-pub druid::sql::WallConfig::complete_insert_values_check: bool
-pub druid::sql::WallConfig::condition_and_alway_false_allow: bool
-pub druid::sql::WallConfig::condition_and_alway_true_allow: bool
-pub druid::sql::WallConfig::condition_double_const_allow: bool
-pub druid::sql::WallConfig::condition_like_true_allow: bool
-pub druid::sql::WallConfig::condition_op_bitwise_allow: bool
-pub druid::sql::WallConfig::condition_op_xor_allow: bool
-pub druid::sql::WallConfig::const_arithmetic_allow: bool
-pub druid::sql::WallConfig::create_table_allow: bool
-pub druid::sql::WallConfig::delete_allow: bool
-pub druid::sql::WallConfig::delete_must_have_where: bool
-pub druid::sql::WallConfig::delete_where_alway_true_check: bool
-pub druid::sql::WallConfig::deny_functions: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::WallConfig::deny_objects: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::WallConfig::deny_schemas: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::WallConfig::deny_tables: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::WallConfig::deny_variants: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::WallConfig::describe_allow: bool
-pub druid::sql::WallConfig::dir: core::option::Option<alloc::string::String>
-pub druid::sql::WallConfig::do_privileged_allow: bool
-pub druid::sql::WallConfig::drop_table_allow: bool
-pub druid::sql::WallConfig::function_check: bool
-pub druid::sql::WallConfig::function_white_list: bool
-pub druid::sql::WallConfig::hint_allow: bool
-pub druid::sql::WallConfig::inited: bool
-pub druid::sql::WallConfig::insert_allow: bool
-pub druid::sql::WallConfig::insert_values_check_size: i32
-pub druid::sql::WallConfig::intersect_allow: bool
-pub druid::sql::WallConfig::limit_zero_allow: bool
-pub druid::sql::WallConfig::lock_table_allow: bool
-pub druid::sql::WallConfig::merge_allow: bool
-pub druid::sql::WallConfig::metadata_allow: bool
-pub druid::sql::WallConfig::minus_allow: bool
-pub druid::sql::WallConfig::multi_statement_allow: bool
-pub druid::sql::WallConfig::must_parameterized: bool
-pub druid::sql::WallConfig::none_base_statement_allow: bool
-pub druid::sql::WallConfig::object_check: bool
-pub druid::sql::WallConfig::permit_functions: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::WallConfig::permit_schemas: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::WallConfig::permit_tables: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::WallConfig::permit_variants: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::WallConfig::read_only_tables: alloc::vec::Vec<alloc::string::String>
-pub druid::sql::WallConfig::rename_table_allow: bool
-pub druid::sql::WallConfig::replace_allow: bool
-pub druid::sql::WallConfig::rollback_allow: bool
-pub druid::sql::WallConfig::schema_check: bool
-pub druid::sql::WallConfig::schema_white_list: bool
-pub druid::sql::WallConfig::select_all_column_allow: bool
-pub druid::sql::WallConfig::select_allow: bool
-pub druid::sql::WallConfig::select_except_check: bool
-pub druid::sql::WallConfig::select_having_alway_true_check: bool
-pub druid::sql::WallConfig::select_intersect_check: bool
-pub druid::sql::WallConfig::select_into_allow: bool
-pub druid::sql::WallConfig::select_into_outfile_allow: bool
-pub druid::sql::WallConfig::select_limit: i32
-pub druid::sql::WallConfig::select_minus_check: bool
-pub druid::sql::WallConfig::select_union_check: bool
-pub druid::sql::WallConfig::select_where_alway_true_check: bool
-pub druid::sql::WallConfig::select_white_list: bool
-pub druid::sql::WallConfig::set_allow: bool
-pub druid::sql::WallConfig::show_allow: bool
-pub druid::sql::WallConfig::start_transaction_allow: bool
-pub druid::sql::WallConfig::strict_syntax_check: bool
-pub druid::sql::WallConfig::table_check: bool
-pub druid::sql::WallConfig::tenant_column: alloc::string::String
-pub druid::sql::WallConfig::tenant_table_pattern: alloc::string::String
-pub druid::sql::WallConfig::truncate_allow: bool
-pub druid::sql::WallConfig::update_allow: bool
-pub druid::sql::WallConfig::update_must_have_where: bool
-pub druid::sql::WallConfig::update_where_alway_true_check: bool
-pub druid::sql::WallConfig::use_allow: bool
-pub druid::sql::WallConfig::variant_check: bool
-pub druid::sql::WallConfig::wrap_allow: bool
-impl druid::sql::wall_config::WallConfig
-pub fn druid::sql::wall_config::WallConfig::add_update_check_columns(&self, &str)
-pub fn druid::sql::wall_config::WallConfig::builder() -> druid::sql::wall_config::WallConfigBuilder
-pub fn druid::sql::wall_config::WallConfig::is_update_check_table(&self, &str) -> bool
-pub fn druid::sql::wall_config::WallConfig::load_config(&mut self, impl core::convert::Into<alloc::string::String>)
-pub fn druid::sql::wall_config::WallConfig::set_tenant_call_back(&self, core::option::Option<alloc::sync::Arc<dyn druid::sql::tenant_call_back::TenantCallBack>>)
-pub fn druid::sql::wall_config::WallConfig::set_update_check_handler(&self, core::option::Option<alloc::sync::Arc<dyn druid::sql::wall_update_check_handler::WallUpdateCheckHandler>>)
-pub fn druid::sql::wall_config::WallConfig::tenant_call_back(&self) -> core::option::Option<alloc::sync::Arc<dyn druid::sql::tenant_call_back::TenantCallBack>>
-pub fn druid::sql::wall_config::WallConfig::update_check_handler(&self) -> core::option::Option<alloc::sync::Arc<dyn druid::sql::wall_update_check_handler::WallUpdateCheckHandler>>
-pub fn druid::sql::wall_config::WallConfig::update_check_table(&self, &str) -> core::option::Option<indexmap::set::IndexSet<alloc::string::String>>
-pub fn druid::sql::wall_config::WallConfig::with_config_dir(impl core::convert::Into<alloc::string::String>) -> Self
-impl core::default::Default for druid::sql::wall_config::WallConfig
-pub fn druid::sql::wall_config::WallConfig::default() -> Self
-pub struct druid::sql::WallConfigBuilder(_)
-impl druid::sql::wall_config::WallConfigBuilder
-pub fn druid::sql::wall_config::WallConfigBuilder::alter_table_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::build(self) -> druid::sql::wall_config::WallConfig
-pub fn druid::sql::wall_config::WallConfigBuilder::call_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::case_condition_const_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::comment_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::condition_and_alway_true_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::condition_double_const_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::condition_op_bitwise_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::const_arithmetic_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::delete_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::delete_must_have_where(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::deny_function(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::deny_schema(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::deny_table(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::deny_variant(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::describe_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::do_privileged_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::drop_table_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::hint_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::insert_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::intersect_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::limit_zero_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::multi_statement_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::must_parameterized(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::read_only_table(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::select_all_column_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::select_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::select_into_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::show_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::start_transaction_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::tenant_call_back(self, alloc::sync::Arc<dyn druid::sql::tenant_call_back::TenantCallBack>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::tenant_column(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::tenant_table_pattern(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::truncate_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::update_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::update_check_column(self, impl core::convert::AsRef<str>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::update_check_handler(self, alloc::sync::Arc<dyn druid::sql::wall_update_check_handler::WallUpdateCheckHandler>) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::update_must_have_where(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::use_allow(self, bool) -> Self
-pub fn druid::sql::wall_config::WallConfigBuilder::variant_check(self, bool) -> Self
+pub fn druid::sql::wall::Wall::with_db_type(druid_rdbc::governance::wall::wall_config::WallConfig, druid::sql::db_type::DbType) -> Self
 pub struct druid::sql::WallContext
 impl druid::sql::wall_context::WallContext
 pub fn druid::sql::wall_context::WallContext::clear_context()
@@ -13949,13 +13672,13 @@ pub const fn druid::sql::wall_context::WallContext::warnings(&self) -> u32
 pub struct druid::sql::WallFilter
 impl druid::sql::wall_filter::WallFilter
 pub fn druid::sql::wall_filter::WallFilter::clear_provider_cache(&self)
-pub fn druid::sql::wall_filter::WallFilter::create_provider(core::option::Option<&str>, core::option::Option<&str>, core::option::Option<druid::sql::db_type::DbType>, core::option::Option<druid::sql::wall_config::WallConfig>) -> core::result::Result<alloc::sync::Arc<druid::sql::wall_provider::WallProvider>, druid::core::error::DruidError>
+pub fn druid::sql::wall_filter::WallFilter::create_provider(core::option::Option<&str>, core::option::Option<&str>, core::option::Option<druid::sql::db_type::DbType>, core::option::Option<druid_rdbc::governance::wall::wall_config::WallConfig>) -> core::result::Result<alloc::sync::Arc<druid::sql::wall_provider::WallProvider>, druid::core::error::DruidError>
 pub fn druid::sql::wall_filter::WallFilter::new(alloc::sync::Arc<druid::sql::wall_provider::WallProvider>) -> Self
 pub fn druid::sql::wall_filter::WallFilter::provider(&self) -> &alloc::sync::Arc<druid::sql::wall_provider::WallProvider>
 pub fn druid::sql::wall_filter::WallFilter::provider_white_list(&self) -> std::collections::hash::set::HashSet<alloc::string::String>
 pub fn druid::sql::wall_filter::WallFilter::set_log_violation(&self, bool)
 pub fn druid::sql::wall_filter::WallFilter::set_throw_exception(&self, bool)
-pub fn druid::sql::wall_filter::WallFilter::with_config(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::wall_filter::WallFilter::with_config(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 impl core::default::Default for druid::sql::wall_filter::WallFilter
 pub fn druid::sql::wall_filter::WallFilter::default() -> Self
 impl druid::core::filter::AfterFilter for druid::sql::wall_filter::WallFilter
@@ -14067,14 +13790,14 @@ pub fn druid::sql::wall_provider::WallProvider::check(&self, &str) -> druid_rdbc
 pub fn druid::sql::wall_provider::WallProvider::check_count(&self) -> u64
 pub fn druid::sql::wall_provider::WallProvider::check_valid(&self, &str) -> core::result::Result<bool, druid::core::error::DruidError>
 pub fn druid::sql::wall_provider::WallProvider::clear_cache(&self)
-pub fn druid::sql::wall_provider::WallProvider::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::wall_provider::WallProvider::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::wall_provider::WallProvider::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::wall_provider::WallProvider::do_privileged<T>(impl core::ops::function::FnOnce() -> T) -> T
 pub fn druid::sql::wall_provider::WallProvider::function_stat_values(&self, bool) -> alloc::vec::Vec<druid::sql::wall_function_stat_value::WallFunctionStatValue>
 pub fn druid::sql::wall_provider::WallProvider::hard_check_count(&self) -> u64
 pub fn druid::sql::wall_provider::WallProvider::is_privileged() -> bool
 pub fn druid::sql::wall_provider::WallProvider::name(&self) -> core::option::Option<alloc::string::String>
-pub fn druid::sql::wall_provider::WallProvider::new(druid::sql::wall_config::WallConfig) -> Self
+pub fn druid::sql::wall_provider::WallProvider::new(druid_rdbc::governance::wall::wall_config::WallConfig) -> Self
 pub fn druid::sql::wall_provider::WallProvider::record_effect_rows(&self, &str, u64, core::option::Option<u64>)
 pub fn druid::sql::wall_provider::WallProvider::reset(&self)
 pub async fn druid::sql::wall_provider::WallProvider::scope_privileged<F>(F) -> <F as core::future::future::Future>::Output where F: core::future::future::Future
@@ -14120,15 +13843,15 @@ pub fn druid::sql::wall_provider_stat_value::WallProviderStatValue::to_map(&self
 pub struct druid::sql::WallUtils
 impl druid::sql::wall_utils::WallUtils
 pub fn druid::sql::wall_utils::WallUtils::is_validate_db2(&str) -> core::result::Result<bool, druid::core::error::DruidError>
-pub fn druid::sql::wall_utils::WallUtils::is_validate_db2_with_config(&str, druid::sql::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
+pub fn druid::sql::wall_utils::WallUtils::is_validate_db2_with_config(&str, druid_rdbc::governance::wall::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
 pub fn druid::sql::wall_utils::WallUtils::is_validate_my_sql(&str) -> core::result::Result<bool, druid::core::error::DruidError>
-pub fn druid::sql::wall_utils::WallUtils::is_validate_my_sql_with_config(&str, druid::sql::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
+pub fn druid::sql::wall_utils::WallUtils::is_validate_my_sql_with_config(&str, druid_rdbc::governance::wall::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
 pub fn druid::sql::wall_utils::WallUtils::is_validate_oracle(&str) -> core::result::Result<bool, druid::core::error::DruidError>
-pub fn druid::sql::wall_utils::WallUtils::is_validate_oracle_with_config(&str, druid::sql::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
+pub fn druid::sql::wall_utils::WallUtils::is_validate_oracle_with_config(&str, druid_rdbc::governance::wall::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
 pub fn druid::sql::wall_utils::WallUtils::is_validate_postgres(&str) -> core::result::Result<bool, druid::core::error::DruidError>
-pub fn druid::sql::wall_utils::WallUtils::is_validate_postgres_with_config(&str, druid::sql::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
+pub fn druid::sql::wall_utils::WallUtils::is_validate_postgres_with_config(&str, druid_rdbc::governance::wall::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
 pub fn druid::sql::wall_utils::WallUtils::is_validate_sql_server(&str) -> core::result::Result<bool, druid::core::error::DruidError>
-pub fn druid::sql::wall_utils::WallUtils::is_validate_sql_server_with_config(&str, druid::sql::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
+pub fn druid::sql::wall_utils::WallUtils::is_validate_sql_server_with_config(&str, druid_rdbc::governance::wall::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
 pub struct druid::sql::WallVisitorBase<'a>
 impl<'a> druid::sql::wall_visitor_base::WallVisitorBase<'a>
 pub fn druid::sql::wall_visitor_base::WallVisitorBase<'a>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
@@ -14147,7 +13870,7 @@ pub fn druid::sql::wall_visitor_base::WallVisitorBase<'a>::update_check_items(&s
 pub fn druid::sql::wall_visitor_base::WallVisitorBase<'a>::violations(&self) -> &[druid_rdbc::governance::wall::violation::WallViolation]
 pub struct druid::sql::WallVisitorUtils
 impl druid::sql::wall_visitor_utils::WallVisitorUtils
-pub fn druid::sql::wall_visitor_utils::WallVisitorUtils::rewrite_for_multi_tenant(&mut [sqlparser::ast::Statement], &druid::sql::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
+pub fn druid::sql::wall_visitor_utils::WallVisitorUtils::rewrite_for_multi_tenant(&mut [sqlparser::ast::Statement], &druid_rdbc::governance::wall::wall_config::WallConfig) -> core::result::Result<bool, druid::core::error::DruidError>
 pub static druid::sql::DEFAULT_KEYWORDS: std::sync::lazy_lock::LazyLock<druid::sql::keywords::Keywords>
 pub static druid::sql::DM_KEYWORDS: std::sync::lazy_lock::LazyLock<druid::sql::keywords::Keywords>
 pub static druid::sql::GLOBAL_SYMBOL_TABLE: std::sync::lazy_lock::LazyLock<std::sync::poison::mutex::Mutex<druid::sql::symbol_table::SymbolTable>>
@@ -14187,21 +13910,14 @@ pub fn druid::sql::SqlInsertValueHandler::process_string(&mut self, &mut Self::R
 pub fn druid::sql::SqlInsertValueHandler::process_time(&mut self, &mut Self::Row, i32, druid_rdbc::types::rdbc_string::RdbcString) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::SqlInsertValueHandler::process_timestamp_millis(&mut self, &mut Self::Row, i32, i64) -> core::result::Result<(), druid::core::error::DruidError>
 pub fn druid::sql::SqlInsertValueHandler::process_timestamp_string(&mut self, &mut Self::Row, i32, druid_rdbc::types::rdbc_string::RdbcString) -> core::result::Result<(), druid::core::error::DruidError>
-pub trait druid::sql::TenantCallBack: core::marker::Send + core::marker::Sync
-pub fn druid::sql::TenantCallBack::filter_resultset_tenant_column(&self, &druid_rdbc::types::value::Value)
-pub fn druid::sql::TenantCallBack::hidden_column(&self, &str) -> core::option::Option<alloc::string::String>
-pub fn druid::sql::TenantCallBack::tenant_column(&self, druid::sql::tenant_call_back::TenantStatementType, &str) -> core::option::Option<alloc::string::String>
-pub fn druid::sql::TenantCallBack::tenant_value(&self, druid::sql::tenant_call_back::TenantStatementType, &str) -> core::option::Option<druid_rdbc::types::value::Value>
 pub trait druid::sql::WallProviderCreator: core::marker::Send + core::marker::Sync + 'static
-pub fn druid::sql::WallProviderCreator::create_wall_config(&self, core::option::Option<&str>, core::option::Option<&str>, core::option::Option<&druid::sql::wall_config::WallConfig>, core::option::Option<druid::sql::db_type::DbType>) -> core::option::Option<druid::sql::wall_provider::WallProvider>
+pub fn druid::sql::WallProviderCreator::create_wall_config(&self, core::option::Option<&str>, core::option::Option<&str>, core::option::Option<&druid_rdbc::governance::wall::wall_config::WallConfig>, core::option::Option<druid::sql::db_type::DbType>) -> core::option::Option<druid::sql::wall_provider::WallProvider>
 pub fn druid::sql::WallProviderCreator::order(&self) -> i32
-pub trait druid::sql::WallUpdateCheckHandler: core::marker::Send + core::marker::Sync
-pub fn druid::sql::WallUpdateCheckHandler::check(&self, &str, &str, &druid_rdbc::types::value::Value, &[druid_rdbc::types::value::Value]) -> bool
 pub trait druid::sql::WallVisitor
 pub fn druid::sql::WallVisitor::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::WallVisitor::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::WallVisitor::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::WallVisitor::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::WallVisitor::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::WallVisitor::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::WallVisitor::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::WallVisitor::set_sql_end_of_comment(&mut self, bool)
@@ -14214,7 +13930,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::clickhouse::clickhous
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::clickhouse::clickhouse_wall_visitor::ClickhouseWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -14227,7 +13943,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::db2::db2_wall_visitor
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::db2::db2_wall_visitor::Db2WallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -14240,7 +13956,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::mysql::my_sql_wall_vi
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::mysql::my_sql_wall_visitor::MySqlWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -14253,7 +13969,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::oracle::oracle_wall_v
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::oracle::oracle_wall_visitor::OracleWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -14266,7 +13982,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::postgresql::pg_wall_v
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::postgresql::pg_wall_visitor::PgWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -14279,7 +13995,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::sqlite::sqlite_wall_v
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlite::sqlite_wall_visitor::SQLiteWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)
@@ -14292,7 +14008,7 @@ impl druid::sql::wall_visitor::WallVisitor for druid::sql::sqlserver::sql_server
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::add_violation(&mut self, druid_rdbc::governance::wall::violation::WallViolation)
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::add_wall_update_check_item(&mut self, druid_rdbc::governance::wall::update_check_item::WallUpdateCheckItem)
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::check(&mut self, &str, &[sqlparser::ast::Statement])
-pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::config(&self) -> &druid::sql::wall_config::WallConfig
+pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::config(&self) -> &druid_rdbc::governance::wall::wall_config::WallConfig
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::db_type(&self) -> druid::sql::db_type::DbType
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::provider(&self) -> &druid::sql::wall_provider::WallProvider
 pub fn druid::sql::sqlserver::sql_server_wall_visitor::SqlServerWallVisitor<'_>::set_sql_end_of_comment(&mut self, bool)

@@ -29,11 +29,20 @@ impl WallUpdateCheckHandler for Check {
     }
 }
 
+/// 门面到内核的方向：仅当两个路径解析到同一类型时才能编译。
+fn facade_to_kernel(value: druid::sql::wall_config::WallConfig) -> WallConfig {
+    value
+}
+
+/// 内核到门面的方向：与 `facade_to_kernel` 共同证明类型恒等，而非复制。
+fn kernel_to_facade(value: WallConfig) -> druid::sql::wall_config::WallConfig {
+    value
+}
+
 #[test]
 fn canonical_config_drives_existing_wall_and_old_module_paths() {
-    let kernel = WallConfig::builder().delete_allow(false).build();
-    let facade: druid::sql::wall_config::WallConfig = kernel;
-    let kernel: WallConfig = facade;
+    let kernel = facade_to_kernel(WallConfig::builder().delete_allow(false).build());
+    let kernel = kernel_to_facade(kernel);
     let wall = Wall::with_db_type(kernel, DbType::MySql);
     assert_eq!(
         wall.check("DELETE FROM orders WHERE id = 1"),

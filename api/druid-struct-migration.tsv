@@ -24,6 +24,8 @@ ResultSetOpenContext	crates/druid/src/core/standard_result_set_open_context.rs	S
 StatementWarningFilterChain	crates/druid/src/core/druid_pooled_statement.rs	DruidPooledStatement	PRIVATE_OWNER	crates/druid/tests/task6_filter_chain_extended_test_parity_part_01.rs
 WrapperAdapter	crates/druid-rdbc/src/wrapper/wrapper.rs	Wrapper	STANDARD_PORT	crates/druid/tests/task6_wrapper_semantics_test_parity.rs
 WallCheckResult	crates/druid-rdbc/src/governance/wall/check_result.rs	WallCheckResult	STANDARD_PORT	crates/druid/tests/dialect_wall_matrix_test.rs
+WallConfig	crates/druid-rdbc/src/governance/wall/wall_config.rs	WallConfig	STANDARD_PORT	crates/druid-test/tests/wall_config_kernel_boundary_test.rs
+WallConfigBuilder	crates/druid-rdbc/src/governance/wall/wall_config.rs	WallConfigBuilder	STANDARD_PORT	crates/druid-test/tests/wall_config_kernel_boundary_test.rs
 WallDenyStat	crates/druid-rdbc/src/governance/wall/deny_stat.rs	WallDenyStat	STANDARD_PORT	crates/druid/tests/wall_deny_stat_test.rs
 WallSqlFunctionStat	crates/druid-rdbc/src/governance/wall/sql_function_stat.rs	WallSqlFunctionStat	STANDARD_PORT	crates/druid/tests/task6_wall_table_stat_meta_data_test_parity.rs
 WallSqlStat	crates/druid-rdbc/src/governance/wall/sql_stat.rs	WallSqlStat	STANDARD_PORT	crates/druid/tests/task6_wall_table_stat_meta_data_test_parity.rs
