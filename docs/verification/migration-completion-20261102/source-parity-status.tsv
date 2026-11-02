@@ -370,9 +370,9 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallAllowSelectAllColumnTest2.ja
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallAllowSelectAllColumnTest2.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallAllowSelectAllColumnTest2.java#testSQLServer	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallAlterTest_0.java#testORACLE	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallCallTest.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallCallTest.java#testOracle	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallCallTest.java#testSqlServer	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallCallTest.java#testMySql	ADAPTED	MISMATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_call_jdbc_escape_is_not_accepted_by_all_dialects	cargo test -p druid --test wall_allow_flags_test: MySQL, Oracle and SQLServer all reject the Java JDBC call escape { call ... }; Java WallUtils accepts it. Recorded as an unapproved parser divergence.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallCallTest.java#testOracle	ADAPTED	MISMATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_call_jdbc_escape_is_not_accepted_by_all_dialects	cargo test -p druid --test wall_allow_flags_test: MySQL, Oracle and SQLServer all reject the Java JDBC call escape { call ... }; Java WallUtils accepts it. Recorded as an unapproved parser divergence.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallCallTest.java#testSqlServer	ADAPTED	MISMATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_call_jdbc_escape_is_not_accepted_by_all_dialects	cargo test -p druid --test wall_allow_flags_test: MySQL, Oracle and SQLServer all reject the Java JDBC call escape { call ... }; Java WallUtils accepts it. Recorded as an unapproved parser divergence.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallCommentTest.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallCommentTest.java#testmysql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallCommentTest.java#testsqlserver	MISSING	NOT_RUN		
@@ -384,8 +384,8 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallConfigTest.java#test_selectA
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallConfigTest.java#test_selectAllow_false	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallConfigTest.java#test_updateAllow	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallConfigTest.java#test_updateAllow_false	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteTest.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteTest.java#testORACLE	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteTest.java#testMySql	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_delete_allow_false_rejects_mysql_and_oracle	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteTest.java#testORACLE	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_delete_allow_false_rejects_mysql_and_oracle	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteWhereTest.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteWhereTest.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteWhereTest1.java#testMySql	MISSING	NOT_RUN		
@@ -396,10 +396,10 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteWhereTest2.java#test_c
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDeleteWhereTest2.java#test_check_true	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDenySchemaTest.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDenyTableTest.java#testORACLE	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest.java#testMySql_true	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest.java#testOracle	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest.java#testOracle_true	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest.java#testMySql	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_drop_table_is_allowed_by_default_and_rejected_when_disabled	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest.java#testMySql_true	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_drop_table_is_allowed_by_default_and_rejected_when_disabled	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest.java#testOracle	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_drop_table_is_allowed_by_default_and_rejected_when_disabled	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest.java#testOracle_true	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_drop_table_is_allowed_by_default_and_rejected_when_disabled	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest1.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest1.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallDropTest2.java#testMySql	MISSING	NOT_RUN		
@@ -413,8 +413,8 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallHavingTest.java#testMySql	MI
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallHavingTest.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallHavingTest6.java#test_check_false	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallHavingTest6.java#test_check_true	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallInsertTest.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallInsertTest.java#testORACLE	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallInsertTest.java#testMySql	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_insert_allow_false_rejects_mysql_and_oracle	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallInsertTest.java#testORACLE	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_insert_allow_false_rejects_mysql_and_oracle	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallInsertTest2.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallInsertTest2.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallLineCommentTest.java#testMySql	MISSING	NOT_RUN		
@@ -429,8 +429,8 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallReadOnlyTest.java#testORACLE
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallReadOnlyTest2.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallReadOnlyTest2.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallSQLExceptionTest.java#test_wall	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectIntoTest.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectIntoTest.java#testORACLE	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectIntoTest.java#testMySql	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_select_into_is_allowed_by_default_for_mysql_and_oracle	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectIntoTest.java#testORACLE	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_select_into_is_allowed_by_default_for_mysql_and_oracle	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectIntoTest1.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectIntoTest1.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallSelectLimitTest.java#testDB2	MISSING	NOT_RUN		
@@ -512,10 +512,10 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallStatTest_update.java#testOra
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallStatTest_update.java#testPG	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallStatTest_update.java#testSQLServer	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallStatTest_whiteList_syntaxError.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest.java#testMySql_false	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest.java#testORACLE	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest.java#testORACLE_false	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest.java#testMySql	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_truncate_is_allowed_by_default_and_rejected_when_disabled	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest.java#testMySql_false	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_truncate_is_allowed_by_default_and_rejected_when_disabled	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest.java#testORACLE	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_truncate_is_allowed_by_default_and_rejected_when_disabled	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest.java#testORACLE_false	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_truncate_is_allowed_by_default_and_rejected_when_disabled	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest1.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest1.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallUnionTest.java#testMySql	MISSING	NOT_RUN		
@@ -526,8 +526,8 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallUnionTest3.java#testMySql	MI
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallUnionTest4.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallUnionTest4.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallUpdateCheckTest.java#test_update_check_handler	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallUpdateTest.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallUpdateTest.java#testORACLE	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallUpdateTest.java#testMySql	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_update_is_not_blocked_by_delete_allow_false	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallUpdateTest.java#testORACLE	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_update_is_not_blocked_by_delete_allow_false	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallUpdateTest1.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallUpdateTest1.java#testORACLE	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallUpdateTest2.java#testMySql_false	MISSING	NOT_RUN		

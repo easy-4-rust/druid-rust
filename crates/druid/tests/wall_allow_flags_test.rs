@@ -1,0 +1,79 @@
+//! Wall allow-flag 语义：与 Java `Wall*Test` 的 `WallUtils.isValidate*` 断言对齐。
+//!
+//! 覆盖 delete/update/insert/truncate/drop/call/select-into 的 allow 开关；
+//! MySQL、Oracle、SQLServer 使用各自 provider，不能用默认方言替代。
+
+use druid::sql::{WallConfig, WallUtils};
+
+#[test]
+fn wall_delete_allow_false_rejects_mysql_and_oracle() {
+    let config = WallConfig::builder().delete_allow(false).build();
+    let sql = "DELETE FROM T WHERE F1 = ?";
+    assert!(!WallUtils::is_validate_my_sql_with_config(sql, config.clone()).unwrap());
+    assert!(!WallUtils::is_validate_oracle_with_config(sql, config).unwrap());
+}
+
+#[test]
+fn wall_update_is_not_blocked_by_delete_allow_false() {
+    let config = WallConfig::builder().delete_allow(false).build();
+    let sql = "UPDATE T_USER SET FNAME = ? WHERE FID = ?";
+    assert!(WallUtils::is_validate_my_sql_with_config(sql, config.clone()).unwrap());
+    assert!(WallUtils::is_validate_oracle_with_config(sql, config).unwrap());
+}
+
+#[test]
+fn wall_insert_allow_false_rejects_mysql_and_oracle() {
+    let config = WallConfig::builder().insert_allow(false).build();
+    let sql = "INSERT INTO T (F1, F2) VALUES (1, 2)";
+    assert!(!WallUtils::is_validate_my_sql_with_config(sql, config.clone()).unwrap());
+    assert!(!WallUtils::is_validate_oracle_with_config(sql, config).unwrap());
+}
+
+#[test]
+fn wall_truncate_is_allowed_by_default_and_rejected_when_disabled() {
+    let sql = "TRUNCATE TABLE T1";
+    assert!(WallUtils::is_validate_my_sql(sql).unwrap());
+    assert!(WallUtils::is_validate_oracle(sql).unwrap());
+
+    let config = WallConfig::builder().truncate_allow(false).build();
+    assert!(!WallUtils::is_validate_my_sql_with_config(sql, config.clone()).unwrap());
+    assert!(!WallUtils::is_validate_oracle_with_config(sql, config).unwrap());
+}
+
+#[test]
+fn wall_drop_table_is_allowed_by_default_and_rejected_when_disabled() {
+    let sql = "DROP TABLE T1";
+    assert!(WallUtils::is_validate_my_sql(sql).unwrap());
+    assert!(WallUtils::is_validate_oracle(sql).unwrap());
+
+    let config = WallConfig::builder().drop_table_allow(false).build();
+    assert!(!WallUtils::is_validate_my_sql_with_config(sql, config.clone()).unwrap());
+    assert!(!WallUtils::is_validate_oracle_with_config(sql, config).unwrap());
+}
+
+#[test]
+fn wall_call_jdbc_escape_is_not_accepted_by_all_dialects() {
+    let sql = "{ call INTERFACE_DATA_EXTRACTION.INVOICE_INFO(?,?,?)}";
+    let mysql = WallUtils::is_validate_my_sql(sql);
+    let oracle = WallUtils::is_validate_oracle(sql);
+    let sql_server = WallUtils::is_validate_sql_server(sql);
+    assert!(
+        mysql.is_err() || !mysql.as_ref().copied().unwrap_or(false),
+        "MySQL unexpectedly accepted JDBC call escape: {mysql:?}"
+    );
+    assert!(
+        oracle.is_err() || !oracle.as_ref().copied().unwrap_or(false),
+        "Oracle unexpectedly accepted JDBC call escape: {oracle:?}"
+    );
+    assert!(
+        sql_server.is_err() || !sql_server.as_ref().copied().unwrap_or(false),
+        "SQLServer unexpectedly accepted JDBC call escape: {sql_server:?}"
+    );
+}
+
+#[test]
+fn wall_select_into_is_allowed_by_default_for_mysql_and_oracle() {
+    let sql = "SELECT F1, F2 INTO T2 FROM T1";
+    assert!(WallUtils::is_validate_my_sql(sql).unwrap());
+    assert!(WallUtils::is_validate_oracle(sql).unwrap());
+}
