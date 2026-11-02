@@ -50,10 +50,10 @@
 - 首批 **143** 个来源方法已映射：18 个 `bvt.pool.vendor` ExceptionSorter 方法 → `exception_sorter_semantics_test`；4 个 `FilterManagerTest` 方法 + `ClearFilterTest#test_filters` + `DruidDataSourceFilterTest#test_filter` → FilterManager/DataSource filter parity 测试。**111 MATCH / 13 APPROVED_DIFFERENCE / 19 MISMATCH**；2201 个未发现方法显式标为 `BLOCKED`；Pool 差分 6 例（3 MATCH + 3 approved）、Callable 7 例（2 MATCH + 5 approved）、ResultSet 5 例（3 MATCH + 2 approved）、Statement 37 例（35 MATCH + 2 approved）、MockSorter 1 例 MATCH、PreparedCache 1 例 approved、WallMultiStatement 2 例 MATCH、WallFilterTest H2 1 例 MATCH、StatementTest#test_stmt 1 例 MATCH；WallUtils 方言测试作为 WallMultiStatement 的第二目标、DruidDataSourceTest_maxWait、notEmptyWait2#test_maxWaitThread、phyMaxUseCount 各 1 例 MATCH；Wall allow 开关 19 例（delete/update/insert/truncate/drop/select-into 16 MATCH，JDBC call escape 3 MISMATCH）；Wall always-true 6 例（select/delete where 4 MATCH，HAVING 2 MISMATCH）；WallUnionTest 2 例 MISMATCH（selectUnionCheck 未拦截普通 UNION）；WallSelectIntoTest1/WallSelectWhereTest0/WallDropTest1 6 例 MATCH，WallDropTest2 DROP PROCEDURE 2 例 MISMATCH；WallSelectWhereTest1/2/3 8 例（6 MATCH + 2 MISMATCH）；WallDeleteWhereTest1 4 例（2 MATCH + 2 MISMATCH）、WallHavingTest6 2 例（1 MATCH + 1 MISMATCH）；WallCommentTest 3 例 MISMATCH（checkValid 一致，但缺 commentDenyStat）；WallDeleteWhereTest2 2 例（1 MATCH + 1 MISMATCH，带注释的 DELETE OR always-true）。另记录 `DruidLoaderUtilsTest#testLoadFilter` 的 log4j/encoding 别名差异为 1 个 MISMATCH，未隐藏。
 - 其余 4759 个 `@Test` 仍为 `MISSING/NOT_RUN`；禁止按测试名自动映射或伪造 MATCH。
 
-### 3. JDBC 方法证据仍以未评估为主
+### 3. JDBC 方法证据：首批 Statement 已回填
 
-- 2001 个身份中 capability 仅 25 PARTIAL，real_db 0/2001。
-- 3.2–3.7 尚未开始实际方法映射与差分。
+- 2001 个身份中 linked 54、unassessed 1947；新增 30 个 `java.sql.Statement` 方法，声明/合同层 PASS，capability PARTIAL。
+- `verify_java8_method_evidence.py` 通过；real_db 仍 0/2001，adapter/logical_proxy 仍未评估，3.2–3.7 未完成。
 
 ### 4. 其他未完成阶段
 

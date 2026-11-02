@@ -23,3 +23,11 @@
 - 未评估项保持 UNASSESSED；不得由同名类型、编译成功或局部测试升级。
 - `real_db` 必须在真实数据库运行后填写，不能用 SQLite/mock 代替其他产品。
 - 后续每批更新后重新计算 SHA，并记录对应 Java/Rust 基线与命令。
+
+## 2026-11-02 Statement 首批回填
+
+- 当前 ledger SHA-256：`4389627c8ab35a96bbad48b315a732f24d6a46896852a36afe88c2dc2b442b79`
+- 新增：30 个 `java.sql.Statement` 方法，关联 `java_rust_statement_errors_differential.rs#pinned_java_and_rust_compare_all_37_statement_inputs`。
+- 结果：capability PARTIAL 54 / UNASSESSED 1947；declaration PASS 38、contract PASS 43、logical_proxy PASS 9、adapter PASS 2、real_db 仍 0/2001。
+- 门禁：`python scripts/verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=54 unassessed=1947`。
+- 边界：只登记 live error differential 可支撑的 declaration/contract；adapter、logical_proxy、real_db 未评估，3.2–3.7 未完成。
