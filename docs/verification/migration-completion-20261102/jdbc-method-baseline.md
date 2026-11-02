@@ -10,11 +10,11 @@
 
 | 维度 | PASS | PARTIAL | UNSUPPORTED | UNASSESSED |
 |---|---:|---:|---:|---:|
-| capability | 0 | 189 | 4 | 1808 |
-| declaration | 177 | 0 | 0 | 1824 |
-| contract | 175 | 0 | 0 | 1826 |
-| adapter | 2 | 0 | 0 | 1999 |
-| logical_proxy | 9 | 0 | 0 | 1992 |
+| capability | 0 | 461 | 4 | 1536 |
+| declaration | 449 | 0 | 0 | 1552 |
+| contract | 447 | 0 | 0 | 1554 |
+| adapter | 105 | 0 | 0 | 1896 |
+| logical_proxy | 199 | 0 | 0 | 1802 |
 | real_db | 14 | 0 | 0 | 1987 |
 
 ## 约束
@@ -57,3 +57,11 @@
 - 结果：linked 193 / unassessed 1808；capability PARTIAL 189 + UNSUPPORTED 4；declaration PASS 177、contract PASS 175、adapter PASS 2、logical_proxy PASS 9、real_db PASS 14。
 - 边界：RowSet 其余 319 个身份仍 UNASSESSED，不能因 2 个流更新负例推断整个 RowSet 不支持；SQLInput/SQLOutput 的已实现方法仍 UNASSESSED。
 - 门禁：`python scripts/verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=193 unassessed=1808`；`unsupported_interface_negative_test` 3 passed。
+
+## 2026-11-02 多智能体批次（Callable/Resource/ResultSet/Statement/Metadata）
+
+- 当前 ledger SHA-256：`fb1ebb001582407e76ec41229df7b161e222b7726d173b942b055463a2776acf`
+- 新增 **272** 个方法的证据：79 个 `CallableStatement`、87 个 Blob/Clob/NClob/Array/Struct/Ref/SQLXML/RowId/SQLInput/SQLOutput、63 个 ResultSet/Statement、43 个 DatabaseMetaData/ResultSetMetaData/ParameterMetaData。
+- 结果：linked **465** / unassessed **1536**；capability PARTIAL 461 + UNSUPPORTED 4；declaration PASS 449、contract PASS 447、adapter PASS 105、logical_proxy PASS 199、real_db 仍 14。
+- 证据边界：`adapter`/`logical_proxy` 主要来自 Toasty SQLite 池化路径和 JDBC Agent H2/HSQLDB 外部消费者测试；metadata 的 27 个 routing-only 与 10 个常量行未回填，Callable 的 `getBoolean(int)` 弱证据行、ResultSet 常量行、资源 `TYPE`/`RowId#toString` 行均被排除，不以路由或 Debug 表示冒充 Java 行为。
+- 门禁：`python scripts/verify_java8_method_evidence.py` → `EVIDENCE_INTEGRITY_PASS linked=465 unassessed=1536`；Callable/Resource/Metadata/ResultSet 目标测试均通过。
