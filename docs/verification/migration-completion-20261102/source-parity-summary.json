@@ -24,18 +24,18 @@
     "ADAPTED": 42,
     "BLOCKED": 2200,
     "MERGED_APPROVED": 51,
-    "MIRRORED": 50,
-    "MISSING": 4635
+    "MIRRORED": 54,
+    "MISSING": 4631
   },
   "java_baseline": "fa8dc9912637a2f729eef9f55356621fec18d40e",
   "manifest": "docs/migration/source-test-parity.json",
-  "rust_baseline": "9e95aab8b24774a9ed2f0be982a3e324a6390339",
+  "rust_baseline": "f0ac2b95f0792d74424b52163a0661e10167bf66",
   "schema": 1,
   "status_table": "docs/verification/migration-completion-20261102/source-parity-status.tsv",
   "statuses": {
     "APPROVED_DIFFERENCE": 13,
-    "MATCH": 111,
+    "MATCH": 115,
     "MISMATCH": 19,
-    "NOT_RUN": 6835
+    "NOT_RUN": 6831
   }
 }
