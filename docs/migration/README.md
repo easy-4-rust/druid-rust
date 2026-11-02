@@ -1,5 +1,7 @@
 # druid-rust 迁移文档
 
+> **2026-11-02 当前状态：** OpenSpec `migration-completion-roadmap` 已完成 19/68；默认全量测试 7/7 crate 通过，`--all-features` 仅 gRPC 目标受 Windows 回环阻塞；全仓 SOURCE_PARITY 4759 仍为 `MISSING/NOT_RUN`，最终判定 **NOT_READY**。当前证据索引见 [执行进展](../verification/migration-completion-20261102/progress.md)。
+
 后续推进：[ExceptionSorter 逐方法语义核验](../verification/method-semantics-20261101/README.md)（12 对象、30 个显式签名）。已修复 Unicode 错误码解析真实偏差；复用源测试和 live differential，保留日志、宿主配置与全量验收未完成项。
 
 本目录是 druid-rust 的**迁移事实与验收**入口。先读 [2026-11-01 当前代码核对](../verification/current-code-audit-20261101/README.md)：已区分文档滞后、已有实现缺验证、真实偏差，并保留待核实队列。
