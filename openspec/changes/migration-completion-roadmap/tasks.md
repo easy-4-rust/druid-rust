@@ -15,7 +15,7 @@
 - [x] 2.2 盘点全部 fixture、脚本、语料、golden 文件与数据资源，记录源路径和 SHA-256；验证资产分母与当前审计的 822 个资源一致或说明新增差异。
 - [ ] 2.3 创建 `docs/migration/source-test-parity.json`，为每个来源用例填写 MIRRORED/ADAPTED/SPLIT/MERGED_APPROVED、目标测试、保留标志与证据；验证无 MISSING/BLOCKED/NOT_APPLICABLE 被隐藏。
 - [x] 2.4 将来源资产逐字节复制到目标位置，派生文件另存；运行资产 SHA-256 校验，验证全部目标文件与原件一致。
-- [ ] 2.5 扩展 `crates/druid-test` 的整仓验收命令与聚合产物，输出每个 case 的 MATCH/MISMATCH/NOT_RUN；验证不存在用生产 crate 局部测试替代整仓验收。
+- [x] 2.5 扩展 `crates/druid-test` 的整仓验收命令与聚合产物，输出每个 case 的 MATCH/MISMATCH/NOT_RUN；验证不存在用生产 crate 局部测试替代整仓验收。证据：`scripts/run_workspace_acceptance.sh` 逐包运行 7 个 crate（全部 exit 0），`source_parity_acceptance` 生成 `source-parity-status.tsv` / `.json`：4759 cases、822 assets、MATCH 0 / MISMATCH 0 / NOT_RUN 4759，明确保留未映射状态。
 
 ## 3. JDBC 逐方法证据
 

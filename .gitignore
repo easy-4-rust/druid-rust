@@ -98,6 +98,8 @@ Cargo.lock
 !crates/druid-wrapper/src/bin/
 crates/druid-wrapper/src/bin/*
 !crates/druid-wrapper/src/bin/druid_driver.rs
+!crates/druid-test/src/bin/
+!crates/druid-test/src/bin/source_parity_acceptance.rs
 .idea/
 .vscode/
 *.swp

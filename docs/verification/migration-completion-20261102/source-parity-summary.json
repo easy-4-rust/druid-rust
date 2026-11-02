@@ -1,0 +1,34 @@
+{
+  "acceptance_module": {
+    "artifact": "../verification/migration-completion-20261102/druid-test-run.json",
+    "command": "cargo test -p druid-test --all-features --offline",
+    "components": [
+      "druid",
+      "druid-rdbc",
+      "druid-wrapper",
+      "druid-metrics",
+      "druid-admin",
+      "druid-bench"
+    ],
+    "failed": 0,
+    "manifest": "crates/druid-test/Cargo.toml",
+    "not_run": 4759,
+    "package": "druid-test",
+    "publish": false,
+    "skipped": 0,
+    "status": "NOT_RUN"
+  },
+  "assets": 822,
+  "cases": 4759,
+  "dispositions": {
+    "MISSING": 4759
+  },
+  "java_baseline": "fa8dc9912637a2f729eef9f55356621fec18d40e",
+  "manifest": "docs/migration/source-test-parity.json",
+  "rust_baseline": "ed161654c203f60e87ea11b4524ca57496a10e73",
+  "schema": 1,
+  "status_table": "docs/verification/migration-completion-20261102/source-parity-status.tsv",
+  "statuses": {
+    "NOT_RUN": 4759
+  }
+}

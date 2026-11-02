@@ -2,7 +2,7 @@
 
 更新：2026-11-02
 
-## 已完成（18/68）
+## 已完成（19/68）
 
 | 任务 | 证据 |
 |---|---|
@@ -14,6 +14,7 @@
 | 2.1 Java 用例清单 | `java-test-cases.tsv`：**4759** 个唯一 case ID |
 | 2.2 资源清单 | `java-test-assets.tsv`：**822** 个资源、13.46 MiB |
 | 2.4 资源精确复制 | 复制到 `crates/druid-test/tests/fixtures/source-java/src/test/resources/`，SHA-256 **822/822** 一致 |
+| 2.5 整仓验收聚合 | `scripts/run_workspace_acceptance.sh` 逐包跑 7 个 crate 全部 exit 0；`source_parity_acceptance` 输出 `source-parity-status.tsv`：4759 cases、MATCH 0 / MISMATCH 0 / NOT_RUN 4759，未隐藏 MISSING |
 | 3.1 JDBC 方法基线 | `java8-method-evidence-baseline.tsv`，2001 身份，SHA-256 `cfa065c8…`，未评估状态不变 |
 | 5.2 Admin 数据合同 | Rust 合同 34 passed（`admin-console-contracts.log`）；前端 5 passed（`admin-web-tests.log`） |
 | 5.4 OpenAPI 同源 | `v1_route_table!` 同时驱动 router 与 OpenAPI paths；`route_manifest_paths_are_unique` 与 `v1_openapi_document_lists_every_served_route` 通过；健康/unavailableFields 测试覆盖 |
