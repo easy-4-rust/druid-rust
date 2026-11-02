@@ -22,7 +22,7 @@
 ## 3. JDBC 逐方法证据
 
 - [x] 3.1 重新生成并校验 `java8-method-evidence.tsv` 当前基线，保留 2001 个身份的完整分母；验证旧证据按 SHA/基线归档，未评估项不被批量改写为通过。
-- [ ] 3.2 完成 Connection、Statement、PreparedStatement、ResultSet 的逐方法映射与差分，覆盖 1-based 索引、NULL/wasNull、错误、关闭与资源清理；验证每个方法有 Java 用例和 MATCH 证据。进展：30 个 `java.sql.Statement` 方法 + `CallableStatement#wasNull()` + `ResultSet` previous/getRow/getFetchSize/wasNull 已关联 live 差分，declaration/contract PASS、capability PARTIAL；ledger linked 59/unassessed 1942，gate 通过；adapter/real_db 仍 UNASSESSED。
+- [ ] 3.2 完成 Connection、Statement、PreparedStatement、ResultSet 的逐方法映射与差分，覆盖 1-based 索引、NULL/wasNull、错误、关闭与资源清理；验证每个方法有 Java 用例和 MATCH 证据。进展：30 个 `java.sql.Statement` 方法 + `CallableStatement#wasNull()` + `ResultSet` previous/getRow/getFetchSize/wasNull + 22 个 PreparedStatement 方法 已关联 live 差分，declaration/contract PASS、capability PARTIAL；ledger linked 81/unassessed 1920，gate 通过；adapter/real_db 仍 UNASSESSED。
 - [ ] 3.3 完成 DatabaseMetaData、ParameterMetaData、ResultSetMetaData 的逐方法验证，区分 null/empty/pattern 与不支持错误；验证声明、合同、adapter 和 logical_proxy 分层结果。
 - [ ] 3.4 完成事务、批处理、生成键、保存点、取消和关闭的验证，保留 i64 更新计数、异常链与 exactly-once 清理；验证对应 Rust/Java 差分 MATCH。
 - [ ] 3.5 完成 LOB、Array、Struct、Ref、SQLXML 的正向/负向能力验证，覆盖流生命周期和 typed error；验证 capability=true 必须有同 adapter 行为证据。
