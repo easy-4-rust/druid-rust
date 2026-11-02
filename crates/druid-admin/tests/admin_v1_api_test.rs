@@ -203,11 +203,17 @@ async fn v1_openapi_document_lists_every_served_route() {
     let paths = body["paths"].as_object().expect("paths must be an object");
     for route in [
         "/druid/api/v1/basic",
+        "/druid/api/v1/health",
+        "/druid/api/v1/history",
         "/druid/api/v1/datasources",
         "/druid/api/v1/datasources/{identity}",
+        "/druid/api/v1/datasources/{identity}/connections",
+        "/druid/api/v1/datasources/{identity}/stack",
         "/druid/api/v1/sql",
+        "/druid/api/v1/sql/{id}",
         "/druid/api/v1/wall",
         "/druid/api/v1/services",
+        "/druid/api/v1/openapi.json",
     ] {
         assert!(
             paths.contains_key(route),
@@ -215,4 +221,25 @@ async fn v1_openapi_document_lists_every_served_route() {
             paths.keys().collect::<Vec<_>>()
         );
     }
+
+    // 漂移检查：OpenAPI 路径集合必须与 router 源码中的 v1 路由字面量一致。
+    let router_source = include_str!("../src/servlet/monitor_view_servlet/monitor_view_a.rs");
+    let mut declared = std::collections::BTreeSet::new();
+    let mut rest = router_source;
+    while let Some(index) = rest.find("\"/api/v1/") {
+        let after_quote = &rest[index + 1..];
+        let Some(end) = after_quote.find('"') else {
+            break;
+        };
+        let path = &after_quote[..end];
+        if path != "/api/v1/" {
+            declared.insert(format!("/druid{path}"));
+        }
+        rest = &after_quote[end..];
+    }
+    let documented: std::collections::BTreeSet<String> = paths.keys().cloned().collect();
+    assert_eq!(
+        declared, documented,
+        "OpenAPI paths must stay identical to the router's declared v1 routes"
+    );
 }

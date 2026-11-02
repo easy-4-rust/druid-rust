@@ -1,0 +1,68 @@
+    Blocking waiting for file lock on build directory
+warning: druid-admin@0.0.0-design: embedded 25 console asset(s) from E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-admin\web/dist
+   Compiling druid-admin v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-admin)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 52s
+     Running tests\admin_console_app_test.rs (D:/cargo-target\debug\deps\admin_console_app_test-8894fa0fe89a3a52.exe)
+
+running 4 tests
+test the_api_stays_available_regardless_of_the_console ... ok
+test console_unknown_path_falls_back_to_the_application_entry ... ok
+test console_entry_serves_the_built_application ... ok
+test console_asset_is_served_with_its_own_content_type ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests\admin_console_routes_test.rs (D:/cargo-target\debug\deps\admin_console_routes_test-a096f2d6c8da4624.exe)
+
+running 9 tests
+test connection_info_identity_json_reports_the_capability_the_backend_lacks ... ok
+test reset_all_json_is_accepted_and_reports_success ... ok
+test datasource_identity_json_unknown_identity_reports_not_found ... ok
+test basic_json_reports_the_runtime_version_and_reset_state ... ok
+test sql_identity_json_unknown_identity_reports_not_found ... ok
+test sql_identity_json_returns_the_matching_sql_stat ... ok
+test datasource_identity_json_returns_the_matching_datasource ... ok
+test active_connection_stack_trace_identity_json_reports_the_capability_the_backend_lacks ... ok
+test log_and_reset_json_is_accepted_and_reports_success ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests\admin_live_console_test.rs (D:/cargo-target\debug\deps\admin_live_console_test-c2fea7cc07e46362.exe)
+
+running 7 tests
+test health_uses_repository_counters_and_sampling_metadata ... ok
+test push_connection_details_report_unsupported_instead_of_empty_success ... ok
+test sql_filters_before_bounded_pagination_and_unknown_max_is_not_slow ... ok
+test push_capabilities_do_not_claim_unreported_errors_or_sql_text ... ok
+test colliding_ids_require_source_context ... ok
+test poll_preserves_reported_zero_and_filters_and_reads_existing_stack ... ok
+test failed_poll_is_not_reported_as_an_empty_healthy_source ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.09s
+
+     Running tests\admin_poll_backend_test.rs (D:/cargo-target\debug\deps\admin_poll_backend_test-039024d83e78cfaf.exe)
+
+running 5 tests
+test service_list_reports_the_configured_application ... ok
+test poll_mode_serves_active_connection_stack_traces ... ok
+test poll_mode_forwards_the_node_remove_abandoned_error ... ok
+test poll_mode_serves_the_monitored_node_rich_data ... ok
+test both_mode_falls_back_to_the_repository_when_the_node_is_unreachable ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.10s
+
+     Running tests\admin_v1_api_test.rs (D:/cargo-target\debug\deps\admin_v1_api_test-1cf6eb69c4cbfeed.exe)
+
+running 9 tests
+test v1_datasource_unknown_identity_answers_not_found ... ok
+test v1_sql_sorts_and_pages ... ok
+test v1_sql_pages_with_the_requested_window ... ok
+test v1_datasources_use_camel_case_and_no_java_envelope ... ok
+test v1_datasource_returns_the_matching_datasource ... ok
+test v1_basic_reports_the_api_version_and_the_backend ... ok
+test v1_services_lists_the_attached_services ... ok
+test v1_wall_reports_the_aggregated_counters ... ok
+test v1_openapi_document_lists_every_served_route ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+

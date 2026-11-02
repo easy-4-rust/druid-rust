@@ -1,0 +1,33 @@
+{
+  "exit_code": 101,
+  "test_result_blocks": 366,
+  "passed": 4371,
+  "failed": 40,
+  "ignored": 12,
+  "failed_targets": [
+    "error: test failed, to rerun pass `-p druid --test task6_filter_chain_extended_test_parity_part_01`",
+    "error: test failed, to rerun pass `-p druid --test task6_filter_chain_extended_test_parity_part_02`",
+    "error: test failed, to rerun pass `-p druid-admin --test admin_binary_test`",
+    "error: test failed, to rerun pass `-p druid-admin --test grpc_network_e2e_test`"
+  ],
+  "ignored_cases": [
+    "test pinned_java_and_rust_compare_all_seven_callable_cases ... ignored, requires frozen Druid 1.2.28 source/build classpath and explicit JDK",
+    "test pinned_java_and_rust_match_every_property_boundary_case ... ignored, requires pinned Java Druid source, compiled dependency classpath and JDK",
+    "test pinned_java_and_rust_match_every_shared_exception_case ... ignored, requires pinned Java Druid source, compiled dependency classpath and JDK",
+    "test pinned_java_and_rust_compare_original_mock_sorter_case ... ignored, requires frozen Druid 1.2.28 source/build classpath and explicit JDK",
+    "test pinned_java_and_rust_compare_all_six_pool_cases ... ignored, requires frozen Druid 1.2.28 source/build classpath and explicit JDK",
+    "test pinned_java_and_rust_compare_original_prepared_cache_case ... ignored, requires frozen Druid 1.2.28 source/build classpath and explicit JDK",
+    "test pinned_java_and_rust_compare_all_five_result_set_inputs ... ignored, requires frozen Java 1.2.28 source/build classpath and explicit JDK; unapproved differences fail",
+    "test pinned_java_and_rust_compare_all_37_statement_inputs ... ignored, requires frozen Druid 1.2.28 build classpath, source and explicit JDK",
+    "test pinned_java_and_rust_compare_both_original_wall_multi_cases ... ignored, requires frozen Druid 1.2.28 source/build classpath and explicit JDK",
+    "test live_backend_capability_claims_match_committed_rows ... ignored, requires DRUID_DATABASE_URL and a live PostgreSQL or MySQL service",
+    "test live_mysql_cancellation_control_reports_feature_not_supported ... ignored, requires DRUID_MYSQL_URL pointing to a live MySQL service",
+    "test live_postgres_cancellation_control_reports_feature_not_supported ... ignored, requires DRUID_DATABASE_URL pointing to a live PostgreSQL service"
+  ],
+  "warnings": [
+    "warning: druid-admin@0.0.0-design: embedded 0 console asset(s) from web/dist",
+    "warning: unused variable: `kw`",
+    "warning: `druid-admin` (lib test) generated 1 warning (1 duplicate)",
+    "warning: `druid-admin` (lib) generated 1 warning (run `cargo fix --lib -p druid-admin` to apply 1 suggestion)"
+  ]
+}

@@ -1,0 +1,621 @@
+**Exploration: WallConfig**
+
+Found 37 symbols across 2 files.
+
+**Blast radius — what depends on these (update/verify before editing)**
+
+- `WallConfig` (crates/druid-rdbc/src/governance/wall/wall_config.rs:17) — 36 callers in `crates/druid-rdbc/src/governance/wall/mod.rs`, `crates/druid/src/pool/druid_data_source_factory.rs`, `crates/druid/src/sql/wall_visitor_utils.rs`, `crates/druid/src/sql/postgresql/pg_wall_provider.rs` +14 more; tests: `crates/druid/tests/wall_config_field_wiring_test.rs`, `crates/druid/tests/dialect_wall_matrix_test.rs`
+- `Wall` (crates/druid/src/sql/wall.rs:24) — 2 callers in `crates/druid/src/sql/mod.rs`; tests: `crates/druid/tests/wall_config_field_wiring_test.rs`
+- `config` (crates/druid/src/sql/lexer/scan_a.rs:203) — 4 callers; tests: `crates/druid/tests/lexer_differential_test.rs`
+- `config` (crates/druid/src/sql/wall_provider.rs:114) — 10 callers in `crates/druid/src/pool/config/builder.rs`, `crates/druid/src/sql/wall_filter.rs`, `crates/druid/src/sql/wall_provider.rs`, `crates/druid/src/sql/wall_visitor_base.rs`; tested via callers: `crates/druid/tests/callable_overload_support/test_callable_factory.rs`, `crates/druid-wrapper/tests/task6_pool_deep_branch_coverage_test_parity_part_02.rs` +23
+
+**Relationships**
+
+**references:**
+- wall_with → WallConfig
+- wall_config_from_properties → WallConfig
+- tenant_value → WallConfig
+- violations_of → WallConfig
+- make_provider → WallConfig
+- tenant_column → WallConfig
+- with_config → WallConfig
+- create_wall_config → WallConfig
+- new → WallConfig
+- rewrite_insert → WallConfig
+- ... and 60 more
+
+**calls:**
+- WallView → SourceStatus
+- WallView → load
+- beginRequest → useRequestGuard
+- load → beginRequest
+- load → wall
+- SqlList → SourceStatus
+- SqlDetail → SourceStatus
+- DatasourceList → SourceStatus
+- Overview → SourceStatus
+- SlowSql → SourceStatus
+- ... and 125 more
+
+**implements:**
+- SqlServerWallVisitor → WallVisitor
+- SQLiteWallVisitor → WallVisitor
+- ClickhouseWallVisitor → WallVisitor
+- Db2WallVisitor → WallVisitor
+- OracleWallVisitor → WallVisitor
+- PgWallVisitor → WallVisitor
+- MySqlWallVisitor → WallVisitor
+
+**instantiates:**
+- build → DruidMetricsConfig
+
+**Source Code**
+
+> The code below is the **verbatim, current on-disk source** of these files — re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.
+
+**`crates/druid/src/sql/wall.rs`** — check_read_only(calls), check_query(calls), check_object_name(calls), collect_comment_warnings(calls), collect_comment_warnings(method), check_statement(calls), check_statement(method), collect_wall_context_warnings(calls), collect_wall_context_warnings(method), collect_update_check_items(calls), +38 more
+
+```rust
+21	use rules::*;
+22	
+23	/// SQL 防火墙。
+24	pub struct Wall {
+25	    config: Arc<WallConfig>,
+26	    db_type: RwLock<DbType>,
+27	}
+28	
+29	impl Wall {
+30	    pub fn new(config: WallConfig) -> Self {
+31	        Self {
+32	            config: Arc::new(config),
+33	            db_type: RwLock::new(DbType::Other),
+34	        }
+35	    }
+36	
+37	    /// 使用显式数据库方言创建 Wall。
+38	    #[must_use]
+39	    pub fn with_db_type(config: WallConfig, db_type: DbType) -> Self {
+40	        Self {
+41	            config: Arc::new(config),
+42	            db_type: RwLock::new(db_type),
+43	        }
+44	    }
+45	
+46	    pub fn config(&self) -> &WallConfig {
+47	        &self.config
+48	    }
+49	
+50	    /// 切换后续 hard-check 使用的数据库方言。
+51	    pub fn set_db_type(&self, db_type: DbType) {
+52	        *self.db_type.write() = db_type;
+53	    }
+54	
+55	    /// 返回当前数据库方言。
+56	    #[must_use]
+57	    pub fn db_type(&self) -> DbType {
+58	        *self.db_type.read()
+59	    }
+60	
+61	    /// 检查 SQL 是否合规。
+62	    pub fn check(&self, sql: &str) -> Result<(), Vec<WallViolation>> {
+63	        if !self.config.comment_allow && contains_disallowed_comment(sql, self.config.hint_allow) {
+64	            return Err(vec![WallViolation::OperationNotAllowed(
+65	                "COMMENT".to_owned(),
+66	            )]);
+67	        }
+68	        let dialect = SqlUtils::dialect(self.db_type());
+69	        let ast = Parser::parse_sql(dialect.as_ref(), sql)
+70	            .map_err(|e| vec![WallViolation::SyntaxError(e.to_string())])?;
+71	        let (violations, _) = self.check_parsed(sql, &ast);
+72	        if violations.is_empty() {
+73	            Ok(())
+74	        } else {
+75	            Err(violations)
+76	        }
+77	    }
+78	
+79	    pub(crate) fn check_parsed(
+80	        &self,
+
+... (gap: check_statement (crates/druid/src/sql/wall.rs:159)) ...
+
+248	    /// DELETE 语句门控 + WHERE 语义 + 只读表检查。
+249	    ///
+250	    /// 对应 Java `WallVisitorUtils#checkDelete`。
+251	    fn check_delete_statement(&self, delete: &sqlparser::ast::Delete, v: &mut Vec<WallViolation>) {
+252	        if !self.config.delete_allow {
+253	            v.push(WallViolation::OperationNotAllowed("DELETE".to_owned()));
+254	        }
+255	        if delete.selection.is_none() && self.config.delete_must_have_where {
+256	            v.push(WallViolation::DeleteWithoutWhere);
+257	        }
+258	        if self.config.delete_where_alway_true_check
+259	            && delete.selection.as_ref().is_some_and(is_always_true)
+260	        {
+261	            Self::push_unique(
+262	                v,
+263	                WallViolation::AlwaysTrueCondition("DELETE WHERE".to_owned()),
+264	            );
+265	        }
+266	        self.check_condition_opt(delete.selection.as_ref(), v);
+267	        self.check_from_table(&delete.from, v);
+268	        for table_with_joins in tables_of(&delete.from) {
+269	            if let TableFactor::Table { name, .. } = &table_with_joins.relation {
+270	                self.check_read_only(name, v);
+271	            }
+272	        }
+273	    }
+274	
+275	    /// UPDATE 语句门控 + WHERE 语义 + 只读表检查。
+276	    ///
+277	    /// 对应 Java `WallVisitorUtils#checkUpdate`。
+278	    fn check_update_statement(
+279	        &self,
+280	        table: &sqlparser::ast::TableWithJoins,
+281	        selection: Option<&Expr>,
+282	        v: &mut Vec<WallViolation>,
+283	    ) {
+284	        if !self.config.update_allow {
+285	            v.push(WallViolation::OperationNotAllowed("UPDATE".to_owned()));
+286	        }
+287	        if selection.is_none() && self.config.update_must_have_where {
+288	            v.push(WallViolation::UpdateWithoutWhere);
+289	        }
+290	        if self.config.update_where_alway_true_check && selection.is_some_and(is_always_true) {
+291	            Self::push_unique(
+292	                v,
+293	                WallViolation::AlwaysTrueCondition("UPDATE WHERE".to_owned()),
+294	            );
+295	        }
+296	        self.check_condition_opt(selection, v);
+297	        self.check_table_factor(&table.relation, v);
+298	        if let TableFactor::Table { name, .. } = &table.relation {
+299	            self.check_read_only(name, v);
+300	        }
+301	    }
+302	
+303	    /// 单一布尔开关语句门控；对应 Java `preVisitCheck` 的 allow 位查表。
+304	    fn statement_gate(&self, stmt: &Statement) -> Option<WallViolation> {
+305	        let (allow, name): (bool, &str) = match stmt {
+306	            Statement::CreateTable(_) => (self.config.create_table_allow, "CREATE TABLE"),
+307	            Statement::AlterTable { .. } => (self.config.alter_table_allow, "ALTER TABLE"),
+308	            Statement::Commit { .. } => (self.config.commit_allow, "COMMIT"),
+309	            Statement::Rollback { .. } => (self.config.rollback_allow, "ROLLBACK"),
+310	            Statement::StartTransaction { .. } => {
+311	                (self.config.start_transaction_allow, "START TRANSACTION")
+312	            }
+313	            Statement::SetVariable { .. } => (self.config.set_allow, "SET"),
+314	            Statement::Use(_) => (self.config.use_allow, "USE"),
+315	            Statement::Call(_) => (self.config.call_allow, "CALL"),
+316	            _ => (self.config.show_allow, "SHOW"),
+317	        };
+318	        (!allow).then(|| WallViolation::OperationNotAllowed(name.to_owned()))
+319	    }
+320	
+321	    fn check_query(&self, query: &Query, v: &mut Vec<WallViolation>) {
+322	        if !self.config.limit_zero_allow && query.limit.as_ref().is_some_and(is_zero_literal) {
+323	            Self::push_unique(v, WallViolation::LimitZeroNotAllowed);
+324	        }
+325	        match &*query.body {
+326	            SetExpr::Select(select) => {
+327	                self.check_select(select, v);
+328	            }
+329	            SetExpr::Query(subquery) => {
+330	                self.check_query(subquery, v);
+331	            }
+332	            SetExpr::SetOperation {
+333	                op, left, right, ..
+334	            } => {
+335	                if *op == SetOperator::Intersect && !self.config.intersect_allow {
+336	                    Self::push_unique(
+337	                        v,
+338	                        WallViolation::OperationNotAllowed("INTERSECT".to_owned()),
+339	                    );
+340	                }
+341	                if let SetExpr::Select(l) = &**left {
+342	                    self.check_select(l, v);
+343	                }
+344	                if let SetExpr::Select(r) = &**right {
+345	                    self.check_select(r, v);
+346	                }
+347	            }
+348	            _ => {}
+349	        }
+350	    }
+351	
+352	    fn check_select(&self, select: &Select, v: &mut Vec<WallViolation>) {
+353	        if !self.config.select_all_column_allow
+
+... (gap) ...
+
+391	    }
+392	
+393	    /// 对可选条件表达式执行 Java `WallVisitorUtils#checkCondition` 语义检查。
+394	    fn check_condition_opt(&self, expression: Option<&Expr>, v: &mut Vec<WallViolation>) {
+395	        if let Some(expression) = expression {
+396	            self.check_condition(expression, v);
+397	        }
+398	    }
+399	
+400	    /// 迁移 Java `getConditionValue`/`getValue_and` 的条件语义检查族。
+401	    ///
+
+... (gap: check_condition (crates/druid/src/sql/wall.rs:406)) ...
+
+496	    /// 检查写入目标是否命中只读表清单。
+497	    ///
+498	    /// 对应 Java `WallVisitorUtils#checkReadOnly` + `WallConfig#isReadOnly`。
+499	    fn check_read_only(&self, name: &ObjectName, v: &mut Vec<WallViolation>) {
+500	        let table = simple_name(name);
+501	        if table.is_empty() {
+502	            return;
+503	        }
+504	        if self
+505	            .config
+506	            .read_only_tables
+507	            .iter()
+508	            .any(|deny| deny.eq_ignore_ascii_case(&table))
+509	        {
+510	            Self::push_unique(v, WallViolation::ReadOnlyTable(name.to_string()));
+511	        }
+512	    }
+513	
+514	    fn check_from_table(&self, from: &FromTable, v: &mut Vec<WallViolation>) {
+515	        let tables = match from {
+516	            FromTable::WithFromKeyword(t) | FromTable::WithoutKeyword(t) => t,
+517	        };
+518	        for twj in tables {
+519	            self.check_table_factor(&twj.relation, v);
+520	        }
+521	    }
+522	
+523	    fn check_table_factor(&self, factor: &TableFactor, v: &mut Vec<WallViolation>) {
+524	        match factor {
+525	            TableFactor::Table { name, .. } => {
+526	                self.check_object_name(name, v);
+527	            }
+528	            TableFactor::Derived { subquery, .. } => {
+529	                self.check_query(subquery, v);
+530	            }
+531	            _ => {}
+532	        }
+533	    }
+534	
+535	    fn check_object_name(&self, name: &ObjectName, v: &mut Vec<WallViolation>) {
+536	        let name_str = name.to_string().to_ascii_lowercase();
+537	        let segments = name_str
+538	            .split('.')
+539	            .map(|segment| segment.trim_matches(['`', '"', '[', ']']))
+540	            .collect::<Vec<_>>();
+541	        if self.config.schema_check && segments.len() > 1 {
+542	            let schema = segments[..segments.len() - 1].join(".");
+543	            if self
+544	                .config
+545	                .deny_schemas
+546	                .iter()
+547	                .any(|deny| schema.eq_ignore_ascii_case(deny))
+548	            {
+549	                Self::push_unique(v, WallViolation::DeniedSchema(schema));
+550	            }
+551	        }
+552	        if self.config.object_check {
+553	            for deny in &self.config.deny_objects {
+554	                if name_str.eq_ignore_ascii_case(deny) {
+555	                    Self::push_unique(v, WallViolation::DeniedObject(name_str.clone()));
+556	                }
+557	            }
+558	        }
+559	        if self.config.table_check {
+560	            let table = segments.last().copied().unwrap_or(name_str.as_str());
+561	            for deny in &self.config.deny_tables {
+562	                if table.eq_ignore_ascii_case(deny) {
+563	                    Self::push_unique(v, WallViolation::DeniedTable(name_str.clone()));
+564	                }
+565	            }
+566	        }
+567	    }
+568	
+569	    fn push_unique(violations: &mut Vec<WallViolation>, violation: WallViolation) {
+570	        if !violations.contains(&violation) {
+571	            violations.push(violation);
+572	        }
+573	    }
+574	
+575	    fn collect_wall_context_warnings(statement: &Statement) {
+576	        let Some(context) = WallContext::current() else {
+577	            return;
+578	        };
+579	        let mut context = context.lock();
+580	        match statement {
+581	            Statement::Update {
+582	                selection: None, ..
+583	            } => context.increment_update_none_condition_warnings(),
+584	            Statement::Delete(delete)
+585	                if delete.selection.is_none()
+586	                    && delete.using.is_none()
+587	                    && !from_has_join(&delete.from) =>
+588	            {
+589	                context.increment_delete_none_condition_warnings();
+590	            }
+591	            _ => {}
+592	        }
+593	
+594	        let _: ControlFlow<()> = visit_expressions(statement, |expression| {
+595	            if let Expr::Like { expr, pattern, .. } = expression {
+596	                if is_number_literal(expr) || is_number_literal(pattern) {
+597	                    context.increment_like_number_warnings();
+598	                }
+599	            }
+600	            ControlFlow::Continue(())
+601	        });
+602	    }
+603	
+604	    fn collect_comment_warnings(&self, sql: &str) {
+605	        let Some(context) = WallContext::current() else {
+606	            return;
+607	        };
+608	        let dialect = SqlUtils::dialect(self.db_type());
+609	        let Ok(tokens) = Tokenizer::new(dialect.as_ref(), sql).tokenize() else {
+610	            return;
+611	        };
+612	        let mut previous = None;
+613	        let mut count = 0_u32;
+614	        for token in tokens {
+615	            match &token {
+616	                Token::Whitespace(
+617	                    Whitespace::SingleLineComment { .. } | Whitespace::MultiLineComment(_),
+618	                ) => {
+619	                    if previous
+620	                        .as_ref()
+621	                        .is_some_and(|previous| !comment_is_accepted_after(previous))
+622	                    {
+623	                        count = count.wrapping_add(1);
+624	                    }
+625	                }
+626	                Token::Whitespace(_) | Token::EOF => {}
+627	                _ => previous = Some(token),
+628	            }
+629	        }
+630	        let mut context = context.lock();
+631	        for _ in 0..count {
+632	            context.increment_comment_count();
+633	        }
+634	    }
+635	
+636	    fn collect_update_check_items(
+637	        &self,
+```
+
+**`crates/druid-rdbc/src/governance/wall/wall_config.rs`** — build(method), calls(calls), references(references), add_update_check_columns(method), builder(method), default(calls), default(method), instantiates(instantiates), is_update_check_table(method), load_config(calls), +10 more
+
+```rust
+14	/// 字段位按 Java `WallConfig` 一一保留（40+ 布尔位），不做拆分。
+15	#[allow(clippy::struct_excessive_bools)]
+16	#[derive(Clone)]
+17	pub struct WallConfig {
+18	    pub none_base_statement_allow: bool,
+19	    pub call_allow: bool,
+20	    pub select_allow: bool,
+21	    pub select_all_column_allow: bool,
+22	    pub select_into_allow: bool,
+23	    pub select_into_outfile_allow: bool,
+24	    pub select_union_check: bool,
+25	    pub select_minus_check: bool,
+26	    pub select_except_check: bool,
+27	    pub select_intersect_check: bool,
+28	    pub insert_allow: bool,
+29	    pub update_allow: bool,
+30	    pub delete_allow: bool,
+31	    pub drop_table_allow: bool,
+32	    pub truncate_allow: bool,
+33	    pub alter_table_allow: bool,
+34	    pub create_table_allow: bool,
+35	    pub rename_table_allow: bool,
+36	    pub lock_table_allow: bool,
+37	    pub block_allow: bool,
+38	    pub commit_allow: bool,
+39	    pub rollback_allow: bool,
+40	    pub use_allow: bool,
+41	    pub show_allow: bool,
+42	    pub describe_allow: bool,
+43	    pub start_transaction_allow: bool,
+44	    pub set_allow: bool,
+45	    pub merge_allow: bool,
+46	    pub minus_allow: bool,
+47	    pub intersect_allow: bool,
+48	    pub replace_allow: bool,
+49	    /// Rust 兼容字段；精确对应 Java `updateWhereNoneCheck`。
+50	    pub update_must_have_where: bool,
+51	    /// Rust 兼容字段；精确对应 Java `deleteWhereNoneCheck`。
+52	    pub delete_must_have_where: bool,
+53	    pub select_where_alway_true_check: bool,
+54	    pub select_having_alway_true_check: bool,
+55	    pub update_where_alway_true_check: bool,
+56	    pub delete_where_alway_true_check: bool,
+57	    pub condition_and_alway_true_allow: bool,
+58	    pub condition_and_alway_false_allow: bool,
+59	    pub condition_double_const_allow: bool,
+60	    pub condition_like_true_allow: bool,
+61	    pub condition_op_xor_allow: bool,
+62	    pub condition_op_bitwise_allow: bool,
+63	    pub case_condition_const_allow: bool,
+64	    pub multi_statement_allow: bool,
+65	    pub hint_allow: bool,
+66	    pub limit_zero_allow: bool,
+67	    pub comment_allow: bool,
+68	    pub strict_syntax_check: bool,
+69	    pub const_arithmetic_allow: bool,
+70	    pub schema_check: bool,
+71	    pub table_check: bool,
+72	    pub function_check: bool,
+73	    pub object_check: bool,
+74	    pub variant_check: bool,
+75	    pub must_parameterized: bool,
+76	    pub do_privileged_allow: bool,
+77	    pub metadata_allow: bool,
+78	    pub wrap_allow: bool,
+79	    pub complete_insert_values_check: bool,
+80	    pub insert_values_check_size: i32,
+81	    pub select_limit: i32,
+82	    pub dir: Option<String>,
+83	    pub inited: bool,
+84	    pub deny_tables: Vec<String>,
+85	    pub deny_functions: Vec<String>,
+86	    pub deny_schemas: Vec<String>,
+87	    pub deny_variants: Vec<String>,
+88	    pub deny_objects: Vec<String>,
+89	    pub permit_tables: Vec<String>,
+90	    pub permit_functions: Vec<String>,
+91	    pub permit_schemas: Vec<String>,
+92	    pub permit_variants: Vec<String>,
+93	    pub read_only_tables: Vec<String>,
+94	    pub select_white_list: bool,
+95	    pub function_white_list: bool,
+96	    pub schema_white_list: bool,
+97	    pub tenant_column: String,
+98	    pub tenant_table_pattern: String,
+99	    tenant_call_back: Arc<RwLock<Option<Arc<dyn TenantCallBack>>>>,
+100	    update_check_columns: Arc<RwLock<IndexMap<String, IndexSet<String>>>>,
+101	    update_check_handler: Arc<RwLock<Option<Arc<dyn WallUpdateCheckHandler>>>>,
+102	}
+103	
+104	impl Default for WallConfig {
+105	    fn default() -> Self {
+
+... (gap) ...
+
+181	            select_white_list: false,
+182	            function_white_list: false,
+183	            schema_white_list: false,
+184	            tenant_column: String::new(),
+185	            tenant_table_pattern: String::new(),
+186	            tenant_call_back: Arc::new(RwLock::new(None)),
+187	            update_check_columns: Arc::new(RwLock::new(IndexMap::new())),
+188	            update_check_handler: Arc::new(RwLock::new(None)),
+189	        }
+190	    }
+191	}
+192	
+193	pub struct WallConfigBuilder(WallConfig);
+194	
+195	impl WallConfig {
+196	    /// 创建 builder。
+197	    #[must_use]
+198	    pub fn builder() -> WallConfigBuilder {
+199	        WallConfigBuilder(WallConfig::default())
+200	    }
+201	
+202	    /// 使用 Java Druid 内置规则目录创建配置。
+203	    ///
+204	    /// 对应 Java：`new WallConfig(String)`。目录末尾 `/` 会被移除，随后按
+205	    /// Java 固定顺序合并 deny、readonly 与 permit 文件。Rust 没有
+206	    /// ClassLoader；crate 自带资源就是 canonical classpath 基线。
+207	    #[must_use]
+208	    pub fn with_config_dir(dir: impl Into<String>) -> Self {
+209	        let mut config = Self::default();
+210	        config.load_config(dir);
+211	        config
+212	    }
+213	
+214	    /// 重新加载指定内置规则目录。
+215	    ///
+
+... (gap: load_config (crates/druid-rdbc/src/governance/wall/wall_config.rs:217)) ...
+
+249	    ///
+250	    /// 对应 Java：`WallConfig#addUpdateCheckColumns(String)`。格式不是严格两个
+251	    /// 片段时静默忽略；表名和列名去除一层 SQL 引号并转换为小写。
+252	    pub fn add_update_check_columns(&self, column_info: &str) {
+253	        let mut items = column_info.split('.');
+254	        let Some(table) = items.next() else {
+255	            return;
+256	        };
+257	        let Some(column) = items.next() else {
+258	            return;
+259	        };
+260	        if items.next().is_some() {
+261	            return;
+262	        }
+263	        let table = normalize_identifier(table);
+264	        let column = normalize_identifier(column);
+265	        self.update_check_columns
+266	            .write()
+267	            .entry(table)
+268	            .or_default()
+269	            .insert(column);
+270	    }
+271	
+272	    /// 返回表是否配置了 UPDATE 检查列。
+273	    ///
+274	    /// 对应 Java：`WallConfig#isUpdateCheckTable(String)`。
+275	    #[must_use]
+276	    pub fn is_update_check_table(&self, table_name: &str) -> bool {
+277	        self.update_check_columns
+278	            .read()
+279	            .contains_key(&normalize_identifier(table_name))
+280	    }
+281	
+282	    /// 返回表的有序 UPDATE 检查列。
+283	    ///
+284	    /// 对应 Java：`WallConfig#getUpdateCheckTable(String)`；Java 使用
+285	    /// `LinkedHashSet`，因此 Rust 使用 `IndexSet` 保留首列选择语义。
+286	    #[must_use]
+287	    pub fn update_check_table(&self, table_name: &str) -> Option<IndexSet<String>> {
+288	        self.update_check_columns
+289	            .read()
+290	            .get(&normalize_identifier(table_name))
+291	            .cloned()
+292	    }
+293	
+294	    /// 返回 UPDATE 检查器。
+295	    ///
+296	    /// 对应 Java：`WallConfig#getUpdateCheckHandler()`。
+297	    #[must_use]
+298	    pub fn update_check_handler(&self) -> Option<Arc<dyn WallUpdateCheckHandler>> {
+299	        self.update_check_handler.read().clone()
+300	    }
+301	
+302	    /// 设置 UPDATE 检查器。
+303	    ///
+304	    /// 对应 Java：`WallConfig#setUpdateCheckHandler(WallUpdateCheckHandler)`。
+305	    pub fn set_update_check_handler(
+306	        &self,
+307	        update_check_handler: Option<Arc<dyn WallUpdateCheckHandler>>,
+308	    ) {
+309	        *self.update_check_handler.write() = update_check_handler;
+310	    }
+311	
+312	    /// 返回多租户回调。
+313	    ///
+314	    /// 对应 Java：`WallConfig#getTenantCallBack()`。
+315	    #[must_use]
+316	    pub fn tenant_call_back(&self) -> Option<Arc<dyn TenantCallBack>> {
+317	        self.tenant_call_back.read().clone()
+318	    }
+319	
+320	    /// 设置多租户回调。
+321	    ///
+322	    /// 对应 Java：`WallConfig#setTenantCallBack(TenantCallBack)`。
+323	    pub fn set_tenant_call_back(&self, tenant_call_back: Option<Arc<dyn TenantCallBack>>) {
+324	        *self.tenant_call_back.write() = tenant_call_back;
+325	    }
+326	}
+327	
+328	impl WallConfigBuilder {
+```
+
+**Not shown above — explore these names for their source**
+
+- crates/druid/src/sql/wall_provider.rs: config:114, WallProvider:61, check_internal:250, new:82, function_stat_values:454, black_list_hit_count:614, +9 more
+- crates/druid-metrics/src/runtime.rs: config:264, DruidMetricsRuntime:23, start_with_grpc:45, start:39, drop:275, self_metrics:269, +3 more
+- crates/druid/src/sql/lexer/scan_a.rs: config:203, new:6, is_enabled:218, config_lexer_feature:223, from_rdbc_string:22
+- crates/druid/src/sql/wall_visitor.rs: config:19, WallVisitor:11, provider:16, set_sql_end_of_comment:42, db_type:13, update_check_items:48, +7 more
+- crates/druid/src/sql/wall_visitor_utils.rs: tenant_value:181, tenant_column:165, rewrite_insert:122, rewrite_select:64, rewrite_select_set_expr:49, rewrite_update:99, +2 more
+- crates/druid/src/sql/wall_filter.rs: before_sql:161, result_set_column_mappings:229, check_metadata_allowed:347, standard_result_set_next:534, create_provider:49, with_config:41
+- crates/druid/src/sql/sql_parser_feature.rs: config:129, SqlParserFeature:10, mask:113, of_nullable:149, of:141, java_name:155, +3 more
+- crates/druid/src/sql/wall_visitor_base.rs: check_virtual_tables:91, check_common:38, check_deny_variants:68
+- crates/druid-admin/web/src/views/WallView.vue: wall:9, WallView:1, error:11, counters:15, loading:10, beginRequest:13, +3 more
+- ... and 36 more files
+
+---
+> **Verbatim source for 2 files is included above — treat it as already Read.** Trimmed for size: `wall.rs`, `wall_config.rs`; gap markers and file headers name what was elided. For those, or anything under "Not shown above", make ANOTHER codegraph_explore with those exact names instead of reading the files — it returns their source with line numbers.

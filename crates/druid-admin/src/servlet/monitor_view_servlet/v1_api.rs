@@ -4,8 +4,8 @@
 //! 分离前端不应为此逐个特判。`/druid/api/v1` 提供一套一致的契约：
 //! 字段一律 camelCase，错误一律用 HTTP 状态码表达。
 //!
-//! 数据来源与 Java 兼容路由一致：远端优先、仓库兜底，
-//! 两者不会给出互相矛盾的结论。
+//! 同时读取远端与推送仓库，逐来源保留字段存在性和失败信息。
+//! Java 兼容路由继续保留原先远端优先的读取语义。
 
 use std::collections::HashMap;
 
@@ -15,8 +15,8 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::{json, Value};
 
+use super::v1_snapshot as snapshot;
 use crate::model::dto::{DataSourceContent, SqlListContent};
-use crate::service::StatQuery;
 
 /// 管理 API 的版本。
 pub const API_VERSION: &str = "v1";
@@ -30,7 +30,7 @@ fn v<T: serde::Serialize>(value: &T) -> Value {
 ///
 /// Java 兼容路由必须保持 PascalCase 字段名，因此这里做一次显式映射。
 /// 用 `serde_json::Map` 逐项插入（`json!` 宏超过约四十个字段会爆递归上限）。
-fn sql_row(stat: &SqlListContent) -> Value {
+pub(super) fn sql_row(stat: &SqlListContent) -> Value {
     let mut row = serde_json::Map::new();
     let pairs: [(&str, Value); 45] = [
         ("id", v(&stat.id)),
@@ -94,33 +94,11 @@ fn sql_row(stat: &SqlListContent) -> Value {
     Value::Object(row)
 }
 
-/// 构造一个 camelCase 的数据源摘要。
-fn datasource_summary(source: &DataSourceContent) -> Value {
-    json!({
-        "serviceId": source.service_id,
-        "serviceName": source.service_name,
-        "identity": source.identity,
-        "name": source.name,
-        "dbType": source.db_type,
-        "driverClassName": source.driver_class_name,
-        "url": source.url,
-        "userName": source.user_name,
-        "activeCount": source.active_count,
-        "poolingCount": source.pooling_count,
-        "maxActive": source.max_active,
-        "waitThreadCount": source.wait_thread_count,
-        "executeCount": source.execute_count,
-        "errorCount": source.error_count,
-        "commitCount": source.commit_count,
-        "rollbackCount": source.rollback_count,
-    })
-}
-
 /// 把 Java 形状的数据源完整配置映射为 camelCase 详情。
 ///
 /// Java 的 datasource 页展示全部 ~74 个字段；版本化 API 的详情路由
 /// 原样保留这些配置，控制台据此渲染完整面板。
-fn datasource_detail(source: &DataSourceContent) -> Value {
+pub(super) fn datasource_detail(source: &DataSourceContent) -> Value {
     let mut row = serde_json::Map::new();
     let pairs: Vec<(&str, Value)> = vec![
         ("serviceId", v(&source.service_id)),
@@ -241,186 +219,148 @@ fn datasource_detail(source: &DataSourceContent) -> Value {
     Value::Object(row)
 }
 
-/// `GET /druid/api/v1/basic` —— Admin 自身的运行信息。
+/// 返回真实版本、来源与本次读取的数据总量。
 pub(crate) async fn basic(State(state): State<super::MonitorViewServlet>) -> Response {
-    let rows = state
-        .backend
-        .source()
-        .datasource_rows()
-        .await
-        .unwrap_or_default();
-    let mut drivers: Vec<String> = rows.iter().filter_map(|c| c.db_type.clone()).collect();
+    let data = snapshot::load(state.backend.source(), false).await;
+    let sql = snapshot::load(state.backend.source(), true).await;
+    let mut drivers: Vec<String> = data
+        .rows
+        .iter()
+        .filter_map(|row| row["dbType"].as_str().map(str::to_owned))
+        .collect();
     drivers.sort();
     drivers.dedup();
-    let sql_count = state
-        .backend
-        .source()
-        .sql_rows(&StatQuery::default())
-        .await
-        .map(|rows| rows.len())
-        .unwrap_or(0);
-    Json(json!({
-        "apiVersion": API_VERSION,
-        "version": env!("CARGO_PKG_VERSION"),
-        "drivers": drivers,
-        "datasourceCount": rows.len(),
-        "sqlCount": sql_count,
-        "backend": if state.backend.source().has_remote() { "poll" } else { "push" },
-    }))
-    .into_response()
+    let backend = if state.backend.source().has_remote() {
+        if state.backend.source().repository_view().is_empty() {
+            "poll"
+        } else {
+            "mixed"
+        }
+    } else {
+        "push"
+    };
+    let body = json!({"apiVersion": API_VERSION, "version": env!("CARGO_PKG_VERSION"),
+        "datasourceCount": data.rows.len(), "sqlCount": sql.rows.len(), "drivers": drivers, "backend": backend, "sqlTextVisible": !state.redaction_policy.is_enabled()});
+    let combined = snapshot::Snapshot {
+        rows: Vec::new(),
+        failures: data.failures.into_iter().chain(sql.failures).collect(),
+        successful: data.successful + sql.successful,
+    };
+    combined.response(body)
 }
 
-/// `GET /druid/api/v1/datasources` —— 数据源列表。
-pub(crate) async fn datasources(State(state): State<super::MonitorViewServlet>) -> Response {
-    let rows = state
-        .backend
-        .source()
-        .datasource_rows()
-        .await
-        .unwrap_or_default();
-    Json(json!({
-        "apiVersion": API_VERSION,
-        "datasources": rows.iter().map(datasource_summary).collect::<Vec<Value>>(),
-    }))
-    .into_response()
+/// 列表携带来源及字段存在性；旧 camelCase 数值字段保持兼容。
+pub(crate) async fn datasources(
+    State(state): State<super::MonitorViewServlet>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    let mut data = snapshot::load(state.backend.source(), false).await;
+    data.rows.retain(|row| snapshot::matches(row, &params));
+    data.response(json!({"apiVersion": API_VERSION, "datasources": data.rows}))
 }
 
-/// `GET /druid/api/v1/datasources/{identity}` —— 单个数据源。
+/// 带 serviceId 精确定位；裸数值身份不唯一时拒绝选取首条。
 pub(crate) async fn datasource(
     State(state): State<super::MonitorViewServlet>,
     Path(identity): Path<i64>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Response {
-    let rows = state
-        .backend
-        .source()
-        .datasource_rows()
-        .await
-        .unwrap_or_default();
-    match rows.iter().find(|content| content.identity == identity) {
-        Some(content) => Json(json!({
-            "apiVersion": API_VERSION,
-            "datasource": datasource_detail(content),
-        }))
-        .into_response(),
-        None => (StatusCode::NOT_FOUND, "no datasource matches the identity").into_response(),
+    let data = snapshot::load(state.backend.source(), false).await;
+    let rows: Vec<&Value> = data
+        .rows
+        .iter()
+        .filter(|row| row["identity"] == identity && snapshot::matches(row, &params))
+        .collect();
+    match rows.as_slice() {
+        [row] => data.response(json!({"apiVersion": API_VERSION, "datasource": row})),
+        [] if data.successful == 0 && !data.failures.is_empty() => data.response(json!({})),
+        [] => snapshot::error(StatusCode::NOT_FOUND, "未找到数据源"),
+        _ => snapshot::error(StatusCode::CONFLICT, "数据源身份不唯一，请指定来源"),
     }
 }
 
-/// `GET /druid/api/v1/sql` —— SQL 统计，支持排序与分页。
+/// SQL 先筛选再稳定排序与有界分页；缺失指标始终排在最后。
 pub(crate) async fn sql_list(
     State(state): State<super::MonitorViewServlet>,
-    Query(parameters): Query<HashMap<String, String>>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Response {
-    let order_by = parameters
-        .get("orderBy")
-        .cloned()
-        .unwrap_or_else(|| "executeCount".to_owned());
-    let descending = parameters
-        .get("orderType")
-        .is_some_and(|value| value == "desc");
-    let page = parameters
+    let mut data = snapshot::load(state.backend.source(), true).await;
+    let order = params.get("orderBy").map_or("executeCount", String::as_str);
+    let descending = params.get("orderType").is_some_and(|v| v == "desc");
+    let page = params
         .get("page")
-        .and_then(|value| value.parse::<usize>().ok())
+        .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(1)
         .max(1);
-    let per_page = parameters
+    let size = params
         .get("perPageCount")
-        .and_then(|value| value.parse::<usize>().ok())
+        .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(50)
-        .max(1);
-
-    let mut rows = state
-        .backend
-        .source()
-        .sql_rows(&StatQuery {
-            service_name: parameters.get("serviceName").cloned(),
-            order_by: order_by.clone(),
-            order_type: if descending {
-                "desc".to_owned()
-            } else {
-                "asc".to_owned()
-            },
-            page,
-            per_page_count: per_page,
-        })
-        .await
-        .unwrap_or_default();
-
-    rows.sort_by(|left, right| {
-        let ordering = compare_values(&sql_row(left), &sql_row(right), &order_by);
-        if descending {
-            ordering.reverse()
-        } else {
-            ordering
-        }
+        .clamp(1, 500);
+    let min_max = params
+        .get("minMaxTimespan")
+        .and_then(|v| v.parse::<f64>().ok());
+    let search = params.get("search").map(|v| v.to_lowercase());
+    data.rows.retain(|row| {
+        snapshot::matches(row, &params)
+            && min_max.is_none_or(|min| {
+                !snapshot::unavailable(row, "maxTimespan")
+                    && row["maxTimespan"].as_f64().is_some_and(|n| n >= min)
+            })
+            && search.as_ref().is_none_or(|q| {
+                // secure 模式禁止通过查询结果推断被隐藏的原文。
+                if state.redaction_policy.is_enabled() {
+                    return false;
+                }
+                !snapshot::unavailable(row, "sql")
+                    && row["sql"]
+                        .as_str()
+                        .is_some_and(|s| s.to_lowercase().contains(q))
+            })
     });
-    let total = rows.len();
-    let from = (page - 1) * per_page;
-    let page_rows: Vec<Value> = if from >= total {
-        Vec::new()
-    } else {
-        rows.iter().skip(from).take(per_page).map(sql_row).collect()
-    };
-    Json(json!({
-        "apiVersion": API_VERSION,
-        "total": total,
-        "page": page,
-        "perPageCount": per_page,
-        "rows": page_rows,
-    }))
-    .into_response()
+    data.rows.sort_by(|a, b| {
+        let missing = snapshot::unavailable(a, order).cmp(&snapshot::unavailable(b, order));
+        if !missing.is_eq() {
+            return missing;
+        }
+        let cmp = compare_values(a, b, order);
+        (if descending { cmp.reverse() } else { cmp })
+            .then_with(|| snapshot::identity(a).cmp(&snapshot::identity(b)))
+    });
+    let total = data.rows.len();
+    let from = page.saturating_sub(1).saturating_mul(size);
+    let rows: Vec<&Value> = data.rows.iter().skip(from).take(size).collect();
+    data.response(json!({"apiVersion": API_VERSION, "total": total, "page": page, "perPageCount": size, "rows": rows}))
 }
 
-/// `GET /druid/api/v1/sql/{id}` —— 单条 SQL 统计 + 服务端解析的 parsed* 字段。
-///
-/// 语义对齐 Java 的 `sql-{id}.json`：不带 serviceId 时按 id/hash 全局查；
-/// 返回时在 camelCase 行上追加 `formattedSql` 与 `parsedTable` / `parsedFields` /
-/// `parsedConditions` / `parsedRelationships` / `parsedOrderbycolumns`。
-/// 解析失败的字段为 null，前端回退客户端简易解析。
+/// 单条 SQL 读取保留服务/池上下文和现有服务端解析结果。
 pub(crate) async fn sql_detail(
     State(state): State<super::MonitorViewServlet>,
     Path(id): Path<i64>,
-    Query(parameters): Query<HashMap<String, String>>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Response {
-    let service_filter = parameters.get("serviceId").cloned();
-    let rows = state
-        .backend
-        .source()
-        .sql_rows(&StatQuery {
-            service_name: None,
-            order_by: "id".to_owned(),
-            order_type: "asc".to_owned(),
-            page: 1,
-            per_page_count: usize::MAX,
-        })
-        .await
-        .unwrap_or_default();
-    let found = rows.iter().find(|row| {
-        let service_matches = match (&service_filter, &row.service_id) {
-            (Some(want), Some(have)) => want.as_str() == &have[..],
-            (Some(_), None) => false,
-            (None, _) => true,
-        };
-        service_matches && (row.id == id || row.hash == id)
-    });
-    match found {
-        Some(row) => {
-            let mut value = sql_row(row);
-            if let Value::Object(ref mut map) = value {
-                let stat = super::sql_parse::parse_sql_stat(row.sql.as_deref().unwrap_or_default());
-                if let Some(fields) = stat.to_json().as_object() {
-                    for (key, parsed) in fields {
-                        map.insert(key.clone(), parsed.clone());
-                    }
+    let data = snapshot::load(state.backend.source(), true).await;
+    let rows: Vec<&Value> = data
+        .rows
+        .iter()
+        .filter(|row| (row["id"] == id || row["hash"] == id) && snapshot::matches(row, &params))
+        .collect();
+    match rows.as_slice() {
+        [row] => {
+            let mut value = (*row).clone();
+            if !snapshot::unavailable(row, "sql") {
+                let parsed =
+                    super::sql_parse::parse_sql_stat(row["sql"].as_str().unwrap_or_default())
+                        .to_json();
+                if let (Some(target), Some(fields)) = (value.as_object_mut(), parsed.as_object()) {
+                    target.extend(fields.clone());
                 }
             }
-            Json(json!({
-                "apiVersion": API_VERSION,
-                "sql": value,
-            }))
-            .into_response()
+            data.response(json!({"apiVersion": API_VERSION, "sql": value}))
         }
-        None => (StatusCode::NOT_FOUND, "no sql stat matches the id").into_response(),
+        [] if data.successful == 0 && !data.failures.is_empty() => data.response(json!({})),
+        [] => snapshot::error(StatusCode::NOT_FOUND, "未找到 SQL"),
+        _ => snapshot::error(StatusCode::CONFLICT, "SQL 身份不唯一，请指定服务与数据源"),
     }
 }
 
@@ -441,12 +381,12 @@ fn compare_values(left: &Value, right: &Value, key: &str) -> std::cmp::Ordering 
     }
 }
 
-/// `GET /druid/api/v1/wall` —— SQL 防火墙统计。
-pub(crate) async fn wall(State(state): State<super::MonitorViewServlet>) -> Response {
-    match state.backend.source().wall().await {
-        Ok(wall) => Json(json!({"apiVersion": API_VERSION, "wall": wall.content})).into_response(),
-        Err(error) => (StatusCode::BAD_GATEWAY, error.to_string()).into_response(),
-    }
+/// 汇总真实 Wall 内容；来源不支持的字段不伪造零值。
+pub(crate) async fn wall(
+    State(state): State<super::MonitorViewServlet>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    super::v1_health::wall_response(state.backend.source(), &params).await
 }
 
 /// `GET /druid/api/v1/services` —— 已接入的服务。
@@ -475,6 +415,10 @@ pub(crate) async fn openapi() -> Response {
             "/druid/api/v1/wall": {"get": {"summary": "Wall statistics"}},
             "/druid/api/v1/services": {"get": {"summary": "Attached services"}},
             "/druid/api/v1/openapi.json": {"get": {"summary": "This document"}},
+            "/druid/api/v1/health": {"get": {"summary": "采集来源、仓库容量与拒绝计数"}},
+            "/druid/api/v1/history": {"get": {"summary": "有界进程内数值采样历史；serviceId、datasourceId、limit 查询"}},
+            "/druid/api/v1/datasources/{identity}/connections": {"get": {"summary": "池化连接与能力状态"}},
+            "/druid/api/v1/datasources/{identity}/stack": {"get": {"summary": "活跃连接借出堆栈"}},
         },
     }))
     .into_response()

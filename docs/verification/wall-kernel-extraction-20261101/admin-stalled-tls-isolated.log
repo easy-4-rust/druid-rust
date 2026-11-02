@@ -1,0 +1,6 @@
+
+running 1 test
+test stalled_tls_handshake_does_not_block_another_http_client ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.64s
+

@@ -1,0 +1,46 @@
+{
+  "original_requested_workspace": "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust",
+  "transferred_code_files": 44,
+  "source_bytes_match_verified_worktree": true,
+  "format_exit": 0,
+  "diff_check_exit": 0,
+  "post_transfer_targeted_tests": {
+    "passed": 43,
+    "failed": 0,
+    "ignored": 0
+  },
+  "rdbc_final_gates": [
+    {
+      "name": "rdbc-msrv-final",
+      "command": [
+        "cargo",
+        "+1.95",
+        "check",
+        "--offline",
+        "-p",
+        "druid-rdbc",
+        "--all-targets",
+        "--all-features"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "rdbc-clippy-final",
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "-p",
+        "druid-rdbc",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "whole_migration_complete": false,
+  "whole_workspace_acceptance_passed": false,
+  "review_minor_deferred": "Future added Java default fields need automatic fixture-key consumption assertion; current frozen denominator is 63."
+}

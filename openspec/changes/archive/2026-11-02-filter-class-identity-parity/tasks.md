@@ -1,0 +1,5 @@
+- [x] 冻结 Java/Rust 基线、调用链和本批次边界。
+- [x] 完成大小写敏感身份与回归矩阵。
+- [x] 运行统一批次测试、覆盖率与格式检查，记录实际结果（10 passed；FilterManager 行覆盖率 98.21%）。
+- [x] 严格 Clippy：shared_row_set 通配导入已修复；`cargo clippy -p druid-admin -p druid-rdbc --all-targets --all-features -- -D warnings -A clippy::pedantic` exit 0。
+- [x] 验证后同步规格：`openspec validate filter-class-identity-parity --strict` 通过，随后归档该 change。

@@ -1,0 +1,365 @@
+    Checking druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\.webcodex-managed-worktrees\druid-rust-f395b762\crates\druid-rdbc)
+    Checking crossbeam-utils v0.8.22
+    Checking once_cell v1.21.4
+    Checking zerocopy v0.8.56
+    Checking parking v2.2.1
+    Checking getrandom v0.2.17
+    Checking const-oid v0.9.6
+    Checking windows_x86_64_msvc v0.52.6
+    Checking event-listener v5.4.2
+    Checking zeroize v1.9.0
+    Checking typenum v1.20.1
+    Checking base64ct v1.8.3
+    Checking pem-rfc7468 v0.7.0
+    Checking generic-array v0.14.7
+    Checking event-listener-strategy v0.5.4
+    Checking windows-targets v0.52.6
+    Checking concurrent-queue v2.5.0
+    Checking fastrand v2.5.0
+    Checking flagset v0.4.7
+    Checking der v0.7.10
+    Checking linkme v0.3.37
+    Checking windows-sys v0.52.0
+    Checking rand_core v0.6.4
+    Checking errno v0.3.14
+    Checking spawns-core v1.1.2
+    Checking ahash v0.8.12
+    Checking spki v0.7.3
+    Checking futures-lite v2.6.1
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking ppv-lite86 v0.2.21
+    Checking tracing-core v0.1.36
+    Checking spin v0.9.9
+    Checking atomic-waker v1.1.2
+    Checking piper v0.2.5
+    Checking lazy_static v1.5.0
+    Checking tracing v0.1.44
+    Checking rand_chacha v0.3.1
+    Checking digest v0.10.7
+    Checking hashbrown v0.14.5
+    Checking spawns-compat v0.2.2
+    Checking rustix v1.1.4
+    Checking polling v3.11.0
+    Checking async-channel v2.5.0
+    Checking aho-corasick v1.1.5
+    Checking async-task v4.7.1
+    Checking konst_macro_rules v0.2.19
+    Checking regex-syntax v0.8.11
+    Checking regex-automata v0.4.18
+    Checking konst v0.2.20
+    Checking blocking v1.6.2
+    Checking async-select v0.3.0
+    Checking async-io v2.6.0
+    Checking spawns v0.2.6
+    Checking rand v0.8.7
+    Checking ahash v0.7.8
+    Checking pkcs8 v0.10.2
+    Checking castaway v0.2.4
+    Checking num-iter v0.1.46
+    Checking ryu v1.0.23
+    Checking asyncs-sync v0.4.0
+    Checking asyncs v0.4.0
+    Checking compact_str v0.4.1
+    Checking thiserror v1.0.69
+    Checking num-bigint-dig v0.8.6
+    Checking pkcs1 v0.7.5
+    Checking strum v0.23.0
+    Checking hashbrown v0.12.3
+    Checking num_enum v0.5.11
+    Checking async-net v2.0.0
+    Checking const_format v0.2.36
+    Checking portable-atomic v1.14.0
+    Checking regex v1.13.1
+    Checking crossbeam-epoch v0.9.20
+    Checking hashlink v0.8.4
+    Checking signature v2.2.0
+    Checking async-lock v3.4.2
+    Checking crossbeam-channel v0.5.16
+    Checking encoding_rs v0.8.35
+    Checking static_assertions v1.1.0
+    Checking inventory v0.3.24
+    Checking bit-vec v0.10.1
+    Checking subtle v2.6.1
+    Checking tagptr v0.2.0
+    Checking ignore-result v0.2.0
+    Checking either v1.17.0
+    Checking zookeeper-client v0.11.2
+    Checking moka v0.12.15
+    Checking rsa v0.9.10
+    Checking bit-set v0.11.1
+    Checking java-properties v2.0.0
+    Checking dashmap v6.2.1
+    Checking x509-cert v0.2.5
+    Checking arc-swap v1.9.2
+    Checking quick-xml v0.41.0
+    Checking deadpool-runtime v0.3.1
+    Checking tokio-stream v0.1.19
+    Checking num_cpus v1.17.0
+    Checking heck v0.5.0
+    Checking base64 v0.22.1
+    Checking druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\.webcodex-managed-worktrees\druid-rust-f395b762\crates\druid)
+error: usage of wildcard import
+ --> crates\druid\src\core\druid_pooled_callable_statement\callable_trait_impls.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{delegate_statement_state_methods, delegate_cached_statement_property_reads, Statement, DruidPooledCallableStatement, RdbcError, ResultSet, GeneratedKeys, ExecutionResult, PreparedStatement, Arc, StatementPropertyEvent, DruidPooledResultSet, CurrentResultDisposition, PreparedParameter, PreparedInputParameter, ParameterIndex, ExecOperation, ExecResult, ResultSetMetaData, ParameterMetaData, CallableStatement, CallableParameter, CallableOutParameter, CallableInputParameter, Value}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+  = note: `-D clippy::wildcard-imports` implied by `-D warnings`
+  = help: to override `-D warnings` add `#[allow(clippy::wildcard_imports)]`
+
+error: usage of wildcard import
+ --> crates\druid\src\core\druid_pooled_connection\inherent_a.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{DruidPooledConnection, DruidConnectionHolder, Arc, FilterChain, DruidConnectionReturnCallback, DruidConnectionDispositionObserver, AtomicBool, OwnerDispositionControl, StandardLogicalPolicy, now_millis, Instant, AtomicU64, HashMap, ProxyAttributes, StandardConnectionReturnCallback, DruidError, Duration, NativeExplicitReturnCallback, ProxyAttributeValue, Ordering, TransactionInfo, ConnectionRecycleDisposition, RdbcError, ExceptionSorter, FatalErrorHandler, StatsCollector}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\druid_pooled_connection\inherent_b.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{DruidPooledConnection, DruidConnectionHolder, HashMap, JsonValue, Arc, ConnectionEventListener, RdbcError, StatementEventListener, ConnectionRecycleDisposition, Ordering, catch_unwind, AssertUnwindSafe, DruidError, ConnectionEvent, Instant, SqlWarning}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\druid_pooled_connection\standard_connection.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{DruidPooledConnection, RdbcError, DruidPooledStatement, Arc, DruidExecutionFilterPolicy, PreparedStatementMethodType, PreparedStatementKey, DruidPooledCallableStatement, standard_connection_helpers, ConnectionEvent, Instant, HashMap, SqlWarning, Ordering}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\druid_pooled_connection\standard_connection_helpers.rs:5:5
+  |
+5 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{DruidPooledConnection, RdbcError, DatabaseMetaDataProxyImpl, Arc, DruidExecutionFilterPolicy, PreparedStatementMethodType, PreparedStatementKey, DruidPooledPreparedStatement, ConnectionEvent, Instant}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\druid_pooled_prepared_statement\prepared_trait_impls.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{delegate_statement_state_methods, delegate_cached_statement_property_reads, Statement, DruidPooledPreparedStatement, RdbcError, ResultSet, GeneratedKeys, ExecutionResult, PreparedStatement, Arc, StatementPropertyEvent, Ordering, DruidPooledResultSet, CurrentResultDisposition, PreparedParameter, PreparedInputParameter, ExecOperation, ExecResult, ResultSetMetaData, ParameterMetaData}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\druid_pooled_result_set\resource.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{StandardResultSetResource, ResultSet, Arc, FilterChain, ResultSetFilterContext, OnceLock, AtomicBool, Mutex, ProxyAttributes, RdbcError, Ordering, Statement, StandardResourceHandle, ResultSetMetaDataProxy, ColumnIndex, Value}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\druid_pooled_result_set\staging.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{StagedResultSet, Arc, DruidPooledStatementInner, ResultSet, DruidPooledStatement, Ordering, ResultSetFilterContext, StandardResultSetResource, DruidPooledResultSet, StagedOpenError, RdbcError, shared_state, ProxyAttributes, AtomicBool, AtomicI32, Statement, MetadataStatement}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\druid_pooled_result_set\result_set_trait.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{ResultSet, DruidPooledResultSet, RdbcError, Ordering, Arc, StandardResourceHandle, ColumnIndex, Value, ResultSetRead, Statement}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\druid_pooled_statement\standard_statement.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{Statement, DruidPooledStatement, RdbcError, CurrentResultDisposition, StatementPropertyEvent, StatementOptions, ResultSetType, ResultSetConcurrency, ResultSetHoldability, StatementMutation, Arc, PooledStatementCancellation, FetchDirection, StatementExecuteType, Instant, ExecOperation, ExecResult, DruidPooledResultSet, GeneratedKeys, ExecutionResult, DruidExecutionFilterPolicy, TrackedStatementResult, Ordering}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\filter_chain_impl\chain_a.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{FilterChainImpl, BeforeFilter, AfterFilter, Arc, ResultSetFilter, DruidError, HashMap, ConnectionFactory, DataSourceConnectionProvider, Duration, DruidPooledConnection, DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain, Connection, ConnectionCloseFilterChain, ConnectionCloseContext, SqlWarning, StandardConnectionWarningFilterChain, StandardResourceRegistry, StandardResourceAdmission, StandardLogicalPolicy, RegisteredLob, Blob, StandardConnectionLobFilterChain, Clob, NClob, ConnectionOpenResult, ConnectionOpenFilterChain, ClobProxy, ClobFilterChain, RdbcString, RdbcReader, RdbcInputStream, RdbcClob, RdbcOutputStream, RdbcWriter, ExecContext, ExecResult}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\filter_chain_impl\chain_b.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{FilterChainImpl, BatchExecContext, DruidError, BeforeFilter, Duration, AfterFilter, ConnectionEvent, ConnectionEventContext, StatementEvent, StatementEventContext, Connection, ResultSetFilter, ResultSetFilterContext, StandardResultSetFilterChain, Arc, SqlWarning, ColumnIndex}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\log_filter\options.rs:6:5
+  |
+6 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{LogFilter, Ordering, SqlFormatOption}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\standard_resource_registry\registry_a.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{StandardResourceRegistry, StandardResourceRegistryState, RdbcError, BTreeMap, Arc, StandardResourceAdmission, StandardResourceHandle, StandardResourceRegistration, StandardResourceCleanupState, Ordering, StandardResourceRegistryEntry, oneshot}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\standard_resource_registry\registry_b.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{StandardResourceRegistry, oneshot, RdbcError, Arc, Weak, StandardResourceCoordinatorGuard, Ordering, StandardResourceRegistryState, StandardResourceCoordinatorStep, StandardResourceCleanupState, StandardResourceHandle}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\xa\state_a.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{XaTransactionState, Xid, XaState, Instant, Duration, XaStateTransitionRecord, XaStateTransitionError, XaOperation}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\core\xa\state_b.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{XaTransactionState, XaStateTransitionError, XaOperation, XaState, XaStateTransitionRecord}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\pool\config\builder.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{DruidPoolBuilder, Arc, RwLock, StatsCollector, Duration, WallProvider, default_filter_manager, TracingDataSourceStatSink, FilterChain, DbType, WallFilter, non_empty_string, WallConfig, ExceptionSorter, DataSourceStatSink, ValidConnectionChecker}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\pool\config\builder_advanced.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{DruidPoolBuilder, Arc, ValidConnectionChecker, ExceptionSorter, Duration, FilterChain, DataSourceStatSink, FilterManager, trim_rdbc_string, PoolInnerConfig, AutoLoad}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\pool\druid_pool\acquire.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{DruidPool, DruidError, Ordering, Arc, remove_abandoned_leases, ConnectionCreateWorker, ConnectionCloseWorker, Duration, DruidPooledConnection, Instant, BorrowCandidate, WaitTaskRegistration, DruidConnectionHolder}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\pool\druid_pool\construct.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{DruidPool, Arc, FilterChain, ConnectionFactory, StatsCollector, WallProvider, ExceptionSorter, PoolInner, DataSourceStatSnapshotContext, AtomicBool, AtomicU64, AsyncMutex, DashMap, Notify, ConnectionCreateWorker, ConnectionCloseWorker, ValidConnectionChecker, OceanBaseValidConnectionChecker, OracleValidConnectionChecker, MySqlValidConnectionChecker, PgValidConnectionChecker, MsSqlValidConnectionChecker, MockExceptionSorter, OceanBaseOracleExceptionSorter, OracleExceptionSorter, MySqlExceptionSorter, PgExceptionSorter, PhoenixExceptionSorter, InformixExceptionSorter, SybaseExceptionSorter, Db2ExceptionSorter, DruidPoolBuilder, DruidPooledConnection, DruidError, DruidPooledConnectionOwner, Duration}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\pool\druid_pool\state.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{DruidPool, PoolState, ConnectionFactory, Ordering, DruidDataSourceStatValue, FatalErrorHandler, ExceptionSorter, DataSourceConnectionProvider, ValidConnectionChecker, DruidError, Arc, StatsCollector, WallProvider, DruidPooledConnection, remove_abandoned_leases, AsyncMutex, FilterChain, DruidConnectionHolder, AtomicBool, ActiveConnectionLease}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\pool\pool_inner\create.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{PoolInner, DruidConnectionHolder, DruidError, Ordering, ConnectionSlotReservation, CreatingTaskRegistration, Instant, Duration, ConnectionFactory, ConnectionOpenResult, ConnectionInfo, Arc, Connection, FilterChain, HashMap, DbType, RdbcUtils, JsonValue, RdbcValue, JsonNumber}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\pool\pool_inner\recycle.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{PoolInner, DruidConnectionHolder, ConnectionRecycleDisposition, CloseWorkerTerminationGuard, Ordering, Duration, Arc, ConnectionCloseCommand, RdbcError, VecDeque, DetachedHolder, FatalErrorHandler, ConnectionState}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: this `continue` expression is redundant
+   --> crates\druid\src\pool\pool_inner\recycle.rs:382:25
+    |
+382 |                         continue;
+    |                         ^^^^^^^^
+    |
+    = help: consider dropping the `continue` expression
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_continue
+    = note: `-D clippy::needless-continue` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::needless_continue)]`
+
+error: this `continue` expression is redundant
+   --> crates\druid\src\pool\pool_inner\recycle.rs:387:25
+    |
+387 |                         continue;
+    |                         ^^^^^^^^
+    |
+    = help: consider dropping the `continue` expression
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_continue
+
+error: this `continue` expression is redundant
+   --> crates\druid\src\pool\pool_inner\recycle.rs:392:25
+    |
+392 |                         continue;
+    |                         ^^^^^^^^
+    |
+    = help: consider dropping the `continue` expression
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_continue
+
+error: usage of wildcard import
+ --> crates\druid\src\pool\pool_inner\state.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{PoolInner, Arc, ConnectionFactory, StatsCollector, VecDeque, Notify, AtomicUsize, AtomicU64, AtomicBool, FatalErrorState, CreateFailureState, PreparedStatementCacheStats, Semaphore, mpsc, ConnectionCloseCommand, watch, FilterChain, Ordering, DruidError, DruidConnectionHolder, Duration, FatalShrinkSnapshot, SystemTime, UNIX_EPOCH, PoolStatSnapshot, Connection, ValidConnectionCheckerAdapter}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\sql\lexer\scan_a.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{Lexer, RdbcString, DbType, KeywordSet, LayoutCharacters, DialectFeature, Token, Keywords, DEFAULT_KEYWORDS, SQLITE_KEYWORDS, DM_KEYWORDS, Arc, CommentHandler, SqlParserFeature, LexerFeature, DialectFeatureValue, LexerSavePoint, LexerError, CharTypes, ParserException}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\sql\lexer\scan_b.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{Lexer, SqlInsertNumber, ParserException, Token, BigInt, FNV_BASIC, CharTypes, fnv_add, fnv_units, RdbcString, LayoutCharacters, LexerFeature, LexerError, NotAllowCommentException, CommentHandler}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+ --> crates\druid\src\sql\wall\rules.rs:1:5
+  |
+1 | use super::*;
+  |     ^^^^^^^^ help: try: `super::{FromTable, Token, Expr, Value, ObjectName, BinaryOperator, ControlFlow, visit_expressions, Statement, HashMap}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: usage of wildcard import
+  --> crates\druid\src\sql\wall.rs:21:5
+   |
+21 | use rules::*;
+   |     ^^^^^^^^ help: try: `rules::{contains_disallowed_comment, is_always_true, tables_of, is_zero_literal, split_boolean_and, const_bool_value, is_const_expr, is_const_bool_true_expr, simple_name, from_has_join, is_number_literal, comment_is_accepted_after, placeholder_indices, expression_contains_column, is_literal_or_placeholder, expression_is_column, expression_parameter_index}`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_imports
+
+error: could not compile `druid` (lib) due to 32 previous errors

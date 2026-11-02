@@ -35,6 +35,8 @@ mod monitor_view_a;
 mod monitor_view_b;
 mod sql_parse;
 mod v1_api;
+mod v1_health;
+mod v1_snapshot;
 
 /// Session expiry duration (2 hours, matching typical Java Servlet session).
 const SESSION_TTL: Duration = Duration::from_secs(7200);

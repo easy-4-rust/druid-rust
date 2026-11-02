@@ -1,0 +1,18 @@
+warning: druid-admin@0.0.0-design: embedded 25 console asset(s) from E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-admin\web/dist
+   Compiling druid-admin v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-admin)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.41s
+     Running tests\admin_v1_api_test.rs (D:/cargo-target\debug\deps\admin_v1_api_test-1cf6eb69c4cbfeed.exe)
+
+running 9 tests
+test v1_services_lists_the_attached_services ... ok
+test v1_basic_reports_the_api_version_and_the_backend ... ok
+test v1_datasource_unknown_identity_answers_not_found ... ok
+test v1_sql_pages_with_the_requested_window ... ok
+test v1_datasource_returns_the_matching_datasource ... ok
+test v1_wall_reports_the_aggregated_counters ... ok
+test v1_openapi_document_lists_every_served_route ... ok
+test v1_datasources_use_camel_case_and_no_java_envelope ... ok
+test v1_sql_sorts_and_pages ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+

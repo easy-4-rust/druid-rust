@@ -17,7 +17,9 @@ const DIST: &str = "web/dist";
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("manifest dir"));
-    let dist = manifest_dir.join(DIST);
+    println!("cargo:rerun-if-env-changed=DRUID_CONSOLE_DIST");
+    let dist =
+        env::var_os("DRUID_CONSOLE_DIST").map_or_else(|| manifest_dir.join(DIST), PathBuf::from);
     println!("cargo:rerun-if-changed={}", dist.display());
     println!("cargo:rerun-if-changed=build.rs");
 
@@ -39,7 +41,7 @@ fn main() {
     println!(
         "cargo:warning=embedded {} console asset(s) from {}",
         assets.len(),
-        DIST
+        dist.display()
     );
 }
 

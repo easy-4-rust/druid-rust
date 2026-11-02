@@ -1,0 +1,1065 @@
+info: cargo-llvm-cov currently setting cfg(coverage); you can opt-out it by passing --no-cfg-coverage
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling cfg-if v1.0.4
+   Compiling serde_core v1.0.229
+   Compiling pin-project-lite v0.2.17
+   Compiling serde v1.0.229
+   Compiling windows-link v0.2.1
+   Compiling version_check v0.9.5
+   Compiling scopeguard v1.2.0
+   Compiling autocfg v1.5.1
+   Compiling once_cell v1.21.4
+   Compiling futures-core v0.3.33
+   Compiling allocator-api2 v0.2.21
+   Compiling parking_lot_core v0.9.12
+   Compiling equivalent v1.0.2
+   Compiling libm v0.2.16
+   Compiling stable_deref_trait v1.2.1
+   Compiling memchr v2.8.3
+   Compiling crossbeam-utils v0.8.22
+   Compiling zerocopy v0.8.56
+   Compiling foldhash v0.2.0
+   Compiling const-oid v0.9.6
+   Compiling bytes v1.12.1
+   Compiling typenum v1.20.1
+   Compiling windows-sys v0.61.2
+   Compiling futures-io v0.3.33
+   Compiling writeable v0.6.3
+   Compiling lock_api v0.4.14
+   Compiling litemap v0.8.2
+   Compiling parking v2.2.1
+   Compiling tracing-core v0.1.36
+   Compiling getrandom v0.4.3
+   Compiling generic-array v0.14.7
+   Compiling utf8_iter v1.0.4
+   Compiling icu_normalizer_data v2.2.0
+   Compiling hashbrown v0.17.1
+   Compiling icu_properties_data v2.2.0
+   Compiling rand_core v0.10.1
+   Compiling num-traits v0.2.19
+   Compiling subtle v2.6.1
+   Compiling slab v0.4.12
+   Compiling futures-sink v0.3.33
+   Compiling cpufeatures v0.3.0
+   Compiling itoa v1.0.18
+   Compiling log v0.4.33
+   Compiling event-listener v5.4.2
+   Compiling bigdecimal v0.4.10
+   Compiling getrandom v0.2.17
+   Compiling zmij v1.0.23
+   Compiling futures-task v0.3.33
+   Compiling serde_json v1.0.151
+   Compiling indexmap v2.14.0
+   Compiling percent-encoding v2.3.2
+   Compiling ahash v0.8.12
+   Compiling futures-channel v0.3.33
+   Compiling chacha20 v0.10.2
+   Compiling mio v1.2.2
+   Compiling socket2 v0.6.5
+   Compiling windows_x86_64_msvc v0.52.6
+   Compiling base64ct v1.8.3
+   Compiling zeroize v1.9.0
+   Compiling rand_core v0.6.4
+   Compiling form_urlencoded v1.2.2
+   Compiling spin v0.9.9
+   Compiling flagset v0.4.7
+   Compiling regex-syntax v0.8.11
+   Compiling rand v0.10.2
+   Compiling linkme-impl v0.3.37
+   Compiling rustversion v1.0.23
+   Compiling shlex v2.0.1
+   Compiling syn v2.0.119
+   Compiling syn v3.0.3
+   Compiling pem-rfc7468 v0.7.0
+   Compiling find-msvc-tools v0.1.9
+   Compiling syn v1.0.109
+   Compiling jiff-tzdb v0.1.8
+   Compiling linkme v0.3.37
+   Compiling concurrent-queue v2.5.0
+   Compiling event-listener-strategy v0.5.4
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling bitflags v2.13.1
+   Compiling fastrand v2.5.0
+   Compiling vcpkg v0.2.15
+   Compiling jiff-core v0.1.0
+   Compiling num-integer v0.1.46
+   Compiling uuid v1.24.0
+   Compiling pkg-config v0.3.33
+   Compiling jiff-tzdb-platform v0.1.3
+   Compiling digest v0.10.7
+   Compiling lazy_static v1.5.0
+   Compiling base64 v0.22.1
+   Compiling windows-targets v0.52.6
+   Compiling foldhash v0.1.5
+   Compiling ryu v1.0.23
+   Compiling rustix v1.1.4
+   Compiling num-bigint-dig v0.8.6
+   Compiling windows_x86_64_msvc v0.48.5
+   Compiling num-bigint v0.4.8
+   Compiling cc v1.4.0
+   Compiling windows-sys v0.52.0
+   Compiling thiserror v2.0.19
+   Compiling toml_datetime v0.6.11
+   Compiling bit-vec v0.10.1
+   Compiling winnow v0.5.40
+   Compiling cpufeatures v0.2.17
+   Compiling hashbrown v0.15.5
+   Compiling num-iter v0.1.46
+   Compiling futures-lite v2.6.1
+   Compiling async-io v2.6.0
+   Compiling ahash v0.7.8
+   Compiling jiff v0.2.35
+   Compiling heck v0.5.0
+   Compiling bit-set v0.11.1
+   Compiling atomic-waker v1.1.2
+   Compiling tinyvec_macros v0.1.1
+   Compiling crc-catalog v2.5.0
+   Compiling unicode-segmentation v1.13.3
+   Compiling hashlink v0.10.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling errno v0.3.14
+   Compiling piper v0.2.5
+   Compiling tinyvec v1.12.0
+   Compiling sha2 v0.10.9
+   Compiling signature v2.2.0
+   Compiling polling v3.11.0
+   Compiling crc v3.4.0
+   Compiling async-channel v2.5.0
+   Compiling hashbrown v0.14.5
+   Compiling aho-corasick v1.1.5
+   Compiling crossbeam-queue v0.3.13
+   Compiling rand_chacha v0.3.1
+   Compiling heck v0.3.3
+   Compiling portable-atomic v1.14.0
+   Compiling async-task v4.7.1
+   Compiling crossbeam-epoch v0.9.20
+   Compiling libsqlite3-sys v0.30.1
+   Compiling unicode-xid v0.2.6
+   Compiling toml_edit v0.19.15
+   Compiling konst_macro_rules v0.2.19
+   Compiling thiserror v1.0.69
+   Compiling unicode-normalization v0.1.25
+   Compiling windows-targets v0.48.5
+   Compiling const_format_proc_macros v0.2.34
+   Compiling rand v0.8.7
+   Compiling blocking v1.6.2
+   Compiling konst v0.2.20
+   Compiling castaway v0.2.4
+   Compiling hmac v0.12.1
+   Compiling atoi v2.0.0
+   Compiling tokio v1.54.1
+   Compiling unicode-bidi v0.3.18
+   Compiling synstructure v0.13.2
+   Compiling asyncs-sync v0.4.0
+   Compiling unicode-properties v0.1.4
+   Compiling hashlink v0.8.4
+   Compiling hashlink v0.9.1
+   Compiling compact_str v0.4.1
+   Compiling hkdf v0.12.4
+   Compiling regex-automata v0.4.18
+   Compiling async-net v2.0.0
+   Compiling const_format v0.2.36
+   Compiling stringprep v0.1.5
+   Compiling hashbrown v0.12.3
+   Compiling windows-sys v0.48.0
+   Compiling md-5 v0.10.6
+   Compiling proc-macro-crate v1.3.1
+   Compiling async-lock v3.4.2
+   Compiling crossbeam-channel v0.5.16
+   Compiling strum_macros v0.23.1
+   Compiling home v0.5.12
+   Compiling encoding_rs v0.8.35
+   Compiling toasty-macros v0.9.0
+   Compiling hex v0.4.3
+   Compiling static_assertions v1.1.0
+   Compiling byteorder v1.5.0
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling tokio-stream v0.1.19
+   Compiling dotenvy v0.15.7
+   Compiling whoami v1.6.1
+   Compiling xxhash-rust v0.8.18
+   Compiling inventory v0.3.24
+   Compiling tagptr v0.2.0
+   Compiling ignore-result v0.2.0
+   Compiling fallible-iterator v0.3.0
+   Compiling arc-swap v1.9.2
+   Compiling sha1 v0.10.7
+   Compiling flume v0.11.1
+   Compiling num_cpus v1.17.0
+   Compiling toasty v0.9.0
+   Compiling index_vec v0.1.4
+   Compiling by_address v1.2.1
+   Compiling etcetera v0.8.0
+   Compiling num_enum_derive v0.5.11
+   Compiling serde_derive v1.0.229
+   Compiling tokio-macros v2.7.2
+   Compiling displaydoc v0.2.7
+   Compiling async-trait v0.1.91
+   Compiling thiserror-impl v2.0.19
+   Compiling strum v0.23.0
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling zerovec-derive v0.11.3
+   Compiling tracing-attributes v0.1.31
+   Compiling futures-macro v0.3.33
+   Compiling der_derive v0.7.3
+   Compiling async-select-proc-macros v0.3.0
+   Compiling sqlparser_derive v0.2.2
+   Compiling thiserror-impl v1.0.69
+   Compiling derive-where v1.6.1
+   Compiling regex v1.13.1
+   Compiling num_enum v0.5.11
+   Compiling pluralizer v0.5.0
+   Compiling sqlparser v0.52.0 (E:\workspaces\workspace-github-easy-4-rust\.webcodex-managed-worktrees\druid-rust-f395b762\vendor\sqlparser)
+   Compiling java-properties v2.0.0
+   Compiling async-select v0.3.0
+   Compiling futures-util v0.3.33
+   Compiling spawns-core v1.1.2
+   Compiling der v0.7.10
+   Compiling zerofrom v0.1.8
+   Compiling tracing v0.1.44
+   Compiling yoke v0.8.3
+   Compiling toasty-core v0.9.0
+   Compiling zerovec v0.11.6
+   Compiling zerotrie v0.2.4
+   Compiling spki v0.7.3
+   Compiling pkcs8 v0.10.2
+   Compiling x509-cert v0.2.5
+   Compiling pkcs1 v0.7.5
+   Compiling tinystr v0.8.3
+   Compiling potential_utf v0.1.5
+   Compiling smallvec v1.15.2
+   Compiling either v1.17.0
+   Compiling chrono v0.4.45
+   Compiling serde_urlencoded v0.7.1
+   Compiling quick-xml v0.41.0
+   Compiling icu_collections v2.2.0
+   Compiling icu_locale_core v2.2.0
+   Compiling rusqlite v0.32.1
+   Compiling parking_lot v0.12.5
+   Compiling dashmap v6.2.1
+   Compiling futures-executor v0.3.33
+   Compiling futures-intrusive v0.5.0
+   Compiling moka v0.12.15
+   Compiling futures v0.3.33
+   Compiling icu_provider v2.2.0
+   Compiling rsa v0.9.10
+   Compiling icu_normalizer v2.2.0
+   Compiling icu_properties v2.2.0
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling url v2.5.8
+   Compiling spawns-compat v0.2.2
+   Compiling deadpool-runtime v0.3.1
+   Compiling spawns v0.2.6
+   Compiling deadpool v0.13.0
+   Compiling asyncs v0.4.0
+   Compiling zookeeper-client v0.11.2
+   Compiling sqlx-core v0.8.6
+   Compiling druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\.webcodex-managed-worktrees\druid-rust-f395b762\crates\druid-rdbc)
+   Compiling sqlx-sqlite v0.8.6
+   Compiling sqlx-mysql v0.8.6
+   Compiling sqlx-postgres v0.8.6
+   Compiling toasty-sql v0.9.0
+   Compiling toasty-driver-sqlite v0.9.0 (E:\workspaces\workspace-github-easy-4-rust\.webcodex-managed-worktrees\druid-rust-f395b762\vendor\toasty-driver-sqlite)
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\.webcodex-managed-worktrees\druid-rust-f395b762\crates\druid)
+   Compiling sqlx v0.8.6
+   Compiling druid-wrapper v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\.webcodex-managed-worktrees\druid-rust-f395b762\crates\druid-wrapper)
+   Compiling druid-test v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\.webcodex-managed-worktrees\druid-rust-f395b762\crates\druid-test)
+    Finished `test` profile [unoptimized] target(s) in 59.18s
+     Running tests\dialect_wall_matrix_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\dialect_wall_matrix_test-0acafed788fcc6b1.exe)
+
+running 21 tests
+test matrix_cross_dialect_consistency_read_only ... ok
+test matrix_ddl_truncate_strict_deny_all_dialects ... ok
+test matrix_cross_dialect_consistency_drop_strict ... ok
+test matrix_ddl_drop_strict_deny_all_dialects ... ok
+test matrix_cross_dialect_consistency_deny_table ... ok
+test matrix_ddl_alter_strict_deny_all_dialects ... ok
+test matrix_deny_table_select_all_dialects ... ok
+test matrix_read_only_table_insert_all_dialects ... ok
+test matrix_syntax_error_all_dialects ... ok
+test matrix_ddl_truncate_default_allow_all_dialects ... ok
+test matrix_ddl_drop_default_allow_all_dialects ... ok
+test matrix_revoke_deny_all_dialects ... ok
+test matrix_crud_select_allowed_all_dialects ... ok
+test matrix_crud_delete_allowed_all_dialects ... ok
+test matrix_crud_insert_allowed_all_dialects ... ok
+test matrix_grant_deny_all_dialects ... ok
+test matrix_ddl_alter_default_allow_all_dialects ... ok
+test matrix_crud_update_allowed_all_dialects ... ok
+test matrix_strict_ddl_3x7 ... ok
+test matrix_cross_dialect_consistency_crud ... ok
+test matrix_full_9x7_default_config ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests\differential_wall_branch_tests.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\differential_wall_branch_tests-dab7737c275bb624.exe)
+
+running 19 tests
+test test_wall_drop_allowed_when_enabled ... ok
+test test_wall_whitespace_only ... ok
+test test_wall_truncate_allowed_when_enabled ... ok
+test test_wall_multi_statement_two_valid ... ok
+test test_wall_deny_table_in_select ... ok
+test test_wall_multi_statement_one_drop ... ok
+test test_wall_query_with_subquery ... ok
+test test_wall_update_allowed_when_disabled ... ok
+test test_wall_complex_multi_violation ... ok
+test test_wall_deny_table_in_update ... ok
+test test_wall_multi_statement_single ... ok
+test test_wall_deny_table_in_delete ... ok
+test test_wall_insert_allowed_when_disabled ... ok
+test test_wall_deny_table_in_insert ... ok
+test test_wall_multi_statement_all_valid ... ok
+test test_wall_delete_allowed_when_disabled ... ok
+test test_wall_deny_schema_in_select ... ok
+test test_wall_deny_function_in_select ... ok
+test test_wall_provider_rejects_qualified_denied_function ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\differential_wall_tests.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\differential_wall_tests-2b1d2085b7f9532e.exe)
+
+running 29 tests
+test test_wall_config_all_46_defaults ... ok
+test test_wall_config_builder_chain ... ok
+test test_wall_delete_with_where ... ok
+test test_wall_delete_without_where ... ok
+test test_wall_delete_denied_when_configured ... ok
+test test_wall_deny_table ... ok
+test test_wall_deny_table_in_delete ... ok
+test test_wall_drop_allowed_when_configured ... ok
+test test_wall_deny_table_in_select ... ok
+test test_wall_drop_table_denied ... ok
+test test_wall_empty_sql ... ok
+test test_wall_deny_table_in_update ... ok
+test test_wall_multiple_violations ... ok
+test test_wall_select_allowed ... ok
+test test_wall_syntax_error ... ok
+test test_wall_insert_allowed ... ok
+test test_wall_truncate_allowed_when_configured ... ok
+test test_wall_truncate_denied ... ok
+test test_wall_update_denied_when_configured ... ok
+test test_wall_update_with_where ... ok
+test test_wall_update_without_where ... ok
+test test_wall_violation_display_delete_without_where ... ok
+test test_wall_violation_display_denied_function ... ok
+test test_wall_violation_display_denied_table ... ok
+test test_wall_violation_display_drop_table ... ok
+test test_wall_violation_display_syntax_error ... ok
+test test_wall_violation_display_truncate ... ok
+test test_wall_violation_display_update_without_where ... ok
+test test_wall_violation_is_error ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\prepared_result_set_wall_context_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\prepared_result_set_wall_context_test-2fbf86bc64cb09df.exe)
+
+running 1 test
+test prepared_and_callable_query_and_generic_results_keep_their_sql_context ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\task6_datasource_wall_utils_test_parity.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\task6_datasource_wall_utils_test_parity-bbc7cb17bf03b67e.exe)
+
+running 17 tests
+test task6_datasource_wall_utils_test_wall_visitor_utils_rewrite_empty_statements ... ok
+test task6_datasource_wall_utils_test_wall_visitor_utils_rewrite_create_table ... ok
+test task6_datasource_wall_utils_test_wall_visitor_utils_rewrite_no_tenant ... ok
+test task6_datasource_wall_utils_test_wall_visitor_utils_rewrite_delete ... ok
+test task6_datasource_wall_utils_test_wall_visitor_utils_rewrite_pattern_no_callback ... ok
+test task6_datasource_wall_utils_test_wall_visitor_utils_rewrite_insert ... ok
+test task6_datasource_wall_utils_test_wall_visitor_utils_rewrite_update ... ok
+test task6_datasource_wall_utils_test_datasource_stat_reset_and_publish ... ok
+test task6_datasource_wall_utils_test_datasource_is_full_and_stat_value ... ok
+test task6_datasource_wall_utils_test_datasource_from_pool_and_getters ... ok
+test task6_datasource_wall_utils_test_datasource_remove_abandoned_and_discard ... ok
+test task6_datasource_wall_utils_test_datasource_credentials_version ... ok
+test task6_datasource_wall_utils_test_datasource_try_get_connection_empty ... ok
+test task6_datasource_wall_utils_test_datasource_init_and_close ... ok
+test task6_datasource_wall_utils_test_datasource_fill ... ok
+test task6_datasource_wall_utils_test_datasource_get_connection_variants ... ok
+test task6_datasource_wall_utils_test_datasource_shrink_variants ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\task6_wall_table_stat_meta_data_test_parity.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\task6_wall_table_stat_meta_data_test_parity-c71789e45c9e0ec7.exe)
+
+running 11 tests
+test task6_wall_table_stat_meta_data_test_wall_sql_table_stat_all_counters ... ok
+test task6_wall_table_stat_meta_data_test_wall_sql_stat_fetch_and_update_counters ... ok
+test task6_wall_table_stat_meta_data_test_wall_sql_stat_new_and_getters ... ok
+test task6_wall_table_stat_meta_data_test_wall_sql_stat_syntax_error ... ok
+test task6_wall_table_stat_meta_data_test_wall_sql_stat_execute_counters ... ok
+test task6_wall_table_stat_meta_data_test_wall_table_stat_add_sql_table_stat ... ok
+test task6_wall_table_stat_meta_data_test_standard_database_meta_data_default_methods ... ok
+test task6_wall_table_stat_meta_data_test_wall_table_stat_data_counters ... ok
+test task6_wall_table_stat_meta_data_test_wall_table_stat_stat_value_and_reset ... ok
+test task6_wall_table_stat_meta_data_test_wall_sql_stat_new_with_stats ... ok
+test task6_wall_table_stat_meta_data_test_wall_sql_stat_stat_value ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests\wall_check_result_parameter_impl_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_check_result_parameter_impl_test-7bfe3f875556d185.exe)
+
+running 9 tests
+test rdbc_parameter_impl_with_length ... ok
+test rdbc_parameter_impl_new ... ok
+test rdbc_parameter_impl_with_calendar ... ok
+test rdbc_parameter_impl_with_value ... ok
+test wall_check_result_privileged ... ok
+test wall_check_result_syntax_error ... ok
+test wall_check_result_update_check_items ... ok
+test wall_provider_stat_value_to_map ... ok
+test wall_check_result_new ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_config_field_wiring_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_config_field_wiring_test-9fe8871b671a3e9b.exe)
+
+running 45 tests
+test builder_new_setters_roundtrip ... ok
+test comment_denied_by_default ... ok
+test comment_marker_inside_string_literal_not_detected ... ok
+test bitwise_operator_gated ... ok
+test const_arithmetic_gated ... ok
+test condition_checks_apply_to_having ... ok
+test condition_checks_apply_to_update_and_delete ... ok
+test const_case_condition_denied_by_default ... ok
+test const_value_covers_not_equal_and_nested ... ok
+test call_statement_blocked_when_disabled ... ok
+test delete_and_update_whole_alway_true_denied ... ok
+test deny_object_blocks_full_object_name ... ok
+test deny_variant_blocks_system_variable ... ok
+test describe_statements_blocked_when_disabled ... ok
+test double_const_condition_denied_by_default ... ok
+test drop_non_table_object_gated_by_drop_table_allow ... ok
+test function_check_gate_disables_function_deny ... ok
+test hash_comment_denied_by_default ... ok
+test intersect_blocked_when_disabled ... ok
+test limit_zero_denied_by_default ... ok
+test multi_statement_denied_by_default ... ok
+test none_base_statement_denied_by_default ... ok
+test part_alway_true_allowed_by_default ... ok
+test same_const_like_denied ... ok
+test read_only_table_blocks_writes ... ok
+test hint_comment_gated_by_hint_allow ... ok
+test must_parameterized_denies_literals ... ok
+test part_alway_false_denied_by_default ... ok
+test select_all_column_denied_when_disabled ... ok
+test schema_check_gate_disables_schema_deny ... ok
+test same_const_like_double_quoted ... ok
+test select_into_denied_when_disabled ... ok
+test show_statements_blocked_when_disabled ... ok
+test start_transaction_denied_when_disabled ... ok
+test table_check_gate_disables_table_deny ... ok
+test update_check_covers_eq_in_list_and_compound_columns ... ok
+test update_check_handler_allows_when_permitted ... ok
+test update_check_handler_rejects_literal_overwrite ... ok
+test update_check_placeholder_defers_item ... ok
+test use_statement_blocked_when_disabled ... ok
+test violation_display_all_variants ... ok
+test variant_check_gate_disables_variant_deny ... ok
+test where_literal_true_is_always_true ... ok
+test wall_context_counts_comment_and_none_condition_warnings ... ok
+test xor_operator_denied_by_default ... ok
+
+test result: ok. 45 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\wall_coverage.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_coverage-35ae3f1e060c7dda.exe)
+
+running 49 tests
+test test_wall_config_default_all_fields ... ok
+test test_wall_config_accessor ... ok
+test test_wall_config_builder_all_methods ... ok
+test test_wall_empty_sql ... ok
+test test_wall_new ... ok
+test test_wall_drop_table_allowed ... ok
+test test_wall_drop_non_table ... ok
+test test_wall_drop_table_multiple ... ok
+test test_wall_drop_table_denied ... ok
+test test_wall_delete_no_where_check_disabled ... ok
+test test_wall_delete_without_where ... ok
+test test_wall_delete_deny_table ... ok
+test test_wall_multi_statement_denied ... ok
+test test_wall_insert_denied ... ok
+test test_wall_delete_with_where ... ok
+test test_wall_insert_allowed ... ok
+test test_wall_insert_deny_table ... ok
+test test_wall_multi_statement_allowed ... ok
+test test_wall_deny_schema_in_select ... ok
+test test_wall_complex_multi_violation ... ok
+test test_wall_delete_denied ... ok
+test test_wall_delete_from_deny_table ... ok
+test test_wall_query_catch_all ... ok
+test test_wall_catch_all_statement_types ... ok
+test test_wall_query_union_deny_table ... ok
+test test_wall_select_allowed ... ok
+test test_wall_query_subquery_deny_table ... ok
+test test_wall_select_denied ... ok
+test test_wall_recursive_query_body ... ok
+test test_wall_query_recursive_subquery ... ok
+test test_wall_select_with_union ... ok
+test test_wall_select_with_subquery ... ok
+test test_wall_syntax_error ... ok
+test test_wall_statement_with_derived_table ... ok
+test test_wall_truncate_allowed ... ok
+test test_wall_truncate_denied ... ok
+test test_wall_table_factor_catch_all ... ok
+test test_wall_truncate_deny_table ... ok
+test test_wall_update_denied ... ok
+test test_wall_update_deny_table ... ok
+test test_wall_update_deny_table_in_from ... ok
+test test_wall_update_no_where_check_disabled ... ok
+test test_wall_update_with_where ... ok
+test test_wall_violation_clone ... ok
+test test_wall_update_without_where ... ok
+test test_wall_violation_debug ... ok
+test test_wall_violation_display_all ... ok
+test test_wall_violation_is_std_error ... ok
+test test_wall_whitespace_only ... ok
+
+test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\wall_deny_stat_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_deny_stat_test-712a5ea2cf20736f.exe)
+
+running 6 tests
+test wall_deny_stat_debug ... ok
+test wall_deny_stat_default ... ok
+test wall_deny_stat_increment ... ok
+test wall_deny_stat_increment_multiple ... ok
+test wall_deny_stat_reset ... ok
+test wall_deny_stat_reset_count_increments ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_filter_differential_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_filter_differential_test-31af18dfb491af90.exe)
+
+running 43 tests
+test create_provider_clickhouse ... ok
+test create_provider_mysql_family_with_config ... ok
+test create_provider_db2 ... ok
+test create_provider_none_db_type_returns_error ... ok
+test create_provider_no_name_when_none ... ok
+test wall_filter_clickhouse_insert_allowed ... ok
+test create_provider_sets_name_from_data_source ... ok
+test create_provider_sqlite ... ok
+test create_provider_postgresql_family ... ok
+test create_provider_unsupported_db_type_returns_error ... ok
+test create_provider_sqlserver_family ... ok
+test create_provider_oracle_family ... ok
+test exec_result_rows_affected_and_row_count ... ok
+test wall_filter_default_uses_default_config ... ok
+test wall_filter_metadata_privileged_bypass ... ok
+test tenant_pattern_exact_match ... ok
+test tenant_pattern_suffix_wildcard ... ok
+test wall_filter_metadata_not_allowed_config ... ok
+test tenant_pattern_prefix_wildcard ... ok
+test wall_filter_new_uses_given_provider ... ok
+test wall_filter_clear_provider_cache ... ok
+test create_provider_with_config_for_each_builtin_dialect ... ok
+test exec_result_default ... ok
+test tenant_pattern_middle_wildcard ... ok
+test wall_filter_mysql_drop_table_blocked ... ok
+test wall_filter_pg_select_allowed ... ok
+test wall_filter_provider_reset_preserves_instance ... ok
+test wall_filter_provider_reuse_across_checks ... ok
+test wall_filter_set_log_violation ... ok
+test wall_filter_set_throw_exception ... ok
+test wall_filter_provider_white_list ... ok
+test wall_filter_oracle_select_allowed ... ok
+test wall_filter_sqlite_syntax_error ... ok
+test create_provider_mysql_family ... ok
+test wall_filter_sqlserver_select_allowed ... ok
+test wall_filter_violation_detected_by_provider ... ok
+test wall_filter_valid_sql_no_violation ... ok
+test wall_sql_stat_add_fetch_row_count ... ok
+test wall_sql_stat_increment_execute_error_count ... ok
+test wall_filter_violation_no_throw_when_exception_disabled ... ok
+test wall_filter_update_check_handler_missing ... ok
+test wall_sql_stat_add_update_count ... ok
+test wall_filter_with_config_creates_provider ... ok
+
+test result: ok. 43 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\wall_function_stat_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_function_stat_test-9e731067c1562e80.exe)
+
+running 8 tests
+test wall_function_stat_add_sql_function_stat ... ok
+test wall_sql_function_stat_clone_copy ... ok
+test wall_sql_function_stat_increment ... ok
+test wall_function_stat_reset ... ok
+test wall_function_stat_default ... ok
+test wall_sql_function_stat_debug ... ok
+test wall_sql_function_stat_default ... ok
+test wall_function_stat_increment ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_provider_cache_stat_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_provider_cache_stat_test-f6bb8e7545bf270c.exe)
+
+running 54 tests
+test do_privileged_sets_and_restores ... ok
+test do_privileged_nested ... ok
+test do_privileged_restores_on_panic ... ok
+test not_privileged_by_default ... ok
+test privileged_bypass_wall_check ... ok
+test record_effect_rows_no_stat_skips ... ok
+test sql_stat_not_found ... ok
+test scope_tenant_value_sets_and_restores ... ok
+test scope_tenant_value_nested ... ok
+test scope_privileged_sets_and_restores ... ok
+test stat_value_filters_empty_entries ... ok
+test black_list_hit_preserves_violations ... ok
+test privileged_no_bypass_when_disabled ... ok
+test black_list_cache_hit_on_violation ... ok
+test sql_stat_from_black_list ... ok
+test stat_value_violation_effect_row_count ... ok
+test syntax_error_count_increments ... ok
+test black_list_returns_set ... ok
+test function_stat_values_from_select ... ok
+test record_effect_rows_updates_table_stat ... ok
+test record_effect_rows_select_fetch ... ok
+test function_stat_multiple ... ok
+test sql_stat_from_white_list ... ok
+test backtick_table_name_normalized ... ok
+test hard_check_count_only_on_cache_miss ... ok
+test double_quote_table_name_normalized ... ok
+test black_list_values_only ... ok
+test table_stat_drop_table ... ok
+test table_stat_create_table ... ok
+test table_stat_truncate ... ok
+test table_stat_alter_table ... ok
+test table_stat_values_from_insert ... ok
+test table_stat_insert_select ... ok
+test table_stat_values_from_delete ... ok
+test clear_cache_preserves_counts ... ok
+test thread_tenant_value_set_and_get ... ok
+test stats_map_contains_keys ... ok
+test stat_value_includes_active_sql ... ok
+test tenant_value_thread_isolation ... ok
+test stat_value_with_reset ... ok
+test stat_value_no_reset ... ok
+test reset_clears_all ... ok
+test sql_stat_values_combined ... ok
+test table_stat_values_from_select ... ok
+test tenant_pattern_disables_cache ... ok
+test table_stat_values_from_update ... ok
+test violation_count_increments ... ok
+test valid_sql_no_syntax_error ... ok
+test valid_sql_no_violation ... ok
+test white_list_cache_hit_on_second_check ... ok
+test white_list_execute_count_accumulates ... ok
+test white_list_hit_with_syntax_error_flag ... ok
+test white_list_returns_set ... ok
+test white_list_values_only ... ok
+
+test result: ok. 54 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\wall_provider_visitor_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_provider_visitor_test-2f4bee2a61986775.exe)
+
+running 22 tests
+test wall_provider_db_type ... ok
+test wall_provider_name ... ok
+test wall_provider_check_valid ... ok
+test wall_provider_new_and_config ... ok
+test wall_provider_privileged ... ok
+test wall_provider_check_violation ... ok
+test wall_provider_sql_stat ... ok
+test wall_provider_tenant_value ... ok
+test wall_provider_try_check_valid ... ok
+test wall_visitor_base_check_common_empty ... ok
+test wall_visitor_base_check_common_with_violation ... ok
+test wall_visitor_base_check_deny_variants_empty ... ok
+test wall_provider_try_check_syntax_error ... ok
+test wall_visitor_base_check_deny_variants_with_config ... ok
+test wall_visitor_base_db_type ... ok
+test wall_visitor_base_new_and_violations ... ok
+test wall_visitor_base_provider ... ok
+test wall_visitor_base_push_unique ... ok
+test wall_visitor_base_setters ... ok
+test wall_visitor_base_update_check_items ... ok
+test wall_provider_check_valid_sql ... ok
+test wall_visitor_base_check_virtual_tables_empty ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\wall_sql_stat_value_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_sql_stat_value_test-c56508a97a082c87.exe)
+
+running 7 tests
+test wall_sql_stat_value_clone_eq ... ok
+test wall_sql_stat_value_default ... ok
+test wall_sql_stat_value_serialize ... ok
+test wall_sql_stat_value_to_map_full ... ok
+test wall_sql_stat_value_to_map_sample_differ ... ok
+test wall_sql_stat_value_to_map_sample_same ... ok
+test wall_sql_stat_value_to_map_sparse ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_table_stat_value_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_table_stat_value_test-5657846fadc52f4f.exe)
+
+running 6 tests
+test wall_table_stat_value_clone_eq ... ok
+test wall_table_stat_value_saturating_add ... ok
+test wall_table_stat_value_to_map_keys ... ok
+test wall_table_stat_value_debug ... ok
+test wall_table_stat_value_total_execute_count ... ok
+test wall_table_stat_value_total_execute_count_zero ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_test-90ce25a70214b7b0.exe)
+
+running 16 tests
+test test_wall_config_builder_chaining ... ok
+test test_wall_config_builder_defaults ... ok
+test test_syntax_error_reported ... ok
+test test_drop_table_allowed_when_configured ... ok
+test test_drop_table_blocked ... ok
+test test_truncate_allowed_when_configured ... ok
+test test_truncate_blocked ... ok
+test test_update_without_where_blocked ... ok
+test test_update_with_where_passes ... ok
+test test_delete_without_where_blocked ... ok
+test test_delete_with_where_passes ... ok
+test test_select_1_passes ... ok
+test test_insert_allowed_by_default ... ok
+test test_select_with_where_passes ... ok
+test test_multi_statement_parsing ... ok
+test test_denied_table_blocked ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_utils_dialect_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_utils_dialect_test-4dfa1f9fbc98def1.exe)
+
+running 12 tests
+test wall_utils_is_validate_my_sql_drop ... ok
+test wall_utils_is_validate_sql_server_with_config ... ok
+test wall_utils_is_validate_sql_server_valid ... ok
+test wall_utils_is_validate_db2_valid ... ok
+test wall_utils_is_validate_my_sql_with_config ... ok
+test wall_utils_is_validate_oracle_with_config ... ok
+test wall_utils_is_validate_postgres_valid ... ok
+test wall_utils_is_validate_postgres_with_config ... ok
+test wall_utils_is_validate_my_sql_valid ... ok
+test wall_utils_is_validate_db2_with_config ... ok
+test wall_utils_is_validate_oracle_valid ... ok
+test java_wall_multi_statement_oracle_is_rejected_by_both_dialects ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\wall_visitor_base_extended_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_visitor_base_extended_test-4f2a68e8896f7691.exe)
+
+running 16 tests
+test add_wall_update_check_item ... ok
+test check_common_read_only_table_delete ... ok
+test check_common_no_violation_for_non_mutation ... ok
+test check_virtual_tables_normal_table_no_violation ... ok
+test check_virtual_tables_with_v_underscore_prefix ... ok
+test check_virtual_tables_disabled ... ok
+test check_common_deny_table_in_select ... ok
+test check_virtual_tables_with_v_prefix ... ok
+test check_common_deny_table_in_join ... ok
+test check_deny_variants_with_system_variable ... ok
+test check_common_read_only_table_insert ... ok
+test check_deny_variants_with_matching_variable ... ok
+test check_common_deny_table_case_insensitive ... ok
+test check_common_read_only_table_update ... ok
+test check_deny_variants_variant_check_disabled ... ok
+test check_common_multiple_statements ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_visitor_dialect_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_visitor_dialect_test-47f7bea00aa1b1f4.exe)
+
+running 19 tests
+test oracle_checker_clone_copy_debug ... ok
+test oracle_checker_default ... ok
+test oracle_checker_config_from_properties_empty ... ok
+test oracle_checker_new ... ok
+test oracle_checker_set_timeout ... ok
+test oracle_checker_config_from_properties ... ok
+test clickhouse_wall_visitor_new ... ok
+test ck_wall_provider_with_config ... ok
+test sqlite_wall_visitor_new ... ok
+test sqlite_wall_visitor_setters ... ok
+test ck_wall_provider_into_inner ... ok
+test ck_wall_provider_default ... ok
+test ck_wall_provider_new ... ok
+test clickhouse_wall_visitor_setters ... ok
+test clickhouse_wall_visitor_check_valid ... ok
+test sqlite_wall_visitor_check_valid ... ok
+test sqlite_wall_visitor_check_deny_table ... ok
+test clickhouse_wall_visitor_check_deny_table ... ok
+test ck_wall_provider_check_valid ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_config_java_observation_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_config_java_observation_test-9c735a8845359b4e.exe)
+
+running 2 tests
+test all_java_scalar_defaults_match_kernel ... ok
+test every_bundled_java_rule_set_matches_kernel ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_config_kernel_boundary_test.rs (D:/codex-build/druid-wall-kernel-cov-20261101\debug\deps\wall_config_kernel_boundary_test-f57b5306a979e0f5.exe)
+
+running 4 tests
+test ordered_update_columns_and_clone_visibility_are_preserved ... ok
+test callback_and_handler_identity_survive_facade_round_trip ... ok
+test kernel_owns_bundled_rules_and_keeps_append_semantics ... ok
+test canonical_config_drives_existing_wall_and_old_module_paths ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Filename                                                            Regions    Missed Regions     Cover   Functions  Missed Functions  Executed       Lines      Missed Lines     Cover    Branches   Missed Branches     Cover
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+core\abstract_oracle_exception_sorter.rs                                 79                79     0.00%          10                10     0.00%          44                44     0.00%           0                 0         -
+core\auto_load.rs                                                        47                35    25.53%           8                 7    12.50%          55                43    21.82%           0                 0         -
+core\cached_prepared_statement.rs                                        16                16     0.00%           4                 4     0.00%          12                12     0.00%           0                 0         -
+core\clob_proxy_impl.rs                                                 101               101     0.00%          30                30     0.00%         110               110     0.00%           0                 0         -
+core\config.rs                                                          150               150     0.00%          32                32     0.00%         169               169     0.00%           0                 0         -
+core\conn_state.rs                                                        3                 3     0.00%           1                 1     0.00%           9                 9     0.00%           0                 0         -
+core\connection_defaults.rs                                             225                98    56.44%          16                 5    68.75%         128                45    64.84%           0                 0         -
+core\connection_info.rs                                                  47                 0   100.00%          10                 0   100.00%          51                 0   100.00%           0                 0         -
+core\connection_recycle_disposition.rs                                   14                 8    42.86%           4                 2    50.00%          17                11    35.29%           0                 0         -
+core\database_meta_data_proxy_impl.rs                                    43                43     0.00%          11                11     0.00%          50                50     0.00%           0                 0         -
+core\db2_exception_sorter.rs                                             13                13     0.00%           3                 3     0.00%          10                10     0.00%           0                 0         -
+core\druid_array.rs                                                     151               151     0.00%          26                26     0.00%         117               117     0.00%           0                 0         -
+core\druid_array_state.rs                                                49                49     0.00%          11                11     0.00%          46                46     0.00%           0                 0         -
+core\druid_blob.rs                                                      137               137     0.00%          18                18     0.00%         127               127     0.00%           0                 0         -
+core\druid_blob_state.rs                                                 46                46     0.00%          10                10     0.00%          36                36     0.00%           0                 0         -
+core\druid_clob.rs                                                      142               142     0.00%          20                20     0.00%         133               133     0.00%           0                 0         -
+core\druid_clob_state.rs                                                 46                46     0.00%          10                10     0.00%          36                36     0.00%           0                 0         -
+core\druid_connection_holder.rs                                         583               287    50.77%          84                44    47.62%         497               255    48.69%           0                 0         -
+core\druid_execution_filter_policy.rs                                   112                56    50.00%          14                 8    42.86%         103                47    54.37%           0                 0         -
+core\druid_n_clob.rs                                                     42                42     0.00%          16                16     0.00%          39                39     0.00%           0                 0         -
+core\druid_pooled_callable_statement.rs                                 512               316    38.28%          55                40    27.27%         430               247    42.56%           0                 0         -
+core\druid_pooled_callable_statement\cache_lifecycle.rs                 209               117    44.02%           2                 0   100.00%         146                74    49.32%           0                 0         -
+core\druid_pooled_callable_statement\callable_trait_impls.rs            668               650     2.69%         114               108     5.26%         523               505     3.44%           0                 0         -
+core\druid_pooled_callable_statement\identity.rs                         12                12     0.00%           1                 1     0.00%           8                 8     0.00%           0                 0         -
+core\druid_pooled_callable_statement\prepared_batch.rs                  189               189     0.00%          17                17     0.00%         159               159     0.00%           0                 0         -
+core\druid_pooled_callable_statement\shared_owner.rs                      5                 5     0.00%           1                 1     0.00%           6                 6     0.00%           0                 0         -
+core\druid_pooled_connection.rs                                          68                48    29.41%           3                 1    66.67%          60                44    26.67%           0                 0         -
+core\druid_pooled_connection\inherent_a.rs                              491               322    34.42%          52                36    30.77%         423               246    41.84%           0                 0         -
+core\druid_pooled_connection\inherent_b.rs                              690               416    39.71%          56                30    46.43%         470               272    42.13%           0                 0         -
+core\druid_pooled_connection\standard_connection.rs                     217               204     5.99%          67                62     7.46%         162               151     6.79%           0                 0         -
+core\druid_pooled_connection\standard_connection_helpers.rs             250               126    49.60%           8                 6    25.00%         153                65    57.52%           0                 0         -
+core\druid_pooled_connection_owner.rs                                   497               497     0.00%          97                97     0.00%         381               381     0.00%           0                 0         -
+core\druid_pooled_prepared_statement.rs                                 669               390    41.70%          56                38    32.14%         535               288    46.17%           0                 0         -
+core\druid_pooled_prepared_statement\identity.rs                         16                16     0.00%           1                 1     0.00%          17                17     0.00%           0                 0         -
+core\druid_pooled_prepared_statement\prepared_batch.rs                  193               193     0.00%          17                17     0.00%         160               160     0.00%           0                 0         -
+core\druid_pooled_prepared_statement\prepared_trait_impls.rs            358               337     5.87%          48                41    14.58%         266               247     7.14%           0                 0         -
+core\druid_pooled_prepared_statement\shared_owner.rs                      5                 5     0.00%           1                 1     0.00%           6                 6     0.00%           0                 0         -
+core\druid_pooled_result_set.rs                                         626               507    19.01%          63                50    20.63%         477               387    18.87%           0                 0         -
+core\druid_pooled_result_set\access.rs                                   61                61     0.00%           5                 5     0.00%          40                40     0.00%           0                 0         -
+core\druid_pooled_result_set\resource.rs                                280               145    48.21%          21                11    47.62%         189                82    56.61%           0                 0         -
+core\druid_pooled_result_set\result_set_trait.rs                        674               670     0.59%          81                79     2.47%         506               502     0.79%           0                 0         -
+core\druid_pooled_result_set\staging.rs                                 116                17    85.34%           6                 4    33.33%          94                20    78.72%           0                 0         -
+core\druid_pooled_statement.rs                                          614               394    35.83%          66                41    37.88%         520               290    44.23%           0                 0         -
+core\druid_pooled_statement\standard_statement.rs                       374               374     0.00%          58                58     0.00%         264               264     0.00%           0                 0         -
+core\druid_resource_owner.rs                                             36                36     0.00%           6                 6     0.00%          35                35     0.00%           0                 0         -
+core\druid_sql_xml.rs                                                   120               120     0.00%          17                17     0.00%         106               106     0.00%           0                 0         -
+core\druid_sql_xml_payload.rs                                            20                20     0.00%           2                 2     0.00%          20                20     0.00%           0                 0         -
+core\druid_sql_xml_state.rs                                              47                47     0.00%          10                10     0.00%          36                36     0.00%           0                 0         -
+core\error.rs                                                           344               344     0.00%          17                17     0.00%         242               242     0.00%           0                 0         -
+core\exception_sorter.rs                                                  3                 0   100.00%           1                 0   100.00%           3                 0   100.00%           0                 0         -
+core\external_connection_lease.rs                                       183               183     0.00%          66                66     0.00%         159               159     0.00%           0                 0         -
+core\filter.rs                                                          136               119    12.50%          58                50    13.79%         153               133    13.07%           0                 0         -
+core\filter\config\config_filter.rs                                     378               378     0.00%          54                54     0.00%         282               282     0.00%           0                 0         -
+core\filter\config\config_tools.rs                                      320               320     0.00%          35                35     0.00%         217               217     0.00%           0                 0         -
+core\filter\encoding\charset_convert.rs                                  87                87     0.00%          12                12     0.00%          65                65     0.00%           0                 0         -
+core\filter\encoding\charset_parameter.rs                                16                16     0.00%           4                 4     0.00%          12                12     0.00%           0                 0         -
+core\filter\encoding\encoding_convert_filter.rs                         107               107     0.00%          21                21     0.00%          76                76     0.00%           0                 0         -
+core\filter\mysql8datetime\my_sql8_date_time_sql_type_filter.rs          16                16     0.00%           6                 6     0.00%          16                16     0.00%           0                 0         -
+core\filter_adapter.rs                                                   16                16     0.00%           6                 6     0.00%          16                16     0.00%           0                 0         -
+core\filter_chain_impl.rs                                               295               225    23.73%          48                37    22.92%         312               228    26.92%           0                 0         -
+core\filter_chain_impl\chain_a.rs                                       353               257    27.20%          72                55    23.61%         393               304    22.65%           0                 0         -
+core\filter_chain_impl\chain_b.rs                                       361               304    15.79%          50                40    20.00%         385               318    17.40%           0                 0         -
+core\filter_event_adapter.rs                                             82                82     0.00%          32                32     0.00%          83                83     0.00%           0                 0         -
+core\filter_manager.rs                                                  338               177    47.63%          23                11    52.17%         224               123    45.09%           0                 0         -
+core\informix_exception_sorter.rs                                         8                 8     0.00%           2                 2     0.00%           6                 6     0.00%           0                 0         -
+core\log_filter.rs                                                      270               270     0.00%          30                30     0.00%         210               210     0.00%           0                 0         -
+core\log_filter\options.rs                                              349               349     0.00%          65                65     0.00%         229               229     0.00%           0                 0         -
+core\mock_exception_sorter.rs                                            10                10     0.00%           3                 3     0.00%           7                 7     0.00%           0                 0         -
+core\ms_sql_valid_connection_checker.rs                                   4                 4     0.00%           2                 2     0.00%           3                 3     0.00%           0                 0         -
+core\my_sql_exception_sorter.rs                                          52                52     0.00%           4                 4     0.00%          35                35     0.00%           0                 0         -
+core\my_sql_valid_connection_checker.rs                                  28                28     0.00%           7                 7     0.00%          25                25     0.00%           0                 0         -
+core\mysql_metadata_compatibility.rs                                      9                 9     0.00%           2                 2     0.00%          10                10     0.00%           0                 0         -
+core\n_clob_proxy_impl.rs                                                22                22     0.00%           5                 5     0.00%          19                19     0.00%           0                 0         -
+core\null_exception_sorter.rs                                             8                 8     0.00%           3                 3     0.00%           7                 7     0.00%           0                 0         -
+core\ocean_base_oracle_exception_sorter.rs                               75                75     0.00%           9                 9     0.00%          67                67     0.00%           0                 0         -
+core\ocean_base_valid_connection_checker.rs                              10                10     0.00%           4                 4     0.00%           9                 9     0.00%           0                 0         -
+core\optional_statement_state_delegates.rs                              308               308     0.00%          40                40     0.00%         120               120     0.00%           0                 0         -
+core\oracle_exception_sorter.rs                                          65                65     0.00%           7                 7     0.00%          53                53     0.00%           0                 0         -
+core\oracle_valid_connection_checker.rs                                  28                 4    85.71%           8                 2    75.00%          25                 3    88.00%           0                 0         -
+core\owner_disposition_control.rs                                        23                19    17.39%           3                 2    33.33%          26                20    23.08%           0                 0         -
+core\pg_exception_sorter.rs                                              11                11     0.00%           3                 3     0.00%           8                 8     0.00%           0                 0         -
+core\pg_valid_connection_checker.rs                                       4                 4     0.00%           2                 2     0.00%           3                 3     0.00%           0                 0         -
+core\phoenix_exception_sorter.rs                                          9                 9     0.00%           3                 3     0.00%           7                 7     0.00%           0                 0         -
+core\pool.rs                                                              3                 3     0.00%           2                 2     0.00%           3                 3     0.00%           0                 0         -
+core\pool_state.rs                                                       43                43     0.00%           1                 1     0.00%          27                27     0.00%           0                 0         -
+core\prepared_statement_cache_stats.rs                                  111                37    66.67%          18                 6    66.67%          80                28    65.00%           0                 0         -
+core\prepared_statement_key.rs                                          176               145    17.61%          24                23     4.17%         188               162    13.83%           0                 0         -
+core\prepared_statement_property_snapshot.rs                             82                43    47.56%           3                 0   100.00%          41                15    63.41%           0                 0         -
+core\proxy_attributes.rs                                                 63                63     0.00%          12                12     0.00%          59                59     0.00%           0                 0         -
+core\rdbc4_valid_connection_checker.rs                                    2                 2     0.00%           1                 1     0.00%           2                 2     0.00%           0                 0         -
+core\registered_lob.rs                                                   17                17     0.00%           5                 5     0.00%          17                17     0.00%           0                 0         -
+core\resource_context.rs                                                136               136     0.00%          12                12     0.00%         119               119     0.00%           0                 0         -
+core\resource_factory.rs                                                 17                17     0.00%           2                 2     0.00%          24                24     0.00%           0                 0         -
+core\resource_id.rs                                                       9                 9     0.00%           3                 3     0.00%           9                 9     0.00%           0                 0         -
+core\resource_kind.rs                                                     9                 9     0.00%           1                 1     0.00%           9                 9     0.00%           0                 0         -
+core\resource_owner.rs                                                    9                 9     0.00%           4                 4     0.00%           7                 7     0.00%           0                 0         -
+core\resource_runtime_capabilities.rs                                     8                 8     0.00%           1                 1     0.00%           8                 8     0.00%           0                 0         -
+core\resource_state.rs                                                    7                 7     0.00%           1                 1     0.00%           7                 7     0.00%           0                 0         -
+core\result_set_filter.rs                                               143               138     3.50%          32                30     6.25%         225               217     3.56%           0                 0         -
+core\result_set_filter_context.rs                                       144                86    40.28%          25                17    32.00%         113                55    51.33%           0                 0         -
+core\result_set_meta_data_proxy.rs                                      228               222     2.63%          43                41     4.65%         178               172     3.37%           0                 0         -
+core\result_set_property_value.rs                                        53                53     0.00%           9                 9     0.00%          63                63     0.00%           0                 0         -
+core\standard_callable_was_null_filter_chain.rs                          13                13     0.00%           2                 2     0.00%          16                16     0.00%           0                 0         -
+core\standard_connection_lob_filter_chain.rs                            175               175     0.00%          18                18     0.00%         130               130     0.00%           0                 0         -
+core\standard_connection_meta_data_filter_chain.rs                       20                20     0.00%           4                 4     0.00%          27                27     0.00%           0                 0         -
+core\standard_connection_warning_filter_chain.rs                         29                29     0.00%           5                 5     0.00%          27                27     0.00%           0                 0         -
+core\standard_logical_policy.rs                                         547               369    32.54%          45                26    42.22%         478               296    38.08%           0                 0         -
+core\standard_prepared_statement_cache.rs                               124                85    31.45%          11                 6    45.45%          99                62    37.37%           0                 0         -
+core\standard_resource_admission.rs                                      33                 2    93.94%           6                 0   100.00%          29                 1    96.55%           0                 0         -
+core\standard_resource_handle.rs                                         11                 1    90.91%           2                 0   100.00%           8                 0   100.00%           0                 0         -
+core\standard_resource_registration.rs                                   39                19    51.28%           8                 4    50.00%          36                14    61.11%           0                 0         -
+core\standard_resource_registry.rs                                       34                 6    82.35%           5                 0   100.00%          33                 4    87.88%           0                 0         -
+core\standard_resource_registry\registry_a.rs                           446               236    47.09%          21                12    42.86%         358               201    43.85%           0                 0         -
+core\standard_resource_registry\registry_b.rs                           338               178    47.34%          15                 6    60.00%         244               135    44.67%           0                 0         -
+core\standard_resource_registry_state.rs                                  7                 0   100.00%           2                 0   100.00%          18                 0   100.00%           0                 0         -
+core\standard_result_set_filter_chain.rs                                475               437     8.00%          38                32    15.79%         344               307    10.76%           0                 0         -
+core\standard_result_set_open_context.rs                                 33                15    54.55%           8                 4    50.00%          43                12    72.09%           0                 0         -
+core\standard_statement_clear_batch_filter_chain.rs                      15                15     0.00%           2                 2     0.00%          16                16     0.00%           0                 0         -
+core\standard_statement_mutation_filter_chain.rs                        115               115     0.00%           4                 4     0.00%         109               109     0.00%           0                 0         -
+core\standard_statement_warning_filter_chain.rs                          27                27     0.00%           3                 3     0.00%          22                22     0.00%           0                 0         -
+core\statement_state_delegates.rs                                       106               106     0.00%          21                21     0.00%          92                92     0.00%           0                 0         -
+core\sybase_exception_sorter.rs                                          18                18     0.00%           3                 3     0.00%          11                11     0.00%           0                 0         -
+core\transaction_info.rs                                                 49                49     0.00%           9                 9     0.00%          46                46     0.00%           0                 0         -
+core\valid_connection_checker.rs                                          7                 7     0.00%           3                 3     0.00%           6                 6     0.00%           0                 0         -
+core\valid_connection_checker_adapter.rs                                 55                55     0.00%           5                 5     0.00%          31                31     0.00%           0                 0         -
+core\wrapper_proxy_hooks.rs                                               9                 9     0.00%           3                 3     0.00%          11                11     0.00%           0                 0         -
+core\xa.rs                                                               57                57     0.00%           6                 6     0.00%          38                38     0.00%           0                 0         -
+core\xa\state_a.rs                                                       73                73     0.00%          14                14     0.00%          57                57     0.00%           0                 0         -
+core\xa\state_b.rs                                                       74                74     0.00%           6                 6     0.00%          79                79     0.00%           0                 0         -
+dynamic\data_source_creator.rs                                          192               192     0.00%          14                14     0.00%         122               122     0.00%           0                 0         -
+dynamic\datasource_group.rs                                               6                 6     0.00%           1                 1     0.00%          13                13     0.00%           0                 0         -
+dynamic\dynamic_datasource.rs                                            41                41     0.00%           9                 9     0.00%          36                36     0.00%           0                 0         -
+dynamic\high_available_data_source.rs                                   463               463     0.00%          80                80     0.00%         363               363     0.00%           0                 0         -
+dynamic\load_balancer.rs                                                 38                38     0.00%           6                 6     0.00%          31                31     0.00%           0                 0         -
+dynamic\mod.rs                                                           11                11     0.00%           2                 2     0.00%           8                 8     0.00%           0                 0         -
+dynamic\node\file_node_listener.rs                                      145               145     0.00%          17                17     0.00%          89                89     0.00%           0                 0         -
+dynamic\node\node_event.rs                                              113               113     0.00%          12                12     0.00%          85                85     0.00%           0                 0         -
+dynamic\node\node_listener.rs                                            50                50     0.00%          11                11     0.00%          41                41     0.00%           0                 0         -
+dynamic\node\pool_updater.rs                                            262               262     0.00%          20                20     0.00%         163               163     0.00%           0                 0         -
+dynamic\node\zookeeper_node_info.rs                                      58                58     0.00%          14                14     0.00%          44                44     0.00%           0                 0         -
+dynamic\node\zookeeper_node_listener.rs                                 390               390     0.00%          34                34     0.00%         252               252     0.00%           0                 0         -
+dynamic\node\zookeeper_node_register.rs                                 193               193     0.00%          22                22     0.00%         129               129     0.00%           0                 0         -
+dynamic\properties_utils.rs                                              69                69     0.00%          10                10     0.00%          46                46     0.00%           0                 0         -
+dynamic\selector\data_source_selector_enum.rs                            14                14     0.00%           3                 3     0.00%          12                12     0.00%           0                 0         -
+dynamic\selector\data_source_selector_factory.rs                         11                11     0.00%           1                 1     0.00%           9                 9     0.00%           0                 0         -
+dynamic\selector\named_data_source_selector.rs                           84                84     0.00%          12                12     0.00%          59                59     0.00%           0                 0         -
+dynamic\selector\random_data_source_recover_task.rs                      63                63     0.00%           4                 4     0.00%          45                45     0.00%           0                 0         -
+dynamic\selector\random_data_source_selector.rs                         251               251     0.00%          39                39     0.00%         184               184     0.00%           0                 0         -
+dynamic\selector\random_data_source_validate_filter.rs                   10                10     0.00%           4                 4     0.00%          10                10     0.00%           0                 0         -
+dynamic\selector\random_data_source_validate_task.rs                    274               274     0.00%          28                28     0.00%         165               165     0.00%           0                 0         -
+dynamic\selector\sticky_data_source_holder.rs                            28                28     0.00%           8                 8     0.00%          30                30     0.00%           0                 0         -
+dynamic\selector\sticky_random_data_source_selector.rs                   94                94     0.00%          11                11     0.00%          62                62     0.00%           0                 0         -
+pool\active_connection_lease.rs                                           8                 8     0.00%           1                 1     0.00%          11                11     0.00%           0                 0         -
+pool\config.rs                                                           98                65    33.67%          15                13    13.33%         113                91    19.47%           0                 0         -
+pool\config\builder.rs                                                  298               216    27.52%          47                41    12.77%         296               195    34.12%           0                 0         -
+pool\config\builder_advanced.rs                                         296               182    38.51%          37                33    10.81%         292               190    34.93%           0                 0         -
+pool\connection_close_worker.rs                                          35                18    48.57%           3                 0   100.00%          34                10    70.59%           0                 0         -
+pool\connection_create_worker.rs                                         78                62    20.51%           3                 0   100.00%          49                37    24.49%           0                 0         -
+pool\druid_data_source.rs                                               507               326    35.70%         107                58    45.79%         433               289    33.26%           0                 0         -
+pool\druid_data_source_factory.rs                                       842               842     0.00%          49                49     0.00%         471               471     0.00%           0                 0         -
+pool\druid_pool.rs                                                      250               138    44.80%          27                19    29.63%         213                96    54.93%           0                 0         -
+pool\druid_pool\acquire.rs                                              510               251    50.78%          27                 4    85.19%         335               159    52.54%           0                 0         -
+pool\druid_pool\construct.rs                                            239                55    76.99%          18                 5    72.22%         209                68    67.46%           0                 0         -
+pool\druid_pool\state.rs                                                731               242    66.89%          87                37    57.47%         560               186    66.79%           0                 0         -
+pool\pool_inner.rs                                                      105                65    38.10%          16                 6    62.50%          89                46    48.31%           0                 0         -
+pool\pool_inner\create.rs                                               517               326    36.94%          30                16    46.67%         364               220    39.56%           0                 0         -
+pool\pool_inner\recycle.rs                                              655               393    40.00%          35                17    51.43%         393               224    43.00%           0                 0         -
+pool\pool_inner\state.rs                                                658               241    63.37%          56                19    66.07%         453               166    63.36%           0                 0         -
+pool\tracing_data_source_stat_sink.rs                                    21                10    52.38%           3                 1    66.67%          12                 3    75.00%           0                 0         -
+sql\char_types.rs                                                       101               101     0.00%           8                 8     0.00%          68                68     0.00%           0                 0         -
+sql\clickhouse\ck_wall_provider.rs                                       22                 0   100.00%           5                 0   100.00%          17                 0   100.00%           0                 0         -
+sql\clickhouse\clickhouse_wall_visitor.rs                                49                13    73.47%          12                 3    75.00%          38                 9    76.32%           0                 0         -
+sql\data_source.rs                                                       43                43     0.00%           9                 9     0.00%          42                42     0.00%           0                 0         -
+sql\db2\db2_wall_provider.rs                                             22                 3    86.36%           5                 1    80.00%          17                 3    82.35%           0                 0         -
+sql\db2\db2_wall_visitor.rs                                              52                34    34.62%          12                 8    33.33%          39                24    38.46%           0                 0         -
+sql\db_type.rs                                                          354               350     1.13%          10                 9    10.00%         260               256     1.54%           0                 0         -
+sql\dialect_feature.rs                                                  121               121     0.00%          19                19     0.00%         109               109     0.00%           0                 0         -
+sql\eof_parser_exception.rs                                              18                18     0.00%           5                 5     0.00%          17                17     0.00%           0                 0         -
+sql\keywords.rs                                                         640               640     0.00%          15                15     0.00%         175               175     0.00%           0                 0         -
+sql\lexer.rs                                                             64                64     0.00%           8                 8     0.00%          41                41     0.00%           0                 0         -
+sql\lexer\scan_a.rs                                                     386               386     0.00%          39                39     0.00%         317               317     0.00%           0                 0         -
+sql\lexer\scan_b.rs                                                     527               527     0.00%          19                19     0.00%         344               344     0.00%           0                 0         -
+sql\mysql\my_sql_wall_provider.rs                                        22                 3    86.36%           5                 1    80.00%          17                 3    82.35%           0                 0         -
+sql\mysql\my_sql_wall_visitor.rs                                         74                33    55.41%          16                 7    56.25%          56                23    58.93%           0                 0         -
+sql\not_allow_comment_exception.rs                                       25                25     0.00%           7                 7     0.00%          28                28     0.00%           0                 0         -
+sql\oracle\oracle_wall_provider.rs                                       22                 3    86.36%           5                 1    80.00%          17                 3    82.35%           0                 0         -
+sql\oracle\oracle_wall_visitor.rs                                        55                34    38.18%          12                 8    33.33%          40                24    40.00%           0                 0         -
+sql\parameter_meta_data.rs                                              142               142     0.00%          27                27     0.00%         102               102     0.00%           0                 0         -
+sql\parser_exception.rs                                                  62                62     0.00%          13                13     0.00%          73                73     0.00%           0                 0         -
+sql\postgresql\pg_wall_provider.rs                                       22                 3    86.36%           5                 1    80.00%          17                 3    82.35%           0                 0         -
+sql\postgresql\pg_wall_visitor.rs                                        52                34    34.62%          12                 8    33.33%          39                24    38.46%           0                 0         -
+sql\rdbc_url.rs                                                          62                62     0.00%          13                13     0.00%          47                47     0.00%           0                 0         -
+sql\rdbc_utils.rs                                                       163               163     0.00%          18                18     0.00%         132               132     0.00%           0                 0         -
+sql\sql_input.rs                                                        192               192     0.00%          26                26     0.00%         118               118     0.00%           0                 0         -
+sql\sql_output.rs                                                       109               109     0.00%          20                20     0.00%          58                58     0.00%           0                 0         -
+sql\sql_parse_exception.rs                                                3                 3     0.00%           1                 1     0.00%           3                 3     0.00%           0                 0         -
+sql\sql_parser_feature.rs                                                68                68     0.00%          10                10     0.00%          62                62     0.00%           0                 0         -
+sql\sql_permission.rs                                                    11                11     0.00%           3                 3     0.00%          12                12     0.00%           0                 0         -
+sql\sql_type.rs                                                          11                11     0.00%           3                 3     0.00%          11                11     0.00%           0                 0         -
+sql\sql_utils.rs                                                         81                66    18.52%          18                16    11.11%          77                61    20.78%           0                 0         -
+sql\sqlite\sqlite_wall_provider.rs                                       22                 6    72.73%           5                 2    60.00%          17                 6    64.71%           0                 0         -
+sql\sqlite\sqlite_wall_visitor.rs                                        49                13    73.47%          12                 3    75.00%          38                 9    76.32%           0                 0         -
+sql\sqlserver\sql_server_wall_provider.rs                                22                 3    86.36%           5                 1    80.00%          17                 3    82.35%           0                 0         -
+sql\sqlserver\sql_server_wall_visitor.rs                                 52                34    34.62%          12                 8    33.33%          39                24    38.46%           0                 0         -
+sql\struct_value.rs                                                      10                10     0.00%           3                 3     0.00%          12                12     0.00%           0                 0         -
+sql\symbol_table.rs                                                     145               145     0.00%          11                11     0.00%          91                91     0.00%           0                 0         -
+sql\token.rs                                                             16                16     0.00%           5                 5     0.00%          16                16     0.00%           0                 0         -
+sql\wall.rs                                                             802                28    96.51%          38                 0   100.00%         560                17    96.96%           0                 0         -
+sql\wall\rules.rs                                                       318                54    83.02%          29                 3    89.66%         208                32    84.62%           0                 0         -
+sql\wall_context.rs                                                     181                98    45.86%          33                12    63.64%         146                62    57.53%           0                 0         -
+sql\wall_filter.rs                                                      475               265    44.21%          59                25    57.63%         344               170    50.58%           0                 0         -
+sql\wall_function_stat.rs                                                22                 0   100.00%           3                 0   100.00%          13                 0   100.00%           0                 0         -
+sql\wall_function_stat_value.rs                                          10                10     0.00%           1                 1     0.00%           6                 6     0.00%           0                 0         -
+sql\wall_provider.rs                                                    818                36    95.60%          81                 6    92.59%         552                20    96.38%           0                 0         -
+sql\wall_provider_creator.rs                                             27                14    48.15%           5                 4    20.00%          19                11    42.11%           0                 0         -
+sql\wall_provider_stat_value.rs                                         105                 6    94.29%           5                 3    40.00%          61                 3    95.08%           0                 0         -
+sql\wall_utils.rs                                                        40                 0   100.00%          10                 0   100.00%          42                 0   100.00%           0                 0         -
+sql\wall_visitor.rs                                                       3                 0   100.00%           1                 0   100.00%           3                 0   100.00%           0                 0         -
+sql\wall_visitor_base.rs                                                195                22    88.72%          28                 1    96.43%         153                10    93.46%           0                 0         -
+sql\wall_visitor_utils.rs                                               315               126    60.00%          26                 9    65.38%         194                71    63.40%           0                 0         -
+stats\data_source_monitorable.rs                                         23                23     0.00%           8                 8     0.00%          22                22     0.00%           0                 0         -
+stats\druid_data_source_stat_manager.rs                                  68                68     0.00%          11                11     0.00%          47                47     0.00%           0                 0         -
+stats\druid_data_source_stat_value.rs                                     3                 3     0.00%           1                 1     0.00%           3                 3     0.00%           0                 0         -
+stats\druid_stat_manager_facade.rs                                      418               418     0.00%          48                48     0.00%         253               253     0.00%           0                 0         -
+stats\druid_stat_service.rs                                             438               438     0.00%          26                26     0.00%         198               198     0.00%           0                 0         -
+stats\merge.rs                                                          425               398     6.35%          32                28    12.50%         285               266     6.67%           0                 0         -
+stats\merge_stat_filter.rs                                               38                38     0.00%          12                12     0.00%          32                32     0.00%           0                 0         -
+stats\rdbc_connection_stat.rs                                           477               444     6.92%          57                54     5.26%         284               254    10.56%           0                 0         -
+stats\rdbc_data_source_stat.rs                                          304               217    28.62%          38                28    26.32%         219               159    27.40%           0                 0         -
+stats\rdbc_result_set_stat.rs                                           217               203     6.45%          25                24     4.00%         144               128    11.11%           0                 0         -
+stats\rdbc_sql_stat.rs                                                  626               626     0.00%          57                57     0.00%         378               378     0.00%           0                 0         -
+stats\rdbc_stat_context.rs                                               41                41     0.00%          11                11     0.00%          33                33     0.00%           0                 0         -
+stats\rdbc_stat_manager.rs                                               78                78     0.00%          13                13     0.00%          61                61     0.00%           0                 0         -
+stats\rdbc_statement_stat.rs                                            247               148    40.08%          33                22    33.33%         149                86    42.28%           0                 0         -
+stats\rdbc_trace_manager.rs                                               4                 4     0.00%           1                 1     0.00%           3                 3     0.00%           0                 0         -
+stats\snapshot_unavailable.rs                                             7                 7     0.00%           1                 1     0.00%           5                 5     0.00%           0                 0         -
+stats\stat_filter.rs                                                    477               477     0.00%          66                66     0.00%         300               300     0.00%           0                 0         -
+stats\stat_filter_context.rs                                            160               160     0.00%          37                37     0.00%         121               121     0.00%           0                 0         -
+stats\stat_filter_context_listener.rs                                     6                 6     0.00%           2                 2     0.00%           6                 6     0.00%           0                 0         -
+stats\stat_filter_context_listener_adapter.rs                            45                45     0.00%          15                15     0.00%          50                50     0.00%           0                 0         -
+stats\table_stat.rs                                                     392               392     0.00%          68                68     0.00%         310               310     0.00%           0                 0         -
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+TOTAL                                                                 38984             29613    24.04%        4681              3695    21.06%       29227             21795    25.43%           0                 0         -

@@ -107,3 +107,64 @@ The Admin SHALL authenticate a console client by session cookie when the applica
 - **WHEN** the Admin is configured with a non-loopback address
 - **THEN** it refuses to start without both TLS and authentication
 - **AND** the versioned API does not relax that requirement
+
+### Requirement: The console presents live middleware monitoring
+The console SHALL open a dense homepage backed by the versioned management API and retain datasource, SQL, slow SQL, Wall and API features. It SHALL expose collection health and capability boundaries using real observations. It SHALL NOT ship prototype fixtures or demonstration controls.
+
+#### Scenario: A field is not reported
+- **WHEN** a source cannot report a metric
+- **THEN** the console labels it unavailable and excludes it from complete aggregates
+- **AND** neither zero nor an empty healthy table substitutes for missing telemetry
+
+#### Scenario: An operator refreshes a filtered page
+- **WHEN** automatic or manual refresh completes
+- **THEN** the current filter, sort, page and detail selection survive
+- **AND** an older request cannot overwrite a newer result
+
+#### Scenario: Identities collide
+- **WHEN** multiple services or datasources share a numeric identity
+- **THEN** the console sends source context for detail requests
+- **AND** an ambiguous unscoped request returns conflict
+
+#### Scenario: Sources fail
+- **WHEN** one source fails and another supplies data
+- **THEN** available data and the failed source status are both shown
+- **AND** complete failure is not presented as an empty successful snapshot
+
+#### Scenario: Slow statements are inspected
+- **WHEN** an operator filters by a cumulative maximum duration
+- **THEN** filtering precedes bounded pagination
+- **AND** cumulative statement executions are not labelled as slow request percentage
+
+### Requirement: The Admin retains bounded recent monitoring samples
+
+The Admin SHALL retain recent numeric samples from accepted push snapshots with a fixed total capacity and TTL, expose them through an authenticated versioned read API, and show their source and retention limits in the console.
+
+#### Scenario: Accepted samples are queried
+
+- **WHEN** a service sends accepted datasource snapshots
+- **THEN** the operator can inspect recent pool, SQL and Wall counters under the service and datasource identity
+- **AND** the query is bounded and includes client sampling time and server receive time
+
+#### Scenario: Counters reset or a submission is rejected
+
+- **WHEN** a cumulative counter falls or a batch is rejected
+- **THEN** a reset has an unavailable delta and a rejected batch contributes no history
+
+#### Scenario: History reaches capacity or TTL
+
+- **WHEN** the sample bound or expiry is reached
+- **THEN** the oldest or expired samples are removed without weakening latest-state limits
+- **AND** the console states that recent history is process-local and does not survive restart
+
+### Requirement: The Admin reports observed process memory in collection health
+
+The Admin SHALL sample its own resident physical memory for the collection-health API. If sampling is unavailable, it SHALL report an unavailable value and SHALL NOT substitute the repository's serialized-state size.
+
+#### Scenario: Process memory can be sampled
+- **WHEN** the operator reads collection health and the process memory sampler succeeds
+- **THEN** the response contains the observed process resident bytes
+
+#### Scenario: Process memory sampling fails
+- **WHEN** the process memory sampler cannot report a value
+- **THEN** the response contains null and marks the field unavailable

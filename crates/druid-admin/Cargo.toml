@@ -46,9 +46,9 @@ tracing-subscriber   = { workspace = true }
 arc-swap      = { workspace = true }
 base64        = { workspace = true }
 subtle        = { workspace = true }
+memory-stats  = "1.2.0"
 
 [dev-dependencies]
-memory-stats  = "1.2.0"
 druid         = { version = "0.0.0-design", path = "../druid" }
 tokio         = { workspace = true, features = ["full", "test-util", "macros"] }
 reqwest       = { workspace = true, features = ["json"] }

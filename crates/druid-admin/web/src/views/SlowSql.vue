@@ -1,14 +1,20 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client.js'
+import { useRefresh, useRequestGuard } from '../composables/useRefresh.js'
+import { scopeQuery, detailLocation } from '../store.js'
+import SourceStatus from '../components/SourceStatus.vue'
 import MiniHistogram from '../components/MiniHistogram.vue'
 import { TIME_BUCKETS_8, formatDuration, formatNumber, zipBuckets } from '../utils/format.js'
 
 const router = useRouter()
 const rows = ref([])
+const total = ref(0)
 const loading = ref(false)
 const error = ref('')
+const snapshot = ref(null)
+const beginRequest = useRequestGuard()
 
 // 慢 SQL 阈值（毫秒）：maxTimespan 达到该值即视为慢。
 // 持久化在 localStorage，对齐 Java 控制台手动调阈值的用法。
@@ -22,64 +28,48 @@ watch(threshold, (value) => {
 const presetThresholds = [100, 500, 1000, 5000, 10000]
 
 async function load() {
+  const isCurrent = beginRequest()
   loading.value = true
   error.value = ''
   try {
-    const body = await api.sql({ page: 1, perPageCount: 100000, orderBy: 'maxTimespan', orderType: 'desc' })
+    const body = await api.sql({ ...scopeQuery(), page: page.value, perPageCount: perPageCount.value, minMaxTimespan: threshold.value, orderBy: 'maxTimespan', orderType: 'desc' })
+    if (!isCurrent()) return
+    snapshot.value = body
     rows.value = body.rows || []
+    total.value = body.total ?? 0
   } catch (cause) {
+    if (!isCurrent()) return
     error.value = cause.message
-    rows.value = []
   } finally {
-    loading.value = false
+    if (isCurrent()) loading.value = false
   }
 }
 
-// 慢 SQL 行：maxTimespan 超过阈值。
-const slowRows = computed(() =>
-  rows.value.filter((row) => Number(row.maxTimespan) >= threshold.value),
-)
-
-// 阈值变化后回到第一页。
-watch(threshold, () => { page.value = 1 })
-
-// 前端分页：阈值过滤后的结果再分页，数据多时不撑爆表格。
 const page = ref(1)
 const perPageCount = ref(20)
-const pagedRows = computed(() => {
-  const from = (page.value - 1) * perPageCount.value
-  return slowRows.value.slice(from, from + perPageCount.value)
-})
-
-const stats = computed(() => {
-  const totalExec = rows.value.reduce((sum, row) => sum + (Number(row.executeCount) || 0), 0)
-  const slowExec = slowRows.value.reduce((sum, row) => sum + (Number(row.executeCount) || 0), 0)
-  const slowTotalTime = slowRows.value.reduce((sum, row) => sum + (Number(row.totalTime) || 0), 0)
-  return [
-    { label: '慢 SQL 条数', value: formatNumber(slowRows.value.length) },
-    { label: '慢 SQL 累计执行', value: formatNumber(slowExec) },
-    { label: '慢 SQL 执行占比', value: totalExec > 0 ? `${((slowExec / totalExec) * 100).toFixed(2)}%` : '—' },
-    { label: '慢 SQL 累计耗时', value: formatDuration(slowTotalTime) },
-    { label: '阈值', value: formatDuration(threshold.value) },
-  ]
-})
+watch(threshold, () => { page.value = 1; load() })
+const stats = computed(() => [
+ { label: '达到阈值的 SQL 条目', value: formatNumber(total.value) },
+ { label: '最大执行耗时阈值', value: formatDuration(threshold.value) },
+ { label: '慢执行次数', value: '未上报' },
+])
 
 function histogram(row) {
   return zipBuckets(row.histogram, TIME_BUCKETS_8)
 }
 
 function openDetail(row) {
-  router.push(`/sql/${row.id}`)
+  router.push(detailLocation('sql', row))
 }
 
-onMounted(load)
+useRefresh(load)
 </script>
 
 <template>
   <el-card shadow="never">
     <template #header>
       <div class="card-header">
-        <span>慢 SQL（{{ slowRows.length }} 条 ≥ 阈值）</span>
+        <span>慢 SQL（{{ total }} 条 ≥ 阈值）</span>
         <div class="header-actions">
           <span class="threshold-label">阈值</span>
           <el-radio-group v-model="threshold" size="small">
@@ -101,10 +91,11 @@ onMounted(load)
       </div>
     </template>
 
+    <SourceStatus :snapshot="snapshot" />
     <el-alert v-if="error" type="error" show-icon :closable="false" :title="error" />
 
     <template v-else>
-      <el-descriptions :column="5" border size="small" class="stats">
+      <el-descriptions :column="3" border size="small" class="stats">
         <el-descriptions-item v-for="item in stats" :key="item.label" :label="item.label">
           {{ item.value }}
         </el-descriptions-item>
@@ -112,11 +103,11 @@ onMounted(load)
 
       <el-table
         v-loading="loading"
-        :data="pagedRows"
+        :data="rows"
         border
         stripe
         size="small"
-        empty-text="没有超过阈值的慢 SQL"
+        empty-text="没有已上报最大耗时且达到阈值的 SQL"
         @row-click="openDetail"
       >
         <el-table-column label="SQL" min-width="320">
@@ -136,7 +127,7 @@ onMounted(load)
         </el-table-column>
         <el-table-column label="平均耗时" width="110" align="right">
           <template #default="{ row }">
-            {{ formatDuration(Number(row.executeCount) > 0 ? Number(row.totalTime) / Number(row.executeCount) : 0) }}
+            {{ formatDuration(row.totalTime != null && Number(row.executeCount) > 0 ? Number(row.totalTime) / Number(row.executeCount) : null) }}
           </template>
         </el-table-column>
         <el-table-column label="执行次数" width="100" align="right" prop="executeCount" sortable>
@@ -162,14 +153,14 @@ onMounted(load)
       <el-pagination
         class="pager"
         layout="total, sizes, prev, pager, next, jumper"
-        :total="slowRows.length"
+        :total="total"
         :current-page="page"
         :page-size="perPageCount"
         :page-sizes="[10, 20, 50, 100]"
         :hide-on-single-page="false"
         background
-        @current-change="(value) => { page = value }"
-        @size-change="(value) => { perPageCount = value; page = 1 }"
+        @current-change="(value) => { page = value; load() }"
+        @size-change="(value) => { perPageCount = value; page = 1; load() }"
       />
     </template>
   </el-card>

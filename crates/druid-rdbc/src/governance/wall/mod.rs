@@ -13,3 +13,12 @@ pub mod table_stat;
 pub mod table_stat_value;
 pub mod update_check_item;
 pub mod violation;
+
+pub mod wall_config;
+pub use wall_config::{WallConfig, WallConfigBuilder};
+
+pub mod tenant_call_back;
+pub use tenant_call_back::{TenantCallBack, TenantStatementType};
+
+pub mod wall_update_check_handler;
+pub use wall_update_check_handler::WallUpdateCheckHandler;

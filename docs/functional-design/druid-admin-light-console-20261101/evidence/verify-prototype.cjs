@@ -1,0 +1,86 @@
+const {chromium}=require(process.env.DRUID_PLAYWRIGHT_MODULE || 'C:/Users/hnxyh/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const fs=require('node:fs');
+const path=require('node:path');
+const assert=require('node:assert/strict');
+const {pathToFileURL}=require('node:url');
+const out=process.env.DRUID_PROTOTYPE_OUTPUT || 'D:/codex-build/druid-admin-design-20261101';
+fs.mkdirSync(out,{recursive:true});
+const source=path.resolve(__dirname,'../prototype.html');
+(async()=>{
+ const browser=await chromium.launch({headless:true,executablePath:process.env.DRUID_BROWSER_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe'});
+ const context=await browser.newContext({viewport:{width:1280,height:1024},reducedMotion:'reduce'});
+ const page=await context.newPage();
+ const errors=[],results=[];
+ page.on('pageerror',error=>errors.push(error.message));
+ const check=(name,detail)=>results.push({name,status:'PASS',detail});
+ await page.goto(pathToFileURL(source).href);
+ await page.waitForSelector('#content .stats');
+ for(const size of [{name:'desktop',width:1280,height:1024},{name:'tablet',width:768,height:1024},{name:'mobile',width:390,height:884}]){
+  await page.setViewportSize({width:size.width,height:size.height});
+  for(const target of ['overview','pools','sql','slow','wall','health','drivers']){
+   await page.locator(`#nav [data-page="${target}"]`).click();
+   const overflow=await page.evaluate(()=>({page:document.documentElement.scrollWidth,viewport:innerWidth,content:document.querySelector('#content').textContent.trim().length}));
+   assert(overflow.page<=overflow.viewport,`${size.name}/${target} overflow ${JSON.stringify(overflow)}`);
+   assert(overflow.content>50);
+   check(`${size.name}/${target}/layout`,overflow);
+  }
+  await page.locator('#nav [data-page="overview"]').click();
+  await page.screenshot({path:path.join(out,`${size.name}.png`),fullPage:true});
+ }
+ await page.setViewportSize({width:1280,height:1024});
+ await page.locator('#service').selectOption('billing');
+ assert.equal(await page.locator('#content [data-pool="orders/i-01/boot-a/1"]').count(),0);
+ const errorCard=page.locator('.stat').filter({hasText:'累计执行错误'});
+ assert.match(await errorCard.textContent(),/—.*无法汇总/);
+ check('unknown-not-zero','所有来源缺失时错误卡显示 —');
+ await page.locator('#nav [data-page="wall"]').click();
+ assert.equal(await page.locator('#content tbody').count(),0);
+ assert.match(await page.locator('#content').textContent(),/未上报规则明细/);
+ check('wall-scope','billing 不出现 orders 规则行');
+ await page.locator('#nav [data-page="sql"]').click();
+ await page.locator('.entity[data-sql="billing/i-01/boot-c/1/101"]').click();
+ await page.locator('#detail[open]').waitFor();
+ assert.match(await page.locator('#detail-context').textContent(),/billing-service.*boot-c/);
+ assert.match(await page.locator('#detail-body').textContent(),/未上报/);
+ await page.keyboard.press('Escape');
+ assert.equal(await page.locator('#detail').evaluate(d=>d.open),false);
+ check('composite-identity/push-unavailable/escape','同 ID 101 定位 billing/boot-c；缺能力未显示为零');
+ await page.locator('#service').selectOption('orders');
+ await page.locator('#sql-search').fill('inventory');
+ assert.equal(await page.locator('#sql-table tbody tr').count(),1);
+ assert.match(await page.locator('#sql-table').textContent(),/inventory/);
+ await page.locator('#refresh').click();
+ assert.equal(await page.locator('#sql-search').inputValue(),'inventory');
+ check('search/manual-refresh','查询条件与表格保持');
+ await page.locator('#pause').click();
+ assert.equal(await page.locator('#pause').textContent(),'恢复演示刷新');
+ check('pause','暂停按钮切换为恢复');
+ await page.locator('#nav [data-page="overview"]').click();
+ await page.locator('#window').selectOption('60');
+ assert.match(await page.locator('.chart').getAttribute('aria-label'),/60 分钟/);
+ check('trend-window','窗口与曲线摘要同步');
+ for(const state of ['partial','stale','empty','error','denied']){
+  await page.locator('#state').selectOption(state);
+  const text=await page.locator('#main').textContent();
+  assert(text.includes({partial:'部分来源失败',stale:'数据已过期',empty:'没有匹配数据',error:'暂时无法获取数据',denied:'无权查看此范围'}[state]));
+  check(`state/${state}`,'状态信息可见');
+ }
+ await page.locator('[data-retry]').click();
+ assert.equal(await page.locator('#state').inputValue(),'normal');
+ check('recovery','恢复只读演示而非生产请求');
+ await page.setViewportSize({width:390,height:884});
+ await page.locator('.entity[data-pool="orders/i-01/boot-a/1"]').click();
+ const dialog=await page.locator('#detail').boundingBox();
+ assert(dialog.x>=0&&dialog.width<=390);
+ await page.screenshot({path:path.join(out,'mobile-detail.png'),fullPage:true});
+ await page.keyboard.press('Escape');
+ const focus=await page.evaluate(()=>document.activeElement.dataset.pool);
+ assert.equal(focus,'orders/i-01/boot-a/1');
+ check('mobile-dialog/focus-return',dialog);
+ assert.deepEqual(errors,[]);
+ check('javascript-errors',errors);
+ await browser.close();
+ const report={source,sourceSha256:require('node:crypto').createHash('sha256').update(fs.readFileSync(source)).digest('hex'),generatedAt:new Date().toISOString(),browser:'Playwright Chromium',results,errors};
+ fs.writeFileSync(path.join(out,'prototype-checks.json'),JSON.stringify(report,null,2));
+ console.log(JSON.stringify({checks:results.length,failed:0,screenshots:['desktop.png','tablet.png','mobile.png','mobile-detail.png']}));
+})().catch(error=>{console.error(error);process.exitCode=1;});

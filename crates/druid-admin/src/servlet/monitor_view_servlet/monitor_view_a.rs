@@ -180,6 +180,16 @@ impl MonitorViewServlet {
             .route("/api/active", get(Self::active))
             .route("/api/commands", post(Self::issue_command))
             // 版本化管理 API：分离前端只读这一套。
+            .route("/api/v1/health", get(super::v1_health::health))
+            .route("/api/v1/history", get(super::v1_health::history))
+            .route(
+                "/api/v1/datasources/{identity}/connections",
+                get(super::v1_health::connections),
+            )
+            .route(
+                "/api/v1/datasources/{identity}/stack",
+                get(super::v1_health::stack),
+            )
             .route("/api/v1/basic", get(super::v1_api::basic))
             .route("/api/v1/datasources", get(super::v1_api::datasources))
             .route(

@@ -1,0 +1,35 @@
+{
+  "implementations": [
+    {
+      "object": "wall_config",
+      "normalized_implementation_unchanged": true
+    },
+    {
+      "object": "tenant_call_back",
+      "normalized_implementation_unchanged": true
+    },
+    {
+      "object": "wall_update_check_handler",
+      "normalized_implementation_unchanged": true
+    }
+  ],
+  "gates": [
+    {
+      "gate": "rdbc-dependency",
+      "command": [
+        "python",
+        "scripts/verify_rdbc_dependency_boundary.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "gate": "diff-check",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit_code": 0
+    }
+  ]
+}

@@ -1,19 +1,26 @@
 <script setup>
-import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '../api/client.js'
+import { useRefresh, useRequestGuard } from '../composables/useRefresh.js'
+import { scopeQuery, detailLocation, store } from '../store.js'
+import SourceStatus from '../components/SourceStatus.vue'
 import MiniHistogram from '../components/MiniHistogram.vue'
 import { ROW_BUCKETS_6, TIME_BUCKETS_8, formatDuration, formatNumber, zipBuckets } from '../utils/format.js'
 
 const router = useRouter()
+const route = useRoute()
+const search = ref('')
 const rows = ref([])
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
+const snapshot = ref(null)
+const beginRequest = useRequestGuard()
 const page = ref(1)
 const perPageCount = ref(50)
-const orderBy = ref('executeCount')
+const orderBy = ref(route.query.orderBy || 'executeCount')
 const orderType = ref('desc')
 
 const sortable = [
@@ -60,22 +67,29 @@ function holdHistogram(row) {
 }
 
 async function load() {
+  const isCurrent = beginRequest()
   loading.value = true
   error.value = ''
   try {
     const body = await api.sql({
+      ...scopeQuery(),
+      serviceId: route.query.serviceId || scopeQuery().serviceId,
+      datasourceId: route.query.datasourceId || scopeQuery().datasourceId,
+      search: search.value || undefined,
       page: page.value,
       perPageCount: perPageCount.value,
       orderBy: orderBy.value,
       orderType: orderType.value,
     })
+    if (!isCurrent()) return
+    snapshot.value = body
     rows.value = body.rows || []
     total.value = body.total ?? rows.value.length
   } catch (cause) {
+    if (!isCurrent()) return
     error.value = cause.message
-    rows.value = []
   } finally {
-    loading.value = false
+    if (isCurrent()) loading.value = false
   }
 }
 
@@ -91,7 +105,7 @@ function sortBy(prop) {
 }
 
 function openDetail(row) {
-  router.push(`/sql/${row.id}`)
+  router.push(detailLocation('sql', row))
 }
 
 // 点击 SQL 文本即复制（不进详情），toast 反馈。
@@ -117,7 +131,7 @@ async function copySql(row) {
   }
 }
 
-onMounted(load)
+useRefresh(load)
 </script>
 
 <template>
@@ -129,6 +143,8 @@ onMounted(load)
       </div>
     </template>
 
+    <div class="scope-toolbar"><el-input v-model="search" clearable :disabled="store.sqlTextVisible === false" placeholder="搜索已上报的 SQL 原文" aria-label="搜索 SQL" style="max-width:360px" @keyup.enter="page=1;load()" @clear="page=1;load()"/><el-button size="small" @click="page=1;load()">查询</el-button><span v-if="store.sqlTextVisible === false" class="muted">SQL 原文已隐藏，搜索不可用</span><span v-if="route.query.serviceId" class="muted">已定位到数据源 {{route.query.datasourceId}}</span><router-link v-if="route.query.serviceId" to="/sql">清除定位条件</router-link></div>
+    <SourceStatus :snapshot="snapshot" />
     <el-alert v-if="error" type="error" show-icon :closable="false" :title="error" />
 
     <el-table
@@ -151,8 +167,9 @@ onMounted(load)
             :title="'点击复制：' + (row.sql || '')"
             @click.stop="copySql(row)"
           >
-            <code>{{ row.sql || '—' }}</code>
+            <code>{{ row.sql || '原文未上报' }}</code>
           </el-link>
+          <div class="source-text">{{ row.serviceName }} / {{ row.dataSource }} <el-button link type="primary" size="small" @click.stop="openDetail(row)">详情</el-button></div>
         </template>
       </el-table-column>
 

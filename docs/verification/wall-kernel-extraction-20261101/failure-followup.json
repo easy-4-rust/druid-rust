@@ -1,0 +1,51 @@
+[
+  {
+    "name": "filter-class-corrected",
+    "command": [
+      "cargo",
+      "test",
+      "--offline",
+      "-p",
+      "druid",
+      "--test",
+      "task6_filter_chain_extended_test_parity_part_01",
+      "--test",
+      "task6_filter_chain_extended_test_parity_part_02"
+    ],
+    "cwd": null,
+    "exit_code": 101
+  },
+  {
+    "name": "admin-tls-isolated",
+    "command": [
+      "D:/codex-build/druid-wall-kernel-20261101/debug/deps/admin_binary_test-508fdf9aa4de8e2c.exe",
+      "remote_http_and_grpc_use_tls_and_require_authentication",
+      "--exact",
+      "--test-threads=1"
+    ],
+    "cwd": "crates/druid-admin",
+    "exit_code": 0
+  },
+  {
+    "name": "admin-stalled-tls-isolated",
+    "command": [
+      "D:/codex-build/druid-wall-kernel-20261101/debug/deps/admin_binary_test-508fdf9aa4de8e2c.exe",
+      "stalled_tls_handshake_does_not_block_another_http_client",
+      "--exact",
+      "--test-threads=1"
+    ],
+    "cwd": "crates/druid-admin",
+    "exit_code": 0
+  },
+  {
+    "name": "admin-grpc-recovery-isolated",
+    "command": [
+      "D:/codex-build/druid-wall-kernel-20261101/debug/deps/grpc_network_e2e_test-e8b8461717c6084c.exe",
+      "validated_w_plus_one_commands_survive_teardown_backpressure_and_live_traffic_resumes",
+      "--exact",
+      "--test-threads=1"
+    ],
+    "cwd": "crates/druid-admin",
+    "exit_code": 0
+  }
+]

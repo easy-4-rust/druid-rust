@@ -1,12 +1,13 @@
 // 数字与时长格式化工具。
 
 export function formatNumber(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return '0'
+  if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) return '未上报'
   return Number(value).toLocaleString('en-US')
 }
 
 export function formatDuration(millis) {
-  const ms = Number(millis) || 0
+  if (millis === null || millis === undefined || millis === '' || !Number.isFinite(Number(millis))) return '未上报'
+  const ms = Number(millis)
   if (ms < 1) return `${ms} ms`
   if (ms < 1000) return `${formatNumber(Math.round(ms))} ms`
   if (ms < 60_000) return `${(ms / 1000).toFixed(2)} s`

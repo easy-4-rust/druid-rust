@@ -1,0 +1,47 @@
+[
+  {
+    "gate": "msrv-default-check",
+    "command": [
+      "cargo",
+      "+1.95.0",
+      "check",
+      "--offline",
+      "--workspace",
+      "--all-targets",
+      "--keep-going"
+    ],
+    "exit_code": 101
+  },
+  {
+    "gate": "msrv-all-features-check",
+    "command": [
+      "cargo",
+      "+1.95.0",
+      "check",
+      "--offline",
+      "--workspace",
+      "--all-targets",
+      "--all-features",
+      "--keep-going"
+    ],
+    "exit_code": 101
+  },
+  {
+    "gate": "strict-clippy",
+    "command": [
+      "cargo",
+      "+1.95.0",
+      "clippy",
+      "--offline",
+      "-p",
+      "druid-rdbc",
+      "-p",
+      "druid-test",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit_code": 1
+  }
+]

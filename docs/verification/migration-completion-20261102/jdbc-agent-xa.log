@@ -1,0 +1,26 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.67s
+     Running tests\jdbc_agent_xa_external_consumer.rs (D:/cargo-target\debug\deps\jdbc_agent_xa_external_consumer-da40e2f0b16d9cac.exe)
+
+running 5 tests
+
+thread 'rust_client_recovers_prepared_branches_across_sessions' (77488) panicked at crates\druid-wrapper\tests\jdbc_agent_xa_external_consumer.rs:341:50:
+set PostgreSQL host: NotPresent
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test public_xa_data_source_implements_only_the_rdbc_standard_contract ... ok
+test blank_xa_class_fails_before_agent_startup ... ok
+test rust_client_recovers_prepared_branches_across_sessions ... FAILED
+test external_pool_returns_logical_lease_and_reuses_live_xa_owner ... ok
+
+thread 'external_pool_discards_xa_owner_after_agent_transport_failure' (62080) panicked at crates\druid-wrapper\tests\jdbc_agent_xa_external_consumer.rs:290:10:
+H2 must create the process-failure probe: SqlException(SqlException { error_code: 42001, sql_state: Some("42001"), message: Some("Syntax error in SQL statement \"CREATE ALIAS AGENT_EXIT FOR 'java.lang.System.exit(int)'[*]\"; expected \"identifier\"; SQL statement:\nCREATE ALIAS AGENT_EXIT FOR 'java.lang.System.exit(int)' [42001-199] [sessionId=c3a76a14-9691-4b4b-bab4-ed5a478c38a3, requestId=3]"), class_name: "org.h2.jdbc.JdbcSQLSyntaxErrorException", assignable_types: ["org.h2.jdbc.JdbcSQLSyntaxErrorException", "java.sql.SQLException", "org.h2.jdbc.JdbcException", "java.sql.SQLSyntaxErrorException", "java.sql.SQLNonTransientException", "java.lang.Iterable", "java.lang.Exception", "java.lang.Throwable", "java.io.Serializable", "java.lang.Object"], recoverable: false, causes: [], next_exceptions: [] })
+test external_pool_discards_xa_owner_after_agent_transport_failure ... FAILED
+
+failures:
+
+failures:
+    external_pool_discards_xa_owner_after_agent_transport_failure
+    rust_client_recovers_prepared_branches_across_sessions
+
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+error: test failed, to rerun pass `-p druid-wrapper --test jdbc_agent_xa_external_consumer`

@@ -78,8 +78,8 @@
 	  				  url: "submitLogin",
 	  				  data: $("#loginForm").serialize(),
 	  				  success: function(data) {
-	  					if("success" == data)
-	  						location.href = "index.html";
+		  					if("success" == data)
+		  						location.href = "./";
 	  					else {
 	  						$("#alertInfo").show();
 	  						$("#loginForm")[0].reset();

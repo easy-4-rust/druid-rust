@@ -1,0 +1,15 @@
+[
+  {
+    "gate": "msrv-valid-default-check",
+    "command": [
+      "cargo",
+      "+1.95",
+      "check",
+      "--offline",
+      "--workspace",
+      "--all-targets",
+      "--keep-going"
+    ],
+    "exit_code": 0
+  }
+]

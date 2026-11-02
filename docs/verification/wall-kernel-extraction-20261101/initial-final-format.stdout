@@ -1,0 +1,6 @@
+Diff in \\?\E:\workspaces\workspace-github-easy-4-rust\.webcodex-managed-worktrees\druid-rust-f395b762\crates\druid\src\sql\wall_update_check_handler.rs:1:
+ //! 兼容公共路径；唯一实现位于 druid-rdbc 的 Wall 内核。
+ 
+[31m-pub use druid_rdbc::governance::wall::wall_update_check_handler::{WallUpdateCheckHandler};
+[0m[32m+pub use druid_rdbc::governance::wall::wall_update_check_handler::WallUpdateCheckHandler;
+[0m 

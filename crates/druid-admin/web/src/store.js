@@ -5,6 +5,8 @@ import { reactive, watch } from 'vue'
 export const store = reactive({
   autoRefreshSeconds: 0,
   tick: 0,
+  serviceId: '',
+  datasourceId: '',
   lastRefreshAt: null,
 })
 
@@ -32,3 +34,13 @@ export const refreshOptions = [
   { value: 15, label: '每 15 秒' },
   { value: 60, label: '每 60 秒' },
 ]
+
+export function scopeQuery() {
+  return { serviceId: store.serviceId || undefined, datasourceId: store.datasourceId || undefined }
+}
+export function detailLocation(kind, row) {
+  return { path: kind === 'sql' ? `/sql/${row.id}` : `/datasources/${row.identity}`, query: {
+    serviceId: row.serviceId || undefined,
+    datasourceId: kind === 'sql' ? row.dataSource ?? undefined : undefined,
+  } }
+}

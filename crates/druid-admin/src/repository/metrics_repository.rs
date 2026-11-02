@@ -1,6 +1,6 @@
 //! Standalone Admin 的有界最新指标 repository。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -10,6 +10,9 @@ use parking_lot::RwLock;
 use crate::model::dto::{DataSourceContent, SqlListContent, WallResult};
 
 use super::{MetricsRepositoryConfig, SerializedSizeBudget, StoredDataSourceEntry};
+
+mod sample_history;
+use sample_history::SampleHistoryEntry;
 
 /// Admin repository 内 datasource 的复合标识。
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -44,6 +47,7 @@ pub struct MetricsRepository {
 
 struct MetricsRepositoryInner {
     entries: HashMap<DataSourceId, StoredDataSourceEntry>,
+    history: VecDeque<SampleHistoryEntry>,
     ingest_count: u64,
     rejected_count: u64,
     capacity_rejected_count: u64,
@@ -64,6 +68,7 @@ impl MetricsRepository {
         Self {
             inner: Arc::new(RwLock::new(MetricsRepositoryInner {
                 entries: HashMap::new(),
+                history: VecDeque::new(),
                 ingest_count: 0,
                 rejected_count: 0,
                 capacity_rejected_count: 0,
@@ -122,6 +127,7 @@ impl MetricsRepository {
             return false;
         };
         for ((id, entry), serialized_bytes) in entries.into_iter().zip(entry_sizes) {
+            self.append_sample(&mut inner, &id, &entry, stream_epoch);
             inner.entries.insert(
                 id,
                 StoredDataSourceEntry::new(entry, stream_epoch, serialized_bytes),
@@ -183,6 +189,7 @@ impl MetricsRepository {
             .entries
             .retain(|id, _| &id.service_identity != service_identity);
         for ((id, entry), serialized_bytes) in entries.into_iter().zip(entry_sizes) {
+            self.append_sample(&mut inner, &id, &entry, stream_epoch);
             inner.entries.insert(
                 id,
                 StoredDataSourceEntry::new(entry, stream_epoch, serialized_bytes),
@@ -208,6 +215,40 @@ impl MetricsRepository {
             .entries
             .values()
             .map(|stored| stored.entry.clone())
+            .collect()
+    }
+
+    /// 返回未过期条目及其仓库身份，供管理读取保留完整来源上下文。
+    pub(crate) fn console_entries(&self) -> Vec<(DataSourceId, DataSourceEntry)> {
+        let mut inner = self.inner.write();
+        self.prune_expired(&mut inner);
+        inner
+            .entries
+            .iter()
+            .map(|(id, stored)| (id.clone(), stored.entry.clone()))
+            .collect()
+    }
+
+    /// 返回服务端单调时钟年龄、采样时间、序列和 epoch；不把客户端时间当作 TTL。
+    pub(crate) fn console_observations(&self) -> Vec<serde_json::Value> {
+        let mut inner = self.inner.write();
+        self.prune_expired(&mut inner);
+        inner
+            .entries
+            .iter()
+            .map(|(id, stored)| {
+                serde_json::json!({
+                    "serviceId": id.service_identity.shared_service_id(),
+                    "serviceName": id.service_identity.shared_service_name(),
+                    "instanceId": id.service_identity.shared_instance_id(),
+                    "bootId": id.service_identity.shared_boot_id(),
+                    "identity": id.identity, "name": stored.entry.datasource.name,
+                    "source": "push", "samplingTimeMillis": stored.entry.last_updated_ms,
+                    "receivedAgeMillis": stored.received_at.elapsed().as_millis(),
+                    "sequence": stored.entry.sequence, "epoch": stored.stream_epoch,
+                    "state": "retained"
+                })
+            })
             .collect()
     }
 
@@ -338,7 +379,9 @@ impl MetricsRepository {
 
     /// 清空所有最新值，保留 observable counters。
     pub fn clear(&self) {
-        self.inner.write().entries.clear();
+        let mut inner = self.inner.write();
+        inner.entries.clear();
+        inner.history.clear();
     }
 
     fn prune_expired(&self, inner: &mut MetricsRepositoryInner) {
@@ -350,6 +393,13 @@ impl MetricsRepository {
         inner.ttl_evicted_count = inner
             .ttl_evicted_count
             .saturating_add((before.saturating_sub(inner.entries.len())) as u64);
+        while inner
+            .history
+            .front()
+            .is_some_and(|sample| now.duration_since(sample.received_at) >= self.config.entry_ttl())
+        {
+            inner.history.pop_front();
+        }
     }
 
     fn measure_entries(&self, incoming: &[(DataSourceId, DataSourceEntry)]) -> Option<Vec<usize>> {

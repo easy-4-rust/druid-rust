@@ -405,6 +405,11 @@ async fn auth_login_page_is_public() {
         .await
         .unwrap();
     assert_eq!(resp.status(), 200, "login.html must be public");
+    let body = resp.text().await.unwrap();
+    assert!(
+        body.contains("location.href = \"./\""),
+        "successful login must return to the context root so it reaches the separated console"
+    );
     handle.abort();
 }
 

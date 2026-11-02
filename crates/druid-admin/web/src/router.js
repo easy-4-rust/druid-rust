@@ -3,7 +3,10 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 // 控制台路由。使用 hash 路由：Admin 的内嵌分发把未命中路径
 // 回落到 index.html，hash 路由不依赖服务端重写规则。
 const routes = [
-  { path: '/', redirect: '/datasources' },
+  { path: '/overview', component: () => import('./views/Overview.vue'), meta: { title: '主页' } },
+  { path: '/health', component: () => import('./views/CollectionHealth.vue'), meta: { title: '采集健康' } },
+  { path: '/capabilities', component: () => import('./views/Capabilities.vue'), meta: { title: '驱动与能力' } },
+  { path: '/', redirect: '/overview' },
   { path: '/datasources', name: 'datasources', component: () => import('./views/DatasourceList.vue'), meta: { title: '数据源' } },
   { path: '/datasources/:identity', name: 'datasource-detail', component: () => import('./views/DatasourceDetail.vue'), meta: { title: '数据源详情' } },
   { path: '/sql', name: 'sql', component: () => import('./views/SqlList.vue'), meta: { title: 'SQL 统计' } },

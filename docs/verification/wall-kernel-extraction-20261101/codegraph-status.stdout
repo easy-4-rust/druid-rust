@@ -1,0 +1,46 @@
+
+CodeGraph Status
+
+Project: E:\workspaces\workspace-github-easy-4-rust\druid-rust
+
+Index Statistics:
+  Files:     1,888
+  Nodes:     36,737
+  Edges:     130,533
+  DB Size:   283.38 MB
+  WAL Size:  0.01 MB
+  Backend:   node:sqlite - built-in (full WAL)
+  Journal:   wal
+
+Nodes by Kind:
+  method          13,720
+  import          8,337
+  function        7,452
+  file            1,855
+  struct          1,566
+  variable        1,462
+  enum_member     1,341
+  class           186
+  enum            162
+  field           156
+  constant        146
+  type_alias      137
+  trait           109
+  route           57
+  namespace       30
+  component       15
+  interface       6
+
+Files by Language:
+  rust            1,650
+  python          117
+  java            53
+  yaml            32
+  javascript      17
+  vue             15
+  typescript      2
+  properties      1
+  xml             1
+
+[OK] Index is up to date
+

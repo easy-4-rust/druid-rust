@@ -1,0 +1,36 @@
+{
+  "crates/druid/src/core/filter_chain_impl/chain_a.rs": {
+    "unchanged_from_HEAD": true,
+    "sha256": "e89886c4666dc2c571f2517e24b631b093b4a4d99b94549e64e12596a78eab88"
+  },
+  "crates/druid/tests/task6_filter_chain_extended_test_parity_part_01.rs": {
+    "unchanged_from_HEAD": true,
+    "sha256": "08814c65d281844c6da2fdaa82f7954dfbb98b25b0b8e9950f3b8a4512c61468"
+  },
+  "crates/druid/tests/task6_filter_chain_extended_test_parity_part_02.rs": {
+    "unchanged_from_HEAD": true,
+    "sha256": "f9629f666ce340c725f3289b8f2551e99e06905b1f0b8e24e4b7e33f141ca5c3"
+  },
+  "java": {
+    "source_sha256": "e6fdf1ce326ffcaf723e21920e56b9c9dbac3ee26638466d25cd95ea62e9eb7a",
+    "compile": [
+      "D:\\Java\\jdk-17.0.12\\bin\\javac.exe",
+      "-encoding",
+      "UTF-8",
+      "-cp",
+      "C:\\Users\\hnxyh\\.m2\\repository\\com\\alibaba\\druid\\1.2.28\\druid-1.2.28.jar",
+      "-d",
+      "D:\\codex-build\\druid-wall-kernel-oracle-20261101\\filter-classes",
+      "crates\\druid-test\\tests\\fixtures\\wall_config_kernel\\source\\core\\src\\main\\java\\com\\alibaba\\druid\\filter\\FilterManager.java",
+      "crates\\druid-test\\tests\\fixtures\\wall_config_kernel\\FilterClassIdentityOracle.java"
+    ],
+    "run": [
+      "D:\\Java\\jdk-17.0.12\\bin\\java.exe",
+      "-cp",
+      "D:\\codex-build\\druid-wall-kernel-oracle-20261101\\filter-classes;E:\\workspaces\\workspace-github\\druid\\core\\src\\main\\resources;C:\\Users\\hnxyh\\.m2\\repository\\com\\alibaba\\druid\\1.2.28\\druid-1.2.28.jar",
+      "FilterClassIdentityOracle"
+    ],
+    "observations": "exact\ttrue\r\nuppercase\tfalse\r\nlowercase\tfalse\r\ntrailing_space\tfalse\r\n",
+    "helper_jar_sha256": "c4cec3792390a2bbe6020d59be52160fd38d15de0f00dc52702eb91128c695a5"
+  }
+}

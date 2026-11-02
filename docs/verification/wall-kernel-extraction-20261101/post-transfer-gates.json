@@ -1,0 +1,44 @@
+[
+  {
+    "name": "current-strict-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--offline",
+      "-p",
+      "druid-rdbc",
+      "-p",
+      "druid-test",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "cwd": "E:\\workspaces\\workspace-github-easy-4-rust\\.webcodex-managed-worktrees\\druid-rust-f395b762",
+    "exit_code": 101
+  },
+  {
+    "name": "original-workspace-boundary",
+    "command": [
+      "cargo",
+      "test",
+      "--offline",
+      "-p",
+      "druid",
+      "-p",
+      "druid-test",
+      "--test",
+      "task6_filter_chain_extended_test_parity_part_01",
+      "--test",
+      "task6_filter_chain_extended_test_parity_part_02",
+      "--test",
+      "wall_config_kernel_boundary_test",
+      "--test",
+      "wall_config_java_observation_test",
+      "--",
+      "--test-threads=1"
+    ],
+    "cwd": "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust",
+    "exit_code": 0
+  }
+]

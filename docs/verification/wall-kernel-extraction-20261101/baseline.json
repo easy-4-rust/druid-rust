@@ -1,0 +1,160 @@
+{
+  "java_head": "fa8dc9912637a2f729eef9f55356621fec18d40e",
+  "rust_head": "ed161654c203f60e87ea11b4524ca57496a10e73",
+  "source_files": [
+    {
+      "path": "crates\\druid\\src\\sql\\wall_config.rs",
+      "sha256": "ef8f66670096ed63794db094a516e94b58d6d50e43b5bc8847f924ad179e57c1"
+    },
+    {
+      "path": "crates\\druid\\src\\sql\\tenant_call_back.rs",
+      "sha256": "7b7fd0eee43b3c6dd292874a81b88a68b4a94611846ac65d3e618b5350353157"
+    },
+    {
+      "path": "crates\\druid\\src\\sql\\wall_update_check_handler.rs",
+      "sha256": "fb19dccd627dbd6e1f6d7c1ea8602d8235b4139a01954c75d9644bdbc7a1b6d2"
+    }
+  ],
+  "resources": [
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\clickhouse\\deny-function.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\clickhouse\\deny-function.txt",
+      "sha256": "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+      "target_sha256": "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+      "java_sha256": "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\clickhouse\\deny-schema.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\clickhouse\\deny-schema.txt",
+      "sha256": "bbc5e661e106c6dcd8dc6dd186454c2fcba3c710fb4d8e71a60c93eaf077f073",
+      "target_sha256": "bbc5e661e106c6dcd8dc6dd186454c2fcba3c710fb4d8e71a60c93eaf077f073",
+      "java_sha256": "bbc5e661e106c6dcd8dc6dd186454c2fcba3c710fb4d8e71a60c93eaf077f073"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\mysql\\deny-function.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\mysql\\deny-function.txt",
+      "sha256": "120b4ffe50593167dcbc11eee3f1b692aa93ad2d5a3ab021fc36aafbbb1b1d56",
+      "target_sha256": "120b4ffe50593167dcbc11eee3f1b692aa93ad2d5a3ab021fc36aafbbb1b1d56",
+      "java_sha256": "120b4ffe50593167dcbc11eee3f1b692aa93ad2d5a3ab021fc36aafbbb1b1d56"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\mysql\\deny-schema.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\mysql\\deny-schema.txt",
+      "sha256": "627c3e73ce095a434526a33001581b79175bfeece7f7818c35cd85b9e4c6e6fd",
+      "target_sha256": "627c3e73ce095a434526a33001581b79175bfeece7f7818c35cd85b9e4c6e6fd",
+      "java_sha256": "627c3e73ce095a434526a33001581b79175bfeece7f7818c35cd85b9e4c6e6fd"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\mysql\\deny-variant.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\mysql\\deny-variant.txt",
+      "sha256": "6d331dd4a312942ceab367352c842e240bc4f6f2290c6b096fc1d8a55322b542",
+      "target_sha256": "6d331dd4a312942ceab367352c842e240bc4f6f2290c6b096fc1d8a55322b542",
+      "java_sha256": "6d331dd4a312942ceab367352c842e240bc4f6f2290c6b096fc1d8a55322b542"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\mysql\\permit-function.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\mysql\\permit-function.txt",
+      "sha256": "7b973d50ac2eddfff2a623285c905b4f7af3c2341ffe4b3c0cfb0a8644099afd",
+      "target_sha256": "7b973d50ac2eddfff2a623285c905b4f7af3c2341ffe4b3c0cfb0a8644099afd",
+      "java_sha256": "7b973d50ac2eddfff2a623285c905b4f7af3c2341ffe4b3c0cfb0a8644099afd"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\mysql\\permit-variant.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\mysql\\permit-variant.txt",
+      "sha256": "79d4cd9cc890925392e6c84c4fb059975629b8c66623167d25d1dd5fe074940e",
+      "target_sha256": "79d4cd9cc890925392e6c84c4fb059975629b8c66623167d25d1dd5fe074940e",
+      "java_sha256": "79d4cd9cc890925392e6c84c4fb059975629b8c66623167d25d1dd5fe074940e"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\oracle\\deny-function.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\oracle\\deny-function.txt",
+      "sha256": "29a64e4775a2f7a9bc6182432ff57935aec29fbbe0a3fd302c29cd1fe2f7a049",
+      "target_sha256": "29a64e4775a2f7a9bc6182432ff57935aec29fbbe0a3fd302c29cd1fe2f7a049",
+      "java_sha256": "29a64e4775a2f7a9bc6182432ff57935aec29fbbe0a3fd302c29cd1fe2f7a049"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\oracle\\deny-object.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\oracle\\deny-object.txt",
+      "sha256": "21f6e4e17e8e884fc3cf020ea2e5f3373cc27da3b769c0224fd080af25da5b33",
+      "target_sha256": "21f6e4e17e8e884fc3cf020ea2e5f3373cc27da3b769c0224fd080af25da5b33",
+      "java_sha256": "21f6e4e17e8e884fc3cf020ea2e5f3373cc27da3b769c0224fd080af25da5b33"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\oracle\\deny-schema.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\oracle\\deny-schema.txt",
+      "sha256": "fe9036e955095b8abb2004cbb68a1126c8d650f3ccb34b7a1e8f05f8d094b8c3",
+      "target_sha256": "fe9036e955095b8abb2004cbb68a1126c8d650f3ccb34b7a1e8f05f8d094b8c3",
+      "java_sha256": "fe9036e955095b8abb2004cbb68a1126c8d650f3ccb34b7a1e8f05f8d094b8c3"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\oracle\\deny-table.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\oracle\\deny-table.txt",
+      "sha256": "ff4e4140d3f9357e00a5eeadaffc4eee20c7695bae14736ed0159b86f5c69798",
+      "target_sha256": "ff4e4140d3f9357e00a5eeadaffc4eee20c7695bae14736ed0159b86f5c69798",
+      "java_sha256": "ff4e4140d3f9357e00a5eeadaffc4eee20c7695bae14736ed0159b86f5c69798"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\oracle\\deny-variant.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\oracle\\deny-variant.txt",
+      "sha256": "cd588acab2b21e79af008b5292cdba8cefd6b0df216fdea5019f531b70b5435a",
+      "target_sha256": "cd588acab2b21e79af008b5292cdba8cefd6b0df216fdea5019f531b70b5435a",
+      "java_sha256": "cd588acab2b21e79af008b5292cdba8cefd6b0df216fdea5019f531b70b5435a"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\oracle\\permit-function.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\oracle\\permit-function.txt",
+      "sha256": "e5cf2c3bc24c30a5f01a6ee86ea350240fb351923c632a877cb5874c78ffc9a6",
+      "target_sha256": "e5cf2c3bc24c30a5f01a6ee86ea350240fb351923c632a877cb5874c78ffc9a6",
+      "java_sha256": "e5cf2c3bc24c30a5f01a6ee86ea350240fb351923c632a877cb5874c78ffc9a6"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\postgres\\deny-function.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\postgres\\deny-function.txt",
+      "sha256": "b53fc1538e355d301a8659d8a05b14498aa180e6dd37f29dca170d71e214bed3",
+      "target_sha256": "b53fc1538e355d301a8659d8a05b14498aa180e6dd37f29dca170d71e214bed3",
+      "java_sha256": "b53fc1538e355d301a8659d8a05b14498aa180e6dd37f29dca170d71e214bed3"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\postgres\\deny-table.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\postgres\\deny-table.txt",
+      "sha256": "f38606e961f6df159748340e3a6734329a5e59a2b1c283081d07e03f348bc8f3",
+      "target_sha256": "f38606e961f6df159748340e3a6734329a5e59a2b1c283081d07e03f348bc8f3",
+      "java_sha256": "f38606e961f6df159748340e3a6734329a5e59a2b1c283081d07e03f348bc8f3"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\sqlserver\\deny-function.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\sqlserver\\deny-function.txt",
+      "sha256": "ca17406b46875f1de49b7dba0da4c54d34bbcc6c7a91f1f0a0f82db32fecab3d",
+      "target_sha256": "ca17406b46875f1de49b7dba0da4c54d34bbcc6c7a91f1f0a0f82db32fecab3d",
+      "java_sha256": "ca17406b46875f1de49b7dba0da4c54d34bbcc6c7a91f1f0a0f82db32fecab3d"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\sqlserver\\deny-object.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\sqlserver\\deny-object.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "java_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\sqlserver\\deny-schema.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\sqlserver\\deny-schema.txt",
+      "sha256": "44f8ca314ca3c0c807e4aa53ee1ac1be13e5d830cf98fa4e24f52d28ee69fda8",
+      "target_sha256": "44f8ca314ca3c0c807e4aa53ee1ac1be13e5d830cf98fa4e24f52d28ee69fda8",
+      "java_sha256": "44f8ca314ca3c0c807e4aa53ee1ac1be13e5d830cf98fa4e24f52d28ee69fda8"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\sqlserver\\deny-table.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\sqlserver\\deny-table.txt",
+      "sha256": "007e8129e238f27f9ccc7c2c22f43ed3764596534a4930ac74179cefafe5c5d2",
+      "target_sha256": "007e8129e238f27f9ccc7c2c22f43ed3764596534a4930ac74179cefafe5c5d2",
+      "java_sha256": "007e8129e238f27f9ccc7c2c22f43ed3764596534a4930ac74179cefafe5c5d2"
+    },
+    {
+      "source": "crates\\druid\\resources\\META-INF\\druid\\wall\\sqlserver\\deny-variant.txt",
+      "target": "crates\\druid-rdbc\\resources\\META-INF\\druid\\wall\\sqlserver\\deny-variant.txt",
+      "sha256": "7e81b0d44e07271dc1d8d40f34a6a652c47ee7cf666ad7f98e37e84af7aea53d",
+      "target_sha256": "7e81b0d44e07271dc1d8d40f34a6a652c47ee7cf666ad7f98e37e84af7aea53d",
+      "java_sha256": "7e81b0d44e07271dc1d8d40f34a6a652c47ee7cf666ad7f98e37e84af7aea53d"
+    }
+  ]
+}

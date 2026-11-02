@@ -1,0 +1,156 @@
+    Blocking waiting for file lock on package cache
+   Compiling serde_core v1.0.229
+   Compiling windows-sys v0.61.2
+   Compiling digest v0.10.7
+   Compiling serde_json v1.0.151
+   Compiling tracing v0.1.44
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.3.1
+   Compiling futures-executor v0.3.33
+   Compiling rand v0.8.7
+   Compiling thiserror-impl v2.0.19
+   Compiling serde v1.0.229
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.2
+   Compiling smallvec v1.15.2
+   Compiling bitflags v2.13.1
+   Compiling parking_lot_core v0.9.12
+   Compiling icu_normalizer v2.2.0
+   Compiling parking_lot v0.12.5
+   Compiling uuid v1.24.0
+   Compiling tokio v1.54.1
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling either v1.17.0
+   Compiling chrono v0.4.45
+   Compiling futures-intrusive v0.5.0
+   Compiling url v2.5.8
+   Compiling thiserror v2.0.19
+   Compiling sha2 v0.10.9
+   Compiling num-bigint-dig v0.8.6
+   Compiling rustix v1.1.4
+   Compiling polling v3.11.0
+   Compiling signature v2.2.0
+   Compiling hmac v0.12.1
+   Compiling atoi v2.0.0
+   Compiling hkdf v0.12.4
+   Compiling rsa v0.9.10
+   Compiling async-io v2.6.0
+   Compiling windows-sys v0.48.0
+   Compiling home v0.5.12
+   Compiling futures v0.3.33
+   Compiling hashlink v0.9.1
+   Compiling md-5 v0.10.6
+   Compiling rusqlite v0.32.1
+   Compiling etcetera v0.8.0
+   Compiling async-net v2.0.0
+   Compiling serde_urlencoded v0.7.1
+   Compiling sha1 v0.10.7
+   Compiling flume v0.11.1
+   Compiling tokio-stream v0.1.19
+   Compiling spawns-compat v0.2.2
+   Compiling spawns v0.2.6
+   Compiling sqlx-core v0.8.6
+   Compiling toasty-core v0.9.0
+   Compiling asyncs v0.4.0
+   Compiling deadpool-runtime v0.3.1
+   Compiling druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\.webcodex-managed-worktrees\druid-rust-f395b762\crates\druid-rdbc)
+   Compiling deadpool v0.13.0
+   Compiling sqlx-sqlite v0.8.6
+   Compiling toasty-sql v0.9.0
+   Compiling toasty-driver-sqlite v0.9.0 (E:\workspaces\workspace-github-easy-4-rust\.webcodex-managed-worktrees\druid-rust-f395b762\vendor\toasty-driver-sqlite)
+   Compiling sqlx-postgres v0.8.6
+   Compiling sqlx-mysql v0.8.6
+   Compiling zookeeper-client v0.11.2
+   Compiling moka v0.12.15
+   Compiling java-properties v2.0.0
+   Compiling dashmap v6.2.1
+   Compiling quick-xml v0.41.0
+   Compiling toasty v0.9.0
+   Compiling sqlx v0.8.6
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\.webcodex-managed-worktrees\druid-rust-f395b762\crates\druid)
+memory allocation of 5832720 bytes failed
+stack backtrace:
+   0:     0x7ff8b1cbf38e - std::backtrace_rs::backtrace::win64::trace
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\..\..\backtrace\src\backtrace\win64.rs:85
+   1:     0x7ff8b1cbf38e - std::backtrace_rs::backtrace::trace_unsynchronized
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\..\..\backtrace\src\backtrace\mod.rs:66
+   2:     0x7ff8b1cbf38e - std::sys::backtrace::_print_fmt
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\sys\backtrace.rs:74
+   3:     0x7ff8b1cbf38e - std::sys::backtrace::impl$0::print::impl$0::fmt
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\sys\backtrace.rs:44
+   4:     0x7ff8b1ce7c61 - core::fmt::write
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\core\src\fmt\mod.rs:0
+   5:     0x7ff8b1ccf7e4 - std::io::default_write_fmt
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\io\mod.rs:622
+   6:     0x7ff8b1ccf7e4 - std::io::Write::write_fmt<std::sys::stdio::windows::Stderr>
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\io\mod.rs:1977
+   7:     0x7ff8b1cb2794 - std::sys::backtrace::BacktraceLock::print
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\sys\backtrace.rs:47
+   8:     0x7ff8b1cb2794 - std::alloc::default_alloc_error_hook
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\alloc.rs:397
+   9:     0x7ff8b1c9808c - std::alloc::rust_oom::closure$0
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\alloc.rs:428
+  10:     0x7ff8b1c9579f - std::sys::backtrace::__rust_end_short_backtrace<std::alloc::rust_oom::closure_env$0,never$>
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\sys\backtrace.rs:182
+  11:     0x7ff8b1cb283b - std::alloc::rust_oom
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\alloc.rs:424
+  12:     0x7ff8b1c98fd8 - std::alloc::_::__rust_alloc_error_handler
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\alloc.rs:423
+  13:     0x7ff8b624cbf9 - alloc::alloc::handle_alloc_error::rt_error
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\alloc\src\alloc.rs:551
+  14:     0x7ff8b624cbf9 - alloc::alloc::handle_alloc_error
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\alloc\src\alloc.rs:557
+  15:     0x7ff8b624a20e - <hashbrown[b8deda5a92126686]::raw::Fallibility>::alloc_err
+  16:     0x7ff8b2acac21 - RINvMs6_NtCsfS3O9ZKjYUs_9hashbrown3rawINtB6_8RawTableTINtNtCs4kJVeIPopPT_12rustc_middle2ty20PseudoCanonicalInputTNtNtBT_8instance8InstanceRINtNtBT_4list7RawListuNtBT_2TyEEETINtNtNtBV_5query5erase10ErasedDataAhj10_ENtNtNtBV_9dep_graph5graph12DepNodeIndexEEE
+  17:     0x7ff8b2b47103 - RINvMs6_NtCsfS3O9ZKjYUs_9hashbrown3rawINtB6_8RawTableTTNtNtNtCs4kJVeIPopPT_12rustc_middle2ty8instance8InstanceNtNtBX_4mono14CollectionModeETINtNtNtBX_5query5erase10ErasedDataAhj20_ENtNtNtBX_9dep_graph5graph12DepNodeIndexEEE14reserve_rehashNCNvMs1_NtCsdNe2z
+  18:     0x7ff8b2bf7bc5 - rustc_query_impl[e1e7bd42ece5b6be]::dep_kind_vtables::make_dep_kind_vtables
+  19:     0x7ff8b212b8d5 - rustc_monomorphize[a86e5e76f4374a61]::mono_checks::check_mono_item
+  20:     0x7ff8b2be8fea - rustc_query_impl[e1e7bd42ece5b6be]::dep_kind_vtables::make_dep_kind_vtables
+  21:     0x7ff8b2b746bf - RINvMs6_NtCsfS3O9ZKjYUs_9hashbrown3rawINtB6_8RawTableTTNtNtNtCs4kJVeIPopPT_12rustc_middle2ty8instance8InstanceNtNtBX_4mono14CollectionModeETINtNtNtBX_5query5erase10ErasedDataAhj20_ENtNtNtBX_9dep_graph5graph12DepNodeIndexEEE14reserve_rehashNCNvMs1_NtCsdNe2z
+  22:     0x7ff8b2be9056 - rustc_query_impl[e1e7bd42ece5b6be]::dep_kind_vtables::make_dep_kind_vtables
+  23:     0x7ff8b2146db5 - rustc_monomorphize[a86e5e76f4374a61]::collector::items_of_instance
+  24:     0x7ff8b2bec343 - rustc_query_impl[e1e7bd42ece5b6be]::dep_kind_vtables::make_dep_kind_vtables
+  25:     0x7ff8b2b9318d - RINvMs6_NtCsfS3O9ZKjYUs_9hashbrown3rawINtB6_8RawTableTTNtNtNtCs4kJVeIPopPT_12rustc_middle2ty8instance8InstanceNtNtBX_4mono14CollectionModeETINtNtNtBX_5query5erase10ErasedDataAhj20_ENtNtNtBX_9dep_graph5graph12DepNodeIndexEEE14reserve_rehashNCNvMs1_NtCsdNe2z
+  26:     0x7ff8b2bec3c5 - rustc_query_impl[e1e7bd42ece5b6be]::dep_kind_vtables::make_dep_kind_vtables
+  27:     0x7ff8b21402a6 - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  28:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  29:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  30:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  31:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  32:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  33:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  34:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  35:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  36:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  37:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  38:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  39:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  40:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  41:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  42:     0x7ff8b2142ebc - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  43:     0x7ff8b14146c0 - core[3b42104b74debb2e]::slice::sort::stable::quicksort::quicksort::<rustc_middle[327ca6dd13956ce7]::mono::CodegenUnit, <[rustc_middle[327ca6dd13956ce7]::mono::CodegenUnit]>::sort_by<rustc_monomorphize[a86e5e76f4374a61]::partitioning::merge_codegen_units::{closure#6}>::{closure#0}>
+  44:     0x7ff8b2131129 - rustc_monomorphize[a86e5e76f4374a61]::partitioning::collect_and_partition_mono_items
+  45:     0x7ff8b17d0387 - llvm::TargetTransformInfoImplBase::canHaveNonUndefGlobalInitializerInAddressSpace
+  46:     0x7ff8b16bf230 - <<rustc_ty_utils[526278a885831dab]::opaque_types::OpaqueTypeCollector>::collect_taits_declared_in_body::TaitInBodyFinder as rustc_hir[1ea8a90067a68ca8]::intravisit::Visitor>::visit_nested_item
+  47:     0x7ff8b17d0405 - llvm::TargetTransformInfoImplBase::canHaveNonUndefGlobalInitializerInAddressSpace
+  48:     0x7ff8b2cfeb73 - rustc_codegen_ssa[f515b37f3e18fe62]::back::symbol_export::exported_generic_symbols_provider_local
+  49:     0x7ff8b17c88dd - llvm::TargetTransformInfoImplBase::canHaveNonUndefGlobalInitializerInAddressSpace
+  50:     0x7ff8b16a79fc - <<rustc_ty_utils[526278a885831dab]::opaque_types::OpaqueTypeCollector>::collect_taits_declared_in_body::TaitInBodyFinder as rustc_hir[1ea8a90067a68ca8]::intravisit::Visitor>::visit_nested_item
+  51:     0x7ff8b17c893f - llvm::TargetTransformInfoImplBase::canHaveNonUndefGlobalInitializerInAddressSpace
+  52:     0x7ff8b2fb0ef5 - <rustc_metadata[c477d82d1f6163c5]::creader::CStore>::from_tcx
+  53:     0x7ff8b196971b - RINvNtNtNtCs55qC6OcLGgs_4core5slice4sort6stable14driftsort_mainTNtNtCs1TCDA9wkLCc_9rustc_abi6layout10VariantIdxNtNtCs4kJVeIPopPT_12rustc_middle2ty10VariantDefENCINvMNtCs8oYkXk2gzQW_5alloc5sliceSBZ_11sort_by_keyB10_NCNvMsr_NtNtCsgRNjb0w8uu7_14rustc_metadata
+  54:     0x7ff8b1982ffb - rustc_metadata[c477d82d1f6163c5]::rmeta::encoder::encode_metadata
+  55:     0x7ff8b197df33 - rustc_metadata[c477d82d1f6163c5]::fs::encode_and_write_metadata
+  56:     0x7ff8aefc534e - <rustc_interface[7971ec2362d01f78]::queries::Linker>::codegen_and_build_linker
+  57:     0x7ff8aef6e6ac - std[fc79cc53f84b73ec]::sys::backtrace::__rust_begin_short_backtrace::<std[fc79cc53f84b73ec]::thread::lifecycle::spawn_unchecked<ctrlc[85c6d45e5360c17e]::set_handler_inner<rustc_driver_impl[3c242465527f1190]::install_ctrlc_handler::{closure#0}>::{closure#0}, ()>::{closure#1}::{closure#0}::{closure#0}, ()>
+  58:     0x7ff8aef6a591 - RINvNtNtCslFVcyoAu48q_3std3sys9backtrace28___rust_begin_short_backtraceNCNCINvNtCsaqrPHTSpvJs_15rustc_interface4util26run_in_thread_with_globalsNCINvB1e_31run_in_thread_pool_with_globalsNCINvNtB1g_9interface12run_compileruNCNvCs5a844wrxEGq_17rustc_driver_i
+  59:     0x7ff8aef73507 - std[fc79cc53f84b73ec]::sys::backtrace::__rust_begin_short_backtrace::<std[fc79cc53f84b73ec]::thread::lifecycle::spawn_unchecked<ctrlc[85c6d45e5360c17e]::set_handler_inner<rustc_driver_impl[3c242465527f1190]::install_ctrlc_handler::{closure#0}>::{closure#0}, ()>::{closure#1}::{closure#0}::{closure#0}, ()>
+  60:     0x7ff8b1cbc55a - std::sys::thread::windows::impl$0::new::thread_start
+                               at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library\std\src\sys\thread\windows.rs:58
+  61:     0x7ff9fd78e8d7 - BaseThreadInitThunk
+  62:     0x7ff9ff0ec53c - RtlUserThreadStart
+error: could not compile `druid` (lib)
+
+Caused by:
+  process didn't exit successfully: `C:\Users\hnxyh\.rustup\toolchains\1.97.1-x86_64-pc-windows-msvc\bin\rustc.exe --crate-name druid --edition=2021 crates\druid\src\lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no --warn=clippy::pedantic --warn=clippy::all --allow=clippy::used_underscore_binding --allow=clippy::unused_self --forbid=unsafe_code --allow=clippy::unreadable_literal --allow=clippy::unnested_or_patterns --allow=clippy::unnecessary_wraps --allow=clippy::unnecessary_literal_bound --warn=unexpected_cfgs --allow=clippy::too_many_lines --allow=clippy::too_many_arguments --allow=clippy::struct_field_names --allow=clippy::struct_excessive_bools --allow=clippy::similar_names --allow=clippy::return_self_not_must_use --allow=clippy::ref_option_ref --allow=clippy::ref_option --allow=clippy::redundant_else --allow=clippy::option_option --allow=clippy::no_effect_underscore_binding --allow=clippy::needless_pass_by_value --allow=clippy::must_use_candidate --allow=clippy::module_name_repetitions --allow=clippy::missing_panics_doc --allow=clippy::missing_errors_doc --allow=clippy::match_wildcard_for_single_variants --allow=clippy::match_single_binding --allow=clippy::map_unwrap_or --allow=clippy::manual_string_new --allow=clippy::manual_let_else --allow=clippy::items_after_statements --allow=clippy::ignored_unit_patterns --allow=clippy::if_not_else --allow=clippy::format_collect --allow=clippy::fn_params_excessive_bools --allow=clippy::float_cmp --allow=clippy::explicit_iter_loop --allow=clippy::duration_suboptimal_units --allow=clippy::double_must_use --allow=clippy::doc_markdown --allow=clippy::default_trait_access --allow=clippy::comparison_chain --allow=clippy::cast_sign_loss --allow=clippy::cast_precision_loss --allow=clippy::cast_possible_wrap --allow=clippy::cast_possible_truncation --allow=clippy::cast_lossless --allow=clippy::bool_comparison --allow=clippy::assigning_clones --allow=clippy::assertions_on_constants --allow=clippy::absurd_extreme_comparisons --check-cfg cfg(task7_require_character_sync) --check-cfg cfg(task7_require_clob_value_sync) --check-cfg cfg(task7_require_driver_sync) --check-cfg cfg(task7_require_old_clob_access) --check-cfg cfg(task7_require_old_xml_access) --check-cfg cfg(task7_require_xml_sync) --check-cfg cfg(task7_require_xml_value_sync) --cfg "feature=\"default\"" --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values(\"config-http\", \"default\", \"mysql\", \"postgresql\", \"sqlite\", \"turso\"))" -C metadata=515df0bd14b6155f -C extra-filename=-a88c7098d14adf4a --out-dir D:/codex-build/druid-wall-kernel-20261101\debug\deps -C strip=debuginfo -L dependency=D:/codex-build/druid-wall-kernel-20261101\debug\deps --extern arc_swap=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libarc_swap-8a571d35b50955e5.rmeta --extern async_trait=D:/codex-build/druid-wall-kernel-20261101\debug\deps\async_trait-178d77cdefb12682.dll --extern base64=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libbase64-c70fe8085af840fa.rmeta --extern bigdecimal=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libbigdecimal-1b39f7761e2902cb.rmeta --extern bitflags=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libbitflags-e1694817071159d1.rmeta --extern chrono=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libchrono-b7574dc1a799953e.rmeta --extern dashmap=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libdashmap-0361f5579ef0a26a.rmeta --extern druid_rdbc=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libdruid_rdbc-25754ed66ca53bba.rmeta --extern encoding_rs=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libencoding_rs-fa58c3257d2e7f2e.rmeta --extern fastrand=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libfastrand-19f5147ec0845ce8.rmeta --extern indexmap=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libindexmap-b6e957196225f7a5.rmeta --extern inventory=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libinventory-d9e13ab9191ff9c4.rmeta --extern java_properties=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libjava_properties-3da26bf4670a3958.rmeta --extern jiff=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libjiff-6dab61781ca0032e.rmeta --extern moka=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libmoka-51daf2814f507791.rmeta --extern num_bigint=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libnum_bigint-8f53d071a185fd85.rmeta --extern parking_lot=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libparking_lot-06b8335a5eb65b86.rmeta --extern quick_xml=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libquick_xml-67f3cbd2c6e841c4.rmeta --extern rsa=D:/codex-build/druid-wall-kernel-20261101\debug\deps\librsa-e35fe07846b4e0f2.rmeta --extern serde=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libserde-b5f4a143bb9d32d2.rmeta --extern serde_json=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libserde_json-05874d86f3290277.rmeta --extern sqlparser=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libsqlparser-8e179cf3439f0a66.rmeta --extern thiserror=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libthiserror-091f4e6ac952439d.rmeta --extern tokio=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libtokio-dab625072ad5bb03.rmeta --extern tracing=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libtracing-5e4f1c8764cbd518.rmeta --extern url=D:/codex-build/druid-wall-kernel-20261101\debug\deps\liburl-674b01d7a51a018c.rmeta --extern uuid=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libuuid-7b1a16a1ab19d2af.rmeta --extern x509_cert=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libx509_cert-90b2f32b3372017f.rmeta --extern xxhash_rust=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libxxhash_rust-15a7e326dacc9b06.rmeta --extern zookeeper_client=D:/codex-build/druid-wall-kernel-20261101\debug\deps\libzookeeper_client-716c4bcc6d7347a6.rmeta -L native=C:\Users\hnxyh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\windows_x86_64_msvc-0.52.6\lib` (exit code: 0xc0000409, STATUS_STACK_BUFFER_OVERRUN)

@@ -1,7 +1,10 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client.js'
+import { useRefresh, useRequestGuard } from '../composables/useRefresh.js'
+import { scopeQuery, detailLocation } from '../store.js'
+import SourceStatus from '../components/SourceStatus.vue'
 import HistogramBar from '../components/HistogramBar.vue'
 import SqlCode from '../components/SqlCode.vue'
 import { ROW_BUCKETS_6, TIME_BUCKETS_8, formatDuration, formatNumber, parseSqlMeta, zipBuckets } from '../utils/format.js'
@@ -11,6 +14,8 @@ const router = useRouter()
 const row = ref(null)
 const loading = ref(false)
 const error = ref('')
+const snapshot = ref(null)
+const beginRequest = useRequestGuard()
 
 const sqlId = computed(() => Number(route.params.id))
 
@@ -83,24 +88,28 @@ const hasError = computed(() => {
 })
 
 async function load() {
+  const isCurrent = beginRequest()
   loading.value = true
   error.value = ''
   try {
     // 详情路由附带服务端 SQL 解析（formattedSql + parsed* 六字段）。
-    const body = await api.sqlDetail(sqlId.value)
+    const body = await api.sqlDetail(sqlId.value, route.query)
+    if (!isCurrent()) return
+    snapshot.value = body
     if (body.sql) {
       row.value = body.sql
     } else {
       error.value = `未找到 ID 为 ${sqlId.value} 的 SQL 统计`
     }
   } catch (cause) {
+    if (!isCurrent()) return
     error.value = cause.message
   } finally {
-    loading.value = false
+    if (isCurrent()) loading.value = false
   }
 }
 
-onMounted(load)
+useRefresh(load)
 </script>
 
 <template>
@@ -115,6 +124,7 @@ onMounted(load)
       </template>
     </el-page-header>
 
+    <SourceStatus :snapshot="snapshot" />
     <el-alert v-if="error" type="error" show-icon :closable="false" :title="error" class="alert" />
 
     <template v-if="row">

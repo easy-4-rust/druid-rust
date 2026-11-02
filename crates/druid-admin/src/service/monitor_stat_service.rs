@@ -20,6 +20,8 @@ use super::{
     MonitorStatServiceError, StatQuery,
 };
 
+mod console_read;
+
 /// 多节点 Druid 管理数据聚合服务。
 ///
 /// 对应 Java: `com.alibaba.druid.admin.service.MonitorStatService`。

@@ -28,7 +28,7 @@ const cells = computed(() =>
       :content="`${cell.label}：${formatNumber(cell.count)}`"
       placement="top"
     >
-      <div class="hit">
+      <div class="hit" tabindex="0" :aria-label="`${cell.label}：${formatNumber(cell.count)}`">
         <!-- 类名不能叫 cell：会撞上 Element Plus 的 .el-table .cell（padding: 0 8px）把方块撑扁。 -->
         <div
           class="sq"
@@ -37,7 +37,7 @@ const cells = computed(() =>
       </div>
     </el-tooltip>
   </div>
-  <span v-else class="empty">—</span>
+  <span v-else class="empty">未上报</span>
 </template>
 
 <style scoped>

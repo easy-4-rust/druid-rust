@@ -1,0 +1,200 @@
+[
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/druid_pooled_callable_statement/callable_trait_impls.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/druid_pooled_connection/inherent_a.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/druid_pooled_connection/inherent_b.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/druid_pooled_connection/standard_connection.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/druid_pooled_connection/standard_connection_helpers.rs",
+    "line": 5,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/druid_pooled_prepared_statement/prepared_trait_impls.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/druid_pooled_result_set/resource.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/druid_pooled_result_set/staging.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/druid_pooled_result_set/result_set_trait.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/druid_pooled_statement/standard_statement.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/filter_chain_impl/chain_a.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/filter_chain_impl/chain_b.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/log_filter/options.rs",
+    "line": 6,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/standard_resource_registry/registry_a.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/standard_resource_registry/registry_b.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/xa/state_a.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/core/xa/state_b.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/pool/config/builder.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/pool/config/builder_advanced.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/pool/druid_pool/acquire.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/pool/druid_pool/construct.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/pool/druid_pool/state.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/pool/pool_inner/create.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/pool/pool_inner/recycle.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "this `continue` expression is redundant",
+    "path": "crates/druid/src/pool/pool_inner/recycle.rs",
+    "line": 382,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "this `continue` expression is redundant",
+    "path": "crates/druid/src/pool/pool_inner/recycle.rs",
+    "line": 387,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "this `continue` expression is redundant",
+    "path": "crates/druid/src/pool/pool_inner/recycle.rs",
+    "line": 392,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/pool/pool_inner/state.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/sql/lexer/scan_a.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/sql/lexer/scan_b.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/sql/wall/rules.rs",
+    "line": 1,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "usage of wildcard import",
+    "path": "crates/druid/src/sql/wall.rs",
+    "line": 21,
+    "unchanged_from_HEAD": true
+  },
+  {
+    "message": "could not compile `druid` (lib) due to 32 previous errors",
+    "path": null,
+    "line": null,
+    "unchanged_from_HEAD": null
+  }
+]

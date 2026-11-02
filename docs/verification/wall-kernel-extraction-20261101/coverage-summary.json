@@ -1,0 +1,96 @@
+{
+  "command": [
+    "cargo",
+    "llvm-cov",
+    "report",
+    "-p",
+    "druid",
+    "-p",
+    "druid-rdbc",
+    "-p",
+    "druid-test",
+    "--json",
+    "--output-path",
+    "docs\\verification\\wall-kernel-extraction-20261101\\coverage-canonical.json"
+  ],
+  "test_targets": 22,
+  "passed": 416,
+  "failed": 0,
+  "ignored": 0,
+  "files": [
+    {
+      "file": "E:\\workspaces\\workspace-github-easy-4-rust\\.webcodex-managed-worktrees\\druid-rust-f395b762\\crates\\druid-rdbc\\src\\governance\\wall\\wall_config.rs",
+      "summary": {
+        "branches": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0.0
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0.0
+        },
+        "functions": {
+          "count": 56,
+          "covered": 56,
+          "percent": 100.0
+        },
+        "instantiations": {
+          "count": 101,
+          "covered": 90,
+          "percent": 89.10891089108911
+        },
+        "lines": {
+          "count": 416,
+          "covered": 415,
+          "percent": 99.75961538461539
+        },
+        "regions": {
+          "count": 399,
+          "covered": 397,
+          "notcovered": 2,
+          "percent": 99.49874686716792
+        }
+      }
+    }
+  ],
+  "totals": {
+    "branches": {
+      "count": 0,
+      "covered": 0,
+      "notcovered": 0,
+      "percent": 0
+    },
+    "functions": {
+      "count": 6839,
+      "covered": 1147,
+      "percent": 16.771457815470097
+    },
+    "instantiations": {
+      "count": 9031,
+      "covered": 1249,
+      "percent": 13.830140626730152
+    },
+    "lines": {
+      "count": 40697,
+      "covered": 8468,
+      "percent": 20.807430523134386
+    },
+    "mcdc": {
+      "count": 0,
+      "covered": 0,
+      "notcovered": 0,
+      "percent": 0
+    },
+    "regions": {
+      "count": 52564,
+      "covered": 10598,
+      "notcovered": 41966,
+      "percent": 20.162088121147555
+    }
+  },
+  "report_scope": "druid + druid-rdbc + druid-test; same test profiles; rdbc added to report selection, not extra test execution"
+}

@@ -1,0 +1,75 @@
+[
+  {
+    "name": "final-boundary-regression",
+    "command": [
+      "cargo",
+      "test",
+      "--offline",
+      "--workspace",
+      "--test",
+      "task6_filter_chain_extended_test_parity_part_01",
+      "--test",
+      "task6_filter_chain_extended_test_parity_part_02",
+      "--test",
+      "wall_config_kernel_boundary_test",
+      "--test",
+      "wall_config_java_observation_test",
+      "--",
+      "--test-threads=1"
+    ],
+    "environment": {
+      "CARGO_TARGET_DIR": "D:/codex-build/druid-wall-kernel-20261101",
+      "CARGO_PROFILE_DEV_DEBUG": "0",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_BUILD_JOBS": "1",
+      "CARGO_NET_OFFLINE": "true"
+    },
+    "exit_code": 0
+  },
+  {
+    "name": "msrv-valid-strict-clippy",
+    "command": [
+      "cargo",
+      "+1.95",
+      "clippy",
+      "--offline",
+      "-p",
+      "druid-rdbc",
+      "-p",
+      "druid-test",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "environment": {
+      "CARGO_TARGET_DIR": "D:/codex-build/druid-wall-kernel-msrv-20261101",
+      "CARGO_PROFILE_DEV_DEBUG": "0",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_BUILD_JOBS": "1",
+      "CARGO_NET_OFFLINE": "true"
+    },
+    "exit_code": 1
+  },
+  {
+    "name": "msrv-single-job-all-features",
+    "command": [
+      "cargo",
+      "+1.95",
+      "check",
+      "--offline",
+      "--workspace",
+      "--all-targets",
+      "--all-features",
+      "--keep-going"
+    ],
+    "environment": {
+      "CARGO_TARGET_DIR": "D:/codex-build/druid-wall-kernel-msrv-20261101",
+      "CARGO_PROFILE_DEV_DEBUG": "0",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_BUILD_JOBS": "1",
+      "CARGO_NET_OFFLINE": "true"
+    },
+    "exit_code": 0
+  }
+]

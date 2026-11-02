@@ -1,0 +1,7 @@
+warning: in the working copy of 'Cargo.lock', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'crates/druid-rdbc/Cargo.toml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'crates/druid-rdbc/src/extensions/shared_row_set/trait_impls.rs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'crates/druid-rdbc/src/governance/wall/mod.rs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'crates/druid/src/sql/tenant_call_back.rs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'crates/druid/src/sql/wall_config.rs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'crates/druid/src/sql/wall_update_check_handler.rs', LF will be replaced by CRLF the next time Git touches it

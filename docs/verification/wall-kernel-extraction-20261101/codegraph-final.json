@@ -1,0 +1,21 @@
+[
+  {
+    "command": [
+      "codegraph",
+      "status"
+    ],
+    "cwd": "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "codegraph",
+      "explore",
+      "WallConfig",
+      "--max-files",
+      "2"
+    ],
+    "cwd": "E:\\workspaces\\workspace-github-easy-4-rust\\druid-rust",
+    "exit_code": 0
+  }
+]

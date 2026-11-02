@@ -1,0 +1,257 @@
+   Compiling smallvec v1.15.2
+   Compiling windows-sys v0.61.2
+   Compiling bitflags v2.13.1
+   Compiling windows-sys v0.52.0
+   Compiling thiserror v2.0.19
+   Compiling serde v1.0.229
+   Compiling getrandom v0.4.3
+   Compiling zerotrie v0.2.4
+   Compiling tinystr v0.8.3
+   Compiling ahash v0.8.12
+   Compiling digest v0.10.7
+   Compiling spin v0.9.9
+   Compiling icu_collections v2.2.0
+   Compiling ref-cast v1.0.26
+   Compiling linkme v0.3.37
+   Compiling futures-executor v0.3.33
+   Compiling petgraph v0.8.3
+   Compiling rand_chacha v0.3.1
+   Compiling either v1.17.0
+   Compiling rand_chacha v0.9.0
+   Compiling anstyle v1.0.14
+warning: druid-admin@0.0.0-design: embedded 22 console asset(s) from E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-admin\web/dist
+   Compiling topcoat-core v0.5.0
+   Compiling jsonpath-rust v1.0.8
+   Compiling parking_lot_core v0.9.12
+   Compiling granit-parser v0.0.7
+   Compiling uuid v1.24.0
+   Compiling lazy_static v1.5.0
+   Compiling icu_locale_core v2.2.0
+   Compiling spawns-core v1.1.2
+   Compiling hashbrown v0.14.5
+   Compiling sha1 v0.10.7
+   Compiling signature v2.2.0
+   Compiling serde_urlencoded v0.7.1
+   Compiling futures v0.3.33
+   Compiling rand v0.8.7
+   Compiling k8s-openapi v0.28.0
+   Compiling chrono v0.4.45
+   Compiling parking_lot v0.12.5
+   Compiling rand v0.9.5
+   Compiling topcoat-view v0.5.0
+   Compiling topcoat-asset v0.5.0
+   Compiling serde-value v0.7.0
+   Compiling annotate-snippets v0.12.16
+   Compiling quick-xml v0.41.0
+   Compiling java-properties v2.0.0
+   Compiling sharded-slab v0.1.7
+   Compiling sha2 v0.10.9
+   Compiling moka v0.12.15
+   Compiling hashlink v0.8.4
+   Compiling dashmap v6.2.1
+   Compiling prometheus v0.14.0
+   Compiling num-bigint-dig v0.8.6
+   Compiling icu_provider v2.2.0
+   Compiling topcoat-runtime v0.5.0
+   Compiling tungstenite v0.29.0
+   Compiling topcoat-view-grammar v0.5.0
+   Compiling serde-saphyr v0.0.29
+   Compiling icu_properties v2.2.0
+   Compiling icu_normalizer v2.2.0
+   Compiling prost-build v0.14.4
+   Compiling topcoat-runtime-grammar v0.5.0
+   Compiling rsa v0.9.10
+   Compiling tonic-prost-build v0.14.6
+   Compiling topcoat-runtime-macro v0.5.0
+   Compiling topcoat-view-macro v0.5.0
+   Compiling socket2 v0.5.10
+   Compiling errno v0.3.14
+   Compiling rustls-platform-verifier v0.7.0
+   Compiling memory-stats v1.2.0
+   Compiling idna_adapter v1.2.2
+   Compiling rustix v1.1.4
+   Compiling idna v1.1.0
+   Compiling druid-metrics v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-metrics)
+   Compiling url v2.5.8
+   Compiling validator v0.20.0
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.2
+   Compiling schannel v0.1.29
+   Compiling polling v3.11.0
+   Compiling nu-ansi-term v0.50.3
+   Compiling tracing-subscriber v0.3.23
+   Compiling rustls-native-certs v0.8.4
+   Compiling async-io v2.6.0
+   Compiling tokio v1.54.1
+   Compiling async-net v2.0.0
+   Compiling tokio-util v0.7.19
+   Compiling tokio-rustls v0.26.4
+   Compiling spawns-compat v0.2.2
+   Compiling async-compression v0.4.43
+   Compiling tokio-stream v0.1.19
+   Compiling druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc)
+   Compiling tokio-tungstenite v0.29.0
+   Compiling spawns v0.2.6
+   Compiling asyncs v0.4.0
+   Compiling zookeeper-client v0.11.2
+   Compiling tokio-metrics v0.5.1
+   Compiling h2 v0.4.17
+   Compiling tower v0.5.3
+   Compiling tower-http v0.7.0
+   Compiling tower-http v0.6.11
+   Compiling kube-core v4.2.0
+   Compiling hyper v1.11.0
+   Compiling hyper-util v0.1.20
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+   Compiling hyper-timeout v0.5.2
+   Compiling axum v0.8.9
+   Compiling hyper-rustls v0.27.9
+   Compiling topcoat-router v0.5.0
+   Compiling kube-client v4.2.0
+   Compiling reqwest v0.12.28
+   Compiling topcoat v0.5.0
+   Compiling kube v4.2.0
+   Compiling tonic v0.14.6
+   Compiling axum-valid v0.25.0
+   Compiling tonic-prost v0.14.6
+   Compiling druid-admin v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-admin)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 54.49s
+     Running tests\grpc_network_e2e_test.rs (D:/cargo-target\debug\deps\grpc_network_e2e_test-7010fe2ff8abcabf.exe)
+
+running 51 tests
+test grpc_client_builder_defaults_ack_window_to_256_and_rejects_zero ... ok
+test hello_ack_server_protocol_version_must_match ... ok
+test grpc_client_shutdown_joins_transport_and_leaves_no_active_stream ... ok
+test admin_shutdown_cancels_and_joins_every_owned_ingest_stream ... ok
+test admin_shutdown_releases_command_waiter_without_an_ack ... ok
+test dropping_tonic_response_detaches_exact_broker_sender_and_reuses_capacity ... ok
+test command_ack_error_does_not_expose_client_supplied_credentials_over_http ... ok
+test grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames ... ok
+test health_and_metrics_remain_truthful_after_grpc_ingest ... ok
+test production_builder_order_binds_shared_command_broker_shutdown ... ok
+test grpc_newer_sequence_updates_rest_state ... ok
+test grpc_rejects_zero_and_max_sequences_without_poisoning_other_streams ... ok
+test grpc_snapshot_is_visible_through_datasource_sql_and_wall_rest ... ok
+test grpc_multi_entry_batch_is_atomically_visible_and_counted_once ... ok
+test reconnect_observation_excludes_setup_but_keeps_the_retry_deadline ... ok
+test grpc_duplicate_and_increasing_sequences_are_handled_over_network ... ok
+test command_route_requires_explicit_basic_even_when_admin_auth_is_disabled_or_session_exists ... ok
+test authoritative_snapshot_replaces_only_after_end_and_empty_snapshot_clears_stream ... ok
+test production_command_entry_is_authenticated_and_fails_closed_without_a_live_stream ... ok
+test out_of_order_snapshot_chunk_fails_closed_without_replacing_visible_state ... ok
+test prometheus_escapes_client_controlled_label_values ... ok
+test incomplete_snapshot_survives_disconnect_without_partial_visibility ... ok
+test full_capacity_command_journal_reconnects_after_hello_ack_without_partial_replay ... ok
+test overlong_identity_is_rejected_before_hello_attachment_repository_or_rest_lookup ... ok
+test snapshot_transaction_capacity_is_enforced_before_staging ... ok
+test repository_rejection_does_not_ack_or_advance_and_same_sequence_can_retry ... ok
+test same_command_id_with_different_payload_fails_closed ... ok
+test old_slash_collision_pair_stays_distinct_across_broker_repository_rest_and_prometheus ... ok
+test two_w_plus_one_unique_commands_fail_closed_without_successor_execution ... ok
+test successor_stream_fences_old_epoch_before_it_can_overwrite_repository ... ok
+test runtime_shutdown_flushes_last_aggregated_batch_over_grpc ... ok
+test remote_plaintext_authorization_fails_before_the_probe_observes_a_connection ... ok
+test blocked_exporter_to_client_handoff_counts_each_batch_exactly_once ... ok
+test shutdown_timeout_reports_only_actual_pending_and_queued_work ... ok
+test unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushed ... ok
+test initial_connect_rpc_and_hello_ack_share_one_configured_deadline ... ok
+test grpc_reconnect_after_fully_acked_batch_keeps_next_sequence_and_updates_rest ... ok
+test grpc_client_reconnects_and_resends_only_pending_frame_bytes ... ok
+test remote_full_snapshot_chunks_and_command_survive_mid_stream_disconnect ... ok
+test invalid_ack_headers_close_transport_and_preserve_pending_frame ... FAILED
+test command_received_before_rotation_goodbye_survives_into_successor_session ... FAILED
+test final_command_reply_replays_after_half_close_and_duplicate_id_is_idempotent ... FAILED
+test admin_restart_with_pending_incremental_supersedes_it_with_monotonic_full_snapshot ... FAILED
+test authenticated_broker_executes_reset_and_full_snapshot_through_real_ingest_service ... FAILED
+test resync_cutoff_preserves_live_update_queued_after_snapshot_sampling ... FAILED
+test live_client_completes_two_different_commands_then_resumes_batches ... FAILED
+test admin_restart_without_pending_triggers_registry_full_snapshot ... FAILED
+test resync_required_supersedes_pending_with_monotonic_registry_full_snapshot ... FAILED
+test reset_result_survives_real_tonic_half_close_and_reconnect_without_reexecution ... FAILED
+test validated_w_plus_one_commands_survive_teardown_backpressure_and_live_traffic_resumes ... FAILED
+test reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries ... FAILED
+
+failures:
+
+---- invalid_ack_headers_close_transport_and_preserve_pending_frame stdout ----
+
+thread 'invalid_ack_headers_close_transport_and_preserve_pending_frame' (7132) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:1353:14:
+valid reconnect ACK completes shutdown: ShutdownTimeout { unflushed: 1 }
+
+---- command_received_before_rotation_goodbye_survives_into_successor_session stdout ----
+
+thread 'command_received_before_rotation_goodbye_survives_into_successor_session' (75536) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:2976:10:
+successor executes preserved command B: Elapsed(())
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- final_command_reply_replays_after_half_close_and_duplicate_id_is_idempotent stdout ----
+
+thread 'final_command_reply_replays_after_half_close_and_duplicate_id_is_idempotent' (77920) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:2123:10:
+server observes replay and idempotent duplicate reply: Elapsed(())
+
+---- admin_restart_with_pending_incremental_supersedes_it_with_monotonic_full_snapshot stdout ----
+
+thread 'admin_restart_with_pending_incremental_supersedes_it_with_monotonic_full_snapshot' (45680) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:3431:6:
+expected datasource state becomes visible: Elapsed(())
+
+---- authenticated_broker_executes_reset_and_full_snapshot_through_real_ingest_service stdout ----
+
+thread 'authenticated_broker_executes_reset_and_full_snapshot_through_real_ingest_service' (75480) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:5147:10:
+command client shuts down cleanly: ShutdownTimeout { unflushed: 0 }
+
+---- resync_cutoff_preserves_live_update_queued_after_snapshot_sampling stdout ----
+
+thread 'resync_cutoff_preserves_live_update_queued_after_snapshot_sampling' (73224) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:1710:10:
+authoritative snapshot sampled before queue drain: Elapsed(())
+
+---- live_client_completes_two_different_commands_then_resumes_batches stdout ----
+
+thread 'live_client_completes_two_different_commands_then_resumes_batches' (71204) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:2280:10:
+second command is not blocked by the first: Elapsed(())
+
+---- admin_restart_without_pending_triggers_registry_full_snapshot stdout ----
+
+thread 'admin_restart_without_pending_triggers_registry_full_snapshot' (43676) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:3431:6:
+expected datasource state becomes visible: Elapsed(())
+
+---- resync_required_supersedes_pending_with_monotonic_registry_full_snapshot stdout ----
+
+thread 'resync_required_supersedes_pending_with_monotonic_registry_full_snapshot' (5320) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:1480:10:
+resync replacement is ACKed before shutdown: ShutdownTimeout { unflushed: 1 }
+
+---- reset_result_survives_real_tonic_half_close_and_reconnect_without_reexecution stdout ----
+
+thread 'reset_result_survives_real_tonic_half_close_and_reconnect_without_reexecution' (74256) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:5426:10:
+command completes after reconnect: Elapsed(())
+
+thread 'tokio-rt-worker' (78476) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:5279:6:
+live stream appears before command deadline: Elapsed(())
+
+---- validated_w_plus_one_commands_survive_teardown_backpressure_and_live_traffic_resumes stdout ----
+
+thread 'validated_w_plus_one_commands_survive_teardown_backpressure_and_live_traffic_resumes' (28076) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:2484:18:
+every validated command reaches a successor session: Elapsed(())
+
+---- reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries stdout ----
+
+thread 'reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries' (61612) panicked at crates\druid-admin\tests\grpc_network_e2e_test.rs:4786:5:
+a stalled reconnect Connect RPC must expire so a successor attempt can start; observed connections=1
+
+
+failures:
+    admin_restart_with_pending_incremental_supersedes_it_with_monotonic_full_snapshot
+    admin_restart_without_pending_triggers_registry_full_snapshot
+    authenticated_broker_executes_reset_and_full_snapshot_through_real_ingest_service
+    command_received_before_rotation_goodbye_survives_into_successor_session
+    final_command_reply_replays_after_half_close_and_duplicate_id_is_idempotent
+    invalid_ack_headers_close_transport_and_preserve_pending_frame
+    live_client_completes_two_different_commands_then_resumes_batches
+    reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries
+    reset_result_survives_real_tonic_half_close_and_reconnect_without_reexecution
+    resync_cutoff_preserves_live_update_queued_after_snapshot_sampling
+    resync_required_supersedes_pending_with_monotonic_registry_full_snapshot
+    validated_w_plus_one_commands_survive_teardown_backpressure_and_live_traffic_resumes
+
+test result: FAILED. 39 passed; 12 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.15s
+
+error: test failed, to rerun pass `-p druid-admin --test grpc_network_e2e_test`

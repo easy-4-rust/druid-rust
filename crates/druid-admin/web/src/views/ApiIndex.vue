@@ -1,17 +1,24 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { ref } from 'vue'
 import { api } from '../api/client.js'
 
+import { useRefresh, useRequestGuard } from '../composables/useRefresh.js'
+const begin = useRequestGuard()
 const document = ref(null)
 const error = ref('')
 
-onMounted(async () => {
+async function load() {
+  const current = begin()
   try {
-    document.value = await api.openapi()
+    const body = await api.openapi()
+    if (!current()) return
+    document.value = body
+    error.value = ''
   } catch (cause) {
-    error.value = cause.message
+    if (current()) error.value = cause.message
   }
-})
+}
+useRefresh(load)
 </script>
 
 <template>
@@ -19,17 +26,13 @@ onMounted(async () => {
     <template #header>
       <div class="card-header">
         <span>API 索引</span>
-        <el-button size="small" @click="() => api.openapi().then((body) => (document = body))">刷新</el-button>
+        <el-button size="small" @click="load">刷新</el-button>
       </div>
     </template>
 
     <el-alert v-if="error" type="error" show-icon :closable="false" :title="error" />
 
     <template v-else-if="document">
-      <p class="note">
-        前端只依赖这一套版本化契约。Java 兼容的
-        <code>/druid/*.json</code> 路由保持原有形状，供既有嵌入方使用。
-      </p>
       <el-table :data="Object.entries(document.paths || {})" border size="small">
         <el-table-column label="路径" min-width="320">
           <template #default="scope">

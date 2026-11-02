@@ -1,0 +1,164 @@
+   Compiling zerocopy-derive v0.8.56
+   Compiling either v1.17.0
+   Compiling windows-sys v0.52.0
+   Compiling chrono v0.4.45
+   Compiling tokio v1.54.1
+   Compiling getrandom v0.3.4
+   Compiling etcetera v0.8.0
+   Compiling tinytemplate v1.2.1
+   Compiling itertools v0.10.5
+   Compiling rayon v1.12.0
+   Compiling errno v0.3.14
+   Compiling is-terminal v0.4.17
+   Compiling tempfile v3.27.0
+   Compiling rustix v1.1.4
+   Compiling zerocopy v0.8.56
+   Compiling async-io v2.6.0
+   Compiling criterion-plot v0.5.0
+   Compiling async-net v2.0.0
+   Compiling tokio-stream v0.1.19
+   Compiling spawns-compat v0.2.2
+   Compiling deadpool-runtime v0.3.1
+   Compiling druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc)
+   Compiling deadpool v0.13.0
+   Compiling spawns v0.2.6
+   Compiling asyncs v0.4.0
+   Compiling sqlx-core v0.8.6
+   Compiling toasty-core v0.9.0
+   Compiling ahash v0.8.12
+   Compiling ppv-lite86 v0.2.21
+   Compiling half v2.7.1
+   Compiling hashbrown v0.14.5
+   Compiling ciborium-ll v0.2.2
+   Compiling rand_chacha v0.3.1
+   Compiling ciborium v0.2.2
+   Compiling rand v0.8.7
+   Compiling hashlink v0.9.1
+   Compiling hashlink v0.8.4
+   Compiling dashmap v6.2.1
+   Compiling criterion v0.5.1
+   Compiling rusqlite v0.32.1
+   Compiling zookeeper-client v0.11.2
+   Compiling num-bigint-dig v0.8.6
+   Compiling rsa v0.9.10
+   Compiling sqlx-sqlite v0.8.6
+   Compiling sqlx-postgres v0.8.6
+   Compiling sqlx-mysql v0.8.6
+   Compiling toasty-sql v0.9.0
+   Compiling toasty-driver-sqlite v0.9.0 (E:\workspaces\workspace-github-easy-4-rust\druid-rust\vendor\toasty-driver-sqlite)
+   Compiling toasty v0.9.0
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+   Compiling sqlx v0.8.6
+   Compiling druid-wrapper v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper)
+   Compiling druid-bench v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-bench)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 46.50s
+     Running unittests src\lib.rs (D:/cargo-target\debug\deps\druid_bench-27a2a6240f42ef4f.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\java_rust_callable_differential.rs (D:/cargo-target\debug\deps\java_rust_callable_differential-86658f845c3682b9.exe)
+
+running 3 tests
+Callable differential artifacts: D:/druid-oracle/work\callable-seven-live-72576-1793576957051327400
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+test original_callable_inputs_preserve_errors_identity_and_lifecycle_records ... ok
+7 original Callable cases compared with exact approved records
+test pinned_java_and_rust_compare_all_seven_callable_cases ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.34s
+
+     Running tests\java_rust_exception_sorters_differential.rs (D:/cargo-target\debug\deps\java_rust_exception_sorters_differential-acc00f9a5bcb56e7.exe)
+
+running 4 tests
+test shared_corpus_has_complete_unique_rust_results_without_panics ... ok
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+Java Druid 33824c3dec1612711f9bb4e409319bcab2e4cd0e; 576 cases; artifacts: D:/druid-oracle/work\exception-sorters-74696-1793576959683070000
+test pinned_java_and_rust_match_every_shared_exception_case ... ok
+Java Druid 33824c3dec1612711f9bb4e409319bcab2e4cd0e; 118 cases; artifacts: D:/druid-oracle/work\exception-sorters-74696-1793576959683039400
+test pinned_java_and_rust_match_every_property_boundary_case ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.70s
+
+     Running tests\java_rust_jdbc42_differential.rs (D:/cargo-target\debug\deps\java_rust_jdbc42_differential-b985b4640450e019.exe)
+
+running 1 test
+test java_and_rust_agree_on_every_jdbc42_type_identity ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+
+     Running tests\java_rust_mock_sorter_differential.rs (D:/cargo-target\debug\deps\java_rust_mock_sorter_differential-972f2d4e497ce338.exe)
+
+running 2 tests
+Mock sorter differential artifacts: D:/druid-oracle/work\mock-sorter-live-74384-1793576963382598500
+test mock_sorter_physical_close_observation_is_complete ... ok
+1 original Mock sorter case: 1 exact match, 0 allowed differences
+test pinned_java_and_rust_compare_original_mock_sorter_case ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.94s
+
+     Running tests\java_rust_pool_differential.rs (D:/cargo-target\debug\deps\java_rust_pool_differential-e64a24f5cdbc9946.exe)
+
+running 3 tests
+Pool differential artifacts: D:/druid-oracle/work\pool-six-live-30212-1793576966103539200
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+test original_pool_inputs_have_complete_rust_lifecycle_records ... ok
+6 original Pool cases compared with exact approved records
+test pinned_java_and_rust_compare_all_six_pool_cases ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.07s
+
+     Running tests\java_rust_prepared_cache_differential.rs (D:/cargo-target\debug\deps\java_rust_prepared_cache_differential-2b2416eeedca80bd.exe)
+
+running 3 tests
+Prepared cache differential artifacts: D:/druid-oracle/work\prepared-cache-live-49600-1793576969260374600
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+test prepared_cache_observation_keeps_the_complete_original_case ... ok
+1 original prepared cache case compared with exact approved records
+test pinned_java_and_rust_compare_original_prepared_cache_case ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.95s
+
+     Running tests\java_rust_result_set_differential.rs (D:/cargo-target\debug\deps\java_rust_result_set_differential-50d536ac9302d49c.exe)
+
+running 3 tests
+ResultSet differential artifacts: D:/druid-oracle/work\result-set-live-55048-1793576971875318700
+test approved_difference_support::exact_approval_rejects_identity_scope_and_every_field_drift ... ok
+test all_original_result_set_inputs_have_complete_rust_observations_and_cleanup ... ok
+5 ResultSet cases: 5 matches or exact approved differences, 0 unapproved differences
+test pinned_java_and_rust_compare_all_five_result_set_inputs ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.92s
+
+     Running tests\java_rust_statement_errors_differential.rs (D:/cargo-target\debug\deps\java_rust_statement_errors_differential-b7a85ef0203a55e5.exe)
+
+running 3 tests
+test completion_allowance_rejects_unrelated_cases_or_any_observed_field_drift ... ok
+Statement differential artifacts: D:/druid-oracle/work\statement-errors-live-59456-1793576974643757800
+test all_frozen_statement_inputs_execute_against_rust_with_full_lifecycle_observations ... ok
+37 cases: 35 exact matches, 2 approved standard differences, 0 mismatches
+test pinned_java_and_rust_compare_all_37_statement_inputs ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.25s
+
+     Running tests\java_rust_wall_multi_differential.rs (D:/cargo-target\debug\deps\java_rust_wall_multi_differential-d659367bef825539.exe)
+
+running 2 tests
+Wall differential artifacts: D:/druid-oracle/work\wall-multi-live-35644-1793576977489823500
+test both_original_wall_multi_inputs_are_rejected ... ok
+2 original Wall cases: 2 exact matches, 0 allowed differences
+test pinned_java_and_rust_compare_both_original_wall_multi_cases ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.97s
+
+     Running tests\java_rust_wall_table_differential.rs (D:/cargo-target\debug\deps\java_rust_wall_table_differential-29a8c874ba58ba69.exe)
+
+running 2 tests
+test wall_table_corpus_retains_all_twenty_original_operations ... ok
+Wall table differential artifacts: D:/druid-oracle/work\wall-table-live-69060-1793576980900056600
+1 original Wall table case: 1 exact match, 0 allowed differences
+test pinned_java_and_rust_compare_original_wall_table_case ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.69s
+

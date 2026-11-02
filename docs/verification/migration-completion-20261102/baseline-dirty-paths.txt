@@ -1,0 +1,68 @@
+ M "docs/migration/\350\277\201\347\247\273\350\267\257\347\272\277\345\233\276.md"
+ M .gitignore
+ M Cargo.lock
+ M crates/druid-admin/Cargo.toml
+ M crates/druid-admin/build.rs
+ M crates/druid-admin/src/repository/metrics_repository.rs
+ M crates/druid-admin/src/repository/mod.rs
+ M crates/druid-admin/src/service/monitor_stat_service.rs
+ M crates/druid-admin/src/servlet/monitor_view_servlet.rs
+ M crates/druid-admin/src/servlet/monitor_view_servlet/monitor_view_a.rs
+ M crates/druid-admin/src/servlet/monitor_view_servlet/v1_api.rs
+ M crates/druid-admin/web/package.json
+ M crates/druid-admin/web/src/App.vue
+ M crates/druid-admin/web/src/api/client.js
+ M crates/druid-admin/web/src/components/HistogramBar.vue
+ M crates/druid-admin/web/src/components/MiniHistogram.vue
+ M crates/druid-admin/web/src/router.js
+ M crates/druid-admin/web/src/store.js
+ M crates/druid-admin/web/src/style.css
+ M crates/druid-admin/web/src/utils/format.js
+ M crates/druid-admin/web/src/views/ApiIndex.vue
+ M crates/druid-admin/web/src/views/DatasourceDetail.vue
+ M crates/druid-admin/web/src/views/DatasourceList.vue
+ M crates/druid-admin/web/src/views/SlowSql.vue
+ M crates/druid-admin/web/src/views/SqlDetail.vue
+ M crates/druid-admin/web/src/views/SqlList.vue
+ M crates/druid-admin/web/src/views/WallView.vue
+ M crates/druid-admin/web/vite.config.js
+ M crates/druid-rdbc/Cargo.toml
+ M crates/druid-rdbc/src/extensions/shared_row_set/trait_impls.rs
+ M crates/druid-rdbc/src/governance/wall/mod.rs
+ M crates/druid/src/sql/tenant_call_back.rs
+ M crates/druid/src/sql/wall_config.rs
+ M crates/druid/src/sql/wall_update_check_handler.rs
+ M crates/druid/tests/task6_filter_chain_extended_test_parity_part_01.rs
+ M crates/druid/tests/task6_filter_chain_extended_test_parity_part_02.rs
+ M docs/superpowers/README.md
+ M docs/verification/current-code-audit-20261101/README.md
+ M openspec/specs/admin-web-console/spec.md
+?? crates/druid-admin/src/repository/metrics_repository/
+?? crates/druid-admin/src/service/monitor_stat_service/
+?? crates/druid-admin/src/servlet/monitor_view_servlet/v1_health.rs
+?? crates/druid-admin/src/servlet/monitor_view_servlet/v1_snapshot.rs
+?? crates/druid-admin/tests/admin_live_console_test.rs
+?? crates/druid-admin/tests/admin_sample_history_test.rs
+?? crates/druid-admin/web/README.md
+?? crates/druid-admin/web/src/components/SourceStatus.vue
+?? crates/druid-admin/web/src/composables/
+?? crates/druid-admin/web/src/utils/requestGuard.js
+?? crates/druid-admin/web/src/views/Capabilities.vue
+?? crates/druid-admin/web/src/views/CollectionHealth.vue
+?? crates/druid-admin/web/src/views/Overview.vue
+?? crates/druid-admin/web/tests/
+?? crates/druid-rdbc/resources/
+?? crates/druid-rdbc/src/governance/wall/tenant_call_back.rs
+?? crates/druid-rdbc/src/governance/wall/wall_config.rs
+?? crates/druid-rdbc/src/governance/wall/wall_update_check_handler.rs
+?? crates/druid-test/tests/fixtures/wall_config_kernel/
+?? crates/druid-test/tests/wall_config_java_observation_test.rs
+?? crates/druid-test/tests/wall_config_kernel_boundary_test.rs
+?? docs/functional-design/
+?? docs/verification/admin-bounded-history-20261102.md
+?? docs/verification/admin-live-console-20261102.md
+?? docs/verification/migration-completion-20261102/
+?? docs/verification/wall-kernel-extraction-20261101/
+?? openspec/changes/admin-bounded-monitor-history/
+?? openspec/changes/admin-live-console/
+?? openspec/changes/migration-completion-roadmap/

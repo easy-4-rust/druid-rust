@@ -1803,6 +1803,7 @@ dependencies = [
  "bitflags 2.13.1",
  "chrono",
  "futures",
+ "indexmap",
  "jiff",
  "parking_lot",
  "serde",

@@ -1,0 +1,72 @@
+   Compiling druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc)
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+   Compiling druid-wrapper v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-wrapper)
+   Compiling druid-test v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-test)
+    Finished `test` profile [unoptimized] target(s) in 55.19s
+     Running tests\task6_filter_chain_extended_test_parity_part_01.rs (D:/codex-build/druid-wall-kernel-20261101\debug\deps\task6_filter_chain_extended_test_parity_part_01-80d15e923820597d.exe)
+
+running 34 tests
+test task6_filter_chain_extended_test_filter_chain_impl_add_after_only_affects_after_count ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_add_before_only_affects_before_count ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_add_filter_populates_all_three_views ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_add_filter_records_class_name ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_add_multiple_filters ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_add_result_set_only_affects_result_set_count ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_after_batch_empty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_after_connection_event_empty_chain ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_after_connection_event_with_identity ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_after_execute_empty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_after_statement_close_with_identity ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_after_statement_event_empty_chain ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_after_statement_event_with_identity ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_before_batch_empty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_before_connection_event_empty_chain ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_before_connection_event_with_identity ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_before_execute_empty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_connection_event_all_variants ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_connection_metadata_through_real_toasty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_connection_warnings_through_real_toasty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_contains_filter_class_name_case_insensitive ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_default_matches_new ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_full_lifecycle_through_real_toasty_sqlite ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_new_is_empty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_prepare_statement_sql_passthrough_empty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_prepare_statement_sql_with_adapter_passthrough ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_prepared_statement_warnings_through_real_toasty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_result_set_find_column_through_real_toasty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_result_set_get_meta_data_through_real_toasty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_result_set_open_after_empty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_result_set_open_after_with_adapter ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_result_set_scalar_getters_through_real_toasty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_statement_add_batch_sql_passthrough_empty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_statement_warnings_through_real_toasty ... ok
+
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests\task6_filter_chain_extended_test_parity_part_02.rs (D:/codex-build/druid-wall-kernel-20261101\debug\deps\task6_filter_chain_extended_test_parity_part_02-fcb63287db29b58d.exe)
+
+running 3 tests
+test task6_filter_chain_extended_test_filter_chain_impl_multi_filter_chain_through_real_toasty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_result_set_navigation_through_real_toasty ... ok
+test task6_filter_chain_extended_test_filter_chain_impl_with_log_filter_through_real_toasty ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\wall_config_java_observation_test.rs (D:/codex-build/druid-wall-kernel-20261101\debug\deps\wall_config_java_observation_test-9c735a8845359b4e.exe)
+
+running 2 tests
+test all_java_scalar_defaults_match_kernel ... ok
+test every_bundled_java_rule_set_matches_kernel ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wall_config_kernel_boundary_test.rs (D:/codex-build/druid-wall-kernel-20261101\debug\deps\wall_config_kernel_boundary_test-f57b5306a979e0f5.exe)
+
+running 4 tests
+test callback_and_handler_identity_survive_facade_round_trip ... ok
+test canonical_config_drives_existing_wall_and_old_module_paths ... ok
+test kernel_owns_bundled_rules_and_keeps_append_semantics ... ok
+test ordered_update_columns_and_clone_visibility_are_preserved ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

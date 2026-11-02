@@ -44,7 +44,7 @@ const bars = computed(() => {
     </div>
     <div class="total">合计 {{ formatNumber(total) }}</div>
   </div>
-  <el-empty v-else description="暂无直方图数据" :image-size="60" />
+  <p v-else class="muted">直方图未上报</p>
 </template>
 
 <style scoped>

@@ -7,14 +7,14 @@ export default defineConfig({
   plugins: [vue()],
   base: './',
   build: {
-    outDir: 'dist',
+    outDir: process.env.DRUID_CONSOLE_DIST || 'dist',
     emptyOutDir: true,
     assetsDir: 'assets',
   },
   server: {
     proxy: {
       '/druid': {
-        target: 'http://127.0.0.1:8080',
+        target: process.env.DRUID_ADMIN_URL || 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
     },
