@@ -142,9 +142,19 @@ def verify(ledger: Path, inventory: Path) -> dict[str, int]:
                 raise EvidenceError(f"row {line}: stale or missing Rust source hash for {rust_reference}")
             if row["rust_method_entry"] and row["rust_method_entry"] != "UNMAPPED":
                 rust_text = rust_path.read_text(encoding="utf-8", errors="replace")
-                rust_method = row["rust_method_entry"].rsplit("::", 1)[-1]
-                if not re.search(rf"\bfn\s+{re.escape(rust_method)}\s*(?:<|\()", rust_text):
-                    raise EvidenceError(f"row {line}: Rust method entry is absent from {rust_reference}")
+                entry = row["rust_method_entry"]
+                if entry.startswith("const:"):
+                    # Java 静态常量/枚举常量：Rust 侧必须是同名 const 或枚举变体。
+                    name = entry.partition(":")[2]
+                    declared = re.search(rf"\bconst\s+{re.escape(name)}\b", rust_text) or re.search(
+                        rf"(?m)^\s*{re.escape(name)}\s*,", rust_text)
+                    if not declared:
+                        raise EvidenceError(
+                            f"row {line}: Rust constant {name} is absent from {rust_reference}")
+                else:
+                    rust_method = entry.rsplit("::", 1)[-1]
+                    if not re.search(rf"\bfn\s+{re.escape(rust_method)}\s*(?:<|\()", rust_text):
+                        raise EvidenceError(f"row {line}: Rust method entry is absent from {rust_reference}")
         elif row["capability"] in {"SUPPORTED", "PARTIAL"}:
             raise EvidenceError(f"row {line}: linked capability lacks a Rust source file")
     return {"inventory": len(source_rows), "ledger": len(rows),

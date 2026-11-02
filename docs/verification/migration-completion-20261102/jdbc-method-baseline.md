@@ -10,12 +10,12 @@
 
 | 维度 | PASS | PARTIAL | UNSUPPORTED | UNASSESSED |
 |---|---:|---:|---:|---:|
-| capability | 0 | 532 | 4 | 1465 |
-| declaration | 520 | 0 | 0 | 1481 |
-| contract | 516 | 0 | 0 | 1485 |
-| adapter | 155 | 0 | 0 | 1846 |
-| logical_proxy | 306 | 0 | 0 | 1695 |
-| real_db | 58 | 0 | 0 | 1943 |
+| capability | 78 | 539 | 4 | 1380 |
+| declaration | 605 | 0 | 0 | 1396 |
+| contract | 601 | 0 | 0 | 1400 |
+| adapter | 155 | 0 | 78 N/A | 1768 |
+| logical_proxy | 306 | 0 | 78 N/A | 1617 |
+| real_db | 58 | 0 | 78 N/A | 1865 |
 
 ## 约束
 
@@ -84,3 +84,12 @@
 - 结果：linked **536** / unassessed **1465**；capability PARTIAL 532 + UNSUPPORTED 4；declaration PASS 520、contract PASS 516、adapter PASS 155、logical_proxy 306、real_db PASS 58。
 - 边界：`DataSource#getConnection(String,String)`、`XA#getXAConnection(String,String)` 仅默认 0A000，未回填；PooledConnection/XA 的 statement listener 无 trait 级测试；RowSetListener#rowChanged 无正向事件断言；XAConnection/XADataSource 的 close/TYPE 与 ConnectionPoolDataSource 获取仍未评估。
 - 门禁：`EVIDENCE_INTEGRITY_PASS linked=536 unassessed=1465`；ledger 校验与 OpenSpec `--strict` 通过。
+
+## 2026-11-03 java.sql.Types / JDBCType 常量批次
+
+- 当前 ledger SHA-256：`975b399636f56cea78d71d9e4ed90e9c978bb5bfefed4d5e6c6bf0db1bf34d58`
+- 新增 85 个身份：39 个 `java.sql.Types` 常量、39 个 `java.sql.JDBCType` 枚举常量、7 个 JDBCType/SQLType 方法（`getName/getVendor/getVendorTypeNumber` 各自两个继承入口 + `valueOf(int)`）。
+- 常量没有 adapter/logical_proxy/real_db 运行时维度，登记为 `NOT_APPLICABLE`；capability 为 `SUPPORTED`，declaration/contract PASS，依据是 `canonical_types_module_preserves_all_java8_constants_and_existing_facades` 与 `canonical_jdbc_type_preserves_every_java8_name_vendor_and_number` 对全部 39 组名称/数值的精确断言。
+- 结果：linked **621** / unassessed **1380**；capability SUPPORTED 78 + PARTIAL 539 + UNSUPPORTED 4；declaration PASS 605、contract PASS 601、adapter PASS 155、logical_proxy PASS 306、real_db PASS 58。
+- 边界：`JDBCType#values()` 与 `valueOf(String)` 无 Rust 对应入口；两个 `#TYPE` 行保持未评估。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=621 unassessed=1380`；`standard_constant_exception_contract_test` 2 passed、`standard_value_ownership_test` 4 passed。

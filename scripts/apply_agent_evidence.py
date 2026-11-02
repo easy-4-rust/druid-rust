@@ -126,14 +126,19 @@ def apply_method(report: Path, apply: bool) -> int:
             declared_source = (candidate.get("rust_source") or "").strip()
             if declared_source:
                 declared_path = ROOT / declared_source
-                if declared_path.is_file() and re.search(
-                    rf"\bfn\s+{re.escape(method_name)}\s*(?:<|\()",
-                    declared_path.read_text(encoding="utf-8", errors="replace"),
-                ):
+                if method_name.startswith("const:"):
+                    name = method_name.partition(":")[2]
+                    text = declared_path.read_text(encoding="utf-8", errors="replace") if declared_path.is_file() else ""
+                    declared = re.search(rf"\bconst\s+{re.escape(name)}\b", text) or re.search(
+                        rf"(?m)^\s*{re.escape(name)}\s*,", text)
+                else:
+                    text = declared_path.read_text(encoding="utf-8", errors="replace") if declared_path.is_file() else ""
+                    declared = re.search(rf"\bfn\s+{re.escape(method_name)}\s*(?:<|\()", text)
+                if declared:
                     source = declared_source
                 else:
                     errors.append(
-                        f"{identity}: declared rust_source lacks fn {method_name}: {declared_source}"
+                        f"{identity}: declared rust_source lacks {method_name}: {declared_source}"
                     )
                     continue
             else:
@@ -150,10 +155,17 @@ def apply_method(report: Path, apply: bool) -> int:
             real_db = select_evidence(
                 candidate.get("real_db_evidence") or "", identity, "real_db_evidence", errors
             )
-            row["adapter"] = "PASS" if adapter not in ("", "NONE", "-") else "UNASSESSED"
-            row["logical_proxy"] = "PASS" if logical not in ("", "NONE", "-") else "UNASSESSED"
-            row["real_db"] = "PASS" if real_db else "UNASSESSED"
-            row["capability"] = "PARTIAL"
+            constant = (candidate.get("applicability") or "").strip() == "constant"
+            if constant:
+                row["adapter"] = "NOT_APPLICABLE"
+                row["logical_proxy"] = "NOT_APPLICABLE"
+                row["real_db"] = "NOT_APPLICABLE"
+                row["capability"] = "SUPPORTED"
+            else:
+                row["adapter"] = "PASS" if adapter not in ("", "NONE", "-") else "UNASSESSED"
+                row["logical_proxy"] = "PASS" if logical not in ("", "NONE", "-") else "UNASSESSED"
+                row["real_db"] = "PASS" if real_db else "UNASSESSED"
+                row["capability"] = "PARTIAL"
             row["rust_source"] = source
             row["rust_source_sha256"] = digest(source)
             note = (candidate.get("notes") or "").strip()
