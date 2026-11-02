@@ -15,7 +15,7 @@
 | 2.1 Java 用例清单 | `java-test-cases.tsv`：4759 个 `@Test` + 2219 个无 `@Test` 的 `public void test...`，manifest 共 **6978** 个唯一 case |
 | 2.2 资源清单 | `java-test-assets.tsv`：**822** 个资源、13.46 MiB |
 | 2.4 资源精确复制 | 复制到 `crates/druid-test/tests/fixtures/source-java/src/test/resources/`，SHA-256 **822/822** 一致 |
-| 2.5 整仓验收聚合 | `scripts/run_workspace_acceptance.sh` 逐包跑 7 个 crate 全部 exit 0；`source_parity_acceptance` 输出 `source-parity-status.tsv`：6978 cases、MATCH 18 / MISMATCH 0 / NOT_RUN 6960，未隐藏 MISSING/BLOCKED |
+| 2.5 整仓验收聚合 | `scripts/run_workspace_acceptance.sh` 逐包跑 7 个 crate 全部 exit 0；`source_parity_acceptance` 输出 `source-parity-status.tsv`：6978 cases、MATCH 23 / MISMATCH 0 / NOT_RUN 6955，未隐藏 MISSING/BLOCKED |
 | 3.1 JDBC 方法基线 | `java8-method-evidence-baseline.tsv`，2001 身份，SHA-256 `cfa065c8…`，未评估状态不变 |
 | 5.2 Admin 数据合同 | Rust 合同 34 passed（`admin-console-contracts.log`）；前端 5 passed（`admin-web-tests.log`） |
 | 5.4 OpenAPI 同源 | `v1_route_table!` 同时驱动 router 与 OpenAPI paths；`route_manifest_paths_are_unique` 与 `v1_openapi_document_lists_every_served_route` 通过；健康/unavailableFields 测试覆盖 |
@@ -47,7 +47,7 @@
 ### 2. SOURCE_PARITY 首批映射已完成，余量仍大
 
 - `docs/migration/source-test-parity.json` 现为 **6978** 个唯一 case（4759 个 `@Test` + 2219 个无 `@Test` 的 `public void test...`），822 个资产。
-- 首批 **18** 个 `bvt.pool.vendor` ExceptionSorter 来源方法已映射到 `exception_sorter_semantics_test`：**18 MATCH / 0 MISMATCH**；其中 2201 个未发现方法显式标为 `BLOCKED`，未隐藏。
+- 首批 **23** 个来源方法已映射：18 个 `bvt.pool.vendor` ExceptionSorter 方法 → `exception_sorter_semantics_test`；4 个 `FilterManagerTest` 方法 + `ClearFilterTest#test_filters` → FilterManager/DataSource filter parity 测试。**23 MATCH / 0 MISMATCH**；2201 个未发现方法显式标为 `BLOCKED`，未隐藏。
 - 其余 4759 个 `@Test` 仍为 `MISSING/NOT_RUN`；禁止按测试名自动映射或伪造 MATCH。
 
 ### 3. JDBC 方法证据仍以未评估为主
