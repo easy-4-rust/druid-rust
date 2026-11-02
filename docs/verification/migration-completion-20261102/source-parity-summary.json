@@ -24,8 +24,8 @@
     "ADAPTED": 20,
     "BLOCKED": 2200,
     "MERGED_APPROVED": 15,
-    "MIRRORED": 47,
-    "MISSING": 4696
+    "MIRRORED": 49,
+    "MISSING": 4694
   },
   "java_baseline": "fa8dc9912637a2f729eef9f55356621fec18d40e",
   "manifest": "docs/migration/source-test-parity.json",
@@ -34,8 +34,8 @@
   "status_table": "docs/verification/migration-completion-20261102/source-parity-status.tsv",
   "statuses": {
     "APPROVED_DIFFERENCE": 13,
-    "MATCH": 68,
+    "MATCH": 70,
     "MISMATCH": 1,
-    "NOT_RUN": 6896
+    "NOT_RUN": 6894
   }
 }

@@ -5943,30 +5943,36 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallMultiStatementTest.java#testMySql",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallMultiStatementTest.java#testMySql",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid-bench/tests/java_rust_wall_multi_differential.rs::pinned_java_and_rust_compare_both_original_wall_multi_cases"
+      ],
+      "disposition": "MIRRORED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "Live Java/Rust Wall multi-statement differential reported MATCH; artifact docs/verification/migration-completion-20261102/wall-multi-differential-comparison.tsv",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallMultiStatementTest.java#testOracle",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallMultiStatementTest.java#testOracle",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
-      "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "targets": [
+        "crates/druid-bench/tests/java_rust_wall_multi_differential.rs::pinned_java_and_rust_compare_both_original_wall_multi_cases"
+      ],
+      "disposition": "MIRRORED",
+      "contract_preserved": true,
+      "inputs_preserved": true,
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "Live Java/Rust Wall multi-statement differential reported MATCH; artifact docs/verification/migration-completion-20261102/wall-multi-differential-comparison.tsv",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallProviderTest.java#test_getSqlStat",

@@ -421,8 +421,8 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallLineCommentTest.java#testMyS
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallLineCommentTest.java#testOracle	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallMultiLineCommentTest.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallMultiLineCommentTest.java#testOracle	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallMultiStatementTest.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallMultiStatementTest.java#testOracle	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallMultiStatementTest.java#testMySql	MIRRORED	MATCH	crates/druid-bench/tests/java_rust_wall_multi_differential.rs::pinned_java_and_rust_compare_both_original_wall_multi_cases	Live Java/Rust Wall multi-statement differential reported MATCH; artifact docs/verification/migration-completion-20261102/wall-multi-differential-comparison.tsv
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallMultiStatementTest.java#testOracle	MIRRORED	MATCH	crates/druid-bench/tests/java_rust_wall_multi_differential.rs::pinned_java_and_rust_compare_both_original_wall_multi_cases	Live Java/Rust Wall multi-statement differential reported MATCH; artifact docs/verification/migration-completion-20261102/wall-multi-differential-comparison.tsv
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallProviderTest.java#test_getSqlStat	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallReadOnlyTest.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallReadOnlyTest.java#testORACLE	MISSING	NOT_RUN		
