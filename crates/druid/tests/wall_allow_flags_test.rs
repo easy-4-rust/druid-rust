@@ -102,3 +102,37 @@ fn wall_union_check_does_not_reject_plain_union() {
     assert!(WallUtils::is_validate_oracle_with_config(union_sql, strict.clone()).unwrap());
     assert!(!WallUtils::is_validate_oracle_with_config(union_comment, strict).unwrap());
 }
+
+#[test]
+fn wall_select_into_allow_false_rejects_mysql_and_oracle() {
+    let mut config = WallConfig::default();
+    config.select_into_allow = false;
+    let sql = "SELECT F1, F2 INTO T2 FROM T1";
+    assert!(!WallUtils::is_validate_my_sql_with_config(sql, config.clone()).unwrap());
+    assert!(!WallUtils::is_validate_oracle_with_config(sql, config).unwrap());
+}
+
+#[test]
+fn wall_select_where_with_extra_condition_is_allowed() {
+    let sql = "SELECT F1, F2 from t WHERE 1 = 1 AND F1 = ?";
+    assert!(WallUtils::is_validate_my_sql(sql).unwrap());
+    assert!(WallUtils::is_validate_oracle(sql).unwrap());
+}
+
+#[test]
+fn wall_drop_table_allow_true_accepts_drop_table() {
+    let mut config = WallConfig::default();
+    config.drop_table_allow = true;
+    assert!(WallUtils::is_validate_my_sql_with_config("DROP TABLE T1", config.clone()).unwrap());
+    assert!(WallUtils::is_validate_oracle_with_config("DROP TABLE T1", config).unwrap());
+}
+
+#[test]
+fn wall_drop_procedure_is_rejected_even_when_drop_table_allow() {
+    let mut config = WallConfig::default();
+    config.drop_table_allow = true;
+    let sql = "DROP PROCEDURE IF EXISTS CP_PayCalc1";
+    // Java WallDropTest2 allows DROP PROCEDURE with dropTableAllow=true; Rust rejects it.
+    assert!(!WallUtils::is_validate_my_sql_with_config(sql, config.clone()).unwrap());
+    assert!(!WallUtils::is_validate_oracle_with_config(sql, config).unwrap());
+}
