@@ -19,6 +19,7 @@ task	status	commits	tests	artifacts
 9.1	done	66dbd173; 548af80c	driver_profile_baseline	docs/verification/migration-completion-20261102/driver-profiles-baseline.tsv
 9.2	done	5a6f6941	driver_matrix (80 profiles × 13 operations)	docs/verification/migration-completion-20261102/driver-matrix-results.tsv
 10.2	done	a490aaf3	grpc_network_e2e_test (3 consecutive runs)	docs/verification/migration-completion-20261102/grpc-recovery-3x.log; grpc-recovery-matrix.md
+10.4	done	3fd11e14	CI 41396400600 Rust contracts ubuntu/windows/macos	repository_churn_memory_budget_test; repository_capacity_test
 11.2	done	ff1cdb2d	cargo +1.95.0 check --workspace --all-targets --locked	docs/verification/migration-completion-20261102/msrv-1.95.log
 11.3	done	592504bc; ff1cdb2d	verify_rdbc_single_standard_breaking_api.py; verify_task6_external_public_contract.py	docs/verification/migration-completion-20261102/structural-and-public-api.md
 12.1	done	dfea440d; a490aaf3	openspec validate migration-completion-roadmap --strict	docs/migration/README.md; 迁移验收规范.md; 迁移路线图.md; 对象级对照表.md; 语义迁移对照表.md

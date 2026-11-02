@@ -87,7 +87,7 @@
 - [ ] 10.1 测量采集对 SQL p50/p95/p99 的影响，验证热路径无 `send().await`、网络或磁盘调用；保留负载、分位数和失败产物。
 - [x] 10.2 重复执行 gRPC 断连、重连、重复/乱序 ACK、Admin 重启、饱和停机和未刷出场景；验证 sequence、幂等、full snapshot、未刷出和 shutdown 数值。证据：`grpc-recovery-3x.log` 连续 3 轮 51 passed / 0 failed / 0 ignored；场景映射见 `grpc-recovery-matrix.md`。
 - [ ] 10.3 验证 Admin K8s、鉴权、TLS、部署和真实浏览器行为，覆盖部分失败、字段脱敏和只读能力；验证实际运行环境不支持项明确标记。
-- [ ] 10.4 在 Linux/macOS/Windows 运行 repository 容量和 session churn 内存预算，验证 RSS/working set 可测量、预算未超标且过期身份被清理。
+- [x] 10.4 在 Linux/macOS/Windows 运行 repository 容量和 session churn 内存预算，验证 RSS/working set 可测量、预算未超标且过期身份被清理。证据：CI run `41396400600` 的 `Rust contracts (ubuntu-latest/windows-latest/macos-latest)` 全部 success；三平台 `cargo test --workspace` 覆盖 `repository_churn_memory_budget_test`（128 MiB sampled physical memory）与 `repository_capacity_test`（TTL/身份清理）。
 
 ## 11. 最终门禁与发布判定
 
@@ -103,5 +103,5 @@
 ## 12. 规格与证据同步
 
 - [x] 12.1 更新四份迁移主文档和当前验证索引，保留历史快照与原始证据；验证当前事实区无相互矛盾的完成状态和第二套现行文档。证据：`docs/migration/README.md`、`迁移验收规范.md`、`迁移路线图.md`、`对象级对照表.md`、`语义迁移对照表.md`、`对象名称一致性检查.md` 均加入 2026-11-02 当前状态块（19/68、NOT_READY），历史段落保留并明确不作当前结论。
-- [x] 12.2 将本 change 的任务逐项关联到实际提交、测试和产物，未执行项保持未勾选；验证 `openspec validate migration-completion-roadmap` 通过。证据：`task-evidence.tsv` 覆盖全部 24 个已完成项；`openspec validate migration-completion-roadmap --strict` 通过。
+- [x] 12.2 将本 change 的任务逐项关联到实际提交、测试和产物，未执行项保持未勾选；验证 `openspec validate migration-completion-roadmap` 通过。证据：`task-evidence.tsv` 覆盖全部 25 个已完成项；`openspec validate migration-completion-roadmap --strict` 通过。
 - [ ] 12.3 仅在实现、测试、验证与规格同步全部完成后 sync/archive；验证主 specs 与 change 一致，Admin 和两个语义 change 仍保持各自独立事实源。
