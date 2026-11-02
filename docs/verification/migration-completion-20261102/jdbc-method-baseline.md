@@ -10,9 +10,9 @@
 
 | 维度 | PASS | PARTIAL | UNSUPPORTED | UNASSESSED |
 |---|---:|---:|---:|---:|
-| capability | 78 | 573 | 4 | 1346 |
-| declaration | 639 | 0 | 0 | 1362 |
-| contract | 635 | 0 | 0 | 1366 |
+| capability | 78 | 678 | 4 | 1241 |
+| declaration | 744 | 0 | 0 | 1257 |
+| contract | 740 | 0 | 0 | 1261 |
 | adapter | 155 | 0 | 78 N/A | 1768 |
 | logical_proxy | 306 | 0 | 78 N/A | 1617 |
 | real_db | 58 | 0 | 78 N/A | 1865 |
@@ -92,7 +92,7 @@
 - 常量没有 adapter/logical_proxy/real_db 运行时维度，登记为 `NOT_APPLICABLE`；capability 为 `SUPPORTED`，declaration/contract PASS，依据是 `canonical_types_module_preserves_all_java8_constants_and_existing_facades` 与 `canonical_jdbc_type_preserves_every_java8_name_vendor_and_number` 对全部 39 组名称/数值的精确断言。
 - 结果：linked **621** / unassessed **1380**；capability SUPPORTED 78 + PARTIAL 539 + UNSUPPORTED 4；declaration PASS 605、contract PASS 601、adapter PASS 155、logical_proxy PASS 306、real_db PASS 58。
 - 边界：`JDBCType#values()` 与 `valueOf(String)` 无 Rust 对应入口；两个 `#TYPE` 行保持未评估。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=655 unassessed=1346`；`standard_constant_exception_contract_test` 2 passed、`standard_value_ownership_test` 4 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=760 unassessed=1241`；`standard_constant_exception_contract_test` 2 passed、`standard_value_ownership_test` 4 passed。
 
 ## 2026-11-03 SQLInput/SQLOutput 剩余标量批次
 
@@ -100,4 +100,12 @@
 - 新增 34 个方法：17 个 `SQLInput#readXxx` 与 17 个 `SQLOutput#writeXxx`，证据为 `every_standard_input_reader_distinguishes_sql_null` / `every_standard_output_writer_retains_attribute_order_and_nulls`，覆盖 SQL NULL 零值/None、was_null 与单属性消费。
 - 结果：linked **655** / unassessed **1346**；capability SUPPORTED 78 + PARTIAL 573 + UNSUPPORTED 4；declaration PASS 639、contract PASS 635。
 - 边界：SQLInput/SQLOutput 仅剩 `TYPE` 未评估；两者仍无 adapter/real_db 证据（JDBC Agent 未实现 UDT 通道）。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=655 unassessed=1346`；`standard_sql_mapping_contract_test` 11 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=760 unassessed=1241`；`standard_sql_mapping_contract_test` 11 passed。
+
+## 2026-11-03 RowSet setter/property 批次
+
+- 当前 ledger SHA-256：`62f593a3c7b381f1e6ceb67d94e98d27863a3dcaa573d7ad4ad0c0f0937221ee`
+- 新增 105 个 `javax.sql.RowSet` 方法：73 个固定参数 setter（`every_fixed_java_row_set_setter_preserves_its_family_and_overload`）、28 个属性 setter/getter（`canonical_row_set_properties_forward_all_requests_and_validate_atomically`）、`execute/clearParameters/addRowSetListener/removeRowSetListener`。
+- 结果：linked **760** / unassessed **1241**；capability SUPPORTED 78 + PARTIAL 678 + UNSUPPORTED 4；declaration PASS 744、contract PASS 740；RowSet 覆盖 107/321。
+- 边界：RowSet 继承的 ResultSet 取值/更新方法（`updateXxx`、`getXxx` 标签重载等）尚无 RowSet 类型上的断言；`RowSetMetaData` 44 个身份仍全部未评估；RowSet 无 adapter/real_db 证据。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=760 unassessed=1241`；`standard_row_set_full_surface_contract_test` 3 passed。
