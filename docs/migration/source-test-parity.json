@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "java_baseline": "fa8dc9912637a2f729eef9f55356621fec18d40e",
-  "rust_baseline": "ed161654c203f60e87ea11b4524ca57496a10e73",
+  "rust_baseline": "9e95aab8b24774a9ed2f0be982a3e324a6390339",
   "acceptance_module": {
     "package": "druid-test",
     "manifest": "crates/druid-test/Cargo.toml",

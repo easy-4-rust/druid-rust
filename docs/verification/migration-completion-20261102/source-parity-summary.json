@@ -29,7 +29,7 @@
   },
   "java_baseline": "fa8dc9912637a2f729eef9f55356621fec18d40e",
   "manifest": "docs/migration/source-test-parity.json",
-  "rust_baseline": "ed161654c203f60e87ea11b4524ca57496a10e73",
+  "rust_baseline": "9e95aab8b24774a9ed2f0be982a3e324a6390339",
   "schema": 1,
   "status_table": "docs/verification/migration-completion-20261102/source-parity-status.tsv",
   "statuses": {

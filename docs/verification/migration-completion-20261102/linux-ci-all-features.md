@@ -1,7 +1,7 @@
 # Linux CI 全量默认/all-features 测试证据（1.5）
 
 日期：2026-11-02
-CI：run `41396400600`，job `rust-contracts`（`125118552514`，ubuntu-latest），commit `5a6f6941`。
+CI：run `41401827024`，job `rust-contracts`（`125135113506`，ubuntu-latest），commit `9e95aab8`。
 
 ## 结果
 
@@ -23,7 +23,7 @@ job 结论：**success**。
 ## 证据提取
 
 ```bash
-gh run view --job 125118552514 --log > rust-contracts-ci.log
+gh api repos/easy-4-rust/druid-rust/actions/jobs/125135113506/logs --allow-escape-sequences > rust-contracts-ci.log
 # 按 step 前缀过滤并累加 "test result:" 行
 ```
 

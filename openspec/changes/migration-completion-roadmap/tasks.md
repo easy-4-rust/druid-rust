@@ -8,7 +8,7 @@
 - [x] 1.2 将生产代码使用的 `memory-stats` 从 druid-admin dev-dependency 调整为正式依赖，或删除该生产调用；验证 `cargo check -p druid-admin --all-features --offline` 通过且 `v1_health` 不再伪造 RSS。
 - [x] 1.3 处理 `sql_parse.rs` 未使用 `kw` 与 `shared_row_set/trait_impls.rs` 通配导入；验证相关目标 `cargo clippy --all-targets --all-features -- -D warnings -A clippy::pedantic` 通过。
 - [x] 1.4 保留 Filter 类身份的 Java `String.equals` 语义，修正旧 Rust 断言并补充同大小写、不同大小写和首尾空格用例；验证 Filter 回归测试通过且未回退生产实现。
-- [x] 1.5 在当前工作区运行默认与 `--all-features` 的 check/test/doc，记录失败与 ignored；验证无未解释失败，ignored 不记为行为通过。证据：Linux CI run `41396400600` job `rust-contracts` success；`cargo test --workspace` 4435 passed / 0 failed / 12 ignored，`--all-features` 4619 passed / 0 failed / 16 ignored；check/clippy/doc 同 job 通过。见 `linux-ci-all-features.md`。
+- [x] 1.5 在当前工作区运行默认与 `--all-features` 的 check/test/doc，记录失败与 ignored；验证无未解释失败，ignored 不记为行为通过。证据：Linux CI run `41401827024` job `rust-contracts` success；`cargo test --workspace` 4435 passed / 0 failed / 12 ignored，`--all-features` 4619 passed / 0 failed / 16 ignored；check/clippy/doc 同 job 通过。见 `linux-ci-all-features.md`。
 - [x] 1.6 完成 `filter-class-identity-parity` 和 `exception-sorter-property-parity` 的剩余验收与规格同步；验证两个 change 在全部任务有证据后才能 validate/archive。证据：filter change 已于 2026-11-02 归档；exception-sorter 严格 Clippy exit 0、17 Rust tests、576+118 差分 4 passed、`--strict` 通过，归档为 `2026-11-02-exception-sorter-property-parity`。
 
 ## 2. SOURCE_PARITY 与测试资产账本

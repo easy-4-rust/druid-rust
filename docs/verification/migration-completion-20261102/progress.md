@@ -10,7 +10,7 @@
 | 1.2 `memory-stats` 正式依赖 | `crates/druid-admin/Cargo.toml` 正式依赖段；`cargo check -p druid-admin --all-features` 通过 |
 | 1.3 严格 Clippy | 修复 `sql_parse.rs` 未使用 `kw`、Admin 12 个 cast/doc 错误；`cargo clippy -p druid-admin -p druid-rdbc --all-targets --all-features -- -D warnings -A clippy::pedantic` exit 0 |
 | 1.4 Filter 回归 | part_01 34 + manager 3 + part_02 6 = **43 passed**；保留 Java 大小写敏感语义 |
-| 1.5 全量默认/all-features | Linux CI run `41396400600` job success：默认 4435 passed/0 failed/12 ignored；all-features 4619 passed/0 failed/16 ignored；check/clippy/doc 通过。见 `linux-ci-all-features.md` |
+| 1.5 全量默认/all-features | Linux CI run `41401827024` job success：默认 4435 passed/0 failed/12 ignored；all-features 4619 passed/0 failed/16 ignored；check/clippy/doc 通过。见 `linux-ci-all-features.md` |
 | 1.6 前置 change 收口 | `exception-sorter-property-parity`：严格 Clippy exit 0、17 Rust tests、576+118 差分 4 passed、`--strict` 通过，归档为 `2026-11-02-exception-sorter-property-parity`；filter change 已归档 |
 | 2.1 Java 用例清单 | `java-test-cases.tsv`：4759 个 `@Test` + 2219 个无 `@Test` 的 `public void test...`，manifest 共 **6978** 个唯一 case |
 | 2.2 资源清单 | `java-test-assets.tsv`：**822** 个资源、13.46 MiB |
@@ -41,7 +41,7 @@
 
 ### 1. 全量测试：Linux CI 已完成（1.5 已关闭）
 
-- Linux CI run `41396400600` job `rust-contracts` success：默认 `cargo test --workspace` **4435 passed / 0 failed / 12 ignored**；`--all-features` **4619 passed / 0 failed / 16 ignored**；check/clippy/doc 同 job 通过。证据 `linux-ci-all-features.md` / `.log`。
+- Linux CI run `41401827024` job `rust-contracts` success：默认 `cargo test --workspace` **4435 passed / 0 failed / 12 ignored**；`--all-features` **4619 passed / 0 failed / 16 ignored**；check/clippy/doc 同 job 通过。证据 `linux-ci-all-features.md` / `.log`。
 - 本地 Windows all-features gRPC 的 `10060` 回环异常保留为环境说明，不再阻塞 1.5。
 
 ### 2. SOURCE_PARITY 首批映射已完成，余量仍大
