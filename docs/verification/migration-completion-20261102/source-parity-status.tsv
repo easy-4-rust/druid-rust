@@ -1029,7 +1029,7 @@ src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_maxActive3.java#tes
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_maxActive4.java#test_error	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_maxWait.java#test_maxWait	ADAPTED	MATCH	crates/druid/tests/pool_wait_limit_test.rs::interrupted_and_timed_out_waiters_leave_pool_reusable	cargo test -p druid --test pool_wait_limit_test (2 passed); the Rust target holds the only connection and proves an interrupted waiter and a timed-out waiter both fail then the pool is reusable.
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_notEmptyWait.java#test_error	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_notEmptyWait2.java#test_maxWaitThread	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_notEmptyWait2.java#test_maxWaitThread	ADAPTED	MATCH	crates/druid/tests/pool_wait_limit_test.rs::max_wait_thread_count_rejects_at_the_limit	cargo test -p druid --test pool_wait_limit_test (2 passed); the Rust target fills maxWaitThreadCount with one waiter and proves the next borrow is rejected immediately with MaxWaitThreadCountExceeded, matching the Java notEmptyWaitThreadCount >= maxWaitThreadCount behavior.
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_oracle.java#test_error	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_oracle2.java#test_oracle	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\pool\DruidDataSourceTest_oracle3.java#test_error	MISSING	NOT_RUN		

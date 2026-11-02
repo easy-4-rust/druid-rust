@@ -14483,16 +14483,19 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_notEmptyWait2.java#test_maxWaitThread",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_notEmptyWait2.java#test_maxWaitThread",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
+      "targets": [
+        "crates/druid/tests/pool_wait_limit_test.rs::max_wait_thread_count_rejects_at_the_limit"
+      ],
+      "disposition": "ADAPTED",
+      "contract_preserved": true,
       "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "cargo test -p druid --test pool_wait_limit_test (2 passed); the Rust target fills maxWaitThreadCount with one waiter and proves the next borrow is rejected immediately with MaxWaitThreadCountExceeded, matching the Java notEmptyWaitThreadCount >= maxWaitThreadCount behavior.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\pool\\DruidDataSourceTest_oracle.java#test_error",
