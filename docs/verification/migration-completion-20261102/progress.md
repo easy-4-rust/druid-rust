@@ -2,7 +2,7 @@
 
 更新：2026-11-02
 
-## 已完成（21/68）
+## 已完成（22/68）
 
 | 任务 | 证据 |
 |---|---|
@@ -21,9 +21,10 @@
 | 6.4 结构债与 public-api/SemVer | `structural-and-public-api.md`：30 个 SemVer 类别精确匹配，EX-002 1,128 行、EX-003 1,216 行未增长，无新增 >800 行文件 |
 | 8.1 2PC 恢复模型冻结 | `druid_rdbc::governance::two_phase` + `two_phase_recovery_model_test` 8 passed；Mixed 永不返回 commit 重放，Unknown 只读核验；见 `docs/migration/two-phase-recovery-model.md` |
 | 9.1 驱动支持基线 | `driver-profiles-baseline.tsv`：80 profiles，declared 46 / experimental 34 / verified+certified **0** |
+| 10.2 gRPC 恢复矩阵 | `grpc-recovery-3x.log` 连续 3 轮 51 passed / 0 failed；断连/重连、重复/乱序 ACK、Admin 重启、饱和停机与未刷出映射见 `grpc-recovery-matrix.md` |
 | 11.2 MSRV 1.95 | 修复本机损坏工具链后 `cargo +1.95.0 check --workspace --all-targets --locked` exit 0，`msrv-1.95.log` |
 | 11.3 public-api/SemVer 外部消费者 | 同 6.4；`verify_task6_external_public_contract.py` PASS |
-| 12.1 迁移文档当前事实同步 | README + 五份主文档加入 2026-11-02 状态块（21/68、NOT_READY），历史快照保留 |
+| 12.1 迁移文档当前事实同步 | README + 五份主文档加入 2026-11-02 状态块（22/68、NOT_READY），历史快照保留 |
 | 5.1 Admin 活跃 change | `admin-live-console` 六项任务已勾选、`--strict` 校验通过 |
 | 5.3 Admin 三尺寸浏览器 | `browser/`：Mobile 390×884、Tablet 768×1024、Desktop 1280×1024 全路由截图；Basic 登录、空态、部分数据、详情、真实点击复制、慢 SQL、连接/stack 能力态；修复登录跳旧页与 SQL/直方图误标记未上报 |
 | 5.5 push 协议边界 | 评估后不扩展 `SqlStatMsg`：gRPC push 未携带的最大耗时/错误/直方图由 `v1_snapshot` 标为 unavailable，慢 SQL 走 Java 兼容 JSON 来源；采集热路径未改。证据：`admin_live_console_test` 7 passed（含 `push_capabilities_keep_real_values_and_mask_unreported_defaults`） |

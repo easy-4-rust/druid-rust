@@ -83,7 +83,7 @@
 ## 10. Metrics 与 Admin 生产验证
 
 - [ ] 10.1 测量采集对 SQL p50/p95/p99 的影响，验证热路径无 `send().await`、网络或磁盘调用；保留负载、分位数和失败产物。
-- [ ] 10.2 重复执行 gRPC 断连、重连、重复/乱序 ACK、Admin 重启、饱和停机和未刷出场景；验证 sequence、幂等、full snapshot、未刷出和 shutdown 数值。
+- [x] 10.2 重复执行 gRPC 断连、重连、重复/乱序 ACK、Admin 重启、饱和停机和未刷出场景；验证 sequence、幂等、full snapshot、未刷出和 shutdown 数值。证据：`grpc-recovery-3x.log` 连续 3 轮 51 passed / 0 failed / 0 ignored；场景映射见 `grpc-recovery-matrix.md`。
 - [ ] 10.3 验证 Admin K8s、鉴权、TLS、部署和真实浏览器行为，覆盖部分失败、字段脱敏和只读能力；验证实际运行环境不支持项明确标记。
 - [ ] 10.4 在 Linux/macOS/Windows 运行 repository 容量和 session churn 内存预算，验证 RSS/working set 可测量、预算未超标且过期身份被清理。
 

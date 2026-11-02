@@ -1,0 +1,187 @@
+===== RUN 1 =====
+   Compiling druid-rdbc v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-rdbc)
+warning: druid-admin@0.0.0-design: embedded 25 console asset(s) from E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-admin\web/dist
+   Compiling druid v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid)
+   Compiling druid-metrics v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-metrics)
+   Compiling druid-admin v0.0.0-design (E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-admin)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 38.88s
+     Running tests\grpc_network_e2e_test.rs (target\debug\deps\grpc_network_e2e_test-7010fe2ff8abcabf.exe)
+
+running 51 tests
+test grpc_client_builder_defaults_ack_window_to_256_and_rejects_zero ... ok
+test grpc_duplicate_and_increasing_sequences_are_handled_over_network ... ok
+test admin_restart_with_pending_incremental_supersedes_it_with_monotonic_full_snapshot ... ok
+test grpc_client_reconnects_and_resends_only_pending_frame_bytes ... ok
+test authoritative_snapshot_replaces_only_after_end_and_empty_snapshot_clears_stream ... ok
+test command_ack_error_does_not_expose_client_supplied_credentials_over_http ... ok
+test final_command_reply_replays_after_half_close_and_duplicate_id_is_idempotent ... ok
+test grpc_client_shutdown_joins_transport_and_leaves_no_active_stream ... ok
+test grpc_multi_entry_batch_is_atomically_visible_and_counted_once ... ok
+test command_received_before_rotation_goodbye_survives_into_successor_session ... ok
+test full_capacity_command_journal_reconnects_after_hello_ack_without_partial_replay ... ok
+test grpc_reconnect_after_fully_acked_batch_keeps_next_sequence_and_updates_rest ... ok
+test admin_shutdown_cancels_and_joins_every_owned_ingest_stream ... ok
+test admin_restart_without_pending_triggers_registry_full_snapshot ... ok
+test command_route_requires_explicit_basic_even_when_admin_auth_is_disabled_or_session_exists ... ok
+test dropping_tonic_response_detaches_exact_broker_sender_and_reuses_capacity ... ok
+test admin_shutdown_releases_command_waiter_without_an_ack ... ok
+test blocked_exporter_to_client_handoff_counts_each_batch_exactly_once ... ok
+test grpc_newer_sequence_updates_rest_state ... ok
+test grpc_rejects_zero_and_max_sequences_without_poisoning_other_streams ... ok
+test grpc_snapshot_is_visible_through_datasource_sql_and_wall_rest ... ok
+test grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames ... ok
+test health_and_metrics_remain_truthful_after_grpc_ingest ... ok
+test authenticated_broker_executes_reset_and_full_snapshot_through_real_ingest_service ... ok
+test hello_ack_server_protocol_version_must_match ... ok
+test incomplete_snapshot_survives_disconnect_without_partial_visibility ... ok
+test initial_connect_rpc_and_hello_ack_share_one_configured_deadline ... ok
+test invalid_ack_headers_close_transport_and_preserve_pending_frame ... ok
+test live_client_completes_two_different_commands_then_resumes_batches ... ok
+test old_slash_collision_pair_stays_distinct_across_broker_repository_rest_and_prometheus ... ok
+test out_of_order_snapshot_chunk_fails_closed_without_replacing_visible_state ... ok
+test overlong_identity_is_rejected_before_hello_attachment_repository_or_rest_lookup ... ok
+test production_builder_order_binds_shared_command_broker_shutdown ... ok
+test production_command_entry_is_authenticated_and_fails_closed_without_a_live_stream ... ok
+test prometheus_escapes_client_controlled_label_values ... ok
+test reconnect_observation_excludes_setup_but_keeps_the_retry_deadline ... ok
+test reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries ... ok
+test remote_full_snapshot_chunks_and_command_survive_mid_stream_disconnect ... ok
+test remote_plaintext_authorization_fails_before_the_probe_observes_a_connection ... ok
+test repository_rejection_does_not_ack_or_advance_and_same_sequence_can_retry ... ok
+test reset_result_survives_real_tonic_half_close_and_reconnect_without_reexecution ... ok
+test resync_cutoff_preserves_live_update_queued_after_snapshot_sampling ... ok
+test resync_required_supersedes_pending_with_monotonic_registry_full_snapshot ... ok
+test runtime_shutdown_flushes_last_aggregated_batch_over_grpc ... ok
+test same_command_id_with_different_payload_fails_closed ... ok
+test shutdown_timeout_reports_only_actual_pending_and_queued_work ... ok
+test snapshot_transaction_capacity_is_enforced_before_staging ... ok
+test successor_stream_fences_old_epoch_before_it_can_overwrite_repository ... ok
+test two_w_plus_one_unique_commands_fail_closed_without_successor_execution ... ok
+test unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushed ... ok
+test validated_w_plus_one_commands_survive_teardown_backpressure_and_live_traffic_resumes ... ok
+
+test result: ok. 51 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.34s
+
+RUN_1_EXIT=0
+===== RUN 2 =====
+warning: druid-admin@0.0.0-design: embedded 25 console asset(s) from E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-admin\web/dist
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.60s
+     Running tests\grpc_network_e2e_test.rs (target\debug\deps\grpc_network_e2e_test-7010fe2ff8abcabf.exe)
+
+running 51 tests
+test grpc_client_builder_defaults_ack_window_to_256_and_rejects_zero ... ok
+test command_ack_error_does_not_expose_client_supplied_credentials_over_http ... ok
+test command_route_requires_explicit_basic_even_when_admin_auth_is_disabled_or_session_exists ... ok
+test authoritative_snapshot_replaces_only_after_end_and_empty_snapshot_clears_stream ... ok
+test authenticated_broker_executes_reset_and_full_snapshot_through_real_ingest_service ... ok
+test blocked_exporter_to_client_handoff_counts_each_batch_exactly_once ... ok
+test admin_shutdown_releases_command_waiter_without_an_ack ... ok
+test admin_restart_without_pending_triggers_registry_full_snapshot ... ok
+test admin_restart_with_pending_incremental_supersedes_it_with_monotonic_full_snapshot ... ok
+test grpc_multi_entry_batch_is_atomically_visible_and_counted_once ... ok
+test admin_shutdown_cancels_and_joins_every_owned_ingest_stream ... ok
+test dropping_tonic_response_detaches_exact_broker_sender_and_reuses_capacity ... ok
+test final_command_reply_replays_after_half_close_and_duplicate_id_is_idempotent ... ok
+test full_capacity_command_journal_reconnects_after_hello_ack_without_partial_replay ... ok
+test grpc_client_reconnects_and_resends_only_pending_frame_bytes ... ok
+test grpc_client_shutdown_joins_transport_and_leaves_no_active_stream ... ok
+test grpc_duplicate_and_increasing_sequences_are_handled_over_network ... ok
+test command_received_before_rotation_goodbye_survives_into_successor_session ... ok
+test grpc_reconnect_after_fully_acked_batch_keeps_next_sequence_and_updates_rest ... ok
+test grpc_rejects_zero_and_max_sequences_without_poisoning_other_streams ... ok
+test grpc_snapshot_is_visible_through_datasource_sql_and_wall_rest ... ok
+test grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames ... ok
+test health_and_metrics_remain_truthful_after_grpc_ingest ... ok
+test grpc_newer_sequence_updates_rest_state ... ok
+test hello_ack_server_protocol_version_must_match ... ok
+test incomplete_snapshot_survives_disconnect_without_partial_visibility ... ok
+test initial_connect_rpc_and_hello_ack_share_one_configured_deadline ... ok
+test invalid_ack_headers_close_transport_and_preserve_pending_frame ... ok
+test live_client_completes_two_different_commands_then_resumes_batches ... ok
+test old_slash_collision_pair_stays_distinct_across_broker_repository_rest_and_prometheus ... ok
+test out_of_order_snapshot_chunk_fails_closed_without_replacing_visible_state ... ok
+test overlong_identity_is_rejected_before_hello_attachment_repository_or_rest_lookup ... ok
+test production_builder_order_binds_shared_command_broker_shutdown ... ok
+test production_command_entry_is_authenticated_and_fails_closed_without_a_live_stream ... ok
+test prometheus_escapes_client_controlled_label_values ... ok
+test reconnect_observation_excludes_setup_but_keeps_the_retry_deadline ... ok
+test reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries ... ok
+test remote_full_snapshot_chunks_and_command_survive_mid_stream_disconnect ... ok
+test remote_plaintext_authorization_fails_before_the_probe_observes_a_connection ... ok
+test repository_rejection_does_not_ack_or_advance_and_same_sequence_can_retry ... ok
+test reset_result_survives_real_tonic_half_close_and_reconnect_without_reexecution ... ok
+test resync_cutoff_preserves_live_update_queued_after_snapshot_sampling ... ok
+test resync_required_supersedes_pending_with_monotonic_registry_full_snapshot ... ok
+test runtime_shutdown_flushes_last_aggregated_batch_over_grpc ... ok
+test same_command_id_with_different_payload_fails_closed ... ok
+test shutdown_timeout_reports_only_actual_pending_and_queued_work ... ok
+test snapshot_transaction_capacity_is_enforced_before_staging ... ok
+test successor_stream_fences_old_epoch_before_it_can_overwrite_repository ... ok
+test two_w_plus_one_unique_commands_fail_closed_without_successor_execution ... ok
+test unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushed ... ok
+test validated_w_plus_one_commands_survive_teardown_backpressure_and_live_traffic_resumes ... ok
+
+test result: ok. 51 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.48s
+
+RUN_2_EXIT=0
+===== RUN 3 =====
+warning: druid-admin@0.0.0-design: embedded 25 console asset(s) from E:\workspaces\workspace-github-easy-4-rust\druid-rust\crates\druid-admin\web/dist
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.60s
+     Running tests\grpc_network_e2e_test.rs (target\debug\deps\grpc_network_e2e_test-7010fe2ff8abcabf.exe)
+
+running 51 tests
+test grpc_client_builder_defaults_ack_window_to_256_and_rejects_zero ... ok
+test blocked_exporter_to_client_handoff_counts_each_batch_exactly_once ... ok
+test authenticated_broker_executes_reset_and_full_snapshot_through_real_ingest_service ... ok
+test command_received_before_rotation_goodbye_survives_into_successor_session ... ok
+test authoritative_snapshot_replaces_only_after_end_and_empty_snapshot_clears_stream ... ok
+test command_ack_error_does_not_expose_client_supplied_credentials_over_http ... ok
+test admin_restart_with_pending_incremental_supersedes_it_with_monotonic_full_snapshot ... ok
+test admin_restart_without_pending_triggers_registry_full_snapshot ... ok
+test admin_shutdown_releases_command_waiter_without_an_ack ... ok
+test dropping_tonic_response_detaches_exact_broker_sender_and_reuses_capacity ... ok
+test command_route_requires_explicit_basic_even_when_admin_auth_is_disabled_or_session_exists ... ok
+test final_command_reply_replays_after_half_close_and_duplicate_id_is_idempotent ... ok
+test full_capacity_command_journal_reconnects_after_hello_ack_without_partial_replay ... ok
+test admin_shutdown_cancels_and_joins_every_owned_ingest_stream ... ok
+test grpc_client_reconnects_and_resends_only_pending_frame_bytes ... ok
+test grpc_client_shutdown_joins_transport_and_leaves_no_active_stream ... ok
+test grpc_duplicate_and_increasing_sequences_are_handled_over_network ... ok
+test grpc_multi_entry_batch_is_atomically_visible_and_counted_once ... ok
+test grpc_newer_sequence_updates_rest_state ... ok
+test grpc_reconnect_after_fully_acked_batch_keeps_next_sequence_and_updates_rest ... ok
+test grpc_rejects_zero_and_max_sequences_without_poisoning_other_streams ... ok
+test grpc_snapshot_is_visible_through_datasource_sql_and_wall_rest ... ok
+test grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames ... ok
+test health_and_metrics_remain_truthful_after_grpc_ingest ... ok
+test hello_ack_server_protocol_version_must_match ... ok
+test incomplete_snapshot_survives_disconnect_without_partial_visibility ... ok
+test initial_connect_rpc_and_hello_ack_share_one_configured_deadline ... ok
+test invalid_ack_headers_close_transport_and_preserve_pending_frame ... ok
+test live_client_completes_two_different_commands_then_resumes_batches ... ok
+test old_slash_collision_pair_stays_distinct_across_broker_repository_rest_and_prometheus ... ok
+test out_of_order_snapshot_chunk_fails_closed_without_replacing_visible_state ... ok
+test overlong_identity_is_rejected_before_hello_attachment_repository_or_rest_lookup ... ok
+test production_builder_order_binds_shared_command_broker_shutdown ... ok
+test production_command_entry_is_authenticated_and_fails_closed_without_a_live_stream ... ok
+test prometheus_escapes_client_controlled_label_values ... ok
+test reconnect_observation_excludes_setup_but_keeps_the_retry_deadline ... ok
+test reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries ... ok
+test remote_full_snapshot_chunks_and_command_survive_mid_stream_disconnect ... ok
+test remote_plaintext_authorization_fails_before_the_probe_observes_a_connection ... ok
+test repository_rejection_does_not_ack_or_advance_and_same_sequence_can_retry ... ok
+test reset_result_survives_real_tonic_half_close_and_reconnect_without_reexecution ... ok
+test resync_cutoff_preserves_live_update_queued_after_snapshot_sampling ... ok
+test resync_required_supersedes_pending_with_monotonic_registry_full_snapshot ... ok
+test runtime_shutdown_flushes_last_aggregated_batch_over_grpc ... ok
+test same_command_id_with_different_payload_fails_closed ... ok
+test shutdown_timeout_reports_only_actual_pending_and_queued_work ... ok
+test snapshot_transaction_capacity_is_enforced_before_staging ... ok
+test successor_stream_fences_old_epoch_before_it_can_overwrite_repository ... ok
+test two_w_plus_one_unique_commands_fail_closed_without_successor_execution ... ok
+test unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushed ... ok
+test validated_w_plus_one_commands_survive_teardown_backpressure_and_live_traffic_resumes ... ok
+
+test result: ok. 51 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.39s
+
+RUN_3_EXIT=0
