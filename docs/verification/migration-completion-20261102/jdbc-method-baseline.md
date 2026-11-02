@@ -10,9 +10,9 @@
 
 | 维度 | PASS | PARTIAL | UNSUPPORTED | UNASSESSED |
 |---|---:|---:|---:|---:|
-| capability | 78 | 539 | 4 | 1380 |
-| declaration | 605 | 0 | 0 | 1396 |
-| contract | 601 | 0 | 0 | 1400 |
+| capability | 78 | 573 | 4 | 1346 |
+| declaration | 639 | 0 | 0 | 1362 |
+| contract | 635 | 0 | 0 | 1366 |
 | adapter | 155 | 0 | 78 N/A | 1768 |
 | logical_proxy | 306 | 0 | 78 N/A | 1617 |
 | real_db | 58 | 0 | 78 N/A | 1865 |
@@ -92,4 +92,12 @@
 - 常量没有 adapter/logical_proxy/real_db 运行时维度，登记为 `NOT_APPLICABLE`；capability 为 `SUPPORTED`，declaration/contract PASS，依据是 `canonical_types_module_preserves_all_java8_constants_and_existing_facades` 与 `canonical_jdbc_type_preserves_every_java8_name_vendor_and_number` 对全部 39 组名称/数值的精确断言。
 - 结果：linked **621** / unassessed **1380**；capability SUPPORTED 78 + PARTIAL 539 + UNSUPPORTED 4；declaration PASS 605、contract PASS 601、adapter PASS 155、logical_proxy PASS 306、real_db PASS 58。
 - 边界：`JDBCType#values()` 与 `valueOf(String)` 无 Rust 对应入口；两个 `#TYPE` 行保持未评估。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=621 unassessed=1380`；`standard_constant_exception_contract_test` 2 passed、`standard_value_ownership_test` 4 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=655 unassessed=1346`；`standard_constant_exception_contract_test` 2 passed、`standard_value_ownership_test` 4 passed。
+
+## 2026-11-03 SQLInput/SQLOutput 剩余标量批次
+
+- 当前 ledger SHA-256：`8e8203a96a99122ee15164e47b7430d1d0fef537cb812fabc58133ca8c195973`
+- 新增 34 个方法：17 个 `SQLInput#readXxx` 与 17 个 `SQLOutput#writeXxx`，证据为 `every_standard_input_reader_distinguishes_sql_null` / `every_standard_output_writer_retains_attribute_order_and_nulls`，覆盖 SQL NULL 零值/None、was_null 与单属性消费。
+- 结果：linked **655** / unassessed **1346**；capability SUPPORTED 78 + PARTIAL 573 + UNSUPPORTED 4；declaration PASS 639、contract PASS 635。
+- 边界：SQLInput/SQLOutput 仅剩 `TYPE` 未评估；两者仍无 adapter/real_db 证据（JDBC Agent 未实现 UDT 通道）。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=655 unassessed=1346`；`standard_sql_mapping_contract_test` 11 passed。
