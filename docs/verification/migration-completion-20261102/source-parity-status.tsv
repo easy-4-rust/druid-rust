@@ -518,8 +518,8 @@ src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest.java#testORACLE
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest.java#testORACLE_false	MERGED_APPROVED	MATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_truncate_is_allowed_by_default_and_rejected_when_disabled	cargo test -p druid --test wall_allow_flags_test (7 passed); the Rust target asserts the same allow-flag outcome for MySQL and Oracle with the Java SQL.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest1.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallTruncateTest1.java#testORACLE	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallUnionTest.java#testMySql	MISSING	NOT_RUN		
-src\test\java\com\alibaba\druid\bvt\filter\wall\WallUnionTest.java#testOracle	MISSING	NOT_RUN		
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallUnionTest.java#testMySql	ADAPTED	MISMATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_union_check_does_not_reject_plain_union	cargo test -p druid --test wall_allow_flags_test: with selectUnionCheck=true the Rust provider still accepts "select ... union select ..." for MySQL and Oracle, while Java rejects it; only the comment form is rejected via comment_allow.
+src\test\java\com\alibaba\druid\bvt\filter\wall\WallUnionTest.java#testOracle	ADAPTED	MISMATCH	crates/druid/tests/wall_allow_flags_test.rs::wall_union_check_does_not_reject_plain_union	cargo test -p druid --test wall_allow_flags_test: with selectUnionCheck=true the Rust provider still accepts "select ... union select ..." for MySQL and Oracle, while Java rejects it; only the comment form is rejected via comment_allow.
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallUnionTest2.java#testMySql	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallUnionTest2.java#testOracle	MISSING	NOT_RUN		
 src\test\java\com\alibaba\druid\bvt\filter\wall\WallUnionTest3.java#testMySql	MISSING	NOT_RUN		

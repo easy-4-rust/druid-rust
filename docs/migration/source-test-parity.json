@@ -7381,30 +7381,36 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallUnionTest.java#testMySql",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallUnionTest.java#testMySql",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_union_check_does_not_reject_plain_union"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MISMATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test: with selectUnionCheck=true the Rust provider still accepts \"select ... union select ...\" for MySQL and Oracle, while Java rejects it; only the comment form is rejected via comment_allow.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallUnionTest.java#testOracle",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallUnionTest.java#testOracle",
-      "targets": [],
-      "disposition": "MISSING",
+      "targets": [
+        "crates/druid/tests/wall_allow_flags_test.rs::wall_union_check_does_not_reject_plain_union"
+      ],
+      "disposition": "ADAPTED",
       "contract_preserved": false,
-      "inputs_preserved": false,
+      "inputs_preserved": true,
       "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MISMATCH",
+      "evidence": "cargo test -p druid --test wall_allow_flags_test: with selectUnionCheck=true the Rust provider still accepts \"select ... union select ...\" for MySQL and Oracle, while Java rejects it; only the comment form is rejected via comment_allow.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallUnionTest2.java#testMySql",

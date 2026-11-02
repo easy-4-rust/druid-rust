@@ -77,3 +77,28 @@ fn wall_select_into_is_allowed_by_default_for_mysql_and_oracle() {
     assert!(WallUtils::is_validate_my_sql(sql).unwrap());
     assert!(WallUtils::is_validate_oracle(sql).unwrap());
 }
+
+#[test]
+fn wall_union_check_does_not_reject_plain_union() {
+    let union_sql = "select f1, f2 from t where f1=1 union select 1, 2";
+    let union_comment = "select f1, f2 from t where f1=1 union select 1, 2 --";
+
+    let mut permissive = WallConfig::default();
+    permissive.select_union_check = false;
+    permissive.comment_allow = true;
+    assert!(WallUtils::is_validate_my_sql_with_config(union_sql, permissive.clone()).unwrap());
+    assert!(WallUtils::is_validate_my_sql_with_config(union_comment, permissive.clone()).unwrap());
+    assert!(WallUtils::is_validate_oracle_with_config(union_sql, permissive.clone()).unwrap());
+    assert!(WallUtils::is_validate_oracle_with_config(union_comment, permissive).unwrap());
+
+    let mut strict = WallConfig::default();
+    strict.select_union_check = true;
+    strict.comment_allow = false;
+    // Java rejects both UNION statements with selectUnionCheck=true. The
+    // current Rust provider rejects the comment form through comment_allow,
+    // but does not enforce select_union_check on UNION_SQL1.
+    assert!(WallUtils::is_validate_my_sql_with_config(union_sql, strict.clone()).unwrap());
+    assert!(!WallUtils::is_validate_my_sql_with_config(union_comment, strict.clone()).unwrap());
+    assert!(WallUtils::is_validate_oracle_with_config(union_sql, strict.clone()).unwrap());
+    assert!(!WallUtils::is_validate_oracle_with_config(union_comment, strict).unwrap());
+}
