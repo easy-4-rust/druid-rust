@@ -222,8 +222,9 @@ async fn v1_openapi_document_lists_every_served_route() {
         );
     }
 
-    // 漂移检查：OpenAPI 路径集合必须与 router 源码中的 v1 路由字面量一致。
-    let router_source = include_str!("../src/servlet/monitor_view_servlet/monitor_view_a.rs");
+    // 漂移检查：OpenAPI 路径集合必须与 v1_api 的唯一路由清单一致；
+    // 同一清单同时驱动 router 注册，避免文档与 handler 分离。
+    let router_source = include_str!("../src/servlet/monitor_view_servlet/v1_api.rs");
     let mut declared = std::collections::BTreeSet::new();
     let mut rest = router_source;
     while let Some(index) = rest.find("\"/api/v1/") {

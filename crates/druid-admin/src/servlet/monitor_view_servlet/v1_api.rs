@@ -18,6 +18,89 @@ use serde_json::{json, Value};
 use super::v1_snapshot as snapshot;
 use crate::model::dto::{DataSourceContent, SqlListContent};
 
+/// 版本化路由的唯一清单。
+///
+/// 路由注册与 OpenAPI 文档都从这份清单展开，避免新增 handler 后只更新其中
+/// 一处而产生路径漂移。每项为 `(router 路径, OpenAPI 摘要, handler)`。
+macro_rules! v1_route_table {
+    ($callback:ident) => {
+        $callback! {
+            (
+                "/api/v1/health",
+                "采集来源、仓库容量与拒绝计数",
+                super::v1_health::health
+            ),
+            (
+                "/api/v1/history",
+                "有界进程内数值采样历史；serviceId、datasourceId、limit 查询",
+                super::v1_health::history
+            ),
+            (
+                "/api/v1/datasources/{identity}/connections",
+                "池化连接与能力状态",
+                super::v1_health::connections
+            ),
+            (
+                "/api/v1/datasources/{identity}/stack",
+                "活跃连接借出堆栈",
+                super::v1_health::stack
+            ),
+            ("/api/v1/basic", "Admin runtime information", basic),
+            ("/api/v1/datasources", "Datasource list", datasources),
+            (
+                "/api/v1/datasources/{identity}",
+                "One datasource",
+                datasource
+            ),
+            ("/api/v1/sql", "SQL statistics", sql_list),
+            (
+                "/api/v1/sql/{id}",
+                "One SQL stat with parsed metadata",
+                sql_detail
+            ),
+            ("/api/v1/wall", "Wall statistics", wall),
+            ("/api/v1/services", "Attached services", services),
+            ("/api/v1/openapi.json", "This document", openapi),
+        }
+    };
+}
+
+/// 由同一清单位于 axum router 中注册版本化路由。
+macro_rules! v1_router {
+    ($(($path:literal, $summary:literal, $handler:path)),* $(,)?) => {
+        axum::Router::new()
+            $(.route($path, axum::routing::get($handler)))*
+    };
+}
+
+/// 由同一清单生成 OpenAPI `paths` 对象。
+macro_rules! v1_openapi_paths {
+    ($(($path:literal, $summary:literal, $handler:path)),* $(,)?) => {{
+        let mut paths = serde_json::Map::new();
+        $(
+            paths.insert(
+                format!("/druid{}", $path),
+                serde_json::json!({"get": {"summary": $summary}}),
+            );
+        )*
+        serde_json::Value::Object(paths)
+    }};
+}
+
+/// 返回版本化路由清单，供单元测试检查唯一性。
+#[cfg(test)]
+macro_rules! v1_route_manifest {
+    ($(($path:literal, $summary:literal, $handler:path)),* $(,)?) => {
+        vec![$(($path, $summary)),*]
+    };
+}
+
+/// 测试用路由清单。
+#[cfg(test)]
+fn route_manifest() -> Vec<(&'static str, &'static str)> {
+    v1_route_table!(v1_route_manifest)
+}
+
 /// 管理 API 的版本。
 pub const API_VERSION: &str = "v1";
 
@@ -398,6 +481,11 @@ pub(crate) async fn services(State(state): State<super::MonitorViewServlet>) -> 
     .into_response()
 }
 
+/// 构建 `/druid/api/v1` 路由。
+pub(super) fn router() -> axum::Router<super::MonitorViewServlet> {
+    v1_route_table!(v1_router)
+}
+
 /// `GET /druid/api/v1/openapi.json` —— 契约文档。
 pub(crate) async fn openapi() -> Response {
     Json(json!({
@@ -406,20 +494,20 @@ pub(crate) async fn openapi() -> Response {
             "title": "Druid Admin management API",
             "version": API_VERSION,
         },
-        "paths": {
-            "/druid/api/v1/basic": {"get": {"summary": "Admin runtime information"}},
-            "/druid/api/v1/datasources": {"get": {"summary": "Datasource list"}},
-            "/druid/api/v1/datasources/{identity}": {"get": {"summary": "One datasource"}},
-            "/druid/api/v1/sql": {"get": {"summary": "SQL statistics"}},
-            "/druid/api/v1/sql/{id}": {"get": {"summary": "One SQL stat with parsed metadata"}},
-            "/druid/api/v1/wall": {"get": {"summary": "Wall statistics"}},
-            "/druid/api/v1/services": {"get": {"summary": "Attached services"}},
-            "/druid/api/v1/openapi.json": {"get": {"summary": "This document"}},
-            "/druid/api/v1/health": {"get": {"summary": "采集来源、仓库容量与拒绝计数"}},
-            "/druid/api/v1/history": {"get": {"summary": "有界进程内数值采样历史；serviceId、datasourceId、limit 查询"}},
-            "/druid/api/v1/datasources/{identity}/connections": {"get": {"summary": "池化连接与能力状态"}},
-            "/druid/api/v1/datasources/{identity}/stack": {"get": {"summary": "活跃连接借出堆栈"}},
-        },
+        "paths": v1_route_table!(v1_openapi_paths),
     }))
     .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn route_manifest_paths_are_unique() {
+        let routes = super::route_manifest();
+        let mut paths: Vec<&str> = routes.iter().map(|(path, _)| *path).collect();
+        assert_eq!(paths.len(), 12);
+        paths.sort_unstable();
+        paths.dedup();
+        assert_eq!(paths.len(), 12, "版本化路由路径必须唯一");
+    }
 }

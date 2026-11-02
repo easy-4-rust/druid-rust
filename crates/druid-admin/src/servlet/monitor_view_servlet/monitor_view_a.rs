@@ -179,28 +179,8 @@ impl MonitorViewServlet {
             .route("/api/connections/{id}", get(Self::connection_info))
             .route("/api/active", get(Self::active))
             .route("/api/commands", post(Self::issue_command))
-            // 版本化管理 API：分离前端只读这一套。
-            .route("/api/v1/health", get(super::v1_health::health))
-            .route("/api/v1/history", get(super::v1_health::history))
-            .route(
-                "/api/v1/datasources/{identity}/connections",
-                get(super::v1_health::connections),
-            )
-            .route(
-                "/api/v1/datasources/{identity}/stack",
-                get(super::v1_health::stack),
-            )
-            .route("/api/v1/basic", get(super::v1_api::basic))
-            .route("/api/v1/datasources", get(super::v1_api::datasources))
-            .route(
-                "/api/v1/datasources/{identity}",
-                get(super::v1_api::datasource),
-            )
-            .route("/api/v1/sql", get(super::v1_api::sql_list))
-            .route("/api/v1/sql/{id}", get(super::v1_api::sql_detail))
-            .route("/api/v1/wall", get(super::v1_api::wall))
-            .route("/api/v1/services", get(super::v1_api::services))
-            .route("/api/v1/openapi.json", get(super::v1_api::openapi))
+            // 版本化管理 API：路由表与 OpenAPI 共用 v1_api 中的同一清单。
+            .merge(super::v1_api::router())
             // 分离前端：独立构建的应用，资源内嵌在二进制中。
             .route("/console", get(Self::console_entry))
             .route("/console/", get(Self::console_entry))
