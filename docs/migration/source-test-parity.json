@@ -5947,7 +5947,8 @@
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallMultiStatementTest.java#testMySql",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallMultiStatementTest.java#testMySql",
       "targets": [
-        "crates/druid-bench/tests/java_rust_wall_multi_differential.rs::pinned_java_and_rust_compare_both_original_wall_multi_cases"
+        "crates/druid-bench/tests/java_rust_wall_multi_differential.rs::pinned_java_and_rust_compare_both_original_wall_multi_cases",
+        "crates/druid/tests/wall_utils_dialect_test.rs::java_wall_multi_statement_oracle_is_rejected_by_both_dialects"
       ],
       "disposition": "MIRRORED",
       "contract_preserved": true,
@@ -5957,14 +5958,15 @@
       "cleanup_preserved": true,
       "case_expansion_complete": true,
       "result_parity": "MATCH",
-      "evidence": "Live Java/Rust Wall multi-statement differential reported MATCH; artifact docs/verification/migration-completion-20261102/wall-multi-differential-comparison.tsv",
+      "evidence": "Live Java/Rust Wall multi-statement differential reported MATCH; artifact docs/verification/migration-completion-20261102/wall-multi-differential-comparison.tsv; cargo test -p druid --test wall_utils_dialect_test (12 passed) re-asserts both dialects reject the same multi-statement SQL",
       "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallMultiStatementTest.java#testOracle",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\filter\\wall\\WallMultiStatementTest.java#testOracle",
       "targets": [
-        "crates/druid-bench/tests/java_rust_wall_multi_differential.rs::pinned_java_and_rust_compare_both_original_wall_multi_cases"
+        "crates/druid-bench/tests/java_rust_wall_multi_differential.rs::pinned_java_and_rust_compare_both_original_wall_multi_cases",
+        "crates/druid/tests/wall_utils_dialect_test.rs::java_wall_multi_statement_oracle_is_rejected_by_both_dialects"
       ],
       "disposition": "MIRRORED",
       "contract_preserved": true,
@@ -5974,7 +5976,7 @@
       "cleanup_preserved": true,
       "case_expansion_complete": true,
       "result_parity": "MATCH",
-      "evidence": "Live Java/Rust Wall multi-statement differential reported MATCH; artifact docs/verification/migration-completion-20261102/wall-multi-differential-comparison.tsv",
+      "evidence": "Live Java/Rust Wall multi-statement differential reported MATCH; artifact docs/verification/migration-completion-20261102/wall-multi-differential-comparison.tsv; cargo test -p druid --test wall_utils_dialect_test (12 passed) re-asserts both dialects reject the same multi-statement SQL",
       "approved_difference": false
     },
     {
@@ -23899,16 +23901,19 @@
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\proxy\\StatementTest.java#test_stmt",
       "case_id": "src\\test\\java\\com\\alibaba\\druid\\bvt\\proxy\\StatementTest.java#test_stmt",
-      "targets": [],
-      "disposition": "MISSING",
-      "contract_preserved": false,
+      "targets": [
+        "crates/druid/tests/task6_pooled_statement_semantics_test_parity.rs::task6_pooled_statement_semantics_test_sqlite_generic_execute_preserves_first_result_generated_keys_and_more_results"
+      ],
+      "disposition": "ADAPTED",
+      "contract_preserved": true,
       "inputs_preserved": false,
-      "assertions_preserved": false,
-      "fixture_state_preserved": false,
-      "cleanup_preserved": false,
-      "case_expansion_complete": false,
-      "result_parity": "NOT_RUN",
-      "evidence": ""
+      "assertions_preserved": true,
+      "fixture_state_preserved": true,
+      "cleanup_preserved": true,
+      "case_expansion_complete": true,
+      "result_parity": "MATCH",
+      "evidence": "cargo test -p druid --test task6_pooled_statement_semantics_test_parity (7 passed); the Rust target covers the Java execute/executeUpdate overloads, generated keys, update counts and CLOSE_CURRENT_RESULT close behavior with a Rust-owned sqlite fixture instead of T_PRE_STMT_TEST.",
+      "approved_difference": false
     },
     {
       "source": "src\\test\\java\\com\\alibaba\\druid\\bvt\\proxy\\StatisticTest.java#test_stat",
