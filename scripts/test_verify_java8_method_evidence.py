@@ -64,6 +64,35 @@ class Java8EvidenceTest(unittest.TestCase):
         self.assertEqual(hashlib.sha256(payload).hexdigest(),
                          "1facdc7c75308db0af9b023847b82b96594d75b667d694774439ed474e53a257")
 
+    def test_linked_rust_sources_use_lf_checkout_and_exact_hashes(self):
+        references = {}
+        for row in verifier.read_rows(self.ledger):
+            for field in ("rust_source", "positive_evidence", "unsupported_evidence"):
+                if row[field]:
+                    references.setdefault(row[field].partition("#")[0], set()).add(row[field + "_sha256"])
+        for reference, recorded_hashes in references.items():
+            with self.subTest(reference=reference):
+                payload = (self.root / reference).read_bytes()
+                self.assertNotIn(b"\r\n", payload)
+                self.assertEqual(recorded_hashes, {hashlib.sha256(payload).hexdigest().upper()})
+
+    def test_line_ending_only_change_invalidates_positive_evidence(self):
+        row = next(row for row in verifier.read_rows(self.ledger) if row["capability"] == "PARTIAL")
+        path = self.root / row["positive_evidence"].partition("#")[0]
+        payload = path.read_bytes()
+        self.assertNotIn(b"\r", payload)
+        path.write_bytes(payload.replace(b"\n", b"\r\n"))
+        with self.assertRaisesRegex(verifier.EvidenceError, "stale evidence source hash"):
+            self.verify()
+
+    def test_content_change_invalidates_positive_evidence(self):
+        row = next(row for row in verifier.read_rows(self.ledger) if row["capability"] == "PARTIAL")
+        path = self.root / row["positive_evidence"].partition("#")[0]
+        with path.open("ab") as stream:
+            stream.write(b"\n// Evidence changed after the ledger was captured.\n")
+        with self.assertRaisesRegex(verifier.EvidenceError, "stale evidence source hash"):
+            self.verify()
+
     def test_windows_and_linux_doclet_outputs_have_identical_canonical_bytes(self):
         payload = self.inventory.read_bytes()
         windows = payload.replace(b"\n", b"\r\n")

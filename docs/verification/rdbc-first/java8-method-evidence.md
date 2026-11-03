@@ -19,6 +19,8 @@ On 2026-10-21, 17 identities have PARTIAL evidence links and 1,984 remain UNASSE
 
 The previous nine links now use actual requirement IDs; the stale rdbc-xa-resource path is corrected to rdbc-xa-resource-contract. Byte hashes for linked Rust sources and tests use explicit LF checkout attributes so platform line endings cannot invalidate the evidence. Existing evidence statuses are preserved.
 
+On 2026-11-03, an audit of all 124 linked Rust files found 35 ledger hashes captured from CRLF checkout bytes; each matched the corresponding tracked LF file after only a line-ending conversion. Their 744 hash fields across 521 rows were corrected to the tracked LF bytes. The repository now requires LF checkout for Rust files, including future evidence links. The verifier still hashes exact source bytes and rejects changed content or line endings; this repair does not promote any capability or evidence layer.
+
 Mutation tests cover missing/escaping/ambiguous specifications, unknown requirements, partial claims without mappings, tests or passed layers, contradictory unassessed states, and the distinction between integrity and optional completeness checking. No ledger row is marked fully SUPPORTED by this increment.
 
 
