@@ -1,5 +1,7 @@
 # 验证台账与 API 快照使用规范 LF 字节，避免 Windows checkout 改变校验值。
-*.tsv text eol=lf
+# Empty final TSV fields can require a trailing tab.
+*.tsv text eol=lf whitespace=-blank-at-eol
+*.rs text eol=lf
 /api/*.txt text eol=lf
 /docs/verification/**/*.json text eol=lf
 
