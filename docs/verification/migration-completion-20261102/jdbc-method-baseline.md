@@ -10,12 +10,12 @@
 
 | 维度 | PASS | PARTIAL | UNSUPPORTED | UNASSESSED |
 |---|---:|---:|---:|---:|
-| capability | 98 | 1092 | 227 | 584 |
-| declaration | 1401 | 0 | 0 | 600 |
+| capability | 112 | 1177 | 230 | 482 |
+| declaration | 1503 | 0 | 0 | 498 |
 | contract | 807 | 0 | 0 | 1194 |
-| adapter | 156 | 0 | 98 N/A | 1747 |
-| logical_proxy | 366 | 0 | 98 N/A | 1537 |
-| real_db | 59 | 0 | 98 N/A | 1844 |
+| adapter | 156 | 0 | 112 N/A | 1733 |
+| logical_proxy | 366 | 0 | 112 N/A | 1523 |
+| real_db | 59 | 0 | 112 N/A | 1830 |
 
 ## 约束
 
@@ -92,7 +92,7 @@
 - 常量没有 adapter/logical_proxy/real_db 运行时维度，登记为 `NOT_APPLICABLE`；capability 为 `SUPPORTED`，declaration/contract PASS，依据是 `canonical_types_module_preserves_all_java8_constants_and_existing_facades` 与 `canonical_jdbc_type_preserves_every_java8_name_vendor_and_number` 对全部 39 组名称/数值的精确断言。
 - 结果：linked **621** / unassessed **1380**；capability SUPPORTED 78 + PARTIAL 539 + UNSUPPORTED 4；declaration PASS 605、contract PASS 601、adapter PASS 155、logical_proxy PASS 306、real_db PASS 58。
 - 边界：`JDBCType#values()` 与 `valueOf(String)` 无 Rust 对应入口；两个 `#TYPE` 行保持未评估。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；`standard_constant_exception_contract_test` 2 passed、`standard_value_ownership_test` 4 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；`standard_constant_exception_contract_test` 2 passed、`standard_value_ownership_test` 4 passed。
 
 ## 2026-11-03 SQLInput/SQLOutput 剩余标量批次
 
@@ -100,7 +100,7 @@
 - 新增 34 个方法：17 个 `SQLInput#readXxx` 与 17 个 `SQLOutput#writeXxx`，证据为 `every_standard_input_reader_distinguishes_sql_null` / `every_standard_output_writer_retains_attribute_order_and_nulls`，覆盖 SQL NULL 零值/None、was_null 与单属性消费。
 - 结果：linked **655** / unassessed **1346**；capability SUPPORTED 78 + PARTIAL 573 + UNSUPPORTED 4；declaration PASS 639、contract PASS 635。
 - 边界：SQLInput/SQLOutput 仅剩 `TYPE` 未评估；两者仍无 adapter/real_db 证据（JDBC Agent 未实现 UDT 通道）。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；`standard_sql_mapping_contract_test` 11 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；`standard_sql_mapping_contract_test` 11 passed。
 
 ## 2026-11-03 RowSet setter/property 批次
 
@@ -108,7 +108,7 @@
 - 新增 105 个 `javax.sql.RowSet` 方法：73 个固定参数 setter（`every_fixed_java_row_set_setter_preserves_its_family_and_overload`）、28 个属性 setter/getter（`canonical_row_set_properties_forward_all_requests_and_validate_atomically`）、`execute/clearParameters/addRowSetListener/removeRowSetListener`。
 - 结果：linked **760** / unassessed **1241**；capability SUPPORTED 78 + PARTIAL 678 + UNSUPPORTED 4；declaration PASS 744、contract PASS 740；RowSet 覆盖 107/321。
 - 边界：RowSet 继承的 ResultSet 取值/更新方法（`updateXxx`、`getXxx` 标签重载等）尚无 RowSet 类型上的断言；`RowSetMetaData` 44 个身份仍全部未评估；RowSet 无 adapter/real_db 证据。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；`standard_row_set_full_surface_contract_test` 3 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；`standard_row_set_full_surface_contract_test` 3 passed。
 
 ## 2026-11-03 RowSet 继承方法与 RowSetMetaData 批次
 
@@ -116,7 +116,7 @@
 - 新增 48 个身份：12 个 RowSet 继承的 ResultSet 方法（next/getObject/getRow/isClosed/getMetaData/close/updateRow/insertRow/deleteRow/afterLast/moveToInsertRow/moveToCurrentRow），17 个 `RowSetMetaData` setter、17 个继承 getter、2 个 Wrapper 方法。
 - 结果：linked **808** / unassessed **1193**；capability SUPPORTED 78 + PARTIAL 726 + UNSUPPORTED 4；declaration PASS 792、contract PASS 788；RowSet 覆盖 119/321、RowSetMetaData 36/44。
 - 边界：RowSet 的 `absolute/relative/first/last/beforeFirst/isFirst/isLast/wasNull/findColumn` 等未在 RowSet 实例上断言；`getColumnClassName/isReadOnly/isWritable/isDefinitelyWritable` 与 3 个可空性常量仍 UNASSESSED；RowSet 无 adapter/real_db 证据。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；`standard_row_set_metadata_contract_test` 5 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；`standard_row_set_metadata_contract_test` 5 passed。
 
 ## 2026-11-03 ResultSet 资源更新批次
 
@@ -124,7 +124,7 @@
 - 新增 7 个 `ResultSet#updateXxx(String, ...)` 方法（Array/Blob/Clob/NClob/Ref/RowId/SQLXML 的 NULL 更新），Java 重载在 Rust 中折叠为 `update_value(ResultSetUpdate::X(None))`，测试断言值变为 SQL NULL 且 `row_updated` 为真。
 - 结果：linked **815** / unassessed **1186**；capability SUPPORTED 78 + PARTIAL 733 + UNSUPPORTED 4；declaration PASS 799、contract PASS 795。
 - 边界：索引重载与流更新（`updateBlob(int,InputStream)` 等）只在标签/0A000 路径有观测，未登记；`updateNull/updateObject` 与其余标量 `updateXxx` 仍无测试。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；`strong_getter_default_contract_test` 4 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；`strong_getter_default_contract_test` 4 passed。
 
 ## 2026-11-03 Callable 继承方法批次
 
@@ -133,7 +133,7 @@
 - 证据：canonical matrix 的有序结果与 wrapper 断言、warning filter 顺序、pooled callable 关闭断言；`cancel()` 由 H2 live 测试断言返回错误，同时登记 adapter/real_db。
 - 结果：linked **827** / unassessed **1174**；capability PARTIAL 745；contract PASS 807、adapter PASS 156、logical_proxy PASS 317、real_db PASS 59。
 - 边界：Callable 剩余 108 个身份主要是索引 `setXxx(int,...)`、`addBatch/clearBatch/executeBatch`、字面 SQL 重载与若干属性读取，均无 Callable 类型上的断言。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；`task6_sql_warning_semantics_test_parity` 12 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；`task6_sql_warning_semantics_test_parity` 12 passed。
 
 ## 2026-11-03 DatabaseMetaData 不支持能力批次
 
@@ -141,7 +141,7 @@
 - 新增 46 个 `UNSUPPORTED`：全部来自 `task6_standard_database_meta_data_differential_test_parity.rs` 的 `*_unsupported` 用例，当前 SQLite 后端对这些必需 JDBC 元数据能力返回 `RdbcError::UnsupportedOperation`。
 - 重要边界：这些是**迁移缺口**而非已批准的能力裁剪；测试只断言 `UnsupportedOperation` 变体，未断言 operation 名或 Java SQLState，因此逐行 `unsupported_result` 明确写明这一点。spec 中 UNSUPPORTED 的“精确 0A000”标准尚未满足，3.3 未完成。
 - 结果：linked **873** / unassessed **1128**；capability SUPPORTED 78 + PARTIAL 745 + UNSUPPORTED 50；declaration PASS 857、contract PASS 853、adapter 156、logical_proxy 317、real_db 59。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；该差分文件 67 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；该差分文件 67 passed。
 
 ## 2026-11-03 DriverManager 批次
 
@@ -150,7 +150,7 @@
 - 证据：`standard_driver_action_test.rs` 的候选链、回调一次性、跨 manager 共享设置断言；全部为合同层，无真实产品数据库依赖。
 - 结果：linked **884** / unassessed **1117**；capability PARTIAL 756；contract PASS 864。
 - 边界：`getDrivers()`（Rust 有 `get_drivers` 但无测试调用）与弃用的 `getLogStream/setLogStream/println` 仍 UNASSESSED。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；`standard_driver_action_test` 8 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；`standard_driver_action_test` 8 passed。
 
 ## 2026-11-03 新增测试：RowSet typed getters
 
@@ -159,7 +159,7 @@
 - 新增 34 个 RowSet 继承 getter 身份：boolean/byte/short/int/long/float/double/string/nString/bytes/bigDecimal 的 int+String 入口，以及三个时间类型的 4 种重载。
 - 结果：linked **918** / unassessed **1083**；RowSet 覆盖 153/321；capability PARTIAL 790、SUPPORTED 78、UNSUPPORTED 50；contract PASS 898。
 - 边界：RowSet 仍余 168 个身份，主要是 `updateXxx`、`getObject` 重载与导航谓词；本测试只覆盖 typed getter 面。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；`row_set_typed_getters_contract_test` 3 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；`row_set_typed_getters_contract_test` 3 passed。
 
 ## 2026-11-03 新增测试：ResultSet 标量 updateXxx 族
 
@@ -168,7 +168,7 @@
 - 新增 31 个 `ResultSet#updateXxx` 身份（16 个 family，含 int/String 重载；`updateObject` 仅 2 参数重载）。Java 重载在 Rust 中折叠为 `ResultSetUpdate` variant，notes 已写明。
 - 结果：linked **949** / unassessed **1052**；ResultSet 覆盖 96/206；capability PARTIAL 821；contract PASS 929。
 - 边界：`updateObject` 的 SQLType/scale 重载、流更新与 `updateRef/updateBlob(Some)` 等资源非 NULL 路径仍未覆盖。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；新测试 2 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；新测试 2 passed。
 
 ## 2026-11-03 多智能体新增测试波次（导航/资源 setter/Callable 索引）
 
@@ -181,7 +181,7 @@
 - 新增 **53** 个身份（RowSet 10、ResultSet 16、PreparedStatement 8、CallableStatement 19；`afterLast/getRow` 与 1 个重复 identity 已存在，跳过）。
 - 结果：linked **1002** / unassessed **999**；capability PARTIAL 874 + SUPPORTED 78 + UNSUPPORTED 50；declaration PASS 986、contract PASS 982、logical_proxy PASS 344。
 - 边界：本轮只覆盖新增测试实际断言的身份；未断言的重载未登记。`real_db` 仍 59/2001。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；4 个新测试 12 passed；两包 fmt check exit 0。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；4 个新测试 12 passed；两包 fmt check exit 0。
 
 ## 2026-11-03 RowSet getObject 面
 
@@ -189,7 +189,7 @@
 - 新增测试 `crates/druid-rdbc/tests/row_set_object_getter_contract_test.rs`（2 passed）：SharedRowSet 上断言无类型与 typed 的 index/label 入口，以及 type-map 入口的精确默认 `UnsupportedOperation`（operation 名逐字断言）。
 - 合入 5 个身份（getObject(int) 已登记）：getObject(String)、getObject(int,Class)、getObject(String,Class) 为 PARTIAL；getObject(int,Map)、getObject(String,Map) 为 UNSUPPORTED。
 - 结果：linked **1007** / unassessed **994**；RowSet 覆盖 168/321；capability PARTIAL 877 + UNSUPPORTED 52。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；新测试 2 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；新测试 2 passed。
 
 ## 2026-11-04 新增测试：Callable 流/资源 setter
 
@@ -198,7 +198,7 @@
 - 断言 variant 种类、SQL type 与 length 字段（流句柄在代理层会被 clone，比较内容而非句柄 id）；流未被消费或关闭。
 - 结果：linked **1029** / unassessed **972**；Callable 覆盖 172/239；capability PARTIAL 899、contract PASS 1009、logical_proxy PASS 366。
 - 未能执行的计划：PreparedStatement 的 `getMetaData/getConnection/getLargeMaxRows/setLargeMaxRows/getLargeUpdateCount` 在 Rust 标准 trait 中没有入口；字面 SQL 的 `execute/executeUpdate/executeQuery/executeLargeUpdate` 重载也没有 PreparedStatement 句柄上的现有测试，需生产接口或新 mock 设计，本轮未登记。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；新测试 2 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；新测试 2 passed。
 
 ## 2026-11-04 新增测试：RowSet 标量与资源更新
 
@@ -207,7 +207,7 @@
 - 新增 `crates/druid-rdbc/tests/row_set_resource_update_contract_test.rs`（3 passed）：7 个资源 NULL handle 的索引/标签更新发布 SQL NULL；Character/NCharacter reader 更新保存流值；Ascii/Binary/BlobStream/ClobReader/NClobReader 共 22 个重载逐项断言 `SQLState=0A000`、`java.sql.SQLFeatureNotSupportedException`、message 含 `row_set_lob_stream_update`。
 - 结果：linked **1107** / unassessed **894**；RowSet 覆盖 246/321；capability PARTIAL 955 + UNSUPPORTED 74；contract PASS 1087。
 - 边界：RowSet 剩余 75 个身份主要是 `updateObject` 的 SQLType/scale 重载与 `getStatement/getHoldability/getFetchDirection` 等未测入口。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；两个新测试 5 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；两个新测试 5 passed。
 
 ## 2026-11-04 RowSet NULL/流 getter 与 ResultSet 常量
 
@@ -215,7 +215,7 @@
 - 新增测试 `crates/druid-rdbc/tests/row_set_null_getter_contract_test.rs`（2 passed）：13 类 NULL 资源/流 getter 的索引与标签入口（26）、wasNull、warnings/clearWarnings、holdability、previous、Wrapper isWrapperFor/unwrap、getBigDecimal(scale) 两个重载。
 - 新增 20 个 `ResultSet`/`RowSet` 常量身份：以 `statement_compat_constants_test.rs#pooled_statement_retains_public_jdbc_constants` 的精确数值断言为证据，三个运行时层 NOT_APPLICABLE、capability SUPPORTED。
 - 结果：linked **1161** / unassessed **840**；capability SUPPORTED 98 + PARTIAL 989 + UNSUPPORTED 74；contract PASS 1141；RowSet 覆盖 291/321、ResultSet 131/206。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；两个新测试 3 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；两个新测试 3 passed。
 
 ## 2026-11-04 RowSet 固定参数 setter 批次
 
@@ -224,7 +224,7 @@
 - 每个用例 `clear_parameters` 后调用并读取 `params()` 快照，断言 descriptor 家族与 by-name 解析槽位；NCharacterStream 绑定不消费 reader。
 - 结果：linked **1173** / unassessed **828**；RowSet 覆盖 302/321；contract PASS 1153。
 - 边界：RowSet 仍余 19 个身份（updateObject 6、row-state 5、fetch/holdability/statement 等）。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；新测试 2 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；新测试 2 passed。
 
 ## 2026-11-04 多智能体波次：RowSet 状态 / Callable 属性 / Metadata 扫描 / 异常方法
 
@@ -236,7 +236,7 @@
   - 异常方法复用 `error_contract_test.rs`（9 passed）：SQLException/SQLWarning/BatchUpdateException 的 getter/setter 共 10 个。
 - 结果：linked **1326** / unassessed **675**；capability PARTIAL 1041 + SUPPORTED 98 + UNSUPPORTED 187；declaration PASS 1310、contract PASS 1306。
 - 重要边界：新增的 111 个 DatabaseMetaData UNSUPPORTED 是**迁移缺口**，观测为 Rust `UnsupportedOperation`（Java `UnsupportedOperationException`），不是 JDBC `SQLFeatureNotSupportedException`/0A000；`getConnection/getMaxLogicalLobSize/supportsRefCursors` 无 Rust 入口，保持 UNASSESSED。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；4 个测试文件 19 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；4 个测试文件 19 passed。
 
 ## 2026-11-04 ResultSet 流更新负例批次
 
@@ -245,7 +245,7 @@
 - 全部逐项断言 `SQLState=0A000`、`java.sql.SQLFeatureNotSupportedException`、message 含 `buffered_row_set_resource_update`，并确认失败后行值/行号/`row_updated` 不变。
 - 关键发现：`BufferedRowSet` 连 `CharacterStream` 也拒绝（与 `SharedRowSet` 行为不同），因此 6 个 `updateCharacterStream` 身份按不支持登记。
 - 结果：linked **1366** / unassessed **635**；capability PARTIAL 1041 + SUPPORTED 98 + UNSUPPORTED 227；contract PASS 1346。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；两个测试 2 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；两个测试 2 passed。
 
 ## 2026-11-04 异常构造器批次
 
@@ -254,4 +254,16 @@
 - 每个用例重建 reason/state/vendorCode/cause/counts 并断言存储字段；回填 **51** 个构造器身份。
 - 未登记：DataTruncation 2 个与 SQLClientInfoException 9 个——Rust 侧是 struct literal，没有可引用的构造 fn，不伪造入口。
 - 结果：linked **1417** / unassessed **584**；capability PARTIAL 1092 + SUPPORTED 98 + UNSUPPORTED 227；contract PASS 1397。
-- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1417 unassessed=584`；构造器测试 62 passed。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；构造器测试 62 passed。
+
+## 2026-11-04 主会话收口：ResultSet/Prepared/Callable 剩余面
+
+- 当前 ledger SHA-256：`5c8501d38df05af5604c90200ad4cc6b44aa85a51712d6dab06fa063e42a22ea`
+- 新增 3 个测试文件、10 个测试函数：
+  - `result_set_remaining_contract_test.rs`（4 passed）：标签 typed/NULL getter、before-first/first/last/after-last、fetch/并发/保留、Wrapper、type-map getObject 精确不支持、7 个 NULL 资源更新。
+  - `prepared_literal_statement_contract_test.rs`（3 passed）：4 种 executeUpdate keys、4 种 execute keys、executeQuery、addBatch、getResultSet、getMetaData 精确 0A000、setBigDecimal。
+  - `callable_literal_property_contract_test.rs`（3 passed）：4 种 executeUpdate/execute keys、executeQuery、addBatch/executeBatch/executeLargeBatch/executeLargeUpdate 折叠、clearParameters、Statement 属性回读、6 个资源 setter、5 个 OUT getter。
+- 另回填 14 个 Prepared/Callable 继承常量（SUPPORTED）。
+- 结果：linked **1519** / unassessed **482**；capability SUPPORTED 112 + PARTIAL 1177 + UNSUPPORTED 230；ResultSet 204/206、Prepared 109/118、Callable 225/239、RowSet 319/321、DatabaseMetaData 175/240。
+- 边界：`executeLargeUpdate(String...)`、`getConnection`、`getLargeMaxRows/setLargeMaxRows/getLargeUpdateCount` 无 Rust 入口；DatabaseMetaData 61 常量与 3 方法无 Rust 入口；Timestamp/Date/Time/DataTruncation/SQLClientInfoException 构造器无独立 Rust 类型。
+- 门禁：`EVIDENCE_INTEGRITY_PASS linked=1519 unassessed=482`；3 个新测试 10 passed。
