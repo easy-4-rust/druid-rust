@@ -1,3 +1,4 @@
+use crate::connection::Connection;
 use crate::error::RdbcError;
 use crate::metadata::{
     DatabaseMetaDataArgument, DatabaseMetaDataOperation, DatabaseMetaDataRequest, RowIdLifetime,
@@ -98,5 +99,36 @@ pub trait DatabaseMetaData: Wrapper + Send + 'static {
             ],
         ))
         .await
+    }
+
+    /// 返回创建本 metadata 对象的连接。
+    ///
+    /// 对应 Java：`java.sql.DatabaseMetaData#getConnection()`。Java 8 规定驱动不支持时
+    /// 抛出 `SQLFeatureNotSupportedException`，因此默认入口返回同一个标准错误，
+    /// 不伪造连接对象，也不返回借用连接。
+    async fn get_connection(&mut self) -> Result<Box<dyn Connection>, RdbcError> {
+        Err(RdbcError::feature_not_supported("metadata_get_connection"))
+    }
+
+    /// 返回逻辑 LOB 的最大字节数。
+    ///
+    /// 对应 Java：`java.sql.DatabaseMetaData#getMaxLogicalLobSize()`。Java 8 规定驱动
+    /// 不支持时抛出 `SQLFeatureNotSupportedException`，因此默认入口返回同一个标准错误，
+    /// 不臆造 LOB 上限。
+    async fn get_max_logical_lob_size(&mut self) -> Result<i32, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "metadata_get_max_logical_lob_size",
+        ))
+    }
+
+    /// 返回驱动是否支持 REF CURSOR。
+    ///
+    /// 对应 Java：`java.sql.DatabaseMetaData#supportsRefCursors()`。Java 8 规定驱动
+    /// 不支持时抛出 `SQLFeatureNotSupportedException`，因此默认入口返回同一个标准错误，
+    /// 不返回伪造的能力声明。
+    async fn supports_ref_cursors(&mut self) -> Result<bool, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "metadata_supports_ref_cursors",
+        ))
     }
 }

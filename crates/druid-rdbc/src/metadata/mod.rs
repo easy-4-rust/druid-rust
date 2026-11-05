@@ -1,6 +1,7 @@
 //! JDBC-like live metadata 与 immutable snapshot 标准。
 
 mod database_meta_data;
+pub mod database_meta_data_constants;
 mod database_meta_data_info_ext;
 mod database_meta_data_limits_ext;
 mod database_meta_data_query_ext;
@@ -11,6 +12,7 @@ mod pseudo_column_usage;
 mod result_set_meta_data;
 
 pub use database_meta_data::{DatabaseMetaData, TablesQuery};
+pub use database_meta_data_constants::DatabaseMetaDataConstants;
 pub use database_meta_data_info_ext::DatabaseMetaDataInfoExt;
 pub use database_meta_data_limits_ext::DatabaseMetaDataLimitsExt;
 pub use database_meta_data_query_ext::DatabaseMetaDataQueryExt;

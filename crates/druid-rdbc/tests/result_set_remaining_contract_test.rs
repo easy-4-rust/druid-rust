@@ -56,7 +56,7 @@ fn row_set() -> BufferedRowSet {
         Value::Decimal(BigDecimal::from_str("123.45").unwrap()),
         Value::String("text".to_owned()),
     ];
-    values.extend(std::iter::repeat(Value::Null).take(13));
+    values.extend(std::iter::repeat_n(Value::Null, 13));
     BufferedRowSet::with_column_labels(
         vec![Row::new(values)],
         LABELS.iter().map(|label| (*label).to_owned()).collect(),

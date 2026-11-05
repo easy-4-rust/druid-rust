@@ -1,6 +1,7 @@
 //! 平台值、SQL 类型与日期时间合同的声明入口。
 
 mod date;
+mod jdbc_datetime_ext;
 mod jdbc_type;
 mod rdbc_calendar;
 mod rdbc_object;
@@ -30,6 +31,7 @@ pub mod types;
 mod value;
 
 pub use date::Date;
+pub use jdbc_datetime_ext::{DateExt, TimeExt, TimestampExt};
 pub use jdbc_type::{JdbcType, JdbcType as RdbcType};
 pub use rdbc_calendar::RdbcCalendar;
 pub use rdbc_calendar::RdbcCalendarArgument;

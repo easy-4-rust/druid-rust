@@ -3,7 +3,6 @@
 //! 每个用例清空参数后调用一个 setter，再读取 `params()` 快照，断言 descriptor
 //! 家族与 by-name 解析到的槽位，避免只验证调用成功。
 
-use druid_rdbc::error::RdbcError;
 use druid_rdbc::extensions::{RowSet, RowSetInternal, SharedRowSet};
 use druid_rdbc::resource::{RdbcCharacterLength, RdbcReader};
 use druid_rdbc::statement::{ParameterIndex, PreparedInputParameter};
