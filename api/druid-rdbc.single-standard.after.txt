@@ -31,9 +31,26 @@ pub druid_rdbc::compat::DataTruncation::index: usize
 pub druid_rdbc::compat::DataTruncation::parameter: bool
 pub druid_rdbc::compat::DataTruncation::read: bool
 pub druid_rdbc::compat::DataTruncation::transfer_size: core::option::Option<usize>
+impl druid_rdbc::compat::DataTruncation
+pub fn druid_rdbc::compat::DataTruncation::causes(&self) -> impl core::iter::traits::iterator::Iterator<Item = &druid_rdbc::error::SqlWarning> + '_
+pub fn druid_rdbc::compat::DataTruncation::data_size(&self) -> core::option::Option<usize>
+pub fn druid_rdbc::compat::DataTruncation::error_code(&self) -> i32
+pub fn druid_rdbc::compat::DataTruncation::index(&self) -> usize
+pub fn druid_rdbc::compat::DataTruncation::new(usize, bool, bool, core::option::Option<usize>, core::option::Option<usize>) -> Self
+pub fn druid_rdbc::compat::DataTruncation::next_warning(&self) -> core::option::Option<&druid_rdbc::error::SqlWarning>
+pub fn druid_rdbc::compat::DataTruncation::parameter(&self) -> bool
+pub fn druid_rdbc::compat::DataTruncation::read(&self) -> bool
+pub fn druid_rdbc::compat::DataTruncation::set_next_warning(&mut self, druid_rdbc::error::SqlWarning)
+pub fn druid_rdbc::compat::DataTruncation::sql_state(&self) -> core::option::Option<&str>
+pub fn druid_rdbc::compat::DataTruncation::sql_warning(&self) -> &druid_rdbc::error::SqlWarning
+pub fn druid_rdbc::compat::DataTruncation::to_sql_warning(&self) -> druid_rdbc::error::SqlWarning
+pub fn druid_rdbc::compat::DataTruncation::transfer_size(&self) -> core::option::Option<usize>
 pub struct druid_rdbc::compat::SqlClientInfoException
 pub druid_rdbc::compat::SqlClientInfoException::exception: druid_rdbc::error::SqlException
 pub druid_rdbc::compat::SqlClientInfoException::failed_properties: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+impl druid_rdbc::compat::SqlClientInfoException
+pub fn druid_rdbc::compat::SqlClientInfoException::failed_properties(&self) -> &std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+pub fn druid_rdbc::compat::SqlClientInfoException::new(druid_rdbc::error::SqlException, std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> Self
 pub type druid_rdbc::compat::SqlDataException = druid_rdbc::error::SqlException
 pub type druid_rdbc::compat::SqlException = druid_rdbc::error::SqlException
 pub type druid_rdbc::compat::SqlFeatureNotSupportedException = druid_rdbc::error::SqlException
@@ -492,6 +509,20 @@ pub druid_rdbc::error::DataTruncation::index: usize
 pub druid_rdbc::error::DataTruncation::parameter: bool
 pub druid_rdbc::error::DataTruncation::read: bool
 pub druid_rdbc::error::DataTruncation::transfer_size: core::option::Option<usize>
+impl druid_rdbc::compat::DataTruncation
+pub fn druid_rdbc::compat::DataTruncation::causes(&self) -> impl core::iter::traits::iterator::Iterator<Item = &druid_rdbc::error::SqlWarning> + '_
+pub fn druid_rdbc::compat::DataTruncation::data_size(&self) -> core::option::Option<usize>
+pub fn druid_rdbc::compat::DataTruncation::error_code(&self) -> i32
+pub fn druid_rdbc::compat::DataTruncation::index(&self) -> usize
+pub fn druid_rdbc::compat::DataTruncation::new(usize, bool, bool, core::option::Option<usize>, core::option::Option<usize>) -> Self
+pub fn druid_rdbc::compat::DataTruncation::next_warning(&self) -> core::option::Option<&druid_rdbc::error::SqlWarning>
+pub fn druid_rdbc::compat::DataTruncation::parameter(&self) -> bool
+pub fn druid_rdbc::compat::DataTruncation::read(&self) -> bool
+pub fn druid_rdbc::compat::DataTruncation::set_next_warning(&mut self, druid_rdbc::error::SqlWarning)
+pub fn druid_rdbc::compat::DataTruncation::sql_state(&self) -> core::option::Option<&str>
+pub fn druid_rdbc::compat::DataTruncation::sql_warning(&self) -> &druid_rdbc::error::SqlWarning
+pub fn druid_rdbc::compat::DataTruncation::to_sql_warning(&self) -> druid_rdbc::error::SqlWarning
+pub fn druid_rdbc::compat::DataTruncation::transfer_size(&self) -> core::option::Option<usize>
 pub struct druid_rdbc::error::ProductErrorBoundary
 impl druid_rdbc::error::ProductErrorBoundary
 pub fn druid_rdbc::error::ProductErrorBoundary::class_name(&self) -> &str
@@ -501,6 +532,9 @@ pub fn druid_rdbc::error::ProductErrorBoundary::source_error(&self) -> core::opt
 pub struct druid_rdbc::error::SqlClientInfoException
 pub druid_rdbc::error::SqlClientInfoException::exception: druid_rdbc::error::SqlException
 pub druid_rdbc::error::SqlClientInfoException::failed_properties: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+impl druid_rdbc::compat::SqlClientInfoException
+pub fn druid_rdbc::compat::SqlClientInfoException::failed_properties(&self) -> &std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+pub fn druid_rdbc::compat::SqlClientInfoException::new(druid_rdbc::error::SqlException, std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> Self
 pub struct druid_rdbc::error::SqlException
 impl druid_rdbc::error::SqlException
 pub fn druid_rdbc::error::SqlException::assignable_types(&self) -> &[alloc::string::String]
@@ -2176,6 +2210,131 @@ pub fn druid_rdbc::governance::wall::TenantCallBack::tenant_value(&self, druid_r
 pub trait druid_rdbc::governance::wall::WallUpdateCheckHandler: core::marker::Send + core::marker::Sync
 pub fn druid_rdbc::governance::wall::WallUpdateCheckHandler::check(&self, &str, &str, &druid_rdbc::types::Value, &[druid_rdbc::types::Value]) -> bool
 pub mod druid_rdbc::metadata
+pub mod druid_rdbc::metadata::database_meta_data_constants
+pub struct druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants
+impl druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::ATTRIBUTE_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::ATTRIBUTE_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::ATTRIBUTE_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::BEST_ROW_NOT_PSEUDO: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::BEST_ROW_PSEUDO: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::BEST_ROW_SESSION: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::BEST_ROW_TEMPORARY: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::BEST_ROW_TRANSACTION: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::BEST_ROW_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::COLUMN_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::COLUMN_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::COLUMN_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_COLUMN_IN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_COLUMN_IN_OUT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_COLUMN_OUT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_COLUMN_RESULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_COLUMN_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_NO_TABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_RESULT_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_RETURN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_RETURNS_TABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_CASCADE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_INITIALLY_DEFERRED: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_INITIALLY_IMMEDIATE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_NOT_DEFERRABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_NO_ACTION: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_RESTRICT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_SET_DEFAULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_SET_NULL: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_COLUMN_IN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_COLUMN_IN_OUT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_COLUMN_OUT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_COLUMN_RESULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_COLUMN_RETURN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_COLUMN_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_NO_RESULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_RESULT_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_RETURNS_RESULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::SQL_STATE_SQL: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::SQL_STATE_SQL_99: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::SQL_STATE_X_OPEN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TABLE_INDEX_CLUSTERED: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TABLE_INDEX_HASHED: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TABLE_INDEX_OTHER: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TABLE_INDEX_STATISTIC: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_PRED_BASIC: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_PRED_CHAR: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_PRED_NONE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_SEARCHABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::VERSION_COLUMN_NOT_PSEUDO: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::VERSION_COLUMN_PSEUDO: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::VERSION_COLUMN_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::ATTRIBUTE_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::ATTRIBUTE_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::ATTRIBUTE_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::BEST_ROW_NOT_PSEUDO: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::BEST_ROW_PSEUDO: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::BEST_ROW_SESSION: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::BEST_ROW_TEMPORARY: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::BEST_ROW_TRANSACTION: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::BEST_ROW_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::COLUMN_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::COLUMN_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::COLUMN_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::FUNCTION_COLUMN_IN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::FUNCTION_COLUMN_IN_OUT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::FUNCTION_COLUMN_OUT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::FUNCTION_COLUMN_RESULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::FUNCTION_COLUMN_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::FUNCTION_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::FUNCTION_NO_TABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::FUNCTION_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::FUNCTION_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::FUNCTION_RESULT_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::FUNCTION_RETURN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::FUNCTION_RETURNS_TABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::IMPORTED_KEY_CASCADE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::IMPORTED_KEY_INITIALLY_DEFERRED: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::IMPORTED_KEY_INITIALLY_IMMEDIATE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::IMPORTED_KEY_NOT_DEFERRABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::IMPORTED_KEY_NO_ACTION: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::IMPORTED_KEY_RESTRICT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::IMPORTED_KEY_SET_DEFAULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::IMPORTED_KEY_SET_NULL: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::PROCEDURE_COLUMN_IN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::PROCEDURE_COLUMN_IN_OUT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::PROCEDURE_COLUMN_OUT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::PROCEDURE_COLUMN_RESULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::PROCEDURE_COLUMN_RETURN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::PROCEDURE_COLUMN_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::PROCEDURE_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::PROCEDURE_NO_RESULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::PROCEDURE_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::PROCEDURE_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::PROCEDURE_RESULT_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::PROCEDURE_RETURNS_RESULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::SQL_STATE_SQL: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::SQL_STATE_SQL_99: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::SQL_STATE_X_OPEN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::TABLE_INDEX_CLUSTERED: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::TABLE_INDEX_HASHED: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::TABLE_INDEX_OTHER: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::TABLE_INDEX_STATISTIC: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::TYPE_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::TYPE_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::TYPE_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::TYPE_PRED_BASIC: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::TYPE_PRED_CHAR: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::TYPE_PRED_NONE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::TYPE_SEARCHABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::VERSION_COLUMN_NOT_PSEUDO: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::VERSION_COLUMN_PSEUDO: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::VERSION_COLUMN_UNKNOWN: i32
 #[non_exhaustive] pub enum druid_rdbc::metadata::ColumnNullability
 pub druid_rdbc::metadata::ColumnNullability::NoNulls
 pub druid_rdbc::metadata::ColumnNullability::Nullable
@@ -2423,6 +2582,69 @@ pub fn druid_rdbc::metadata::ColumnDescriptor::with_driver_type(self, impl core:
 pub const fn druid_rdbc::metadata::ColumnDescriptor::with_flags(self, bool, bool, bool, bool, bool) -> Self
 pub fn druid_rdbc::metadata::ColumnDescriptor::with_origin(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
 pub const fn druid_rdbc::metadata::ColumnDescriptor::with_writability(self, bool, bool, bool) -> Self
+pub struct druid_rdbc::metadata::DatabaseMetaDataConstants
+impl druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::ATTRIBUTE_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::ATTRIBUTE_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::ATTRIBUTE_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::BEST_ROW_NOT_PSEUDO: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::BEST_ROW_PSEUDO: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::BEST_ROW_SESSION: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::BEST_ROW_TEMPORARY: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::BEST_ROW_TRANSACTION: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::BEST_ROW_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::COLUMN_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::COLUMN_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::COLUMN_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_COLUMN_IN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_COLUMN_IN_OUT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_COLUMN_OUT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_COLUMN_RESULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_COLUMN_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_NO_TABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_RESULT_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_RETURN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::FUNCTION_RETURNS_TABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_CASCADE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_INITIALLY_DEFERRED: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_INITIALLY_IMMEDIATE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_NOT_DEFERRABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_NO_ACTION: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_RESTRICT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_SET_DEFAULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::IMPORTED_KEY_SET_NULL: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_COLUMN_IN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_COLUMN_IN_OUT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_COLUMN_OUT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_COLUMN_RESULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_COLUMN_RETURN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_COLUMN_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_NO_RESULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_RESULT_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::PROCEDURE_RETURNS_RESULT: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::SQL_STATE_SQL: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::SQL_STATE_SQL_99: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::SQL_STATE_X_OPEN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TABLE_INDEX_CLUSTERED: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TABLE_INDEX_HASHED: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TABLE_INDEX_OTHER: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TABLE_INDEX_STATISTIC: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_NO_NULLS: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_NULLABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_NULLABLE_UNKNOWN: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_PRED_BASIC: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_PRED_CHAR: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_PRED_NONE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::TYPE_SEARCHABLE: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::VERSION_COLUMN_NOT_PSEUDO: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::VERSION_COLUMN_PSEUDO: i32
+pub const druid_rdbc::metadata::database_meta_data_constants::DatabaseMetaDataConstants::VERSION_COLUMN_UNKNOWN: i32
 pub struct druid_rdbc::metadata::DatabaseMetaDataRequest
 impl druid_rdbc::metadata::DatabaseMetaDataRequest
 pub fn druid_rdbc::metadata::DatabaseMetaDataRequest::arguments(&self) -> &[druid_rdbc::metadata::DatabaseMetaDataArgument]
@@ -2472,11 +2694,14 @@ pub druid_rdbc::metadata::TablesQuery::table_name_pattern: core::option::Option<
 pub druid_rdbc::metadata::TablesQuery::table_types: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub trait druid_rdbc::metadata::DatabaseMetaData: druid_rdbc::wrapper::Wrapper + core::marker::Send + 'static
 pub fn druid_rdbc::metadata::DatabaseMetaData::database_product_name<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::string::String, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::metadata::DatabaseMetaData::get_connection<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::metadata::DatabaseMetaData::get_max_logical_lob_size<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i32, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::metadata::DatabaseMetaData::metadata_boolean<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::metadata::DatabaseMetaData::metadata_integer<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i32, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::metadata::DatabaseMetaData::metadata_result_set<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::metadata::DatabaseMetaData::metadata_row_id_lifetime<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::metadata::RowIdLifetime, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::metadata::DatabaseMetaData::metadata_string<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<alloc::string::String>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::metadata::DatabaseMetaData::supports_ref_cursors<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::metadata::DatabaseMetaData::tables<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::TablesQuery) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub trait druid_rdbc::metadata::DatabaseMetaDataInfoExt: druid_rdbc::metadata::DatabaseMetaData
 pub fn druid_rdbc::metadata::DatabaseMetaDataInfoExt::all_procedures_are_callable<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Send + 'async_trait, 'life0: 'async_trait
@@ -4213,6 +4438,8 @@ pub fn druid_rdbc::statement::Statement::close<'life0, 'async_trait>(&'life0 mut
 pub fn druid_rdbc::statement::Statement::close_on_completion(&mut self) -> core::result::Result<(), druid_rdbc::RdbcError>
 pub fn druid_rdbc::statement::Statement::execute<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::GeneratedKeys) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::statement::ExecutionResult>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
 pub fn druid_rdbc::statement::Statement::execute_batch<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<i64>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::statement::Statement::execute_large_batch(&mut self) -> core::result::Result<alloc::vec::Vec<i64>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::statement::Statement::execute_large_update(&mut self, &str, druid_rdbc::statement::GeneratedKeys) -> core::result::Result<i64, druid_rdbc::RdbcError>
 pub fn druid_rdbc::statement::Statement::execute_query<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
 pub fn druid_rdbc::statement::Statement::execute_update<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::GeneratedKeys) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i64, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
 pub fn druid_rdbc::statement::Statement::execute_values<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
@@ -4220,6 +4447,8 @@ pub fn druid_rdbc::statement::Statement::fetch_direction(&self) -> core::result:
 pub fn druid_rdbc::statement::Statement::fetch_size(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
 pub fn druid_rdbc::statement::Statement::generated_keys<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::statement::Statement::get_generated_keys<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::statement::Statement::get_large_max_rows(&self) -> core::result::Result<i64, druid_rdbc::RdbcError>
+pub fn druid_rdbc::statement::Statement::get_large_update_count(&self) -> core::result::Result<core::option::Option<i64>, druid_rdbc::RdbcError>
 pub fn druid_rdbc::statement::Statement::get_more_results<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::CurrentResultDisposition) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::statement::Statement::get_more_results_current<'life0, 'async_trait>(&'life0 mut self, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
 pub fn druid_rdbc::statement::Statement::get_result_set<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
@@ -4239,6 +4468,7 @@ pub fn druid_rdbc::statement::Statement::set_cursor_name_nullable(&mut self, cor
 pub fn druid_rdbc::statement::Statement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::RdbcError>
 pub fn druid_rdbc::statement::Statement::set_fetch_direction(&mut self, druid_rdbc::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::RdbcError>
 pub fn druid_rdbc::statement::Statement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::statement::Statement::set_large_max_rows(&mut self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
 pub fn druid_rdbc::statement::Statement::set_max_field_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
 pub fn druid_rdbc::statement::Statement::set_max_rows(&mut self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
 pub fn druid_rdbc::statement::Statement::set_poolable(&mut self, bool) -> core::result::Result<(), druid_rdbc::RdbcError>
@@ -4788,6 +5018,34 @@ pub const druid_rdbc::types::BINARY_INPUT_STREAM: i32
 pub const druid_rdbc::types::CHARACTER_INPUT_STREAM: i32
 pub const druid_rdbc::types::NCHARACTER_INPUT_STREAM: i32
 pub const druid_rdbc::types::URL: i32
+pub trait druid_rdbc::types::DateExt
+pub fn druid_rdbc::types::DateExt::get_hours(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::DateExt::get_minutes(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::DateExt::get_seconds(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::DateExt::new_date(i32, i32, i32) -> core::result::Result<chrono::naive::date::NaiveDate, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::DateExt::new_date_from_millis(i64) -> core::result::Result<chrono::naive::date::NaiveDate, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::DateExt::set_hours(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::DateExt::set_minutes(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::DateExt::set_seconds(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::DateExt::set_time(&mut self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::DateExt::to_instant(&self) -> core::result::Result<chrono::datetime::DateTime<chrono::offset::utc::Utc>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::DateExt::to_jdbc_string(&self) -> alloc::string::String
+pub fn druid_rdbc::types::DateExt::to_local_date(&self) -> chrono::naive::date::NaiveDate
+pub fn druid_rdbc::types::DateExt::value_of(&str) -> core::result::Result<chrono::naive::date::NaiveDate, druid_rdbc::RdbcError>
+impl druid_rdbc::types::DateExt for chrono::naive::date::NaiveDate
+pub fn chrono::naive::date::NaiveDate::get_hours(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn chrono::naive::date::NaiveDate::get_minutes(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn chrono::naive::date::NaiveDate::get_seconds(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn chrono::naive::date::NaiveDate::new_date(i32, i32, i32) -> core::result::Result<chrono::naive::date::NaiveDate, druid_rdbc::RdbcError>
+pub fn chrono::naive::date::NaiveDate::new_date_from_millis(i64) -> core::result::Result<chrono::naive::date::NaiveDate, druid_rdbc::RdbcError>
+pub fn chrono::naive::date::NaiveDate::set_hours(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn chrono::naive::date::NaiveDate::set_minutes(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn chrono::naive::date::NaiveDate::set_seconds(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn chrono::naive::date::NaiveDate::set_time(&mut self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn chrono::naive::date::NaiveDate::to_instant(&self) -> core::result::Result<chrono::datetime::DateTime<chrono::offset::utc::Utc>, druid_rdbc::RdbcError>
+pub fn chrono::naive::date::NaiveDate::to_jdbc_string(&self) -> alloc::string::String
+pub fn chrono::naive::date::NaiveDate::to_local_date(&self) -> chrono::naive::date::NaiveDate
+pub fn chrono::naive::date::NaiveDate::value_of(&str) -> core::result::Result<chrono::naive::date::NaiveDate, druid_rdbc::RdbcError>
 pub trait druid_rdbc::types::OpaqueObjectValue: core::fmt::Debug + core::marker::Send + core::marker::Sync
 pub fn druid_rdbc::types::OpaqueObjectValue::as_any(&self) -> &dyn core::any::Any
 pub fn druid_rdbc::types::OpaqueObjectValue::class_name(&self) -> &str
@@ -4852,6 +5110,74 @@ impl druid_rdbc::types::SqlType for druid_rdbc::types::JdbcType
 pub fn druid_rdbc::types::JdbcType::name(&self) -> &'static str
 pub fn druid_rdbc::types::JdbcType::vendor(&self) -> &'static str
 pub fn druid_rdbc::types::JdbcType::vendor_type_number(&self) -> i32
+pub trait druid_rdbc::types::TimeExt
+pub fn druid_rdbc::types::TimeExt::get_date(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimeExt::get_day(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimeExt::get_month(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimeExt::get_year(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimeExt::new_time(i32, i32, i32) -> core::result::Result<chrono::naive::time::NaiveTime, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimeExt::new_time_from_millis(i64) -> core::result::Result<chrono::naive::time::NaiveTime, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimeExt::set_date(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimeExt::set_month(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimeExt::set_time(&mut self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimeExt::set_year(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimeExt::to_instant(&self) -> core::result::Result<chrono::datetime::DateTime<chrono::offset::utc::Utc>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimeExt::to_jdbc_string(&self) -> alloc::string::String
+pub fn druid_rdbc::types::TimeExt::to_local_time(&self) -> chrono::naive::time::NaiveTime
+pub fn druid_rdbc::types::TimeExt::value_of(&str) -> core::result::Result<chrono::naive::time::NaiveTime, druid_rdbc::RdbcError>
+impl druid_rdbc::types::TimeExt for chrono::naive::time::NaiveTime
+pub fn chrono::naive::time::NaiveTime::get_date(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn chrono::naive::time::NaiveTime::get_day(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn chrono::naive::time::NaiveTime::get_month(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn chrono::naive::time::NaiveTime::get_year(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn chrono::naive::time::NaiveTime::new_time(i32, i32, i32) -> core::result::Result<chrono::naive::time::NaiveTime, druid_rdbc::RdbcError>
+pub fn chrono::naive::time::NaiveTime::new_time_from_millis(i64) -> core::result::Result<chrono::naive::time::NaiveTime, druid_rdbc::RdbcError>
+pub fn chrono::naive::time::NaiveTime::set_date(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn chrono::naive::time::NaiveTime::set_month(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn chrono::naive::time::NaiveTime::set_time(&mut self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn chrono::naive::time::NaiveTime::set_year(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn chrono::naive::time::NaiveTime::to_instant(&self) -> core::result::Result<chrono::datetime::DateTime<chrono::offset::utc::Utc>, druid_rdbc::RdbcError>
+pub fn chrono::naive::time::NaiveTime::to_jdbc_string(&self) -> alloc::string::String
+pub fn chrono::naive::time::NaiveTime::to_local_time(&self) -> chrono::naive::time::NaiveTime
+pub fn chrono::naive::time::NaiveTime::value_of(&str) -> core::result::Result<chrono::naive::time::NaiveTime, druid_rdbc::RdbcError>
+pub trait druid_rdbc::types::TimestampExt
+pub fn druid_rdbc::types::TimestampExt::after(&self, &chrono::naive::datetime::NaiveDateTime) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::before(&self, &chrono::naive::datetime::NaiveDateTime) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::compare_to(&self, &chrono::naive::datetime::NaiveDateTime) -> core::result::Result<core::cmp::Ordering, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::compare_to_date(&self, &chrono::naive::datetime::NaiveDateTime) -> core::result::Result<core::cmp::Ordering, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::equals_object(&self, &chrono::naive::datetime::NaiveDateTime) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::equals_timestamp(&self, &chrono::naive::datetime::NaiveDateTime) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::from_instant(chrono::datetime::DateTime<chrono::offset::utc::Utc>) -> core::result::Result<chrono::naive::datetime::NaiveDateTime, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::get_nanos(&self) -> u32
+pub fn druid_rdbc::types::TimestampExt::get_time(&self) -> core::result::Result<i64, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::hash_code(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::new_timestamp(i32, i32, i32, i32, i32, i32, i32) -> core::result::Result<chrono::naive::datetime::NaiveDateTime, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::new_timestamp_from_millis(i64) -> core::result::Result<chrono::naive::datetime::NaiveDateTime, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::set_nanos(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::set_time(&mut self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::to_instant(&self) -> core::result::Result<chrono::datetime::DateTime<chrono::offset::utc::Utc>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::TimestampExt::to_jdbc_string(&self) -> alloc::string::String
+pub fn druid_rdbc::types::TimestampExt::to_local_date_time(&self) -> chrono::naive::datetime::NaiveDateTime
+pub fn druid_rdbc::types::TimestampExt::value_of(&str) -> core::result::Result<chrono::naive::datetime::NaiveDateTime, druid_rdbc::RdbcError>
+impl druid_rdbc::types::TimestampExt for chrono::naive::datetime::NaiveDateTime
+pub fn chrono::naive::datetime::NaiveDateTime::after(&self, &chrono::naive::datetime::NaiveDateTime) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::before(&self, &chrono::naive::datetime::NaiveDateTime) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::compare_to(&self, &chrono::naive::datetime::NaiveDateTime) -> core::result::Result<core::cmp::Ordering, druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::compare_to_date(&self, &chrono::naive::datetime::NaiveDateTime) -> core::result::Result<core::cmp::Ordering, druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::equals_object(&self, &chrono::naive::datetime::NaiveDateTime) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::equals_timestamp(&self, &chrono::naive::datetime::NaiveDateTime) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::from_instant(chrono::datetime::DateTime<chrono::offset::utc::Utc>) -> core::result::Result<chrono::naive::datetime::NaiveDateTime, druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::get_nanos(&self) -> u32
+pub fn chrono::naive::datetime::NaiveDateTime::get_time(&self) -> core::result::Result<i64, druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::hash_code(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::new_timestamp(i32, i32, i32, i32, i32, i32, i32) -> core::result::Result<chrono::naive::datetime::NaiveDateTime, druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::new_timestamp_from_millis(i64) -> core::result::Result<chrono::naive::datetime::NaiveDateTime, druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::set_nanos(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::set_time(&mut self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::to_instant(&self) -> core::result::Result<chrono::datetime::DateTime<chrono::offset::utc::Utc>, druid_rdbc::RdbcError>
+pub fn chrono::naive::datetime::NaiveDateTime::to_jdbc_string(&self) -> alloc::string::String
+pub fn chrono::naive::datetime::NaiveDateTime::to_local_date_time(&self) -> chrono::naive::datetime::NaiveDateTime
+pub fn chrono::naive::datetime::NaiveDateTime::value_of(&str) -> core::result::Result<chrono::naive::datetime::NaiveDateTime, druid_rdbc::RdbcError>
 pub type druid_rdbc::types::RdbcArray = druid_rdbc::extensions::ArrayHandle
 pub type druid_rdbc::types::RdbcBigDecimal = bigdecimal::BigDecimal
 pub type druid_rdbc::types::RdbcBlob = druid_rdbc::extensions::BlobHandle

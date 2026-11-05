@@ -147,7 +147,8 @@ def verify(ledger: Path, inventory: Path) -> dict[str, int]:
                     # Java 静态常量/枚举常量：Rust 侧必须是同名 const 或枚举变体。
                     name = entry.partition(":")[2]
                     declared = re.search(rf"\bconst\s+{re.escape(name)}\b", rust_text) or re.search(
-                        rf"(?m)^\s*{re.escape(name)}\s*,", rust_text)
+                        rf"\b{re.escape(name)}\s*,", rust_text) or re.search(
+                        rf"\b{re.escape(name)}\s*\}}", rust_text)
                     if not declared:
                         raise EvidenceError(
                             f"row {line}: Rust constant {name} is absent from {rust_reference}")

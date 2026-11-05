@@ -118,13 +118,7 @@ fn warning_client_info_and_data_truncation_payloads_are_lossless() {
     assert_eq!(client_info.exception.sql_state(), Some("01S00"));
     assert_eq!(client_info.failed_properties, failed_properties);
 
-    let truncation = DataTruncation {
-        index: 3,
-        parameter: true,
-        read: false,
-        data_size: Some(64),
-        transfer_size: Some(32),
-    };
+    let truncation = DataTruncation::new(3, true, false, Some(64), Some(32));
     assert_eq!(truncation.index, 3);
     assert!(truncation.parameter);
     assert!(!truncation.read);
@@ -236,13 +230,7 @@ fn canonical_batch_exception_retains_compat_identity_and_large_counts() {
 #[test]
 fn canonical_truncation_retains_read_write_and_unknown_sizes() {
     for read in [false, true] {
-        let canonical = CanonicalDataTruncation {
-            index: 3,
-            parameter: !read,
-            read,
-            data_size: None,
-            transfer_size: Some(32),
-        };
+        let canonical = CanonicalDataTruncation::new(3, !read, read, None, Some(32));
         let compatibility: DataTruncation = canonical.clone();
         assert_eq!(compatibility, canonical);
         assert_eq!(compatibility.index, 3);

@@ -25,9 +25,6 @@ const CONSTANT_COUNT: usize = 61;
 /// 台账 identity 的 owner 前缀。
 const OWNER: &str = "java.sql.DatabaseMetaData";
 
-/// 台账中该 owner 的未评估常量 capability 取值。
-const CAPABILITY_UNASSESSED: &str = "UNASSESSED";
-
 /// Java 8 常量名，顺序与 Java 8 源码声明顺序一致。
 const JAVA8_CONSTANT_NAMES: [&str; CONSTANT_COUNT] = [
     "procedureResultUnknown",

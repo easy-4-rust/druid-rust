@@ -1091,13 +1091,7 @@ fn batch_update_exception_init_cause() {
 
 #[test]
 fn data_truncation_init_sizes() {
-    let truncation = DataTruncation {
-        index: 3,
-        parameter: true,
-        read: false,
-        data_size: Some(64),
-        transfer_size: Some(32),
-    };
+    let truncation = DataTruncation::new(3, true, false, Some(64), Some(32));
 
     assert_eq!(truncation.index, 3);
     assert!(truncation.parameter);
@@ -1106,25 +1100,13 @@ fn data_truncation_init_sizes() {
     assert_eq!(truncation.transfer_size, Some(32));
     assert_same_type_as_compat(
         &truncation,
-        &druid_rdbc::compat::DataTruncation {
-            index: 3,
-            parameter: true,
-            read: false,
-            data_size: Some(64),
-            transfer_size: Some(32),
-        },
+        &druid_rdbc::compat::DataTruncation::new(3, true, false, Some(64), Some(32)),
     );
 }
 
 #[test]
 fn data_truncation_init_sizes_cause() {
-    let truncation = DataTruncation {
-        index: 7,
-        parameter: false,
-        read: true,
-        data_size: None,
-        transfer_size: Some(128),
-    };
+    let truncation = DataTruncation::new(7, false, true, None, Some(128));
 
     assert_eq!(truncation.index, 7);
     assert!(!truncation.parameter);

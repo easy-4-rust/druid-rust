@@ -331,6 +331,34 @@ pub trait Statement: Wrapper + Send + 'static {
         })
     }
 
+    /// 返回 64 位 max-rows 限制。
+    ///
+    /// 默认按 JDK 8 `java.sql.Statement` 的 JDBC 4.2 默认方法语义报告 `AbstractMethodError`，
+    /// 既有实现无需实现本方法即可保持 Java 8 的调用结果。
+    ///
+    /// 参数无；`0` 表示无限制。
+    /// 对应 Java: java.sql.Statement#getLargeMaxRows()。
+    fn get_large_max_rows(&self) -> Result<i64, RdbcError> {
+        Err(RdbcError::Other(
+            "AbstractMethodError: druid_rdbc::statement::Statement::get_large_max_rows is not implemented (java.sql.Statement#getLargeMaxRows)"
+                .to_owned(),
+        ))
+    }
+
+    /// 设置 64 位 max-rows 限制。
+    ///
+    /// 默认按 JDK 8 `java.sql.Statement` 的 JDBC 4.2 默认方法语义报告 `AbstractMethodError`，
+    /// 既有实现无需实现本方法即可保持 Java 8 的调用结果。
+    ///
+    /// 参数 max 为新的 64 位 max-rows 限制；`0` 表示无限制。
+    /// 对应 Java: java.sql.Statement#setLargeMaxRows(long)。
+    fn set_large_max_rows(&mut self, _max: i64) -> Result<(), RdbcError> {
+        Err(RdbcError::Other(
+            "AbstractMethodError: druid_rdbc::statement::Statement::set_large_max_rows is not implemented (java.sql.Statement#setLargeMaxRows)"
+                .to_owned(),
+        ))
+    }
+
     /// 设置 driver escape processing。
     fn set_escape_processing(&mut self, _enabled: bool) -> Result<(), RdbcError> {
         Err(RdbcError::UnsupportedOperation {
@@ -442,6 +470,26 @@ pub trait Statement: Wrapper + Send + 'static {
         })
     }
 
+    /// 执行 large update 并返回 64 位更新计数。
+    ///
+    /// 默认按 JDK 8 `java.sql.Statement` 的 JDBC 4.2 默认方法语义报告 `AbstractMethodError`，
+    /// 既有实现无需实现本方法即可保持 Java 8 的调用结果。
+    ///
+    /// 对应 Java 重载（Java 8 中四个重载均为默认方法，默认抛出 `AbstractMethodError`）：
+    /// - `java.sql.Statement#executeLargeUpdate(String)`
+    /// - `java.sql.Statement#executeLargeUpdate(String,int)`
+    /// - `java.sql.Statement#executeLargeUpdate(String,int[])`
+    /// - `java.sql.Statement#executeLargeUpdate(String,String[])`
+    ///
+    /// 参数 sql 为待执行语句；keys 为 generated-keys 请求；返回受影响行数。
+    /// 对应 Java: java.sql.Statement#executeLargeUpdate。
+    fn execute_large_update(&mut self, _sql: &str, _keys: GeneratedKeys) -> Result<i64, RdbcError> {
+        Err(RdbcError::Other(
+            "AbstractMethodError: druid_rdbc::statement::Statement::execute_large_update is not implemented (java.sql.Statement#executeLargeUpdate)"
+                .to_owned(),
+        ))
+    }
+
     /// 执行 generic statement 并保留结果种类。
     async fn execute(
         &mut self,
@@ -479,6 +527,20 @@ pub trait Statement: Wrapper + Send + 'static {
         })
     }
 
+    /// 执行 large batch 并返回每条命令的 64 位更新计数。
+    ///
+    /// 默认按 JDK 8 `java.sql.Statement` 的 JDBC 4.2 默认方法语义报告 `AbstractMethodError`，
+    /// 既有实现无需实现本方法即可保持 Java 8 的调用结果。
+    ///
+    /// 参数无；返回按命令顺序排列的 64 位更新计数。
+    /// 对应 Java: java.sql.Statement#executeLargeBatch()。
+    fn execute_large_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        Err(RdbcError::Other(
+            "AbstractMethodError: druid_rdbc::statement::Statement::execute_large_batch is not implemented (java.sql.Statement#executeLargeBatch)"
+                .to_owned(),
+        ))
+    }
+
     /// 返回本 statement 最近一次执行产生的 owned generated-keys result set。
     async fn generated_keys(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         Err(RdbcError::feature_not_supported("statement_generated_keys"))
@@ -501,6 +563,20 @@ pub trait Statement: Wrapper + Send + 'static {
         Err(RdbcError::UnsupportedOperation {
             operation: "statement_get_update_count",
         })
+    }
+
+    /// 返回本 statement 最近一次执行产生的 64 位更新计数。
+    ///
+    /// 默认按 JDK 8 `java.sql.Statement` 的 JDBC 4.2 默认方法语义报告 `AbstractMethodError`，
+    /// 既有实现无需实现本方法即可保持 Java 8 的调用结果。
+    ///
+    /// 参数无；没有 update result 时返回 `None`。
+    /// 对应 Java: java.sql.Statement#getLargeUpdateCount()。
+    fn get_large_update_count(&self) -> Result<Option<i64>, RdbcError> {
+        Err(RdbcError::Other(
+            "AbstractMethodError: druid_rdbc::statement::Statement::get_large_update_count is not implemented (java.sql.Statement#getLargeUpdateCount)"
+                .to_owned(),
+        ))
     }
 
     /// 推进到下一个 execution result。
