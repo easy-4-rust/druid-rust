@@ -152,6 +152,14 @@ def verify(ledger: Path, inventory: Path) -> dict[str, int]:
                     if not declared:
                         raise EvidenceError(
                             f"row {line}: Rust constant {name} is absent from {rust_reference}")
+                elif entry.startswith("type:"):
+                    # Java #TYPE 类标记：Rust 侧必须存在同名 trait/struct/enum 类型。
+                    name = entry.partition(":")[2]
+                    declared = re.search(
+                        rf"pub (?:trait|struct|enum)\s+{re.escape(name)}\b", rust_text)
+                    if not declared:
+                        raise EvidenceError(
+                            f"row {line}: Rust type {name} is absent from {rust_reference}")
                 else:
                     rust_method = entry.rsplit("::", 1)[-1]
                     if not re.search(rf"\bfn\s+{re.escape(rust_method)}\s*(?:<|\()", rust_text):

@@ -132,6 +132,11 @@ def apply_method(report: Path, apply: bool) -> int:
                     declared = re.search(rf"\bconst\s+{re.escape(name)}\b", text) or re.search(
                         rf"\b{re.escape(name)}\s*,", text) or re.search(
                         rf"\b{re.escape(name)}\s*\}}", text)
+                elif method_name.startswith("type:"):
+                    name = method_name.partition(":")[2]
+                    text = declared_path.read_text(encoding="utf-8", errors="replace") if declared_path.is_file() else ""
+                    declared = re.search(
+                        rf"pub (?:trait|struct|enum)\s+{re.escape(name)}\b", text)
                 else:
                     text = declared_path.read_text(encoding="utf-8", errors="replace") if declared_path.is_file() else ""
                     declared = re.search(rf"\bfn\s+{re.escape(method_name)}\s*(?:<|\()", text)
