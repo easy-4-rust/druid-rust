@@ -51,6 +51,9 @@ pub trait TimestampExt {
     /// 非法格式返回 `InvalidArgument`，等价于 JDK 8 抛出的 `IllegalArgumentException`。
     /// 对应 Java: `java.sql.Timestamp#valueOf(String)`。
     fn value_of(value: &str) -> Result<NaiveDateTime, RdbcError>;
+    /// 由 `LocalDateTime` 构造 Timestamp。对应 Java: `Timestamp#valueOf(LocalDateTime)`。
+    /// Java null 入参抛 NPE；Rust 签名以非空载体表达。
+    fn value_of_local_date_time(value: NaiveDateTime) -> NaiveDateTime;
 
     /// 返回本地日期时间视图。
     ///
@@ -150,6 +153,9 @@ pub trait DateExt {
     /// 月、日允许省略前导零；非法格式返回 `InvalidArgument`，等价于 JDK 8 抛出的
     /// `IllegalArgumentException`。对应 Java: `java.sql.Date#valueOf(String)`。
     fn value_of(value: &str) -> Result<NaiveDate, RdbcError>;
+    /// 由 `LocalDate` 构造 Date。对应 Java: `Date#valueOf(LocalDate)`。
+    /// Java null 入参抛 NPE；Rust 签名以非空载体表达。
+    fn value_of_local_date(value: NaiveDate) -> NaiveDate;
 
     /// 返回本地日期视图。
     ///
@@ -240,6 +246,9 @@ pub trait TimeExt {
     /// 时、分、秒允许省略前导零；非法格式返回 `InvalidArgument`，等价于 JDK 8 抛出的
     /// `IllegalArgumentException`。对应 Java: `java.sql.Time#valueOf(String)`。
     fn value_of(value: &str) -> Result<NaiveTime, RdbcError>;
+    /// 由 `LocalTime` 构造 Time。对应 Java: `Time#valueOf(LocalTime)`。
+    /// Java null 入参抛 NPE；Rust 签名以非空载体表达。
+    fn value_of_local_time(value: NaiveTime) -> NaiveTime;
 
     /// 返回本地时刻视图。
     ///
@@ -365,6 +374,10 @@ impl TimestampExt for NaiveDateTime {
 
     fn value_of(value: &str) -> Result<NaiveDateTime, RdbcError> {
         parse_jdbc_timestamp(value)
+    }
+
+    fn value_of_local_date_time(value: NaiveDateTime) -> NaiveDateTime {
+        value
     }
 
     fn to_local_date_time(&self) -> NaiveDateTime {
@@ -496,6 +509,10 @@ impl DateExt for NaiveDate {
         parse_jdbc_date(value)
     }
 
+    fn value_of_local_date(value: NaiveDate) -> NaiveDate {
+        value
+    }
+
     fn to_local_date(&self) -> NaiveDate {
         *self
     }
@@ -558,6 +575,10 @@ impl TimeExt for NaiveTime {
 
     fn value_of(value: &str) -> Result<NaiveTime, RdbcError> {
         parse_jdbc_time(value)
+    }
+
+    fn value_of_local_time(value: NaiveTime) -> NaiveTime {
+        value
     }
 
     fn to_local_time(&self) -> NaiveTime {

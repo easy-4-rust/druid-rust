@@ -444,3 +444,28 @@ fn jdbc_type_entries_are_reachable_through_the_extension_traits() {
         "12:34:56"
     );
 }
+
+#[test]
+fn timestamp_value_of_local_date_time_is_identity() {
+    // 对应 Java: Timestamp#valueOf(LocalDateTime)；null 入参 Java 抛 NPE，Rust 非空载体。
+    let value = timestamp(10, 20, 30, 123_456_789);
+    assert_eq!(
+        <NaiveDateTime as TimestampExt>::value_of_local_date_time(value),
+        value,
+        "valueOf(LocalDateTime) 必须保留纳秒精度"
+    );
+}
+
+#[test]
+fn date_value_of_local_date_is_identity() {
+    // 对应 Java: Date#valueOf(LocalDate)
+    let value = NaiveDate::from_ymd_opt(2026, 11, 5).unwrap();
+    assert_eq!(<NaiveDate as DateExt>::value_of_local_date(value), value);
+}
+
+#[test]
+fn time_value_of_local_time_is_identity() {
+    // 对应 Java: Time#valueOf(LocalTime)
+    let value = NaiveTime::from_hms_nano_opt(8, 9, 10, 111_111_111).unwrap();
+    assert_eq!(<NaiveTime as TimeExt>::value_of_local_time(value), value);
+}
